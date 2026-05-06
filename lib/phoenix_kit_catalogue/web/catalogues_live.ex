@@ -792,12 +792,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           data-sortable-event="reorder_catalogues"
           data-sortable-items=".sortable-item"
           data-sortable-hide-source="false"
+          data-sortable-handle=".pk-drag-handle"
           phx-hook="SortableGrid"
         >
           <.table_default_row :for={catalogue <- @catalogues} class="sortable-item" data-id={catalogue.uuid}>
             <.table_default_cell
               :if={length(@catalogues) > 1}
-              class="cursor-grab active:cursor-grabbing text-base-content/40"
+              class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/40"
             >
               <.icon name="hero-bars-3" class="w-4 h-4" />
             </.table_default_cell>

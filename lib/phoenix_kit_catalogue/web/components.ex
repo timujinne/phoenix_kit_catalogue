@@ -915,6 +915,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           data-sortable-event={@on_reorder}
           data-sortable-items=".sortable-item"
           data-sortable-hide-source="false"
+          data-sortable-handle={if @on_reorder, do: ".pk-drag-handle"}
           phx-hook={if @on_reorder, do: "SortableGrid"}
         >
           <.catalogue_rule_row
@@ -963,7 +964,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     >
       <div
         :if={@draggable}
-        class="cursor-grab active:cursor-grabbing text-base-content/30 hover:text-base-content/70 select-none"
+        class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/30 hover:text-base-content/70 select-none"
         title={Gettext.gettext(PhoenixKitWeb.Gettext, "Drag to reorder")}
       >
         <.icon name="hero-bars-3" class="w-4 h-4" />
@@ -1218,6 +1219,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         data-sortable-items=".sortable-item"
         data-sortable-hide-source="false"
         data-sortable-group={@reorder_group}
+        data-sortable-handle={if @on_reorder, do: ".pk-drag-handle"}
         phx-hook={if @on_reorder, do: "SortableGrid"}
         {@reorder_scope_attrs}
       >
@@ -1228,7 +1230,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         >
           <.table_default_cell
             :if={@on_reorder}
-            class="cursor-grab active:cursor-grabbing text-base-content/40"
+            class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/40"
           >
             <.icon name="hero-bars-3" class="w-4 h-4" />
           </.table_default_cell>

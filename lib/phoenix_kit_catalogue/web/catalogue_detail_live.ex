@@ -1258,6 +1258,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           data-sortable-items=".sortable-item"
           data-sortable-hide-source="false"
           data-sortable-group="catalogue-categories"
+          data-sortable-handle=".pk-drag-handle"
           phx-hook={if @view_mode == "active", do: "SortableGrid"}
         >
           <%= for {card, card_idx} <- Enum.with_index(@loaded_cards) do %>
@@ -1401,7 +1402,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <div class="flex items-center gap-2">
             <div
               :if={@view_mode == "active" and @sibling_count > 1}
-              class="cursor-grab active:cursor-grabbing text-base-content/30 hover:text-base-content/70 select-none"
+              class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/30 hover:text-base-content/70 select-none"
               title={Gettext.gettext(PhoenixKitWeb.Gettext, "Drag to reorder (among siblings)")}
             >
               <.icon name="hero-bars-3" class="w-4 h-4" />

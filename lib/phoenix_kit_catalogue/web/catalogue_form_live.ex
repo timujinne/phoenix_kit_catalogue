@@ -644,20 +644,30 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
         </div>
       </.form>
 
-      <%!-- Danger zone — only in edit mode --%>
-      <div :if={@action == :edit} class="card bg-base-100 shadow-lg border border-error/20">
-        <div class="card-body flex flex-row items-center justify-between gap-4">
-          <div>
-            <span class="text-sm font-semibold text-error">{Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Catalogue")}</span>
-            <p class="text-xs text-base-content/50">
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "This will permanently delete this catalogue, all its categories, and all items within them. This cannot be undone.")}
-            </p>
+      <%!-- Danger zone — collapsed by default to match the integrations
+           page pattern; user clicks to reveal the destructive action. --%>
+      <details :if={@action == :edit} class="card bg-base-100 border-2 border-error/30">
+        <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error" />
+          <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitWeb.Gettext, "Danger Zone")}</h3>
+          <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
+        </summary>
+
+        <div class="card-body pt-0 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Catalogue")}</p>
+              <p class="text-xs text-base-content/60">
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "This will permanently delete this catalogue, all its categories, and all items within them. This cannot be undone.")}
+              </p>
+            </div>
+            <button phx-click="show_delete_confirm" class="btn btn-outline btn-error btn-sm shrink-0">
+              <.icon name="hero-trash" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+            </button>
           </div>
-          <button phx-click="show_delete_confirm" class="btn btn-outline btn-error btn-sm shrink-0">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
-          </button>
         </div>
-      </div>
+      </details>
 
       <.confirm_modal
         show={@confirm_delete}

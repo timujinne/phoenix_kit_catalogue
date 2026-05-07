@@ -7,6 +7,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
 
   import PhoenixKitWeb.Components.MultilangForm
   import PhoenixKitWeb.Components.Core.AdminPageHeader, only: [admin_page_header: 1]
+  import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Modal, only: [confirm_modal: 1]
   import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
@@ -462,78 +463,102 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         </div>
       </.form>
 
-      <%!-- Move to a different parent — only in edit mode, within the same catalogue --%>
-      <div :if={@action == :edit} class="card bg-base-100 shadow-lg">
-        <div class="card-body flex flex-col gap-3">
-          <h3 class="text-sm font-semibold text-base-content/80">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Parent")}</h3>
-          <p class="text-xs text-base-content/50">{Gettext.gettext(PhoenixKitWeb.Gettext, "Reparent this category within its catalogue. Its subtree comes along.")}</p>
-          <div class="flex items-end gap-3">
-            <div class="form-control flex-1">
-              <.select
-                name="parent_uuid"
-                id="category-parent-move-target"
-                value={@parent_move_target}
-                prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "— Top level (no parent) —")}
-                options={@parent_options}
-                class="select-sm transition-colors focus-within:select-primary"
-                phx-change="select_parent_move_target"
-              />
+      <%!-- Move actions — collapsed by default to keep destructive +
+           low-frequency actions out of the primary edit flow.
+           Native <details> handles toggle; no JS needed. --%>
+      <details :if={@action == :edit} class="card bg-base-100 shadow-lg">
+        <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
+          <.icon name="hero-arrows-right-left" class="w-4 h-4 text-base-content/60" />
+          <h3 class="font-semibold text-base">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}</h3>
+          <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
+        </summary>
+
+        <div class="card-body pt-0 space-y-6">
+          <%!-- Move to a different parent — within the same catalogue --%>
+          <div class="flex flex-col gap-3">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Parent")}</p>
+              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "Reparent this category within its catalogue. Its subtree comes along.")}</p>
             </div>
-            <button
-              type="button"
-              phx-click="move_under_parent"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
-              disabled={@parent_move_target == @category.parent_uuid}
-              class="btn btn-sm btn-outline"
-            >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+            <div class="flex items-end gap-3">
+              <div class="form-control flex-1">
+                <.select
+                  name="parent_uuid"
+                  id="category-parent-move-target"
+                  value={@parent_move_target}
+                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "— Top level (no parent) —")}
+                  options={@parent_options}
+                  class="select-sm transition-colors focus-within:select-primary"
+                  phx-change="select_parent_move_target"
+                />
+              </div>
+              <button
+                type="button"
+                phx-click="move_under_parent"
+                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                disabled={@parent_move_target == @category.parent_uuid}
+                class="btn btn-sm btn-outline"
+              >
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+              </button>
+            </div>
+          </div>
+
+          <%!-- Move to another catalogue — only when other catalogues exist --%>
+          <div :if={@other_catalogues != []} class="flex flex-col gap-3">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Catalogue")}</p>
+              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move this category and all its items to a different catalogue.")}</p>
+            </div>
+            <div class="flex items-end gap-3">
+              <div class="form-control flex-1">
+                <.select
+                  name="catalogue_uuid"
+                  id="category-move-target"
+                  value={@move_target}
+                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select catalogue --")}
+                  options={Enum.map(@other_catalogues, &{&1.name, &1.uuid})}
+                  class="select-sm transition-colors focus-within:select-primary"
+                  phx-change="select_move_target"
+                />
+              </div>
+              <button
+                type="button"
+                phx-click="move_category"
+                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                disabled={is_nil(@move_target)}
+                class="btn btn-sm btn-outline"
+              >
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <%!-- Danger zone — collapsed by default; matches the integrations
+           page Danger Zone pattern (red border, exclamation-triangle,
+           confirm modal on click). --%>
+      <details :if={@action == :edit} class="card bg-base-100 border-2 border-error/30">
+        <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error" />
+          <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitWeb.Gettext, "Danger Zone")}</h3>
+          <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
+        </summary>
+
+        <div class="card-body pt-0 space-y-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Category")}</p>
+              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "This will permanently delete this category and all its items. This cannot be undone.")}</p>
+            </div>
+            <button phx-click="show_delete_confirm" class="btn btn-outline btn-error btn-sm shrink-0">
+              <.icon name="hero-trash" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
             </button>
           </div>
         </div>
-      </div>
-
-      <%!-- Move to another catalogue — only in edit mode with other catalogues available --%>
-      <div :if={@action == :edit && @other_catalogues != []} class="card bg-base-100 shadow-lg">
-        <div class="card-body flex flex-col gap-3">
-          <h3 class="text-sm font-semibold text-base-content/80">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Catalogue")}</h3>
-          <p class="text-xs text-base-content/50">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move this category and all its items to a different catalogue.")}</p>
-          <div class="flex items-end gap-3">
-            <div class="form-control flex-1">
-              <.select
-                name="catalogue_uuid"
-                id="category-move-target"
-                value={@move_target}
-                prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select catalogue --")}
-                options={Enum.map(@other_catalogues, &{&1.name, &1.uuid})}
-                class="select-sm transition-colors focus-within:select-primary"
-                phx-change="select_move_target"
-              />
-            </div>
-            <button
-              type="button"
-              phx-click="move_category"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
-              disabled={is_nil(@move_target)}
-              class="btn btn-sm btn-outline"
-            >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <%!-- Danger zone — only in edit mode --%>
-      <div :if={@action == :edit} class="card bg-base-100 shadow-lg border border-error/20">
-        <div class="card-body flex flex-row items-center justify-between gap-4">
-          <div>
-            <span class="text-sm font-semibold text-error">{Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Category")}</span>
-            <p class="text-xs text-base-content/50">{Gettext.gettext(PhoenixKitWeb.Gettext, "This will permanently delete this category and all its items. This cannot be undone.")}</p>
-          </div>
-          <button phx-click="show_delete_confirm" class="btn btn-outline btn-error btn-sm shrink-0">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
-          </button>
-        </div>
-      </div>
+      </details>
 
       <.confirm_modal
         show={@confirm_delete_all}

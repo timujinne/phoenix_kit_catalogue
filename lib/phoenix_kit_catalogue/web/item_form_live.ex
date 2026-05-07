@@ -1289,84 +1289,95 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         </div>
       </.form>
 
-      <%!-- Move — standard items move to a category anywhere; smart
-           items move across smart catalogues (no category). Each card
-           only renders when its own target list is non-empty so we
-           never show an empty-dropdown dead end. --%>
-      <div
-        :if={@action == :edit && @catalogue_kind != "smart" && @all_categories != []}
+      <%!-- Move — collapsed by default. Standard items move to a
+           category anywhere; smart items move across smart catalogues
+           (no category). Each block only renders when its own target
+           list is non-empty so we never show an empty-dropdown dead
+           end; the outer <details> only renders when at least one
+           branch is available. --%>
+      <details
+        :if={
+          @action == :edit &&
+            ((@catalogue_kind != "smart" && @all_categories != []) ||
+               (@catalogue_kind == "smart" && @smart_move_targets != []))
+        }
         class="card bg-base-100 shadow-lg"
       >
-        <div class="card-body flex flex-col gap-3">
-          <h3 class="text-sm font-semibold text-base-content/80">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Category")}
-          </h3>
-          <p class="text-xs text-base-content/50">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Move this item to a category in any catalogue.")}
-          </p>
-          <div class="flex items-end gap-3">
-            <div class="form-control flex-1">
-              <.select
-                name="category_uuid"
-                id="item-move-category"
-                value={@move_target}
-                prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}
-                options={Enum.map(@all_categories, &{&1.name, &1.uuid})}
-                class="select-sm transition-colors focus-within:select-primary"
-                phx-change="select_move_target"
-              />
-            </div>
-            <button
-              type="button"
-              phx-click="move_item"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
-              disabled={is_nil(@move_target)}
-              class="btn btn-sm btn-outline"
-            >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
-            </button>
-          </div>
-        </div>
-      </div>
+        <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
+          <.icon name="hero-arrows-right-left" class="w-4 h-4 text-base-content/60" />
+          <h3 class="font-semibold text-base">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}</h3>
+          <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
+        </summary>
 
-      <div
-        :if={@action == :edit && @catalogue_kind == "smart" && @smart_move_targets != []}
-        class="card bg-base-100 shadow-lg"
-      >
-        <div class="card-body flex flex-col gap-3">
-          <h3 class="text-sm font-semibold text-base-content/80">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Smart Catalogue")}
-          </h3>
-          <p class="text-xs text-base-content/50">
-            {Gettext.gettext(
-              PhoenixKitWeb.Gettext,
-              "Move this item into a different smart catalogue. Its catalogue rules stay attached."
-            )}
-          </p>
-          <div class="flex items-end gap-3">
-            <div class="form-control flex-1">
-              <.select
-                name="catalogue_uuid"
-                id="item-move-smart-catalogue"
-                value={@move_target}
-                prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select catalogue --")}
-                options={Enum.map(@smart_move_targets, &{&1.name, &1.uuid})}
-                class="select-sm transition-colors focus-within:select-primary"
-                phx-change="select_move_target"
-              />
+        <div class="card-body pt-0 space-y-6">
+          <%!-- Standard items: move to any category --%>
+          <div :if={@catalogue_kind != "smart" && @all_categories != []} class="flex flex-col gap-3">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Category")}</p>
+              <p class="text-xs text-base-content/60">
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move this item to a category in any catalogue.")}
+              </p>
             </div>
-            <button
-              type="button"
-              phx-click="move_item"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
-              disabled={is_nil(@move_target)}
-              class="btn btn-sm btn-outline"
-            >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
-            </button>
+            <div class="flex items-end gap-3">
+              <div class="form-control flex-1">
+                <.select
+                  name="category_uuid"
+                  id="item-move-category"
+                  value={@move_target}
+                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}
+                  options={Enum.map(@all_categories, &{&1.name, &1.uuid})}
+                  class="select-sm transition-colors focus-within:select-primary"
+                  phx-change="select_move_target"
+                />
+              </div>
+              <button
+                type="button"
+                phx-click="move_item"
+                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                disabled={is_nil(@move_target)}
+                class="btn btn-sm btn-outline"
+              >
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+              </button>
+            </div>
+          </div>
+
+          <%!-- Smart items: move to a different smart catalogue --%>
+          <div :if={@catalogue_kind == "smart" && @smart_move_targets != []} class="flex flex-col gap-3">
+            <div>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Smart Catalogue")}</p>
+              <p class="text-xs text-base-content/60">
+                {Gettext.gettext(
+                  PhoenixKitWeb.Gettext,
+                  "Move this item into a different smart catalogue. Its catalogue rules stay attached."
+                )}
+              </p>
+            </div>
+            <div class="flex items-end gap-3">
+              <div class="form-control flex-1">
+                <.select
+                  name="catalogue_uuid"
+                  id="item-move-smart-catalogue"
+                  value={@move_target}
+                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select catalogue --")}
+                  options={Enum.map(@smart_move_targets, &{&1.name, &1.uuid})}
+                  class="select-sm transition-colors focus-within:select-primary"
+                  phx-change="select_move_target"
+                />
+              </div>
+              <button
+                type="button"
+                phx-click="move_item"
+                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                disabled={is_nil(@move_target)}
+                class="btn btn-sm btn-outline"
+              >
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </details>
     </div>
     """
   end

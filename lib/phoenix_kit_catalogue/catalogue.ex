@@ -1254,43 +1254,61 @@ defmodule PhoenixKitCatalogue.Catalogue do
   Soft-deletes a category and its entire subtree by setting their
   status to `"deleted"`.
 
-  **Cascades downward** in a transaction, following the nested-category
-  tree introduced in V103:
-  1. All non-deleted items in this category and any descendant → status `"deleted"`
-  2. This category and every descendant category → status `"deleted"`
+  **Cascades the categories downward** in a transaction (the category
+  itself and every descendant flip to `"deleted"`), following the V103
+  nested-category tree.
+
+  **Items in the subtree** are handled per the `:items` opt:
+
+    * `:cascade` (default) — items in the subtree flip to `"deleted"`
+      alongside the categories. Original behavior, kept for programmatic
+      callers + admin "delete and trash everything" intent.
+    * `:uncategorize` — items in the subtree keep their `catalogue_uuid`
+      but get `category_uuid: nil`, surviving the category trash. Used
+      by the admin modal when the operator wants the category gone but
+      the items kept in the same catalogue.
+    * `{:move_to, target_uuid}` — items move to the target category
+      (which must live in the same catalogue) before the category is
+      trashed. Cross-catalogue moves aren't supported here; the LV
+      restricts the dropdown to same-catalogue targets.
 
   Logs a single `category.trashed` activity on the root with
-  `subtree_size` (categories touched, including root) and
-  `items_cascaded` (items touched) in the metadata.
+  `subtree_size`, `items_handled`, and `items_disposition` in metadata.
 
   ## Examples
 
       {:ok, _} = Catalogue.trash_category(category)
+      {:ok, _} = Catalogue.trash_category(category, items: :uncategorize)
+      {:ok, _} = Catalogue.trash_category(category, items: {:move_to, target_uuid})
   """
-  @spec trash_category(Category.t(), keyword()) :: {:ok, Category.t()} | {:error, term()}
+  @spec trash_category(Category.t(), keyword()) ::
+          {:ok, Category.t()}
+          | {:error, :move_target_not_found | :cross_catalogue_move | term()}
   def trash_category(%Category{} = category, opts \\ []) do
+    disposition = Keyword.get(opts, :items, :cascade)
+
     result =
       repo().transaction(fn ->
         now = DateTime.utc_now()
         subtree = Tree.subtree_uuids(category.uuid)
 
-        {items_cascaded, _} =
-          from(i in Item,
-            where: i.category_uuid in ^subtree and i.status != "deleted"
-          )
-          |> repo().update_all(set: [status: "deleted", updated_at: now])
+        case apply_item_disposition(disposition, subtree, category, now) do
+          {:ok, items_handled} ->
+            from(c in Category,
+              where: c.uuid in ^subtree and c.status != "deleted"
+            )
+            |> repo().update_all(set: [status: "deleted", updated_at: now])
 
-        from(c in Category,
-          where: c.uuid in ^subtree and c.status != "deleted"
-        )
-        |> repo().update_all(set: [status: "deleted", updated_at: now])
+            updated = repo().get!(Category, category.uuid)
+            {updated, length(subtree), items_handled}
 
-        updated = repo().get!(Category, category.uuid)
-        {updated, length(subtree), items_cascaded}
+          {:error, reason} ->
+            repo().rollback(reason)
+        end
       end)
 
     case result do
-      {:ok, {updated, subtree_size, items_cascaded}} ->
+      {:ok, {updated, subtree_size, items_handled}} ->
         log_activity(%{
           action: "category.trashed",
           mode: "manual",
@@ -1302,7 +1320,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
             "name" => category.name,
             "catalogue_uuid" => category.catalogue_uuid,
             "subtree_size" => subtree_size,
-            "items_cascaded" => items_cascaded
+            "items_handled" => items_handled,
+            "items_disposition" => disposition_to_metadata(disposition)
           }
         })
 
@@ -1312,6 +1331,53 @@ defmodule PhoenixKitCatalogue.Catalogue do
         error
     end
   end
+
+  defp apply_item_disposition(:cascade, subtree, _category, now) do
+    {count, _} =
+      from(i in Item,
+        where: i.category_uuid in ^subtree and i.status != "deleted"
+      )
+      |> repo().update_all(set: [status: "deleted", updated_at: now])
+
+    {:ok, count}
+  end
+
+  defp apply_item_disposition(:uncategorize, subtree, category, now) do
+    {count, _} =
+      from(i in Item,
+        where: i.category_uuid in ^subtree and i.status != "deleted"
+      )
+      |> repo().update_all(
+        set: [category_uuid: nil, catalogue_uuid: category.catalogue_uuid, updated_at: now]
+      )
+
+    {:ok, count}
+  end
+
+  defp apply_item_disposition({:move_to, target_uuid}, subtree, category, now) do
+    case repo().get(Category, target_uuid) do
+      nil ->
+        {:error, :move_target_not_found}
+
+      %Category{catalogue_uuid: target_cat_uuid} when target_cat_uuid != category.catalogue_uuid ->
+        {:error, :cross_catalogue_move}
+
+      %Category{uuid: ^target_uuid} = target ->
+        {count, _} =
+          from(i in Item,
+            where: i.category_uuid in ^subtree and i.status != "deleted"
+          )
+          |> repo().update_all(
+            set: [category_uuid: target.uuid, catalogue_uuid: target.catalogue_uuid, updated_at: now]
+          )
+
+        {:ok, count}
+    end
+  end
+
+  defp disposition_to_metadata(:cascade), do: "cascade"
+  defp disposition_to_metadata(:uncategorize), do: "uncategorize"
+  defp disposition_to_metadata({:move_to, uuid}), do: "move_to:#{uuid}"
 
   @doc """
   Restores a soft-deleted category (and its deleted subtree) by
@@ -1329,48 +1395,37 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
       {:ok, _} = Catalogue.restore_category(category)
   """
-  @spec restore_category(Category.t(), keyword()) :: {:ok, Category.t()} | {:error, term()}
+  @spec restore_category(Category.t(), keyword()) ::
+          {:ok, Category.t()}
+          | {:error, :parent_catalogue_deleted | term()}
   def restore_category(%Category{} = category, opts \\ []) do
     result =
       repo().transaction(fn ->
-        now = DateTime.utc_now()
-        subtree = Tree.subtree_uuids(category.uuid)
-        ancestors = Tree.ancestor_uuids(category.uuid)
-
-        # Upward: catalogue first, then ancestor categories — both
-        # before the subtree so parents are active before children.
+        # Refuse if the parent catalogue is itself deleted. The operator
+        # must restore the catalogue explicitly first.
         case repo().get(Catalogue, category.catalogue_uuid) do
-          %Catalogue{status: "deleted"} = cat ->
-            cat |> Catalogue.changeset(%{status: "active"}) |> repo().update!()
+          %Catalogue{status: "deleted"} ->
+            repo().rollback(:parent_catalogue_deleted)
 
           _ ->
             :ok
         end
 
-        if ancestors != [] do
-          from(c in Category,
-            where: c.uuid in ^ancestors and c.status == "deleted"
-          )
-          |> repo().update_all(set: [status: "active", updated_at: now])
-        end
-
-        from(c in Category,
-          where: c.uuid in ^subtree and c.status == "deleted"
-        )
-        |> repo().update_all(set: [status: "active", updated_at: now])
-
-        {items_cascaded, _} =
-          from(i in Item,
-            where: i.category_uuid in ^subtree and i.status == "deleted"
-          )
-          |> repo().update_all(set: [status: "active", updated_at: now])
-
-        updated = repo().get!(Category, category.uuid)
-        {updated, length(subtree), items_cascaded}
+        # Only flip the target category's status — no cascades. Items,
+        # descendant categories, and ancestor categories all keep their
+        # current statuses. The boss's principle: each entity's status
+        # is its own; restore-as-undo doesn't ripple sideways. Items
+        # that were cascade-trashed alongside this category stay
+        # deleted; the operator restores them separately (where
+        # `restore_item/2` will route them through the same parent the
+        # restored category sits in if it's now active).
+        category
+        |> Category.changeset(%{status: "active"})
+        |> repo().update!()
       end)
 
     case result do
-      {:ok, {updated, subtree_size, items_cascaded}} ->
+      {:ok, updated} ->
         log_activity(%{
           action: "category.restored",
           mode: "manual",
@@ -1380,9 +1435,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
           parent_catalogue_uuid: category.catalogue_uuid,
           metadata: %{
             "name" => category.name,
-            "catalogue_uuid" => category.catalogue_uuid,
-            "subtree_size" => subtree_size,
-            "items_cascaded" => items_cascaded
+            "catalogue_uuid" => category.catalogue_uuid
           }
         })
 
@@ -1762,6 +1815,32 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
   @spec list_category_ancestors(Ecto.UUID.t()) :: [Category.t()]
   defdelegate list_category_ancestors(category_uuid), to: Tree, as: :ancestors_in_order
+
+  @doc """
+  Returns same-catalogue active categories that can receive items from
+  a category about to be deleted (the category itself and its V103
+  descendants are excluded). Used by the admin "delete category" modal
+  to populate the move-target dropdown.
+
+  Each entry is `{category, depth}`, depth-first order — the same shape
+  `list_category_tree/2` returns so callers can render the same indent
+  rules.
+  """
+  @spec list_move_target_categories(Category.t()) :: [{Category.t(), non_neg_integer()}]
+  def list_move_target_categories(%Category{} = category) do
+    # `Tree.subtree_uuids/1` returns raw 16-byte binaries; `list_category_tree/2`
+    # returns Ecto-loaded categories whose `:uuid` is the textual form.
+    # Normalise both to text via `load_uuid/1` so the membership check fires.
+    subtree =
+      category.uuid
+      |> Tree.subtree_uuids()
+      |> Enum.map(&load_uuid/1)
+      |> MapSet.new()
+
+    category.catalogue_uuid
+    |> list_category_tree(mode: :active)
+    |> Enum.reject(fn {cat, _depth} -> MapSet.member?(subtree, cat.uuid) end)
+  end
 
   @doc """
   Returns the categories in a catalogue paired with their tree depth,
@@ -2440,6 +2519,38 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   @doc """
+  Lists soft-deleted items in a catalogue as a flat list, ordered by
+  deletion date (most-recently-deleted first). `updated_at` is the
+  deletion-time proxy — flipping `status` to `"deleted"` always bumps
+  it. Used by the Items tab Deleted view, which surfaces a recency-
+  ordered audit list rather than category-grouped cards.
+
+  ## Options
+
+    * `:limit` — caps the list (default 500). Pagination isn't wired
+      yet; if a catalogue routinely exceeds the limit, layer a cursor
+      on top of this query.
+    * `:preload` — extra associations on top of the default
+      `[:catalogue, category: :catalogue, manufacturer: []]`.
+
+  ## Examples
+
+      Catalogue.list_deleted_items_for_catalogue(catalogue_uuid)
+  """
+  @spec list_deleted_items_for_catalogue(Ecto.UUID.t(), keyword()) :: [Item.t()]
+  def list_deleted_items_for_catalogue(catalogue_uuid, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 500)
+
+    from(i in Item,
+      where: i.catalogue_uuid == ^catalogue_uuid and i.status == "deleted",
+      order_by: [desc: i.updated_at, asc: i.uuid],
+      limit: ^limit,
+      preload: ^Helpers.merge_preloads([:catalogue, category: :catalogue, manufacturer: []], opts)
+    )
+    |> repo().all()
+  end
+
+  @doc """
   Lists uncategorized items (no category assigned) for a specific catalogue.
 
   ## Options
@@ -2791,25 +2902,53 @@ defmodule PhoenixKitCatalogue.Catalogue do
   @doc """
   Restores a soft-deleted item by setting its status to `"active"`.
 
-  **Cascades upward** in a transaction: if the parent category is deleted,
-  restores it too (so the item is visible in the active view).
+  Refuses with `{:error, :parent_catalogue_deleted}` when the item's
+  parent catalogue is itself deleted — the operator must restore the
+  catalogue first. (An item cannot exist outside a catalogue.)
+
+  When the parent catalogue is active but the item's category is
+  deleted, the item is **uncategorized on restore**: `category_uuid` is
+  set to `nil` so the item resurfaces in the catalogue's Uncategorized
+  bucket. This avoids the surprising side-effect of auto-reviving the
+  whole category structure. If the user wants the category back, they
+  restore the category explicitly (which cascades downward and brings
+  the item with it via `category_uuid` matching).
 
   ## Examples
 
       {:ok, item} = Catalogue.restore_item(item)
+      {:error, :parent_catalogue_deleted} =
+        Catalogue.restore_item(item_under_deleted_catalogue)
   """
-  @spec restore_item(Item.t(), keyword()) :: {:ok, Item.t()} | {:error, term()}
+  @spec restore_item(Item.t(), keyword()) ::
+          {:ok, Item.t()} | {:error, :parent_catalogue_deleted | term()}
   def restore_item(%Item{} = item, opts \\ []) do
     result =
       repo().transaction(fn ->
-        maybe_restore_parent_hierarchy(item.category_uuid)
+        case repo().get(Catalogue, item.catalogue_uuid) do
+          %Catalogue{status: "deleted"} ->
+            repo().rollback(:parent_catalogue_deleted)
 
-        item
-        |> Item.changeset(%{status: "active"})
-        |> repo().update!()
+          _ ->
+            :ok
+        end
+
+        detached? = category_deleted?(item.category_uuid)
+
+        attrs =
+          if detached?,
+            do: %{status: "active", category_uuid: nil},
+            else: %{status: "active"}
+
+        restored =
+          item
+          |> Item.changeset(attrs)
+          |> repo().update!()
+
+        {restored, detached?}
       end)
 
-    with {:ok, restored} <- result do
+    with {:ok, {restored, detached?}} <- result do
       log_activity(%{
         action: "item.restored",
         mode: "manual",
@@ -2817,33 +2956,21 @@ defmodule PhoenixKitCatalogue.Catalogue do
         resource_type: "item",
         resource_uuid: restored.uuid,
         parent_catalogue_uuid: restored.catalogue_uuid,
-        metadata: %{"name" => restored.name}
+        metadata:
+          %{"name" => restored.name}
+          |> Map.merge(if detached?, do: %{"detached_from_category" => true}, else: %{})
       })
 
       {:ok, restored}
     end
   end
 
-  defp maybe_restore_parent_hierarchy(nil), do: :ok
+  defp category_deleted?(nil), do: false
 
-  defp maybe_restore_parent_hierarchy(category_uuid) do
+  defp category_deleted?(category_uuid) do
     case repo().get(Category, category_uuid) do
-      %Category{status: "deleted"} = cat ->
-        maybe_restore_parent_catalogue(cat.catalogue_uuid)
-        cat |> Category.changeset(%{status: "active"}) |> repo().update!()
-
-      _ ->
-        :ok
-    end
-  end
-
-  defp maybe_restore_parent_catalogue(catalogue_uuid) do
-    case repo().get(Catalogue, catalogue_uuid) do
-      %Catalogue{status: "deleted"} = cat ->
-        cat |> Catalogue.changeset(%{status: "active"}) |> repo().update!()
-
-      _ ->
-        :ok
+      %Category{status: "deleted"} -> true
+      _ -> false
     end
   end
 
@@ -3287,6 +3414,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   defdelegate item_count_for_catalogue(catalogue_uuid), to: Counts
   defdelegate item_counts_by_catalogue(), to: Counts
+  defdelegate active_item_count_in_subtree(category_uuid), to: Counts
   defdelegate category_count_for_catalogue(catalogue_uuid), to: Counts
   defdelegate category_counts_by_catalogue(), to: Counts
   defdelegate deleted_item_count_for_catalogue(catalogue_uuid), to: Counts

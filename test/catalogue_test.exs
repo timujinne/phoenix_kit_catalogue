@@ -620,22 +620,24 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_category restores ancestors upward and subtree downward" do
+    test "restore_category only flips the target's status (no cascades)" do
       cat = create_catalogue()
       root = create_category(cat, %{name: "Root"})
       mid = create_category(cat, %{name: "Mid", parent_uuid: root.uuid})
       leaf = create_category(cat, %{name: "Leaf", parent_uuid: mid.uuid})
       item = create_item(%{name: "Thing", category_uuid: leaf.uuid})
 
-      {:ok, _} = Catalogue.trash_category(root)
+      {:ok, _} = Catalogue.trash_category(root, items: :cascade)
 
-      # Restore from the deepest node; ancestors + subtree should come back.
+      # Restore the deepest node — only `leaf` flips back. Ancestors,
+      # descendants, and items keep their (deleted) status. The boss's
+      # rule: each entity's status is its own; restore doesn't ripple.
       assert {:ok, _} = Catalogue.restore_category(Catalogue.get_category(leaf.uuid))
 
-      assert Catalogue.get_category(root.uuid).status == "active"
-      assert Catalogue.get_category(mid.uuid).status == "active"
       assert Catalogue.get_category(leaf.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      assert Catalogue.get_category(root.uuid).status == "deleted"
+      assert Catalogue.get_category(mid.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_category hard-deletes the subtree" do
@@ -718,19 +720,23 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_category cascades to items and restores parent catalogue" do
+    test "restore_category refuses when parent catalogue is deleted" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
       Catalogue.trash_catalogue(cat)
 
-      # Restore the category — should also restore catalogue (upward) and items (downward)
+      # Restoring the category alone is no longer allowed when the
+      # catalogue itself is deleted — the operator must restore the
+      # catalogue first. The previous auto-revive surprised operators
+      # who only meant to undo a category-level trash.
       category = Catalogue.get_category(category.uuid)
-      {:ok, _} = Catalogue.restore_category(category)
+      assert {:error, :parent_catalogue_deleted} = Catalogue.restore_category(category)
 
-      assert Catalogue.get_catalogue(cat.uuid).status == "active"
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # State unchanged.
+      assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
+      assert Catalogue.get_category(category.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_category removes category and items" do
@@ -1013,38 +1019,43 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert restored.status == "active"
     end
 
-    test "restore_item/1 cascades upward to deleted parent category" do
+    test "restore_item/1 detaches from a deleted parent category (uncategorizes)" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
 
-      Catalogue.trash_category(category)
+      # Trash via :cascade so the item shares the category's deleted state.
+      Catalogue.trash_category(category, items: :cascade)
       assert Catalogue.get_category(category.uuid).status == "deleted"
       assert Catalogue.get_item(item.uuid).status == "deleted"
 
       item = Catalogue.get_item(item.uuid)
-      {:ok, _} = Catalogue.restore_item(item)
+      {:ok, restored} = Catalogue.restore_item(item)
 
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # New behaviour: the item resurfaces as Uncategorized in the same
+      # catalogue. The category stays deleted — restoring an item no
+      # longer auto-revives the category structure.
+      assert restored.status == "active"
+      assert restored.category_uuid == nil
+      assert restored.catalogue_uuid == cat.uuid
+      assert Catalogue.get_category(category.uuid).status == "deleted"
     end
 
-    test "restore_item/1 cascades upward to deleted parent catalogue" do
+    test "restore_item/1 refuses when parent catalogue is deleted" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
 
       Catalogue.trash_catalogue(cat)
       assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
-      assert Catalogue.get_category(category.uuid).status == "deleted"
       assert Catalogue.get_item(item.uuid).status == "deleted"
 
       item = Catalogue.get_item(item.uuid)
-      {:ok, _} = Catalogue.restore_item(item)
+      assert {:error, :parent_catalogue_deleted} = Catalogue.restore_item(item)
 
-      assert Catalogue.get_catalogue(cat.uuid).status == "active"
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # Nothing was changed — caller must restore the catalogue first.
+      assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_item/1 removes from DB" do

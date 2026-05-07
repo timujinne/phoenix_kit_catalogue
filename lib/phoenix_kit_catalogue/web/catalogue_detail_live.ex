@@ -26,6 +26,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub
+  alias PhoenixKitCatalogue.Errors
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.{Category, Item}
   alias PhoenixKitCatalogue.Web.Components.PdfSearchModal
@@ -48,12 +49,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         has_more: false,
         loading: false,
         confirm_delete: nil,
+        trash_modal: nil,
         view_mode: "active",
         deleted_count: 0,
         active_item_count: 0,
         deleted_item_count: 0,
         active_category_count: 0,
         deleted_category_count: 0,
+        deleted_items: [],
         search_query: "",
         search_results: nil,
         search_offset: 0,
@@ -90,6 +93,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # `?tab=items|categories` is reflected into socket assigns on every
   # patch. The default is "items"; any unknown value falls back to
   # "items" so a stale link can't push the LV into an undefined tab.
+  #
+  # After updating the tab, run the per-tab auto-flip — if the user
+  # switches into a tab whose Deleted bucket is empty, flip them back
+  # to Active rather than land them in an empty Deleted view.
   @impl true
   def handle_params(params, _uri, socket) do
     tab =
@@ -98,7 +105,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         _ -> "items"
       end
 
-    {:noreply, assign(socket, :tab, tab)}
+    {:noreply, socket |> assign(:tab, tab) |> maybe_auto_flip_to_active()}
   end
 
   # PubSub: another LV touched a category/item/catalogue/smart-rule.
@@ -273,6 +280,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found.")
          )}
 
+      {:error, :parent_catalogue_deleted} ->
+        {:noreply,
+         put_flash(socket, :error, Errors.message(:parent_catalogue_deleted))}
+
       {:error, reason} ->
         log_operation_error(socket, "restore_item", %{
           entity_type: "item",
@@ -335,14 +346,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  def handle_event("trash_category", %{"uuid" => uuid}, socket) do
-    with %{} = category <- Catalogue.get_category(uuid),
-         {:ok, _} <- Catalogue.trash_category(category, actor_opts(socket)) do
-      {:noreply,
-       socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Category moved to deleted."))
-       |> reset_and_load()}
-    else
+  # Entry point from the Items / Categories tab Delete buttons. When the
+  # category subtree has zero active items, trashes directly. Otherwise
+  # opens a modal so the operator chooses what happens to the items
+  # (move them to another category, or detach them as uncategorized in
+  # the same catalogue) before the category trash fires.
+  def handle_event("request_trash_category", %{"uuid" => uuid}, socket) do
+    case Catalogue.get_category(uuid) do
       nil ->
         {:noreply,
          put_flash(
@@ -351,20 +361,62 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            Gettext.gettext(PhoenixKitWeb.Gettext, "Category not found.")
          )}
 
-      {:error, reason} ->
-        log_operation_error(socket, "trash_category", %{
-          entity_type: "category",
-          entity_uuid: uuid,
-          reason: reason
-        })
+      category ->
+        item_count = Catalogue.active_item_count_in_subtree(uuid)
 
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete category.")
-         )}
+        if item_count == 0 do
+          do_trash_category(socket, category, items: :cascade)
+        else
+          {:noreply, assign(socket, :trash_modal, build_trash_modal_state(category, item_count))}
+        end
     end
+  end
+
+  def handle_event("set_trash_disposition", %{"disposition" => disp}, socket) do
+    modal = socket.assigns.trash_modal || %{}
+
+    new_modal =
+      case disp do
+        "uncategorize" -> %{modal | disposition: :uncategorize, target_uuid: nil}
+        "move_to" -> %{modal | disposition: :move_to}
+        "cascade" -> %{modal | disposition: :cascade, target_uuid: nil}
+        _ -> modal
+      end
+
+    {:noreply, assign(socket, :trash_modal, new_modal)}
+  end
+
+  def handle_event("select_trash_target", %{"category_uuid" => uuid}, socket) do
+    modal = socket.assigns.trash_modal || %{}
+    {:noreply, assign(socket, :trash_modal, %{modal | target_uuid: blank_to_nil(uuid)})}
+  end
+
+  def handle_event("confirm_trash_category", _params, socket) do
+    case socket.assigns.trash_modal do
+      %{category: category, disposition: :uncategorize} ->
+        socket
+        |> assign(:trash_modal, nil)
+        |> do_trash_category(category, items: :uncategorize)
+
+      %{category: category, disposition: :move_to, target_uuid: target_uuid}
+      when not is_nil(target_uuid) ->
+        socket
+        |> assign(:trash_modal, nil)
+        |> do_trash_category(category, items: {:move_to, target_uuid})
+
+      %{category: category, disposition: :cascade} ->
+        socket
+        |> assign(:trash_modal, nil)
+        |> do_trash_category(category, items: :cascade)
+
+      _ ->
+        # Confirm should be disabled in this state; defensive no-op.
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("cancel_trash_category", _params, socket) do
+    {:noreply, assign(socket, :trash_modal, nil)}
   end
 
   def handle_event("restore_category", %{"uuid" => uuid}, socket) do
@@ -382,6 +434,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            :error,
            Gettext.gettext(PhoenixKitWeb.Gettext, "Category not found.")
          )}
+
+      {:error, :parent_catalogue_deleted} ->
+        {:noreply,
+         put_flash(socket, :error, Errors.message(:parent_catalogue_deleted))}
 
       {:error, reason} ->
         log_operation_error(socket, "restore_category", %{
@@ -554,6 +610,42 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
+  defp build_trash_modal_state(%Category{} = category, item_count) do
+    %{
+      category: category,
+      item_count: item_count,
+      targets: Catalogue.list_move_target_categories(category),
+      disposition: :uncategorize,
+      target_uuid: nil
+    }
+  end
+
+  defp do_trash_category(socket, category, opts) do
+    full_opts = Keyword.merge(opts, actor_opts(socket))
+
+    case Catalogue.trash_category(category, full_opts) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Category moved to deleted."))
+         |> reset_and_load()}
+
+      {:error, reason} ->
+        log_operation_error(socket, "trash_category", %{
+          entity_type: "category",
+          entity_uuid: category.uuid,
+          reason: reason
+        })
+
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete category.")
+         )}
+    end
+  end
+
   defp apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids) do
     case Catalogue.reorder_items(
            catalogue_uuid,
@@ -609,12 +701,23 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # those can affect which cards render and in what order.
   defp reset_and_load(socket) do
     uuid = socket.assigns.catalogue_uuid
-    deleted_count = Catalogue.deleted_count_for_catalogue(uuid)
 
-    # Auto-switch back to active if the deleted tab was visible but has
-    # no content left.
+    # Pre-compute tab-relevant deleted count for the auto-flip decision.
+    # The flip rule: if the tab the user is in has no deleted entries
+    # AND they're sitting in the Deleted view, snap them back to Active
+    # so they don't land in an empty Deleted bucket.
+    deleted_item_count = Catalogue.deleted_item_count_for_catalogue(uuid)
+    deleted_category_count = Catalogue.deleted_category_count_for_catalogue(uuid)
+    deleted_count = deleted_item_count + deleted_category_count
+
+    relevant_count =
+      case socket.assigns.tab do
+        "categories" -> deleted_category_count
+        _ -> deleted_item_count
+      end
+
     view_mode =
-      if deleted_count == 0 and socket.assigns.view_mode == "deleted",
+      if relevant_count == 0 and socket.assigns.view_mode == "deleted",
         do: "active",
         else: socket.assigns.view_mode
 
@@ -628,44 +731,94 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
     has_any_content = category_list != [] or uncategorized_total > 0
 
-    socket
-    |> assign(
-      page_title: catalogue.name,
-      catalogue: catalogue,
-      category_list: category_list,
-      category_depths: category_depths,
-      category_counts: category_counts,
-      uncategorized_total: uncategorized_total,
-      loaded_cards: [],
-      cursor: initial_cursor(),
-      has_more: has_any_content,
-      loading: has_any_content,
-      deleted_count: deleted_count,
-      active_item_count: Catalogue.item_count_for_catalogue(uuid),
-      deleted_item_count: Catalogue.deleted_item_count_for_catalogue(uuid),
-      active_category_count: Catalogue.category_count_for_catalogue(uuid),
-      deleted_category_count: Catalogue.deleted_category_count_for_catalogue(uuid),
-      view_mode: view_mode
-    )
-    |> load_next_batch()
+    # Items tab Deleted view is a flat recency-ordered list, not the
+    # category-grouped streamed cards. Skip the cursor / load_next_batch
+    # machinery in that branch and load the flat list directly.
+    items_tab_deleted? = view_mode == "deleted" and socket.assigns.tab == "items"
+
+    deleted_items =
+      if items_tab_deleted?,
+        do: Catalogue.list_deleted_items_for_catalogue(uuid),
+        else: []
+
+    socket =
+      socket
+      |> assign(
+        page_title: catalogue.name,
+        catalogue: catalogue,
+        category_list: category_list,
+        category_depths: category_depths,
+        category_counts: category_counts,
+        uncategorized_total: uncategorized_total,
+        loaded_cards: [],
+        cursor: initial_cursor(),
+        has_more: not items_tab_deleted? and has_any_content,
+        loading: not items_tab_deleted? and has_any_content,
+        deleted_count: deleted_count,
+        active_item_count: Catalogue.item_count_for_catalogue(uuid),
+        deleted_item_count: deleted_item_count,
+        active_category_count: Catalogue.category_count_for_catalogue(uuid),
+        deleted_category_count: deleted_category_count,
+        view_mode: view_mode,
+        deleted_items: deleted_items
+      )
+
+    if items_tab_deleted?, do: socket, else: load_next_batch(socket)
   end
 
   # Refreshes the header counts (Active / Deleted tabs) and the
   # per-category + uncategorized totals after an item mutation, without
   # reloading the card list. Preserves scroll position.
+  #
+  # Special case: when restoring/deleting drains the Deleted view to
+  # zero, we have to flip back to Active and reset_and_load — otherwise
+  # the loaded_cards (which were progressively drained by
+  # `remove_item_locally`) keep rendering empty content for items that
+  # are now active in another view. Symptom: badges show correct active
+  # counts but the cards are blank.
   defp refresh_counts(socket) do
     uuid = socket.assigns.catalogue_uuid
     mode = view_mode_to_atom(socket.assigns.view_mode)
+    items_tab_deleted? = socket.assigns.view_mode == "deleted" and socket.assigns.tab == "items"
 
-    assign(socket,
-      deleted_count: Catalogue.deleted_count_for_catalogue(uuid),
-      active_item_count: Catalogue.item_count_for_catalogue(uuid),
-      deleted_item_count: Catalogue.deleted_item_count_for_catalogue(uuid),
-      active_category_count: Catalogue.category_count_for_catalogue(uuid),
-      deleted_category_count: Catalogue.deleted_category_count_for_catalogue(uuid),
-      category_counts: Catalogue.item_counts_by_category_for_catalogue(uuid, mode: mode),
-      uncategorized_total: Catalogue.uncategorized_count_for_catalogue(uuid, mode: mode)
-    )
+    deleted_items =
+      if items_tab_deleted?,
+        do: Catalogue.list_deleted_items_for_catalogue(uuid),
+        else: socket.assigns[:deleted_items] || []
+
+    socket =
+      assign(socket,
+        deleted_count: Catalogue.deleted_count_for_catalogue(uuid),
+        active_item_count: Catalogue.item_count_for_catalogue(uuid),
+        deleted_item_count: Catalogue.deleted_item_count_for_catalogue(uuid),
+        active_category_count: Catalogue.category_count_for_catalogue(uuid),
+        deleted_category_count: Catalogue.deleted_category_count_for_catalogue(uuid),
+        category_counts: Catalogue.item_counts_by_category_for_catalogue(uuid, mode: mode),
+        uncategorized_total: Catalogue.uncategorized_count_for_catalogue(uuid, mode: mode),
+        deleted_items: deleted_items
+      )
+
+    maybe_auto_flip_to_active(socket)
+  end
+
+  # Per-tab auto-flip: Items tab uses deleted_item_count, Categories tab
+  # uses deleted_category_count. Without tab awareness the user would
+  # land in an empty Deleted view of one tab while the other tab still
+  # had deleted entries (since `deleted_count` is the combined total).
+  defp maybe_auto_flip_to_active(socket) do
+    relevant_count =
+      case socket.assigns.tab do
+        "categories" -> socket.assigns.deleted_category_count
+        _ -> socket.assigns.deleted_item_count
+      end
+
+    if relevant_count == 0 and socket.assigns.view_mode == "deleted" do
+      socket
+      |> assign(:view_mode, "active")
+      |> reset_and_load()
+    else
+      socket
+    end
   end
 
   # PubSub-driven refresh. Updates counts, the catalogue struct, and the
@@ -683,34 +836,27 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # where this catalogue itself was deleted (caller redirects to index).
   defp refresh_in_place(socket) do
     uuid = socket.assigns.catalogue_uuid
-
     catalogue = Catalogue.fetch_catalogue!(uuid)
-    deleted_count = Catalogue.deleted_count_for_catalogue(uuid)
-
-    view_mode =
-      if deleted_count == 0 and socket.assigns.view_mode == "deleted",
-        do: "active",
-        else: socket.assigns.view_mode
-
-    mode = view_mode_to_atom(view_mode)
+    mode = view_mode_to_atom(socket.assigns.view_mode)
     tree = Catalogue.list_category_tree(uuid, mode: mode)
     category_list = Enum.map(tree, fn {cat, _depth} -> cat end)
     category_depths = Map.new(tree, fn {cat, depth} -> {cat.uuid, depth} end)
 
-    assign(socket,
+    socket
+    |> assign(
       page_title: catalogue.name,
       catalogue: catalogue,
-      view_mode: view_mode,
       category_list: category_list,
       category_depths: category_depths,
       category_counts: Catalogue.item_counts_by_category_for_catalogue(uuid, mode: mode),
       uncategorized_total: Catalogue.uncategorized_count_for_catalogue(uuid, mode: mode),
-      deleted_count: deleted_count,
+      deleted_count: Catalogue.deleted_count_for_catalogue(uuid),
       active_item_count: Catalogue.item_count_for_catalogue(uuid),
       deleted_item_count: Catalogue.deleted_item_count_for_catalogue(uuid),
       active_category_count: Catalogue.category_count_for_catalogue(uuid),
       deleted_category_count: Catalogue.deleted_category_count_for_catalogue(uuid)
     )
+    |> maybe_auto_flip_to_active()
   end
 
   # Loads one batch (up to `@per_page` items) based on the current
@@ -1303,17 +1449,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           </div>
         </div>
 
-        <div :if={is_nil(@search_results) and not @search_loading and @loaded_cards == [] and not @has_more and not @loading and @view_mode == "deleted"} class="card bg-base-100 shadow">
+        <div :if={is_nil(@search_results) and not @search_loading and @deleted_items == [] and @view_mode == "deleted"} class="card bg-base-100 shadow">
           <div class="card-body items-center text-center py-12">
             <p class="text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "No deleted items.")}</p>
           </div>
         </div>
 
-        <%!-- Streamed cards (one per category, one for uncategorized).
+        <%!-- Active view: streamed cards (one per category + Uncategorized).
              Category DnD lives on the Categories tab — Items tab is
              read-only structure so admins focus on item-level edits. --%>
         <div
-          :if={is_nil(@search_results) and not @search_loading and @loaded_cards != []}
+          :if={is_nil(@search_results) and not @search_loading and @view_mode == "active" and @loaded_cards != []}
           id="catalogue-detail-cards"
           class="flex flex-col gap-6"
         >
@@ -1334,9 +1480,30 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <% end %>
         </div>
 
-        <%!-- Infinite-scroll sentinel --%>
+        <%!-- Deleted view: flat list ordered by deletion date. No
+             category grouping — the boss wants a recency-ordered audit
+             list, not a tree. --%>
         <div
-          :if={is_nil(@search_results) and not @search_loading and @has_more}
+          :if={is_nil(@search_results) and not @search_loading and @view_mode == "deleted" and @deleted_items != []}
+          id="catalogue-detail-deleted-items"
+        >
+          <.item_table
+            items={@deleted_items}
+            columns={[:name, :sku, :unit, :status]}
+            on_restore="restore_item"
+            on_permanent_delete="show_delete_confirm"
+            permanent_delete_type="item"
+            cards={true}
+            show_toggle={false}
+            storage_key="catalogue-detail-items"
+            id="catalogue-deleted-items"
+          />
+        </div>
+
+        <%!-- Infinite-scroll sentinel (active view only — deleted view
+             is a one-shot 500-row list and doesn't paginate yet). --%>
+        <div
+          :if={is_nil(@search_results) and not @search_loading and @view_mode == "active" and @has_more}
           id="detail-load-more-sentinel"
           phx-hook="InfiniteScroll"
           data-cursor={"#{@cursor.phase}-#{@cursor.category_index}-#{@cursor.item_offset}"}
@@ -1347,7 +1514,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           </div>
         </div>
 
-          <div :if={is_nil(@search_results) and not @search_loading and not @has_more and @loaded_cards != []} class="text-center text-xs text-base-content/40 py-2">
+          <div :if={is_nil(@search_results) and not @search_loading and @view_mode == "active" and not @has_more and @loaded_cards != []} class="text-center text-xs text-base-content/40 py-2">
             {Gettext.gettext(PhoenixKitWeb.Gettext, "All items loaded")}
           </div>
         </div>
@@ -1453,6 +1620,137 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         danger={true}
       />
 
+      <%!-- "What about the items?" modal — opens when the operator
+           clicks Delete on a category that still has active items in
+           its V103 subtree. The boss's rule: deleting the category
+           shouldn't drag the items down with it; the operator picks
+           a destination first. --%>
+      <.confirm_modal
+        :if={@trash_modal}
+        show={true}
+        on_confirm="confirm_trash_category"
+        on_cancel="cancel_trash_category"
+        title={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete category — what about the items?")}
+        title_icon="hero-folder-minus"
+        confirm_text={
+          if @trash_modal[:disposition] == :cascade,
+            do: Gettext.gettext(PhoenixKitWeb.Gettext, "Delete category and items"),
+            else: Gettext.gettext(PhoenixKitWeb.Gettext, "Move items and delete category")
+        }
+        confirm_disabled={
+          @trash_modal[:disposition] == :move_to and is_nil(@trash_modal[:target_uuid])
+        }
+        danger={true}
+      >
+        <p class="text-sm text-base-content/70">
+          <strong>{@trash_modal[:category].name}</strong>
+          {Gettext.gettext(
+            PhoenixKitWeb.Gettext,
+            "and its subtree contain %{count} active items. Choose where they should go before the category is deleted.",
+            count: @trash_modal[:item_count]
+          )}
+        </p>
+
+        <div class="space-y-3 mt-4">
+          <%!-- Option 1: uncategorize (no further input needed) --%>
+          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
+            <input
+              type="radio"
+              name="trash_disposition"
+              value="uncategorize"
+              checked={@trash_modal[:disposition] == :uncategorize}
+              phx-click="set_trash_disposition"
+              phx-value-disposition="uncategorize"
+              class="radio radio-sm radio-primary mt-0.5"
+            />
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-sm">
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Make items uncategorized")}
+              </p>
+              <p class="text-xs text-base-content/60">
+                {Gettext.gettext(
+                  PhoenixKitWeb.Gettext,
+                  "Items stay in this catalogue but are no longer attached to any category."
+                )}
+              </p>
+            </div>
+          </label>
+
+          <%!-- Option 2: move to another category in the same catalogue.
+               Only meaningful when there's a sibling/elsewhere to move to;
+               we still render the radio when the list is empty so the UI
+               is symmetric, but the dropdown shows an empty-state hint. --%>
+          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
+            <input
+              type="radio"
+              name="trash_disposition"
+              value="move_to"
+              checked={@trash_modal[:disposition] == :move_to}
+              phx-click="set_trash_disposition"
+              phx-value-disposition="move_to"
+              class="radio radio-sm radio-primary mt-0.5"
+            />
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-sm">
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move items to another category")}
+              </p>
+              <p class="text-xs text-base-content/60 mb-2">
+                {Gettext.gettext(
+                  PhoenixKitWeb.Gettext,
+                  "Pick a target category in this catalogue. The category being deleted and its subtree are excluded."
+                )}
+              </p>
+              <%= if @trash_modal[:targets] == [] do %>
+                <p class="text-xs text-warning">
+                  {Gettext.gettext(PhoenixKitWeb.Gettext, "No other categories available — use Uncategorized instead.")}
+                </p>
+              <% else %>
+                <select
+                  name="category_uuid"
+                  phx-change="select_trash_target"
+                  disabled={@trash_modal[:disposition] != :move_to}
+                  class="select select-sm select-bordered w-full"
+                >
+                  <option value="">{Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}</option>
+                  <%= for {cat, depth} <- @trash_modal[:targets] do %>
+                    <option value={cat.uuid} selected={@trash_modal[:target_uuid] == cat.uuid}>
+                      {String.duplicate("— ", depth)}{cat.name}
+                    </option>
+                  <% end %>
+                </select>
+              <% end %>
+            </div>
+          </label>
+
+          <%!-- Option 3: cascade — items follow the category to the
+               Deleted view. Soft-delete, restorable. The "I want everything
+               gone" path; not the default since the boss specifically
+               disliked this being implicit. --%>
+          <label class="flex items-start gap-3 p-3 rounded-lg border border-error/30 cursor-pointer hover:bg-error/5">
+            <input
+              type="radio"
+              name="trash_disposition"
+              value="cascade"
+              checked={@trash_modal[:disposition] == :cascade}
+              phx-click="set_trash_disposition"
+              phx-value-disposition="cascade"
+              class="radio radio-sm radio-error mt-0.5"
+            />
+            <div class="flex-1 min-w-0">
+              <p class="font-medium text-sm text-error">
+                {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete items along with the category")}
+              </p>
+              <p class="text-xs text-base-content/60">
+                {Gettext.gettext(
+                  PhoenixKitWeb.Gettext,
+                  "Items move to the Deleted view alongside the category. Both can be restored later."
+                )}
+              </p>
+            </div>
+          </label>
+        </div>
+      </.confirm_modal>
+
       <.live_component
         :if={@pdf_search_item}
         module={PdfSearchModal}
@@ -1546,7 +1844,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               {Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
             </.link>
             <button
-              phx-click="trash_category"
+              phx-click="request_trash_category"
               phx-value-uuid={@card.category.uuid}
               phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting...")}
               class="btn btn-ghost btn-xs text-error"
@@ -1569,7 +1867,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-click="show_delete_confirm"
               phx-value-uuid={@card.category.uuid}
               phx-value-type="category"
-              class="btn btn-ghost btn-xs text-error"
+              class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-error/30 bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors cursor-pointer"
             >
               {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
             </button>
@@ -1709,7 +2007,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               {@category.name}
             </span>
             <span :if={@category.status == "deleted"} class="badge badge-error badge-xs">deleted</span>
-            <span class="badge badge-ghost badge-sm">{@count} {Gettext.gettext(PhoenixKitWeb.Gettext, "items")}</span>
+            <%!-- Item count only for active categories. Once a category
+                 is deleted, its items are managed separately (Items tab
+                 Deleted view) — the count here would be confusing under
+                 the "separate status" rule. --%>
+            <span :if={@category.status == "active"} class="badge badge-ghost badge-sm">{@count} {Gettext.gettext(PhoenixKitWeb.Gettext, "items")}</span>
           </div>
 
           <%!-- Active mode: Edit + Delete --%>
@@ -1718,7 +2020,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               {Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
             </.link>
             <button
-              phx-click="trash_category"
+              phx-click="request_trash_category"
               phx-value-uuid={@category.uuid}
               phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting...")}
               class="btn btn-ghost btn-xs text-error"
@@ -1741,7 +2043,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-click="show_delete_confirm"
               phx-value-uuid={@category.uuid}
               phx-value-type="category"
-              class="btn btn-ghost btn-xs text-error"
+              class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-error/30 bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors cursor-pointer"
             >
               {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
             </button>

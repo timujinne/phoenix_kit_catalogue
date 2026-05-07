@@ -23,6 +23,21 @@ defmodule PhoenixKitCatalogue.Catalogue.Counts do
   end
 
   @doc """
+  Counts active items in a category subtree (the category itself and
+  every V103 descendant). Used by the admin "delete category" modal to
+  decide whether to ask the operator what should happen to the items.
+  """
+  @spec active_item_count_in_subtree(Ecto.UUID.t()) :: non_neg_integer()
+  def active_item_count_in_subtree(category_uuid) do
+    subtree = PhoenixKitCatalogue.Catalogue.Tree.subtree_uuids(category_uuid)
+
+    from(i in Item,
+      where: i.category_uuid in ^subtree and i.status != "deleted"
+    )
+    |> repo().aggregate(:count)
+  end
+
+  @doc """
   Returns a map of `%{catalogue_uuid => non_deleted_item_count}` for all catalogues.
 
   Single-query batch version of `item_count_for_catalogue/1` — avoids N+1 when

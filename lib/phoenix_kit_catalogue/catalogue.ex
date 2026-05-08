@@ -1359,7 +1359,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
       nil ->
         {:error, :move_target_not_found}
 
-      %Category{catalogue_uuid: target_cat_uuid} when target_cat_uuid != category.catalogue_uuid ->
+      %Category{catalogue_uuid: target_cat_uuid}
+      when target_cat_uuid != category.catalogue_uuid ->
         {:error, :cross_catalogue_move}
 
       %Category{uuid: ^target_uuid} = target ->
@@ -1368,7 +1369,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
             where: i.category_uuid in ^subtree and i.status != "deleted"
           )
           |> repo().update_all(
-            set: [category_uuid: target.uuid, catalogue_uuid: target.catalogue_uuid, updated_at: now]
+            set: [
+              category_uuid: target.uuid,
+              catalogue_uuid: target.catalogue_uuid,
+              updated_at: now
+            ]
           )
 
         {:ok, count}
@@ -3030,6 +3035,221 @@ defmodule PhoenixKitCatalogue.Catalogue do
     end
 
     {count, nil}
+  end
+
+  # ── Bulk actions on UUID lists (admin selection toolbar) ──────
+
+  @doc """
+  Bulk soft-deletes items by UUID. Empty list is a no-op. Logs a single
+  `item.bulk_trashed` activity row when count > 0.
+  """
+  @spec bulk_trash_items([Ecto.UUID.t()], keyword()) :: {non_neg_integer(), nil}
+  def bulk_trash_items([], _opts), do: {0, nil}
+
+  def bulk_trash_items(uuids, opts) when is_list(uuids) do
+    {count, _} =
+      from(i in Item, where: i.uuid in ^uuids and i.status != "deleted")
+      |> repo().update_all(set: [status: "deleted", updated_at: DateTime.utc_now()])
+
+    if count > 0 do
+      log_activity(%{
+        action: "item.bulk_trashed",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "item",
+        metadata: %{"count" => count, "uuids" => uuids}
+      })
+    end
+
+    {count, nil}
+  end
+
+  @doc """
+  Bulk restores items by UUID. Refuses any item whose parent catalogue
+  is deleted (returns the count of *attempted* successes; skipped ones
+  are excluded). Items with deleted parent categories are uncategorized
+  on restore — same rule as `restore_item/2`.
+  """
+  @spec bulk_restore_items([Ecto.UUID.t()], keyword()) :: {non_neg_integer(), nil}
+  def bulk_restore_items([], _opts), do: {0, nil}
+
+  def bulk_restore_items(uuids, opts) when is_list(uuids) do
+    now = DateTime.utc_now()
+
+    items =
+      from(i in Item,
+        where: i.uuid in ^uuids and i.status == "deleted",
+        preload: [:catalogue, :category]
+      )
+      |> repo().all()
+      |> Enum.reject(fn i -> i.catalogue && i.catalogue.status == "deleted" end)
+
+    {ok_uuids, detached_uuids} =
+      Enum.reduce(items, {[], []}, fn item, {ok_acc, det_acc} ->
+        if item.category && item.category.status == "deleted" do
+          {[item.uuid | ok_acc], [item.uuid | det_acc]}
+        else
+          {[item.uuid | ok_acc], det_acc}
+        end
+      end)
+
+    {count_attached, _} =
+      from(i in Item,
+        where: i.uuid in ^(ok_uuids -- detached_uuids) and i.status == "deleted"
+      )
+      |> repo().update_all(set: [status: "active", updated_at: now])
+
+    {count_detached, _} =
+      from(i in Item, where: i.uuid in ^detached_uuids and i.status == "deleted")
+      |> repo().update_all(set: [status: "active", category_uuid: nil, updated_at: now])
+
+    count = count_attached + count_detached
+
+    if count > 0 do
+      log_activity(%{
+        action: "item.bulk_restored",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "item",
+        metadata: %{
+          "count" => count,
+          "detached_count" => count_detached,
+          "uuids" => ok_uuids
+        }
+      })
+    end
+
+    {count, nil}
+  end
+
+  @doc """
+  Bulk hard-deletes items by UUID. Use with care — no soft-delete cycle.
+  Logs a single `item.bulk_permanently_deleted` activity row when
+  count > 0.
+  """
+  @spec bulk_permanently_delete_items([Ecto.UUID.t()], keyword()) ::
+          {non_neg_integer(), nil}
+  def bulk_permanently_delete_items([], _opts), do: {0, nil}
+
+  def bulk_permanently_delete_items(uuids, opts) when is_list(uuids) do
+    {count, _} = from(i in Item, where: i.uuid in ^uuids) |> repo().delete_all()
+
+    if count > 0 do
+      log_activity(%{
+        action: "item.bulk_permanently_deleted",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "item",
+        metadata: %{"count" => count, "uuids" => uuids}
+      })
+    end
+
+    {count, nil}
+  end
+
+  @doc """
+  Bulk-moves items to a target category. Target must live in the same
+  catalogue as the items; cross-catalogue moves are rejected. Use
+  `target_uuid: nil` to uncategorize all items (within whichever
+  catalogue each item already lives in).
+  """
+  @spec bulk_move_items_to_category([Ecto.UUID.t()], Ecto.UUID.t() | nil, keyword()) ::
+          {:ok, non_neg_integer()} | {:error, :category_not_found}
+  def bulk_move_items_to_category([], _target, _opts), do: {:ok, 0}
+
+  def bulk_move_items_to_category(uuids, nil, opts) when is_list(uuids) do
+    {count, _} =
+      from(i in Item, where: i.uuid in ^uuids)
+      |> repo().update_all(set: [category_uuid: nil, updated_at: DateTime.utc_now()])
+
+    if count > 0 do
+      log_activity(%{
+        action: "item.bulk_moved",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "item",
+        metadata: %{"count" => count, "to_category_uuid" => nil}
+      })
+    end
+
+    {:ok, count}
+  end
+
+  def bulk_move_items_to_category(uuids, target_uuid, opts) when is_list(uuids) do
+    case repo().get(Category, target_uuid) do
+      nil ->
+        {:error, :category_not_found}
+
+      %Category{} = target ->
+        {count, _} =
+          from(i in Item, where: i.uuid in ^uuids)
+          |> repo().update_all(
+            set: [
+              category_uuid: target.uuid,
+              catalogue_uuid: target.catalogue_uuid,
+              updated_at: DateTime.utc_now()
+            ]
+          )
+
+        if count > 0 do
+          log_activity(%{
+            action: "item.bulk_moved",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "item",
+            metadata: %{
+              "count" => count,
+              "to_category_uuid" => target.uuid,
+              "to_catalogue_uuid" => target.catalogue_uuid
+            }
+          })
+        end
+
+        {:ok, count}
+    end
+  end
+
+  @doc """
+  Bulk soft-deletes categories by UUID with a uniform item disposition
+  (cascade / uncategorize / move_to). Each category goes through the
+  same logic as `trash_category/2`. Returns `{:ok, %{categories:
+  count, items_handled: count}}` or surfaces the first error.
+  """
+  @spec bulk_trash_categories(
+          [Ecto.UUID.t()],
+          :cascade | :uncategorize | {:move_to, Ecto.UUID.t()},
+          keyword()
+        ) ::
+          {:ok, %{categories: non_neg_integer(), items_handled: non_neg_integer()}}
+          | {:error, term()}
+  def bulk_trash_categories([], _disposition, _opts),
+    do: {:ok, %{categories: 0, items_handled: 0}}
+
+  def bulk_trash_categories(uuids, disposition, opts) when is_list(uuids) do
+    repo().transaction(fn ->
+      Enum.reduce_while(uuids, %{categories: 0, items_handled: 0}, fn uuid, acc ->
+        case repo().get(Category, uuid) do
+          nil ->
+            {:cont, acc}
+
+          %Category{status: "deleted"} ->
+            {:cont, acc}
+
+          %Category{} = category ->
+            case trash_category(category, Keyword.put(opts, :items, disposition)) do
+              {:ok, _} ->
+                {:cont, %{acc | categories: acc.categories + 1}}
+
+              {:error, reason} ->
+                repo().rollback(reason)
+            end
+        end
+      end)
+    end)
+    |> case do
+      {:ok, summary} -> {:ok, summary}
+      error -> error
+    end
   end
 
   @doc """

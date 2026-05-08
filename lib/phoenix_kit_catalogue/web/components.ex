@@ -1167,6 +1167,20 @@ defmodule PhoenixKitCatalogue.Web.Components do
       "SortableJS group name; tables sharing a group can exchange items via cross-container drag (e.g. items moving between categories)"
   )
 
+  attr(:selectable, :boolean,
+    default: false,
+    doc:
+      "When true, each row gets a checkbox in the leftmost column (combined with the drag handle when reorderable). The drag handle is hidden until the row is hovered."
+  )
+
+  attr(:selected_uuids, :any, default: nil, doc: "MapSet of selected item UUIDs")
+
+  attr(:on_toggle_select, :string,
+    default: nil,
+    doc:
+      "Event name fired when the user toggles a row's checkbox. The LV handler receives `phx-value-uuid`."
+  )
+
   def item_table(assigns) do
     assigns =
       assigns
@@ -1192,18 +1206,31 @@ defmodule PhoenixKitCatalogue.Web.Components do
       }
     >
       <:card_header :let={item}>
-        <.link
-          :if={@edit_path && item.uuid}
-          navigate={safe_call(@edit_path, item.uuid)}
-          class="font-medium text-sm link link-hover"
-        >
-          {item.name || "—"}
-        </.link>
-        <span :if={!@edit_path || !item.uuid} class="font-medium text-sm">{item.name || "—"}</span>
+        <%!-- Mobile card view: prepend the checkbox so bulk-select works
+             on phone screens too. The desktop table view has its own
+             checkbox column; this keeps the card view symmetric. --%>
+        <div class="flex items-center gap-2">
+          <input
+            :if={@selectable and @on_toggle_select}
+            type="checkbox"
+            class="checkbox checkbox-xs"
+            checked={selected?(@selected_uuids, item.uuid)}
+            phx-click={@on_toggle_select}
+            phx-value-uuid={item.uuid}
+          />
+          <.link
+            :if={@edit_path && item.uuid}
+            navigate={safe_call(@edit_path, item.uuid)}
+            class="font-medium text-sm link link-hover"
+          >
+            {item.name || "—"}
+          </.link>
+          <span :if={!@edit_path || !item.uuid} class="font-medium text-sm">{item.name || "—"}</span>
+        </div>
       </:card_header>
       <.table_default_header>
         <.table_default_row>
-          <.table_default_header_cell :if={@on_reorder} class="w-8"></.table_default_header_cell>
+          <.table_default_header_cell :if={!is_nil(@on_reorder) or @selectable} class="w-10"></.table_default_header_cell>
           <.table_default_header_cell :for={col <- @columns}>
             {column_label(col)}
           </.table_default_header_cell>
@@ -1225,14 +1252,31 @@ defmodule PhoenixKitCatalogue.Web.Components do
       >
         <.table_default_row
           :for={item <- @items}
-          class={if @on_reorder, do: "sortable-item"}
+          class={if @on_reorder, do: "sortable-item group", else: "group"}
           data-id={item.uuid}
         >
-          <.table_default_cell
-            :if={@on_reorder}
-            class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/40"
-          >
-            <.icon name="hero-bars-3" class="w-4 h-4" />
+          <%!-- Combined checkbox + drag handle column. Checkbox is
+               always visible when selectable; drag handle hover-reveals
+               via group-hover so it doesn't compete visually with the
+               checkbox or the row content. --%>
+          <.table_default_cell :if={!is_nil(@on_reorder) or @selectable} class="w-10">
+            <div class="flex items-center gap-1.5">
+              <span
+                :if={@on_reorder}
+                class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                title={Gettext.gettext(PhoenixKitWeb.Gettext, "Drag to reorder")}
+              >
+                <.icon name="hero-bars-3" class="w-4 h-4" />
+              </span>
+              <input
+                :if={@selectable and @on_toggle_select}
+                type="checkbox"
+                class="checkbox checkbox-xs"
+                checked={selected?(@selected_uuids, item.uuid)}
+                phx-click={@on_toggle_select}
+                phx-value-uuid={item.uuid}
+              />
+            </div>
           </.table_default_cell>
           <.item_cell
             :for={col <- @columns}
@@ -1277,6 +1321,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
   # hook can pluck them off the container as extra payload. `nil` /
   # blank values become `""`-valued attrs so the parser side can detect
   # "uncategorized" without ambiguity.
+  defp selected?(nil, _uuid), do: false
+  defp selected?(%MapSet{} = set, uuid), do: MapSet.member?(set, uuid)
+  defp selected?(_, _), do: false
+
   defp build_reorder_scope_attrs(scope) when is_map(scope) do
     Enum.flat_map(scope, fn {key, value} ->
       attr_name = "data-sortable-scope-" <> dash_case(to_string(key))
@@ -1343,48 +1391,51 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp card_action_buttons(assigns) do
     ~H"""
+    <%!-- Mobile card view: icon-only buttons (text labels would overflow
+         a 390px card row). `title` carries the label as a native browser
+         tooltip + accessibility name. The card view is desktop-hidden
+         (`md:hidden`) so we don't worry about labelled-button parity. --%>
     <.link
       :if={@edit_path && @item.uuid}
       navigate={safe_call(@edit_path, @item.uuid)}
-      class="btn btn-ghost btn-xs"
+      class="btn btn-ghost btn-xs btn-square"
+      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
+      aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
     >
-      <.icon name="hero-pencil" class="w-3.5 h-3.5" /> {Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
+      <.icon name="hero-pencil" class="w-4 h-4" />
     </.link>
     <button
       :if={@pdf_search_event && @item.uuid}
       type="button"
       phx-click={@pdf_search_event}
       phx-value-uuid={@item.uuid}
-      class="btn btn-ghost btn-xs"
+      class="btn btn-ghost btn-xs btn-square"
+      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Search PDFs")}
+      aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Search PDFs")}
     >
-      <.icon name="hero-document-magnifying-glass" class="w-3.5 h-3.5" /> {Gettext.gettext(
-        PhoenixKitWeb.Gettext,
-        "Search PDFs"
-      )}
+      <.icon name="hero-document-magnifying-glass" class="w-4 h-4" />
     </button>
     <button
       :if={@on_delete}
       phx-click={@on_delete}
       phx-value-uuid={@item.uuid}
       phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting...")}
-      class="btn btn-ghost btn-xs text-error"
+      class="btn btn-ghost btn-xs btn-square text-error"
+      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete")}
+      aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete")}
     >
-      <.icon name="hero-trash" class="w-3.5 h-3.5" /> {Gettext.gettext(
-        PhoenixKitWeb.Gettext,
-        "Delete"
-      )}
+      <.icon name="hero-trash" class="w-4 h-4" />
     </button>
     <button
       :if={@on_restore}
       phx-click={@on_restore}
       phx-value-uuid={@item.uuid}
       phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Restoring...")}
-      class="btn btn-ghost btn-xs text-success"
+      class="btn btn-ghost btn-xs btn-square text-success"
+      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+      aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
     >
-      <.icon name="hero-arrow-path" class="w-3.5 h-3.5" /> {Gettext.gettext(
-        PhoenixKitWeb.Gettext,
-        "Restore"
-      )}
+      <.icon name="hero-arrow-path" class="w-4 h-4" />
     </button>
     <button
       :if={@on_permanent_delete}
@@ -1392,12 +1443,11 @@ defmodule PhoenixKitCatalogue.Web.Components do
       phx-value-uuid={@item.uuid}
       phx-value-type={@permanent_delete_type}
       phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting...")}
-      class="btn btn-ghost btn-xs text-error"
+      class="btn btn-ghost btn-xs btn-square text-error"
+      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+      aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
     >
-      <.icon name="hero-trash" class="w-3.5 h-3.5" /> {Gettext.gettext(
-        PhoenixKitWeb.Gettext,
-        "Delete Forever"
-      )}
+      <.icon name="hero-trash" class="w-4 h-4" />
     </button>
     """
   end

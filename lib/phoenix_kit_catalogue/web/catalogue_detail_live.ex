@@ -161,6 +161,98 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     {:noreply, assign(socket, show_pdf_search: false, pdf_search_item: nil)}
   end
 
+  # Cross-tab live reorder: another open detail page just reordered
+  # items inside a card on the same catalogue. Refresh just that card's
+  # items (preserves scroll) and fire the same flash the originator
+  # saw. `from == self()` is the originating LV — already updated
+  # locally, skip to avoid double-flashing.
+  def handle_info(
+        {:catalogue_card_refresh, cat_uuid, scope, flash_uuid, flash_status, from},
+        %{assigns: %{catalogue_uuid: catalogue_uuid}} = socket
+      )
+      when cat_uuid == catalogue_uuid and from != self() do
+    socket = refresh_card_items(socket, scope)
+
+    socket =
+      if is_binary(flash_uuid),
+        do: flash_reorder(socket, flash_uuid, flash_status),
+        else: socket
+
+    {:noreply, socket}
+  end
+
+  # Sender's own broadcast — already handled locally; ignore.
+  def handle_info({:catalogue_card_refresh, _, _, _, _, from}, socket) when from == self(),
+    do: {:noreply, socket}
+
+  # Cross-tab live reorder for categories: order positions changed,
+  # which affects how every streamed card is laid out. Heavier
+  # reset_and_load — same trade-off the local reorder makes.
+  def handle_info(
+        {:catalogue_category_reorder, cat_uuid, moved_id, status, from},
+        %{assigns: %{catalogue_uuid: catalogue_uuid}} = socket
+      )
+      when cat_uuid == catalogue_uuid and from != self() do
+    socket = reset_and_load(socket)
+
+    socket =
+      if is_binary(moved_id),
+        do: flash_reorder(socket, moved_id, status),
+        else: socket
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:catalogue_category_reorder, _, _, _, from}, socket) when from == self(),
+    do: {:noreply, socket}
+
+  # Cross-tab live bulk change: another open detail page just bulk-
+  # trashed / restored / moved / hard-deleted items. Two-step animation
+  # for receivers — flash the "leaving" colour on every affected DOM
+  # row immediately, schedule the actual state refresh after the flash
+  # plays out (~800ms), then on refresh fire green flash for the
+  # arriving rows when the kind is :restored or :moved.
+  def handle_info(
+        {:catalogue_bulk_change, cat_uuid, kind, uuids, _scopes, from},
+        %{assigns: %{catalogue_uuid: catalogue_uuid}} = socket
+      )
+      when cat_uuid == catalogue_uuid and from != self() do
+    leaving_status =
+      case kind do
+        # Restored items aren't currently visible — nothing to flash red.
+        :restored -> nil
+        # Trashed / moved / permanent-deleted: they're on this tab now,
+        # so red-flash them as they're about to leave.
+        _ -> :error
+      end
+
+    socket =
+      if leaving_status,
+        do: Enum.reduce(uuids, socket, &flash_reorder(&2, &1, leaving_status)),
+        else: socket
+
+    Process.send_after(self(), {:bulk_change_apply, kind, uuids}, 800)
+
+    {:noreply, socket}
+  end
+
+  # Originator's own bulk-change broadcast — already updated locally.
+  def handle_info({:catalogue_bulk_change, _, _, _, _, from}, socket) when from == self(),
+    do: {:noreply, socket}
+
+  # Tail of the cross-tab bulk animation — applies the actual state
+  # refresh and the arriving-side green flash (for moves / restores).
+  def handle_info({:bulk_change_apply, kind, uuids}, socket) do
+    socket = socket |> reset_and_load() |> refresh_counts()
+
+    socket =
+      if kind in [:restored, :moved],
+        do: Enum.reduce(uuids, socket, &flash_reorder(&2, &1, :ok)),
+        else: socket
+
+    {:noreply, socket}
+  end
+
   def handle_info(msg, socket) do
     Logger.debug("CatalogueDetailLive ignored unhandled message: #{inspect(msg)}")
     {:noreply, socket}
@@ -748,6 +840,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                ) do
           from_scope = from_category_uuid || :uncategorized
           to_scope = to_category_uuid || :uncategorized
+          # Source loses an item, destination gains one — broadcast both
+          # so other open tabs refresh both cards. Flash only on the
+          # destination scope (where the row landed).
+          PubSub.broadcast_card_refresh(to_catalogue_uuid, from_scope, nil, :ok)
+          PubSub.broadcast_card_refresh(to_catalogue_uuid, to_scope, moved_id, :ok)
 
           {:noreply,
            socket
@@ -819,6 +916,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp do_bulk_trash_items(socket) do
     uuids = socket.assigns.selected_items |> MapSet.to_list()
     {count, _} = Catalogue.bulk_trash_items(uuids, actor_opts(socket))
+    PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :trashed, uuids, [])
 
     socket
     |> assign(:bulk_confirm, nil)
@@ -831,6 +929,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp do_bulk_permanent_delete_items(socket) do
     uuids = socket.assigns.selected_items |> MapSet.to_list()
     {count, _} = Catalogue.bulk_permanently_delete_items(uuids, actor_opts(socket))
+    PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :permanent_delete, uuids, [])
 
     socket
     |> assign(:bulk_confirm, nil)
@@ -843,6 +942,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp do_bulk_restore_items(socket) do
     uuids = socket.assigns.selected_items |> MapSet.to_list()
     {count, _} = Catalogue.bulk_restore_items(uuids, actor_opts(socket))
+    PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :restored, uuids, [])
 
     socket
     |> assign(:selected_items, MapSet.new())
@@ -856,6 +956,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
     case Catalogue.bulk_move_items_to_category(uuids, target_uuid, actor_opts(socket)) do
       {:ok, count} ->
+        # `:moved` triggers the receiver's full red-fade → refresh →
+        # green-fade sequence on every other open tab.
+        PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :moved, uuids, [])
+
         socket
         |> assign(:bulk_move_modal, nil)
         |> assign(:selected_items, MapSet.new())
@@ -965,6 +1069,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          ) do
       :ok ->
         scope = category_uuid || :uncategorized
+        # Tell other open detail tabs to refresh this card + flash.
+        PubSub.broadcast_card_refresh(catalogue_uuid, scope, moved_id, :ok)
 
         {:noreply,
          socket
@@ -1607,6 +1713,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
     case result do
       :ok ->
+        # Other open tabs need a full reset_and_load to pick up the new
+        # category order — affects how every streamed card renders.
+        PubSub.broadcast_category_reorder(socket.assigns.catalogue_uuid, moved_id, :ok)
         {:noreply, flash_reorder(socket, moved_id, :ok)}
 
       {:error, reason} ->

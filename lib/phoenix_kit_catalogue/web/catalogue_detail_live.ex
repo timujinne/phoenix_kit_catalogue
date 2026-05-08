@@ -682,19 +682,24 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     {:noreply, assign(socket, :confirm_delete, nil)}
   end
 
-  def handle_event("reorder_categories", %{"ordered_ids" => ordered_ids}, socket)
+  def handle_event("reorder_categories", %{"ordered_ids" => ordered_ids} = params, socket)
       when is_list(ordered_ids) do
-    apply_category_reorder(socket, ordered_ids)
+    apply_category_reorder(socket, ordered_ids, params["moved_id"])
   end
 
-  # Cross-category drop: SortableJS sent `moved_id` plus the source
-  # category in `from*` keys alongside the destination's scope. We move
-  # the item, then reorder the destination to match the visual order
-  # the user dropped it into. The source's remaining order is preserved
-  # implicitly — its position values stay valid since they're per-scope.
+  # Cross-category drop: SortableJS sent the source category in `from*`
+  # keys alongside the destination's scope. We move the item, then
+  # reorder the destination to match the visual order the user dropped
+  # it into. The source's remaining order is preserved implicitly —
+  # its position values stay valid since they're per-scope.
+  #
+  # Pattern-matches on `fromCatalogueUuid` (only present on cross-
+  # container drops) rather than `moved_id` (now sent for every drop
+  # so the LV can flash the moved row regardless).
   def handle_event(
         "reorder_items",
-        %{"ordered_ids" => ordered_ids, "moved_id" => moved_id} = params,
+        %{"ordered_ids" => ordered_ids, "moved_id" => moved_id, "fromCatalogueUuid" => _} =
+            params,
         socket
       )
       when is_list(ordered_ids) and is_binary(moved_id) do
@@ -748,11 +753,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            socket
            |> refresh_card_items(from_scope, -1)
            |> refresh_card_items(to_scope, +1)
-           |> refresh_counts()}
+           |> refresh_counts()
+           |> flash_reorder(moved_id, :ok)}
         else
           nil ->
             {:noreply,
-             put_flash(socket, :error, Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found."))}
+             socket
+             |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found."))
+             |> flash_reorder(moved_id, :error)}
 
           {:error, reason} ->
             log_operation_error(socket, "move_item_via_dnd", %{
@@ -767,7 +775,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                :error,
                Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to move item.")
              )
-             |> reset_and_load()}
+             |> reset_and_load()
+             |> flash_reorder(moved_id, :error)}
         end
     end
   end
@@ -776,6 +785,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       when is_list(ordered_ids) do
     catalogue_uuid = params["catalogueUuid"]
     category_uuid = blank_to_nil(params["categoryUuid"])
+    moved_id = params["moved_id"]
 
     if catalogue_uuid != socket.assigns.catalogue_uuid do
       {:noreply,
@@ -785,7 +795,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          Gettext.gettext(PhoenixKitWeb.Gettext, "Wrong catalogue scope.")
        )}
     else
-      apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids)
+      apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids, moved_id)
     end
   end
 
@@ -946,7 +956,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  defp apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids) do
+  defp apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids, moved_id) do
     case Catalogue.reorder_items(
            catalogue_uuid,
            category_uuid,
@@ -955,18 +965,33 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          ) do
       :ok ->
         scope = category_uuid || :uncategorized
-        {:noreply, refresh_card_items(socket, scope)}
+
+        {:noreply,
+         socket
+         |> refresh_card_items(scope)
+         |> flash_reorder(moved_id, :ok)}
 
       {:error, reason} ->
         log_operation_error(socket, "reorder_items", %{reason: reason})
 
         {:noreply,
-         put_flash(
-           socket,
+         socket
+         |> put_flash(
            :error,
            Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to reorder items.")
-         )}
+         )
+         |> reset_and_load()
+         |> flash_reorder(moved_id, :error)}
     end
+  end
+
+  # Pushes the `sortable:flash` event the SortableGrid hook listens for.
+  # `moved_id` may be nil if a stale client missed the JS-side update;
+  # we no-op in that case so the success/error flash isn't required.
+  defp flash_reorder(socket, nil, _status), do: socket
+
+  defp flash_reorder(socket, moved_id, status) when is_binary(moved_id) do
+    push_event(socket, "sortable:flash", %{uuid: moved_id, status: to_string(status)})
   end
 
   # ── Helpers ─────────────────────────────────────────────────────
@@ -1557,7 +1582,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # a half-reordered state. UUIDs whose parent changed are silently
   # kept under their original parent — DnD here is for sibling-only
   # reorder, not reparenting.
-  defp apply_category_reorder(socket, ordered_ids) do
+  defp apply_category_reorder(socket, ordered_ids, moved_id) do
     by_uuid = Map.new(socket.assigns.category_list, fn %Category{} = c -> {c.uuid, c} end)
 
     groups =
@@ -1582,17 +1607,19 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
     case result do
       :ok ->
-        {:noreply, socket}
+        {:noreply, flash_reorder(socket, moved_id, :ok)}
 
       {:error, reason} ->
         log_operation_error(socket, "reorder_categories", %{reason: reason})
 
         {:noreply,
-         put_flash(
-           socket,
+         socket
+         |> put_flash(
            :error,
            Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to reorder categories.")
-         )}
+         )
+         |> reset_and_load()
+         |> flash_reorder(moved_id, :error)}
     end
   end
 

@@ -89,7 +89,7 @@ defmodule PhoenixKitCatalogue do
   # ===========================================================================
 
   @impl PhoenixKit.Module
-  def version, do: "0.1.16"
+  def version, do: "0.1.17"
 
   @impl PhoenixKit.Module
   def css_sources, do: [:phoenix_kit_catalogue]
@@ -146,8 +146,7 @@ defmodule PhoenixKitCatalogue do
         # parent "Catalogue" tab is the only thing that lights up on
         # detail/form pages — which looks wrong in the sidebar.
         match:
-          {:regex,
-           ~r"^/admin/catalogue(/(?!manufacturers|suppliers|import|events|pdfs).*)?$"},
+          {:regex, ~r"^/admin/catalogue(/(?!manufacturers|suppliers|import|events|pdfs).*)?$"},
         parent: :admin_catalogue,
         live_view: {PhoenixKitCatalogue.Web.CataloguesLive, :index}
       },

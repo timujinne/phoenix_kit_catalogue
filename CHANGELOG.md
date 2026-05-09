@@ -1,3 +1,33 @@
+## 0.1.17 - 2026-05-09
+
+### Added
+- **Items / Categories tabs on the catalogue detail page** — reflected to URL via `?tab=items|categories`. Each tab keeps its own Active / Deleted counts and per-tab Active/Deleted switcher. The Items tab Deleted view is a flat recency-ordered list (`list_deleted_items_for_catalogue/2`, capped at 500) instead of category-grouped cards. Auto-flip back to Active when the per-tab Deleted bucket empties — no more landing in an empty Deleted view of one tab while the other still has rows.
+- **Bulk select + actions** — row checkboxes (table + card view) with a sticky action bar. Items: Delete / Restore / Move (Move opens a same-catalogue target picker). Categories: Delete (opens the disposition modal in bulk mode) / Restore. New context fns `bulk_trash_items/2`, `bulk_restore_items/2`, `bulk_permanently_delete_items/2`, `bulk_move_items_to_category/3`, `bulk_trash_categories/3`. The bulk-move fn requires a `:catalogue_uuid` opt and validates both items + target stay in scope (mirrors the single-item DnD guard so a crafted client request can't silently flip a `catalogue_uuid` cross-catalogue).
+- **Per-card pagination** — replaced the global infinite-scroll cursor with a PdfSearchModal-style 25-row preview + per-card "Show N more" button. `expand_card` is deferred (event handler returns immediately, button renders the loading state, fetch runs on the next mailbox tick) with an 8s `:expand_timeout` recovery so a network hiccup mid-click restores the button + flashes a retry message.
+- **Cross-tab live updates** via PubSub — reorders, bulk operations, and category position changes broadcast to all open detail pages on the same catalogue. Bulk operations get a two-step receiver animation (red flash on leaving rows → 800ms delay → state refresh → green flash on arriving rows). New `Catalogue.PubSub` broadcasts: `broadcast_card_refresh/5`, `broadcast_category_reorder/4`, `broadcast_bulk_change/4`. All include `from \\ self()` so the originator's own broadcast is filtered on receive.
+- **Item-disposition modal** when trashing a category that still has items — Cascade / Uncategorize / Move-to (with same-catalogue target picker via `list_move_target_categories/1`). `trash_category/2` accepts an `:items` opt: `:cascade` (default), `:uncategorize`, or `{:move_to, target_uuid}`. Activity metadata grows `items_handled` + `items_disposition`.
+- **`active_item_count_in_subtree/1`** — admin "delete category" modal gate; counts items in the category and every V103 descendant.
+- **`list_move_target_categories/1`** — same-catalogue active categories that can receive items from a category about to be deleted (the category itself and its V103 descendants are excluded). Used by the disposition modal's move-target dropdown.
+- **`:parent_catalogue_deleted` error reason** with gettext message — surfaced when restoring a category or item whose parent catalogue is itself deleted.
+- **Drag-handle-only DnD** across all catalogue admin views — `pk-drag-handle` class wired through `data-sortable-handle` on catalogues table, category rows, item tables, and smart-rule rows. The row body is no longer a drag affordance.
+
+### Changed
+- **Soft-delete is decoupled — each entity owns its own status.** `restore_category/2` no longer cascades up or down; only the target category's status flips back to `"active"`. Refuses with `{:error, :parent_catalogue_deleted}` when the parent catalogue is itself deleted (the operator must restore the catalogue first). Items that came down via `:cascade` stay deleted; descendants stay deleted; ancestor categories stay at whatever status they were. `restore_item/2` refuses if the parent catalogue is deleted; when the parent **category** is deleted, the item is uncategorized on restore (`category_uuid: nil`) so it surfaces in the catalogue's Uncategorized bucket without auto-reviving the category structure. Activity metadata grows `"detached_from_category" => true` in that case. **Behaviour change** for callers that relied on the old cascading restore — call `restore_catalogue/2` first, or restore items individually after the parent.
+- `category.restored` activity metadata no longer carries `subtree_size` / `items_cascaded` (always 0 under the no-cascade rule); `category.trashed` carries `subtree_size`, `items_handled`, and `items_disposition` (`"cascade"` / `"uncategorize"` / `"move_to:<uuid>"`).
+- `bulk_restore_items/2` now wraps the read-then-partition-then-write pipeline in `repo().transaction/1` so a concurrent parent-status flip can't push the partition off-by-one (would otherwise either detach an item that should have stayed attached or vice versa). Single-item `restore_item/2` was already transactional; the bulk path now matches.
+- `do_bulk_move/4` (both clauses) gained `where: i.status != "deleted"` for surface consistency with `bulk_trash_items` / `bulk_restore_items` — defence against a stale tab submitting a deleted UUID.
+
+### Fixed
+- `restore_category/2` docstring rewritten to match the no-cascade behaviour (was still describing the prior cascade-both-directions semantics).
+- 6 unwrapped flash strings in the catalogue-detail bulk handlers — all now wrapped in `Gettext.gettext`. Two `inspect(reason)` flashes that leaked raw Elixir terms replaced with gettext-wrapped user messages; raw reason routes to `log_operation_error/3` for engineer visibility.
+- `Catalogue.PdfLibrary.sha256_file/1` — `File.stream!(path, [], 65_536)` was the pre-Elixir-1.16 signature (modes at arg 2, byte-count at arg 3). Modern signature is `File.stream!(path, line_or_bytes, modes)`. Fixed via swap to `File.stream!(path, 65_536, [])`. The contract violation was cascading into `no_local_return` on `sha256_file/1` + 7 "function will never be called" warnings across `existing_active_file/1`, `ensure_extraction/1`, `resolve_extraction_after_insert/1`, `insert_pdf_row/5`, `enqueue_extraction/1`, and `store_via_core/4` — all clear now that dialyzer can trace the call graph again.
+
+### Removed
+- `move_category_up` / `move_category_down` LV events — category reorder is drag-only via the SortableGrid hook now. The `apply_category_reorder/3` path is exercised end-to-end by the DnD wire.
+- Global infinite-scroll cursor + `:has_more` / `:loading` mount-default assigns — superseded by per-card expand.
+- Dead `_scopes` payload on `broadcast_bulk_change/5` — was always `[]` from every call site, always `_`-bound by every receiver. Dropped (signature is now `/4`).
+- Old `subtree_size` / `items_cascaded` cascade in `restore_category` activity metadata — see Changed.
+
 ## 0.1.16 - 2026-05-05
 
 ### Added

@@ -11,6 +11,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
   """
   use PhoenixKitCatalogue.LiveCase
 
+  alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction}
 
@@ -26,7 +27,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
     file_uuid = UUIDv7.generate()
     user_uuid = ensure_user_uuid()
 
-    Ecto.Adapters.SQL.query!(
+    SQL.query!(
       Repo,
       """
       INSERT INTO phoenix_kit_files
@@ -52,8 +53,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
         original_filename: Keyword.get(opts, :filename, "sample.pdf"),
         byte_size: 1024,
         status: Keyword.get(opts, :status, "active"),
-        trashed_at:
-          if(Keyword.get(opts, :status) == "trashed", do: now_truncated(), else: nil)
+        trashed_at: if(Keyword.get(opts, :status) == "trashed", do: now_truncated(), else: nil)
       })
       |> Repo.insert()
 
@@ -72,7 +72,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
   defp ensure_user_uuid do
     fixed_uuid = "019dffff-ffff-7fff-bfff-fffffffffffe"
 
-    Ecto.Adapters.SQL.query!(
+    SQL.query!(
       Repo,
       """
       INSERT INTO phoenix_kit_users
@@ -153,7 +153,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
       html = view |> render_click("restore", %{"uuid" => pdf.uuid})
 
       assert html =~ "PDF restored." or
-               (Catalogue.get_pdf(pdf.uuid) |> Map.get(:status) == "active")
+               Catalogue.get_pdf(pdf.uuid) |> Map.get(:status) == "active"
 
       assert_activity_logged("pdf.restored",
         resource_uuid: pdf.uuid,

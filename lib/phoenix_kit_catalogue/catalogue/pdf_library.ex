@@ -54,6 +54,8 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
     PdfPageContent
   }
 
+  alias PhoenixKitCatalogue.Workers.PdfExtractor
+
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
   # ── List / read ─────────────────────────────────────────────────────
@@ -110,7 +112,9 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   """
   @spec get_extraction(Pdf.t() | Ecto.UUID.t()) :: PdfExtraction.t() | nil
   def get_extraction(%Pdf{file_uuid: file_uuid}), do: get_extraction(file_uuid)
-  def get_extraction(file_uuid) when is_binary(file_uuid), do: repo().get(PdfExtraction, file_uuid)
+
+  def get_extraction(file_uuid) when is_binary(file_uuid),
+    do: repo().get(PdfExtraction, file_uuid)
 
   # ── Upload ──────────────────────────────────────────────────────────
 
@@ -144,16 +148,14 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   def create_pdf_from_upload(tmp_path, original_filename, opts \\ []) do
     actor_uuid = opts[:actor_uuid]
 
-    cond do
-      not is_binary(actor_uuid) or actor_uuid == "" ->
-        # Core's `phoenix_kit_files.user_uuid` is NOT NULL; without an
-        # actor, `Storage.store_file/2` would crash with a changeset
-        # validation error after copying the file to disk. Reject early
-        # so the LV gets a clean `{:error, :missing_actor}` to surface.
-        {:error, :missing_actor}
-
-      true ->
-        do_create_pdf_from_upload(tmp_path, original_filename, opts, actor_uuid)
+    # Core's `phoenix_kit_files.user_uuid` is NOT NULL; without an
+    # actor, `Storage.store_file/2` would crash with a changeset
+    # validation error after copying the file to disk. Reject early
+    # so the LV gets a clean `{:error, :missing_actor}` to surface.
+    if is_binary(actor_uuid) and actor_uuid != "" do
+      do_create_pdf_from_upload(tmp_path, original_filename, opts, actor_uuid)
+    else
+      {:error, :missing_actor}
     end
   end
 
@@ -215,8 +217,11 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   end
 
   defp sha256_file(path) do
+    # Stream the file in 64 KB chunks. Elixir 1.16+ moved modes from
+    # arg 2 to arg 3; the old `(path, [], 65_536)` shape is a contract
+    # mismatch that dialyzer flags.
     path
-    |> File.stream!([], 65_536)
+    |> File.stream!(65_536, [])
     |> Enum.reduce(:crypto.hash_init(:sha256), &:crypto.hash_update(&2, &1))
     |> :crypto.hash_final()
     |> Base.encode16(case: :lower)
@@ -240,29 +245,28 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
            on_conflict: :nothing,
            conflict_target: :file_uuid
          ) do
-      {:ok, _stub} ->
-        # Conflict path: returned struct may be the un-persisted stub.
-        # Re-fetch to ensure we report extraction_status reliably and
-        # only enqueue when the row was newly inserted.
-        case repo().get(PdfExtraction, file_uuid) do
-          %PdfExtraction{extraction_status: "pending", inserted_at: inserted_at} = extraction ->
-            # Heuristic: if inserted within the last second, this call
-            # is the inserter — enqueue. Otherwise another caller already
-            # did so. Idempotent worst case: duplicate enqueue, worker
-            # short-circuits on terminal status.
-            age_secs = DateTime.diff(DateTime.utc_now(), inserted_at, :second)
-            if age_secs <= 1, do: enqueue_extraction(file_uuid)
-            {:ok, extraction}
+      {:ok, _stub} -> resolve_extraction_after_insert(file_uuid)
+      {:error, _} = err -> err
+    end
+  end
 
-          %PdfExtraction{} = extraction ->
-            {:ok, extraction}
+  # Conflict path: `on_conflict: :nothing` returns the un-persisted stub,
+  # so re-fetch to report `extraction_status` reliably and only enqueue
+  # when this caller was the inserter (heuristic: inserted within the
+  # last second). Worst case is a duplicate enqueue — the worker
+  # short-circuits on a terminal status.
+  defp resolve_extraction_after_insert(file_uuid) do
+    case repo().get(PdfExtraction, file_uuid) do
+      %PdfExtraction{extraction_status: "pending", inserted_at: inserted_at} = extraction ->
+        age_secs = DateTime.diff(DateTime.utc_now(), inserted_at, :second)
+        if age_secs <= 1, do: enqueue_extraction(file_uuid)
+        {:ok, extraction}
 
-          nil ->
-            {:error, :ensure_extraction_lost_row}
-        end
+      %PdfExtraction{} = extraction ->
+        {:ok, extraction}
 
-      {:error, _} = err ->
-        err
+      nil ->
+        {:error, :ensure_extraction_lost_row}
     end
   end
 
@@ -417,9 +421,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
 
   defp maybe_handoff_underlying_file(file_uuid) do
     refcount =
-      repo().one(
-        from(p in Pdf, where: p.file_uuid == ^file_uuid, select: count(p.uuid))
-      )
+      repo().one(from(p in Pdf, where: p.file_uuid == ^file_uuid, select: count(p.uuid)))
 
     if refcount == 0 do
       case Storage.get_file(file_uuid) do
@@ -523,7 +525,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   end
 
   defp broadcast_for_file(file_uuid) do
-    repo().all(from p in Pdf, where: p.file_uuid == ^file_uuid, select: p.uuid)
+    repo().all(from(p in Pdf, where: p.file_uuid == ^file_uuid, select: p.uuid))
     |> Enum.each(&PubSub.broadcast(:pdf, &1))
   end
 
@@ -575,8 +577,10 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   defp failure_error_kind(_), do: "other"
 
   defp failure_reason(:not_found), do: "extraction_row_vanished"
+
   defp failure_reason(%Ecto.Changeset{errors: errors}),
     do: errors |> Enum.map(fn {k, _} -> Atom.to_string(k) end) |> Enum.uniq() |> Enum.join(",")
+
   defp failure_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
   defp failure_reason(_), do: "unspecified"
 
@@ -633,15 +637,13 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
     threshold = Keyword.get(opts, :similarity_threshold, 0.4)
     titles = item_titles(item)
 
-    cond do
-      titles == [] ->
-        []
-
-      true ->
-        case literal_search_grouped(titles, per_pdf) do
-          [] -> trigram_search_grouped(longest(titles), threshold, per_pdf)
-          groups -> groups
-        end
+    if titles == [] do
+      []
+    else
+      case literal_search_grouped(titles, per_pdf) do
+        [] -> trigram_search_grouped(longest(titles), threshold, per_pdf)
+        groups -> groups
+      end
     end
   end
 
@@ -702,7 +704,10 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
           # instead of silently degrading the search to "no
           # translations found".
           e in [KeyError, ArgumentError, UndefinedFunctionError] ->
-            Logger.warning("PdfLibrary.item_titles Multilang lookup failed: #{Exception.message(e)}")
+            Logger.warning(
+              "PdfLibrary.item_titles Multilang lookup failed: #{Exception.message(e)}"
+            )
+
             []
         end
       else
@@ -936,12 +941,8 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
 
   defp snippet_for(text, titles) when is_binary(text) and is_list(titles) do
     text = collapse_ws(text)
-    downcase_text = String.downcase(text)
 
-    case Enum.find_value(titles, fn title ->
-           idx = :binary.match(downcase_text, String.downcase(title))
-           if idx == :nomatch, do: nil, else: idx
-         end) do
+    case find_title_match(String.downcase(text), titles) do
       nil ->
         String.slice(text, 0, 200)
 
@@ -953,6 +954,15 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   end
 
   defp snippet_for(_, _), do: ""
+
+  defp find_title_match(downcase_text, titles) do
+    Enum.find_value(titles, fn title ->
+      case :binary.match(downcase_text, String.downcase(title)) do
+        :nomatch -> nil
+        idx -> idx
+      end
+    end)
+  end
 
   # ── Internal helpers ────────────────────────────────────────────────
 
@@ -981,10 +991,10 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   end
 
   defp enqueue_extraction(file_uuid) do
-    if Code.ensure_loaded?(PhoenixKitCatalogue.Workers.PdfExtractor) do
+    if Code.ensure_loaded?(PdfExtractor) do
       try do
         %{"file_uuid" => file_uuid}
-        |> PhoenixKitCatalogue.Workers.PdfExtractor.new()
+        |> PdfExtractor.new()
         |> Oban.insert()
       rescue
         # Realistic Oban.insert failure modes: DB connectivity, schema

@@ -23,6 +23,8 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
 
   use Phoenix.LiveComponent
 
+  require Logger
+
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
 
   alias PhoenixKitCatalogue.Catalogue
@@ -62,57 +64,54 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
   end
 
   defp run_search(socket, item) do
-    try do
-      titles = PdfLibrary.item_titles(item)
-      groups = Catalogue.search_pdfs_for_item(item, per_pdf: @per_pdf)
+    titles = PdfLibrary.item_titles(item)
+    groups = Catalogue.search_pdfs_for_item(item, per_pdf: @per_pdf)
 
-      # If the literal search returned [], the trigram fallback fired
-      # internally — surface its query so per-PDF expand keeps the
-      # same scoring shape. Detected by checking whether any hit's
-      # score < 1.0 (literal hits are exactly 1.0).
-      trigram_query =
-        case groups do
-          [%{hits: [%{score: score} | _]} | _] when score < 1.0 -> longest_title(titles)
-          _ -> nil
-        end
+    # If the literal search returned [], the trigram fallback fired
+    # internally — surface its query so per-PDF expand keeps the
+    # same scoring shape. Detected by checking whether any hit's
+    # score < 1.0 (literal hits are exactly 1.0).
+    trigram_query =
+      case groups do
+        [%{hits: [%{score: score} | _]} | _] when score < 1.0 -> longest_title(titles)
+        _ -> nil
+      end
+
+    assign(socket,
+      groups: groups,
+      titles: titles,
+      trigram_query: trigram_query,
+      loading: false,
+      expanding: MapSet.new(),
+      error: nil,
+      last_item_uuid: item.uuid
+    )
+  rescue
+    # Narrowed: only catch DB-side and known query errors. Anything
+    # else (programmer error, missing module, etc.) re-raises so it
+    # surfaces in telemetry instead of silently rendering as a UI
+    # message that hides the bug.
+    e in [
+      DBConnection.ConnectionError,
+      Postgrex.Error,
+      Ecto.QueryError,
+      Ecto.Query.CastError
+    ] ->
+      Logger.warning("PdfSearchModal.run_search/2 DB error: #{Exception.message(e)}")
 
       assign(socket,
-        groups: groups,
-        titles: titles,
-        trigram_query: trigram_query,
+        groups: [],
+        titles: [],
+        trigram_query: nil,
         loading: false,
         expanding: MapSet.new(),
-        error: nil,
+        error:
+          Gettext.gettext(
+            PhoenixKitWeb.Gettext,
+            "Search is temporarily unavailable. Please try again in a moment."
+          ),
         last_item_uuid: item.uuid
       )
-    rescue
-      # Narrowed: only catch DB-side and known query errors. Anything
-      # else (programmer error, missing module, etc.) re-raises so it
-      # surfaces in telemetry instead of silently rendering as a UI
-      # message that hides the bug.
-      e in [
-        DBConnection.ConnectionError,
-        Postgrex.Error,
-        Ecto.QueryError,
-        Ecto.Query.CastError
-      ] ->
-        require Logger
-        Logger.warning("PdfSearchModal.run_search/2 DB error: #{Exception.message(e)}")
-
-        assign(socket,
-          groups: [],
-          titles: [],
-          trigram_query: nil,
-          loading: false,
-          expanding: MapSet.new(),
-          error:
-            Gettext.gettext(
-              PhoenixKitWeb.Gettext,
-              "Search is temporarily unavailable. Please try again in a moment."
-            ),
-          last_item_uuid: item.uuid
-        )
-    end
   end
 
   defp longest_title([]), do: nil
@@ -159,7 +158,6 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
           Ecto.QueryError,
           Ecto.Query.CastError
         ] ->
-          require Logger
           Logger.warning("PdfSearchModal.show_more DB error: #{Exception.message(e)}")
 
           {:noreply,
@@ -197,23 +195,25 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
 
         snippet
         |> String.split(regex, include_captures: true)
-        |> Enum.map_join(fn segment ->
-          escaped_segment =
-            segment
-            |> Phoenix.HTML.html_escape()
-            |> Phoenix.HTML.safe_to_string()
-
-          if Regex.match?(regex, segment) do
-            ~s|<mark class="bg-warning/40 rounded px-0.5">| <> escaped_segment <> "</mark>"
-          else
-            escaped_segment
-          end
-        end)
+        |> Enum.map_join(&render_highlight_segment(&1, regex))
         |> Phoenix.HTML.raw()
     end
   end
 
   defp highlight_snippet(_, _), do: Phoenix.HTML.raw("")
+
+  defp render_highlight_segment(segment, regex) do
+    escaped =
+      segment
+      |> Phoenix.HTML.html_escape()
+      |> Phoenix.HTML.safe_to_string()
+
+    if Regex.match?(regex, segment) do
+      ~s|<mark class="bg-warning/40 rounded px-0.5">| <> escaped <> "</mark>"
+    else
+      escaped
+    end
+  end
 
   @impl true
   def render(assigns) do

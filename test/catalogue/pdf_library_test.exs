@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
   """
   use PhoenixKitCatalogue.DataCase, async: false
 
+  alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PdfLibrary
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction, PdfPage, PdfPageContent}
@@ -27,9 +28,15 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
     # Storage would persist for a small PDF.
     file_uuid = Keyword.get(opts, :uuid, UUIDv7.generate())
     user_uuid = Keyword.get(opts, :user_uuid, ensure_user_uuid())
-    checksum = Keyword.get(opts, :file_checksum, :crypto.strong_rand_bytes(32) |> Base.encode16(case: :lower))
 
-    Ecto.Adapters.SQL.query!(
+    checksum =
+      Keyword.get(
+        opts,
+        :file_checksum,
+        :crypto.strong_rand_bytes(32) |> Base.encode16(case: :lower)
+      )
+
+    SQL.query!(
       Repo,
       """
       INSERT INTO phoenix_kit_files
@@ -59,7 +66,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
     # inserts no-op via ON CONFLICT.
     fixed_uuid = "019dffff-ffff-7fff-bfff-ffffffffffff"
 
-    Ecto.Adapters.SQL.query!(
+    SQL.query!(
       Repo,
       """
       INSERT INTO phoenix_kit_users

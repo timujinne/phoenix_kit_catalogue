@@ -17,6 +17,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   import PhoenixKitWeb.Components.Core.FileUpload, only: [file_upload: 1]
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Web.Helpers
@@ -173,7 +174,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
         # `db_pending: true` activity row so the user-initiated upload
         # is in the audit trail even when storage / catalogue insert
         # failed. Action mirrors the success-side `pdf.uploaded`.
-        PhoenixKitCatalogue.Catalogue.ActivityLog.log(%{
+        ActivityLog.log(%{
           action: "pdf.uploaded",
           mode: "manual",
           actor_uuid: Helpers.actor_uuid(socket),

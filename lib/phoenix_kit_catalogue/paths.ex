@@ -5,6 +5,7 @@ defmodule PhoenixKitCatalogue.Paths do
   All paths go through `PhoenixKit.Utils.Routes.path/1` for prefix/locale handling.
   """
 
+  alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
 
   @base "/admin/catalogue"
@@ -65,7 +66,7 @@ defmodule PhoenixKitCatalogue.Paths do
   """
   @spec pdf_file(map()) :: String.t()
   def pdf_file(%{file_uuid: file_uuid}) when is_binary(file_uuid) do
-    PhoenixKit.Modules.Storage.URLSigner.signed_url(file_uuid, "original")
+    URLSigner.signed_url(file_uuid, "original")
   end
 
   @doc """
@@ -82,7 +83,8 @@ defmodule PhoenixKitCatalogue.Paths do
   """
   @spec pdf_viewer(map(), pos_integer()) :: String.t()
   def pdf_viewer(pdf, page) when is_integer(page) and page >= 1 do
-    "/_pdfjs/web/viewer.html?file=" <> URI.encode_www_form(pdf_file(pdf)) <>
+    "/_pdfjs/web/viewer.html?file=" <>
+      URI.encode_www_form(pdf_file(pdf)) <>
       "#page=" <> Integer.to_string(page)
   end
 

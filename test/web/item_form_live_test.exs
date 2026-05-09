@@ -72,7 +72,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       html =
         view
-        |> form("form[phx-submit=save]", %{"item" => base_item_params(%{"name" => ""})})
+        |> form("form[action=\"#\"][phx-submit=save]", %{
+          "item" => base_item_params(%{"name" => ""})
+        })
         |> render_change()
 
       # The exact error wording comes from gettext; assert the field is
@@ -86,7 +88,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       html =
         view
-        |> form("form[phx-submit=save]", %{"item" => base_item_params()})
+        |> form("form[action=\"#\"][phx-submit=save]", %{"item" => base_item_params()})
         |> render_change()
 
       assert html =~ "Oak Panel"
@@ -104,7 +106,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:error, {:live_redirect, %{to: to}}} =
         view
-        |> form("form[phx-submit=save]", %{"item" => params})
+        |> form("form[action=\"#\"][phx-submit=save]", %{"item" => params})
         |> render_submit()
 
       # After create the LiveView navigates to the catalogue detail.
@@ -123,7 +125,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:error, {:live_redirect, _}} =
         view
-        |> form("form[phx-submit=save]", %{
+        |> form("form[action=\"#\"][phx-submit=save]", %{
           "item" => base_item_params(%{"name" => "Loose item", "category_uuid" => ""})
         })
         |> render_submit()
@@ -141,7 +143,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       html =
         view
-        |> form("form[phx-submit=save]", %{
+        |> form("form[action=\"#\"][phx-submit=save]", %{
           "item" => base_item_params(%{"name" => "", "sku" => "user-typed-sku"})
         })
         |> render_submit()
@@ -187,7 +189,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:error, {:live_redirect, %{to: to}}} =
         view
-        |> form("form[phx-submit=save]", %{
+        |> form("form[action=\"#\"][phx-submit=save]", %{
           "item" => base_item_params(%{"name" => "New name", "category_uuid" => category.uuid})
         })
         |> render_submit()
@@ -214,7 +216,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:error, {:live_redirect, _}} =
         view
-        |> form("form[phx-submit=save]", %{
+        |> form("form[action=\"#\"][phx-submit=save]", %{
           "item" =>
             base_item_params(%{
               "name" => "X",
@@ -322,7 +324,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       render_change(view, "set_catalogue_rule_value", %{"uuid" => kitchen.uuid, "value" => "10"})
 
       view
-      |> form("form[phx-submit=save]",
+      |> form("form[action=\"#\"][phx-submit=save]",
         item: %{
           "name" => item.name,
           "status" => "active"
@@ -346,7 +348,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       render_change(view, "set_catalogue_rule_unit", %{"uuid" => kitchen.uuid, "unit" => "flat"})
 
       view
-      |> form("form[phx-submit=save]",
+      |> form("form[action=\"#\"][phx-submit=save]",
         item: %{
           "name" => item.name,
           "status" => "active"
@@ -371,7 +373,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       render_click(view, "clear_catalogue_rules", %{})
 
       view
-      |> form("form[phx-submit=save]",
+      |> form("form[action=\"#\"][phx-submit=save]",
         item: %{
           "name" => item.name,
           "status" => "active"

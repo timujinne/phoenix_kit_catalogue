@@ -620,22 +620,24 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_category restores ancestors upward and subtree downward" do
+    test "restore_category only flips the target's status (no cascades)" do
       cat = create_catalogue()
       root = create_category(cat, %{name: "Root"})
       mid = create_category(cat, %{name: "Mid", parent_uuid: root.uuid})
       leaf = create_category(cat, %{name: "Leaf", parent_uuid: mid.uuid})
       item = create_item(%{name: "Thing", category_uuid: leaf.uuid})
 
-      {:ok, _} = Catalogue.trash_category(root)
+      {:ok, _} = Catalogue.trash_category(root, items: :cascade)
 
-      # Restore from the deepest node; ancestors + subtree should come back.
+      # Restore the deepest node — only `leaf` flips back. Ancestors,
+      # descendants, and items keep their (deleted) status. The boss's
+      # rule: each entity's status is its own; restore doesn't ripple.
       assert {:ok, _} = Catalogue.restore_category(Catalogue.get_category(leaf.uuid))
 
-      assert Catalogue.get_category(root.uuid).status == "active"
-      assert Catalogue.get_category(mid.uuid).status == "active"
       assert Catalogue.get_category(leaf.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      assert Catalogue.get_category(root.uuid).status == "deleted"
+      assert Catalogue.get_category(mid.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_category hard-deletes the subtree" do
@@ -718,19 +720,23 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_category cascades to items and restores parent catalogue" do
+    test "restore_category refuses when parent catalogue is deleted" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
       Catalogue.trash_catalogue(cat)
 
-      # Restore the category — should also restore catalogue (upward) and items (downward)
+      # Restoring the category alone is no longer allowed when the
+      # catalogue itself is deleted — the operator must restore the
+      # catalogue first. The previous auto-revive surprised operators
+      # who only meant to undo a category-level trash.
       category = Catalogue.get_category(category.uuid)
-      {:ok, _} = Catalogue.restore_category(category)
+      assert {:error, :parent_catalogue_deleted} = Catalogue.restore_category(category)
 
-      assert Catalogue.get_catalogue(cat.uuid).status == "active"
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # State unchanged.
+      assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
+      assert Catalogue.get_category(category.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_category removes category and items" do
@@ -1013,38 +1019,43 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert restored.status == "active"
     end
 
-    test "restore_item/1 cascades upward to deleted parent category" do
+    test "restore_item/1 detaches from a deleted parent category (uncategorizes)" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
 
-      Catalogue.trash_category(category)
+      # Trash via :cascade so the item shares the category's deleted state.
+      Catalogue.trash_category(category, items: :cascade)
       assert Catalogue.get_category(category.uuid).status == "deleted"
       assert Catalogue.get_item(item.uuid).status == "deleted"
 
       item = Catalogue.get_item(item.uuid)
-      {:ok, _} = Catalogue.restore_item(item)
+      {:ok, restored} = Catalogue.restore_item(item)
 
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # New behaviour: the item resurfaces as Uncategorized in the same
+      # catalogue. The category stays deleted — restoring an item no
+      # longer auto-revives the category structure.
+      assert restored.status == "active"
+      assert restored.category_uuid == nil
+      assert restored.catalogue_uuid == cat.uuid
+      assert Catalogue.get_category(category.uuid).status == "deleted"
     end
 
-    test "restore_item/1 cascades upward to deleted parent catalogue" do
+    test "restore_item/1 refuses when parent catalogue is deleted" do
       cat = create_catalogue()
       category = create_category(cat)
       item = create_item(%{name: "Item", category_uuid: category.uuid})
 
       Catalogue.trash_catalogue(cat)
       assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
-      assert Catalogue.get_category(category.uuid).status == "deleted"
       assert Catalogue.get_item(item.uuid).status == "deleted"
 
       item = Catalogue.get_item(item.uuid)
-      {:ok, _} = Catalogue.restore_item(item)
+      assert {:error, :parent_catalogue_deleted} = Catalogue.restore_item(item)
 
-      assert Catalogue.get_catalogue(cat.uuid).status == "active"
-      assert Catalogue.get_category(category.uuid).status == "active"
-      assert Catalogue.get_item(item.uuid).status == "active"
+      # Nothing was changed — caller must restore the catalogue first.
+      assert Catalogue.get_catalogue(cat.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
     test "permanently_delete_item/1 removes from DB" do
@@ -3696,6 +3707,319 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
 
       ancestors = PhoenixKitCatalogue.Catalogue.list_category_ancestors(leaf.uuid)
       assert Enum.map(ancestors, & &1.name) == ["Root", "Mid"]
+    end
+  end
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Bulk actions (admin selection toolbar)
+  # ═══════════════════════════════════════════════════════════════════
+
+  describe "bulk_trash_items/2" do
+    test "flips status to deleted for the given uuids" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      b = create_item(%{name: "B", catalogue_uuid: cat.uuid})
+      c = create_item(%{name: "C", catalogue_uuid: cat.uuid})
+
+      assert {2, nil} = Catalogue.bulk_trash_items([a.uuid, b.uuid], [])
+
+      assert Catalogue.get_item(a.uuid).status == "deleted"
+      assert Catalogue.get_item(b.uuid).status == "deleted"
+      assert Catalogue.get_item(c.uuid).status == "active"
+    end
+
+    test "empty list is a no-op" do
+      assert {0, nil} = Catalogue.bulk_trash_items([], [])
+    end
+
+    test "skips already-deleted items in the count" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      Catalogue.trash_item(a)
+
+      assert {0, nil} = Catalogue.bulk_trash_items([a.uuid], [])
+    end
+  end
+
+  describe "bulk_restore_items/2" do
+    test "restores items in place when parent category is active" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      a = create_item(%{name: "A", category_uuid: category.uuid})
+      Catalogue.trash_item(a)
+
+      assert {1, nil} = Catalogue.bulk_restore_items([a.uuid], [])
+      restored = Catalogue.get_item(a.uuid)
+      assert restored.status == "active"
+      assert restored.category_uuid == category.uuid
+    end
+
+    test "uncategorizes items whose parent category is deleted" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      a = create_item(%{name: "A", category_uuid: category.uuid})
+
+      Catalogue.trash_category(category, items: :cascade)
+
+      assert {1, nil} = Catalogue.bulk_restore_items([a.uuid], [])
+      restored = Catalogue.get_item(a.uuid)
+      assert restored.status == "active"
+      # Parent category was deleted — bulk restore detaches the item
+      # so it surfaces in the catalogue's Uncategorized bucket without
+      # auto-reviving the category structure.
+      assert restored.category_uuid == nil
+      assert restored.catalogue_uuid == cat.uuid
+    end
+
+    test "refuses items whose parent catalogue is deleted" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      Catalogue.trash_catalogue(cat)
+
+      # Item is filtered out by the parent-catalogue-deleted guard.
+      assert {0, nil} = Catalogue.bulk_restore_items([a.uuid], [])
+      assert Catalogue.get_item(a.uuid).status == "deleted"
+    end
+  end
+
+  describe "bulk_permanently_delete_items/2" do
+    test "hard-deletes the rows" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      b = create_item(%{name: "B", catalogue_uuid: cat.uuid})
+
+      assert {2, nil} = Catalogue.bulk_permanently_delete_items([a.uuid, b.uuid], [])
+
+      assert is_nil(Catalogue.get_item(a.uuid))
+      assert is_nil(Catalogue.get_item(b.uuid))
+    end
+  end
+
+  describe "bulk_move_items_to_category/3" do
+    test "refuses without a :catalogue_uuid scope opt" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+
+      # Required guard — a caller that forgets the scope opt gets a
+      # clear refusal rather than a silent cross-catalogue write.
+      assert {:error, :missing_catalogue_scope} =
+               Catalogue.bulk_move_items_to_category([a.uuid], nil, [])
+    end
+
+    test "rejects when an item belongs to a different catalogue than the scope" do
+      cat_a = create_catalogue()
+      cat_b = create_catalogue()
+      foreign = create_item(%{name: "Foreign", catalogue_uuid: cat_b.uuid})
+
+      assert {:error, :wrong_catalogue_scope} =
+               Catalogue.bulk_move_items_to_category(
+                 [foreign.uuid],
+                 nil,
+                 catalogue_uuid: cat_a.uuid
+               )
+
+      # Item untouched — still in its original catalogue.
+      assert Catalogue.get_item(foreign.uuid).catalogue_uuid == cat_b.uuid
+    end
+
+    test "rejects when target category lives in a different catalogue than the scope" do
+      cat_a = create_catalogue()
+      cat_b = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat_a.uuid})
+      foreign_target = create_category(cat_b)
+
+      assert {:error, :wrong_catalogue_scope} =
+               Catalogue.bulk_move_items_to_category(
+                 [a.uuid],
+                 foreign_target.uuid,
+                 catalogue_uuid: cat_a.uuid
+               )
+
+      # Item untouched — still in its original catalogue.
+      assert Catalogue.get_item(a.uuid).catalogue_uuid == cat_a.uuid
+    end
+
+    test "rejects when target category does not exist" do
+      cat = create_catalogue()
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      bogus = "00000000-0000-0000-0000-000000000000"
+
+      assert {:error, :category_not_found} =
+               Catalogue.bulk_move_items_to_category(
+                 [a.uuid],
+                 bogus,
+                 catalogue_uuid: cat.uuid
+               )
+    end
+
+    test "moves all items into the target category" do
+      cat = create_catalogue()
+      target = create_category(cat, %{name: "Target"})
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      b = create_item(%{name: "B", catalogue_uuid: cat.uuid})
+
+      assert {:ok, 2} =
+               Catalogue.bulk_move_items_to_category(
+                 [a.uuid, b.uuid],
+                 target.uuid,
+                 catalogue_uuid: cat.uuid
+               )
+
+      assert Catalogue.get_item(a.uuid).category_uuid == target.uuid
+      assert Catalogue.get_item(b.uuid).category_uuid == target.uuid
+    end
+
+    test "uncategorizes when target_uuid is nil" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      a = create_item(%{name: "A", category_uuid: category.uuid})
+
+      assert {:ok, 1} =
+               Catalogue.bulk_move_items_to_category(
+                 [a.uuid],
+                 nil,
+                 catalogue_uuid: cat.uuid
+               )
+
+      moved = Catalogue.get_item(a.uuid)
+      assert moved.category_uuid == nil
+      assert moved.catalogue_uuid == cat.uuid
+    end
+  end
+
+  describe "bulk_trash_categories/3" do
+    test ":cascade soft-deletes categories + their items" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      item = create_item(%{name: "Item", category_uuid: category.uuid})
+
+      assert {:ok, %{categories: 1}} =
+               Catalogue.bulk_trash_categories([category.uuid], :cascade, [])
+
+      assert Catalogue.get_category(category.uuid).status == "deleted"
+      assert Catalogue.get_item(item.uuid).status == "deleted"
+    end
+
+    test ":uncategorize keeps items active and detaches them from the category" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      item = create_item(%{name: "Item", category_uuid: category.uuid})
+
+      assert {:ok, %{categories: 1}} =
+               Catalogue.bulk_trash_categories([category.uuid], :uncategorize, [])
+
+      assert Catalogue.get_category(category.uuid).status == "deleted"
+      survived = Catalogue.get_item(item.uuid)
+      assert survived.status == "active"
+      assert survived.category_uuid == nil
+    end
+
+    test "{:move_to, target_uuid} reparents items to the target before trashing" do
+      cat = create_catalogue()
+      source = create_category(cat, %{name: "Source"})
+      target = create_category(cat, %{name: "Target"})
+      item = create_item(%{name: "Item", category_uuid: source.uuid})
+
+      assert {:ok, %{categories: 1}} =
+               Catalogue.bulk_trash_categories([source.uuid], {:move_to, target.uuid}, [])
+
+      assert Catalogue.get_category(source.uuid).status == "deleted"
+      moved = Catalogue.get_item(item.uuid)
+      assert moved.status == "active"
+      assert moved.category_uuid == target.uuid
+    end
+
+    test "skips already-deleted categories in the count" do
+      cat = create_catalogue()
+      a = create_category(cat, %{name: "A"})
+      b = create_category(cat, %{name: "B"})
+      Catalogue.trash_category(b)
+
+      assert {:ok, %{categories: 1}} =
+               Catalogue.bulk_trash_categories([a.uuid, b.uuid], :uncategorize, [])
+    end
+
+    test "empty list is a no-op" do
+      assert {:ok, %{categories: 0, items_handled: 0}} =
+               Catalogue.bulk_trash_categories([], :cascade, [])
+    end
+  end
+
+  describe "list_move_target_categories/1" do
+    test "excludes the category itself" do
+      cat = create_catalogue()
+      a = create_category(cat, %{name: "A"})
+
+      targets = Catalogue.list_move_target_categories(a)
+      uuids = Enum.map(targets, fn {c, _depth} -> c.uuid end)
+
+      refute a.uuid in uuids
+    end
+
+    test "excludes the category's V103 subtree" do
+      cat = create_catalogue()
+      root = create_category(cat, %{name: "Root"})
+      child = create_category(cat, %{name: "Child", parent_uuid: root.uuid})
+      grandchild = create_category(cat, %{name: "GC", parent_uuid: child.uuid})
+      sibling = create_category(cat, %{name: "Sibling"})
+
+      targets = Catalogue.list_move_target_categories(root)
+      uuids = Enum.map(targets, fn {c, _depth} -> c.uuid end)
+
+      refute root.uuid in uuids
+      refute child.uuid in uuids
+      refute grandchild.uuid in uuids
+      assert sibling.uuid in uuids
+    end
+  end
+
+  describe "active_item_count_in_subtree/1" do
+    test "counts items in the category and every V103 descendant" do
+      cat = create_catalogue()
+      root = create_category(cat, %{name: "Root"})
+      child = create_category(cat, %{name: "Child", parent_uuid: root.uuid})
+
+      _ = create_item(%{name: "RootItem", category_uuid: root.uuid})
+      _ = create_item(%{name: "ChildItem", category_uuid: child.uuid})
+      deleted = create_item(%{name: "Deleted", category_uuid: child.uuid})
+      Catalogue.trash_item(deleted)
+
+      assert Catalogue.active_item_count_in_subtree(root.uuid) == 2
+    end
+  end
+
+  describe "list_deleted_items_for_catalogue/2" do
+    test "returns only deleted items in this catalogue, newest first" do
+      cat = create_catalogue()
+      cat_other = create_catalogue()
+
+      a = create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      b = create_item(%{name: "B", catalogue_uuid: cat.uuid})
+      foreign = create_item(%{name: "F", catalogue_uuid: cat_other.uuid})
+
+      Catalogue.trash_item(a)
+      Process.sleep(1100)
+      Catalogue.trash_item(b)
+      Catalogue.trash_item(foreign)
+
+      uuids =
+        cat.uuid
+        |> Catalogue.list_deleted_items_for_catalogue()
+        |> Enum.map(& &1.uuid)
+
+      assert uuids == [b.uuid, a.uuid]
+      refute foreign.uuid in uuids
+    end
+
+    test "respects :limit" do
+      cat = create_catalogue()
+
+      for i <- 1..3 do
+        item = create_item(%{name: "Item #{i}", catalogue_uuid: cat.uuid})
+        Catalogue.trash_item(item)
+      end
+
+      assert length(Catalogue.list_deleted_items_for_catalogue(cat.uuid, limit: 2)) == 2
     end
   end
 end

@@ -11,7 +11,11 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
 
   @base "/en/admin/catalogue"
 
-  defp form_selector, do: "form[phx-submit=save]"
+  # The Attachments dropzone (`Attachments.allow_attachment_upload/1`)
+  # also renders a `phx-submit="save"` form, so the loose selector is
+  # ambiguous. Scope to forms with `action="#"` — the canonical shape
+  # of the resource forms in this module.
+  defp form_selector, do: ~s|form[action="#"][phx-submit=save]|
 
   # ─────────────────────────────────────────────────────────────────
   # CatalogueFormLive

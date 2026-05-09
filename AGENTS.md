@@ -76,12 +76,59 @@ This is a **PhoenixKit module** that implements the `PhoenixKit.Module` behaviou
 - All per-catalogue queries (`list_items_for_catalogue`, `item_count_for_catalogue`, `item_counts_by_catalogue`, `deleted_item_count_for_catalogue`, `search_items_in_catalogue`) filter on `items.catalogue_uuid` and include both categorized and uncategorized items
 - Import executor passes `skip_derive: true` to `create_item/2` because it guarantees attrs consistency by construction (it owns the target catalogue and creates or constrains categories within it) — this avoids a per-item category lookup during bulk imports
 
-### Soft-Delete Cascade System
+### Soft-Delete System
 
-- **Downward on trash:** catalogue → categories + all items (categorized and uncategorized) in that catalogue. Category → **entire subtree** (V103) including descendant categories + their items.
-- **Upward on restore:** item → category → catalogue; category → **every deleted ancestor category** + catalogue + full deleted subtree + items. Restoring a deep child brings back ancestors so the restored node is reachable in the active tree.
-- **Permanent delete** follows same downward cascade but removes from DB; uncategorized items of the catalogue are removed too. For categories: subtree is walked, items hard-deleted, `parent_uuid` NULL'd across the subtree (V103's FK has no `ON DELETE CASCADE`), then rows deleted.
-- All cascading operations wrapped in `Repo.transaction/1`. Activity metadata on `category.trashed` / `category.restored` / `category.permanently_deleted` / `category.moved` carries `subtree_size` (categories touched, including root) and `items_cascaded` so the audit log tells the full story.
+The boss's principle as of 2026-05-08: **each entity's status is its
+own**; trash and restore don't ripple sideways unless the operator
+explicitly asks for it.
+
+- **`trash_catalogue/2`** — still cascades downward (catalogue →
+  categories + all items in it). Operator-driven catalogue trash is
+  rare and the cascade preserves a clean restore round-trip. Restore
+  symmetrically brings the subtree back.
+- **`trash_category/2`** — accepts an `:items` opt that the admin
+  picks via the "Delete category — what about the items?" modal in
+  the LV before the trash fires:
+    * `:cascade` (default for non-modal callers) — items in the V103
+      subtree flip to `"deleted"` alongside the categories. The "I
+      really want everything gone" path; flagged red in the modal.
+    * `:uncategorize` — items keep their `catalogue_uuid` but get
+      `category_uuid: nil`, surviving the category trash. Default in
+      the modal.
+    * `{:move_to, target_uuid}` — items move to a same-catalogue
+      target category before the category is trashed. The dropdown
+      excludes the deleting subtree (`list_move_target_categories/1`).
+  Activity log gains `items_handled` + `items_disposition` metadata.
+  Categories in the subtree always cascade-trash regardless of the
+  items disposition — the modal is about the items, not the tree.
+- **`trash_item/2`** — leaf operation, trivial flip.
+- **`restore_catalogue/2`** — still cascades downward (mirror of
+  trash_catalogue).
+- **`restore_category/2`** — **no cascades**. Only the target
+  category's status flips back to `"active"`. Refuses with
+  `{:error, :parent_catalogue_deleted}` when the parent catalogue is
+  itself deleted (operator must restore the catalogue first). Items
+  that came down via `:cascade` stay deleted; the operator restores
+  them individually from the Items-tab Deleted view, where
+  `restore_item/2` routes them through the now-active parent.
+  Descendant categories stay deleted too — `list_category_tree/2`'s
+  orphan-promotion surfaces a re-active leaf as a root.
+- **`restore_item/2`** — refuses if the parent catalogue is deleted.
+  When the parent **category** is deleted, the item is **uncategorized
+  on restore** (`category_uuid: nil`) so it surfaces in the
+  catalogue's Uncategorized bucket without auto-reviving the category.
+  Activity metadata adds `"detached_from_category" => true` in that
+  case. When the parent category is active, restore is in-place.
+- **`permanently_delete_catalogue/2` / `permanently_delete_category/2`**
+  — unchanged. Hard-delete cascade. Refuses on smart-rule references
+  (catalogue) unless `:force`. Subtree categories get `parent_uuid`
+  NULLed first since V103's self-FK has no `ON DELETE CASCADE`.
+
+All transactional. Activity-log atoms unchanged: `category.trashed` /
+`.restored` / `.permanently_deleted` etc. Metadata shapes:
+`category.trashed` carries `subtree_size`, `items_handled`,
+`items_disposition`. `category.restored` no longer reports
+`subtree_size` / `items_cascaded` (always 0 under the new rule).
 
 ### Nested Categories (V103)
 
@@ -201,7 +248,7 @@ that can fail returns one of:
     `:parent_not_found`, `:not_siblings`, `:category_not_found`,
     `:catalogue_not_found`, `:same_catalogue`, `:no_user`,
     `:unsupported`, `:unsupported_file_format`, `:not_found`,
-    `:missing_item_name`, `:csv_empty`)
+    `:missing_item_name`, `:csv_empty`, `:parent_catalogue_deleted`)
   * a tagged tuple (`{:referenced_by_smart_items, count}`,
     `{:duplicate_referenced_catalogue, uuid}`,
     `{:invalid_price, raw}`, `{:invalid_markup, raw}`,
@@ -232,7 +279,7 @@ Every mutating operation in `Catalogue` context is logged via `PhoenixKit.Activi
 
 - **Pattern**: Private `log_activity/1` helper guarded by `Code.ensure_loaded?(PhoenixKit.Activity)` with rescue to `Logger.warning`. Activity logging failures never crash the primary operation.
 - **Actor tracking**: All mutating functions accept `opts \\ []` keyword list. Pass `actor_uuid: user.uuid` to attribute the action.
-- **Actions logged**: `manufacturer.created/updated/deleted`, `supplier.created/updated/deleted`, `catalogue.created/updated/deleted/trashed/restored/permanently_deleted`, `category.created/updated/deleted/trashed/restored/permanently_deleted/moved/positions_swapped`, `item.created/updated/deleted/trashed/restored/permanently_deleted/moved/bulk_trashed`, `manufacturer.suppliers_synced`, `supplier.manufacturers_synced`, `smart_rules.synced` (with `added`/`updated`/`removed`/`total` counts), `import.started`, `import.completed`, `catalogue_module.enabled` / `catalogue_module.disabled` (logged from the `enable_system/0` / `disable_system/0` callbacks in `lib/phoenix_kit_catalogue.ex`). Since V103, `category.trashed` / `category.restored` / `category.permanently_deleted` carry `subtree_size` + `items_cascaded`; `category.moved` includes `from_parent_uuid` / `to_parent_uuid` (in-catalogue reparents via `move_category_under/3`) or `from_catalogue_uuid` / `to_catalogue_uuid` + `subtree_size` + `items_cascaded` (cross-catalogue moves). Attachments (file uploads, featured-image changes) are not individually logged — they're captured as part of the `item.updated` / `catalogue.updated` entry on the containing save.
+- **Actions logged**: `manufacturer.created/updated/deleted`, `supplier.created/updated/deleted`, `catalogue.created/updated/deleted/trashed/restored/permanently_deleted`, `category.created/updated/deleted/trashed/restored/permanently_deleted/moved/positions_swapped`, `item.created/updated/deleted/trashed/restored/permanently_deleted/moved/bulk_trashed`, `manufacturer.suppliers_synced`, `supplier.manufacturers_synced`, `smart_rules.synced` (with `added`/`updated`/`removed`/`total` counts), `import.started`, `import.completed`, `catalogue_module.enabled` / `catalogue_module.disabled` (logged from the `enable_system/0` / `disable_system/0` callbacks in `lib/phoenix_kit_catalogue.ex`). `category.trashed` carries `subtree_size`, `items_handled`, and `items_disposition` (`"cascade"` / `"uncategorize"` / `"move_to:<uuid>"` — see Soft-Delete System above). `item.restored` includes `"detached_from_category" => true` when the item was uncategorized on restore because its parent was still deleted. `category.moved` includes `from_parent_uuid` / `to_parent_uuid` (in-catalogue reparents via `move_category_under/3`) or `from_catalogue_uuid` / `to_catalogue_uuid` + `subtree_size` + `items_cascaded` (cross-catalogue moves). Attachments (file uploads, featured-image changes) are not individually logged — they're captured as part of the `item.updated` / `catalogue.updated` entry on the containing save.
 - **Mode**: `"manual"` for user actions, `"auto"` for import-created items/categories
 - **LiveViews**: extract actor UUID via `actor_opts/1` from `PhoenixKitCatalogue.Web.Helpers` (imported into every form LV). Reads `socket.assigns[:phoenix_kit_current_user]`. The companion `actor_uuid/1` returns the bare UUID when a context call wants the bare value (e.g. `Activity.log/1` metadata).
 - **Convention — `:ok`-only**: the `Catalogue.ActivityLog` helper logs only on the `{:ok, _}` branch, never on `{:error, _}`. Failed mutations surface as `{:error, _}` to the LV, which logs the rich error context via its own `log_operation_error/3`. The activity log is the user-visible audit trail; operation errors are an engineer-visible log stream. Mixing the two would drown the audit feed in validation noise.
@@ -283,6 +330,53 @@ The `scope_selector/1` component in `web/components.ex` renders a disclosure wit
 - **Components** (`PhoenixKitCatalogue.Web.Components`): Reusable components — `item_table`, `search_input`, `search_results_summary`, `scope_selector`, `catalogue_rules_picker` (smart catalogue rule editor), `empty_state`, `view_mode_toggle`. All features opt-in via attrs. All text localized via `Gettext.gettext(PhoenixKitWeb.Gettext, ...)`. Components never crash — unknown columns, unloaded associations, nil values, and bad function arguments produce "—" placeholders and Logger warnings. `scope_selector` is the partner of the scoped search API: it renders a disclosure with catalogue/category checkbox lists and emits customizable toggle/clear events — the LV owns the selected-UUIDs state and feeds them into `Catalogue.search_items/2`'s `:catalogue_uuids` / `:category_uuids` opts.
 - **Routes**: Admin routes auto-generated from `admin_tabs/0`
 - **Paths**: Centralized path helpers in `Paths` module — always use these instead of hardcoding URLs
+
+#### CatalogueDetailLive layout (2026-05-08)
+
+The detail page splits into two scoped tabs reflected into the URL via
+`?tab=items|categories` (`handle_params/3` → `push_patch` from
+`switch_tab`). Default is "items"; unknown values fall back.
+
+- **Items tab → Active**: streamed cards (one per category + an
+  Uncategorized bucket), infinite-scroll cursor (`@cursor`,
+  `@loaded_cards`, `@has_more`). Category DnD lives only on the
+  Categories tab; items reorder within their category card.
+- **Items tab → Deleted**: flat list ordered by deletion date desc
+  (`Catalogue.list_deleted_items_for_catalogue/2`, capped at 500).
+  No category grouping, no infinite scroll. Restore + Delete Forever
+  per row; restore detaches from any deleted parent.
+- **Categories tab → Active**: depth-indented compact category rows
+  with drag handles (when ≥2 siblings), Edit + Delete actions. The
+  "Delete category" path opens the item-disposition modal when the
+  subtree has any active items.
+- **Categories tab → Deleted**: list of deleted categories with
+  Restore + Delete Forever pill buttons. No item count badge on the
+  row (separate-status: items aren't tied to the category's deleted
+  state in the Categories tab UI).
+
+The Active/Deleted status switcher is **per-tab**: Items tab shows
+`active_item_count` / `deleted_item_count`; Categories tab shows
+`active_category_count` / `deleted_category_count`. The auto-flip back
+to Active also runs against the per-tab count via
+`maybe_auto_flip_to_active/1` — invoked from `reset_and_load`,
+`refresh_counts`, `refresh_in_place`, and `handle_params` so the user
+never lands in an empty Deleted view of either tab.
+
+#### Item-disposition modal
+
+The trash flow on `Catalogue.trash_category/2` accepts an `:items`
+opt — the LV's `request_trash_category` event opens a modal when the
+subtree has active items, otherwise trashes directly with `:cascade`.
+Three radio options:
+
+- **Make items uncategorized** (default — `:uncategorize`)
+- **Move items to another category** (`{:move_to, target_uuid}`,
+  same-catalogue dropdown via `list_move_target_categories/1`)
+- **Delete items along with the category** (`:cascade`, red border)
+
+`active_item_count_in_subtree/1` decides whether to skip the modal
+entirely. The Confirm button label flips to "Delete category and
+items" for cascade; otherwise "Move items and delete category".
 
 ### Form conventions (0.1.12+)
 

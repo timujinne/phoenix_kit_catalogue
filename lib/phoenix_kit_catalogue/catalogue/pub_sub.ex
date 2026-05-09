@@ -87,4 +87,95 @@ defmodule PhoenixKitCatalogue.Catalogue.PubSub do
 
     :ok
   end
+
+  @doc """
+  Broadcasts a card-refresh event so other open detail pages re-fetch
+  a single category card's items after a reorder.
+
+  `scope` is a category UUID or `:uncategorized`. `from` is the
+  originating process; receivers compare against `self()` to skip
+  self-originated events (the source LV already updated locally).
+
+  `flash_uuid` + `flash_status` let the receiver fire a
+  `sortable:flash` push_event keyed to the moved row, so a second
+  open tab sees the same green/red flash the originator did.
+  """
+  @spec broadcast_card_refresh(
+          Ecto.UUID.t(),
+          Ecto.UUID.t() | :uncategorized,
+          Ecto.UUID.t() | nil,
+          atom(),
+          pid()
+        ) :: :ok
+  def broadcast_card_refresh(catalogue_uuid, scope, flash_uuid, flash_status, from \\ self()) do
+    if Code.ensure_loaded?(PhoenixKit.PubSubHelper) do
+      PhoenixKit.PubSubHelper.broadcast(
+        @topic,
+        {:catalogue_card_refresh, catalogue_uuid, scope, flash_uuid, flash_status, from}
+      )
+    end
+
+    :ok
+  end
+
+  @doc """
+  Broadcasts a category-reorder event so other open detail pages
+  re-fetch the category list (positions changed). Heavier than
+  `broadcast_card_refresh/5` — receivers do a full reset_and_load
+  since category order affects every streamed card on the page.
+  """
+  @spec broadcast_category_reorder(
+          Ecto.UUID.t(),
+          Ecto.UUID.t() | nil,
+          atom(),
+          pid()
+        ) :: :ok
+  def broadcast_category_reorder(catalogue_uuid, moved_id, status, from \\ self()) do
+    if Code.ensure_loaded?(PhoenixKit.PubSubHelper) do
+      PhoenixKit.PubSubHelper.broadcast(
+        @topic,
+        {:catalogue_category_reorder, catalogue_uuid, moved_id, status, from}
+      )
+    end
+
+    :ok
+  end
+
+  @doc """
+  Broadcasts a bulk-change event so other open detail pages animate
+  the affected items leaving / arriving on screen.
+
+  `kind`:
+    * `:trashed` — items are going away (red flash → state refresh).
+    * `:restored` — items are coming back (state refresh → green flash).
+    * `:moved` — items are leaving one scope and entering another
+      (red flash on source DOM → state refresh → green flash on
+      destination DOM).
+    * `:permanent_delete` — items are gone for good (same animation
+      as `:trashed`; the row removal is harder to undo but the visual
+      cue is the same).
+
+  `uuids` is the affected item list. `scopes` is the list of category
+  scopes (UUIDs or `:uncategorized`) whose cards need to refresh — for
+  moves this is the union of source and destination; for trash/restore
+  it's the scope that gained/lost items.
+  """
+  @spec broadcast_bulk_change(
+          Ecto.UUID.t(),
+          :trashed | :restored | :moved | :permanent_delete,
+          [Ecto.UUID.t()],
+          [Ecto.UUID.t() | :uncategorized],
+          pid()
+        ) :: :ok
+  def broadcast_bulk_change(catalogue_uuid, kind, uuids, scopes, from \\ self())
+      when is_atom(kind) and is_list(uuids) and is_list(scopes) do
+    if Code.ensure_loaded?(PhoenixKit.PubSubHelper) do
+      PhoenixKit.PubSubHelper.broadcast(
+        @topic,
+        {:catalogue_bulk_change, catalogue_uuid, kind, uuids, scopes, from}
+      )
+    end
+
+    :ok
+  end
 end

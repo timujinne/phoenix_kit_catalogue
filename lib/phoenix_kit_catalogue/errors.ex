@@ -55,6 +55,7 @@ defmodule PhoenixKitCatalogue.Errors do
           | :missing_item_name
           | :unsupported_file_format
           | :csv_empty
+          | :parent_catalogue_deleted
 
   @doc """
   Translates an error reason into a user-facing string via gettext.
@@ -127,6 +128,13 @@ defmodule PhoenixKitCatalogue.Errors do
 
   def message(:csv_empty),
     do: Gettext.gettext(PhoenixKitWeb.Gettext, "CSV file is empty.")
+
+  def message(:parent_catalogue_deleted),
+    do:
+      Gettext.gettext(
+        PhoenixKitWeb.Gettext,
+        "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+      )
 
   # Tagged tuples — atoms that carry a single parameter.
 

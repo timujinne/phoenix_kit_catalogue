@@ -63,7 +63,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html =~ "A1"
     end
 
-    test "load_more event advances to the next category", %{conn: conn} do
+    test "every category renders eagerly with its own preview slice", %{conn: conn} do
+      # 2026-05-09: Items tab swapped infinite scroll for per-card
+      # expand (mirrors PdfSearchModal). All categories show on first
+      # render with a 25-item preview + per-card "Show N more" button.
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "First", position: 0})
       cat_b = fixture_category(catalogue, %{name: "Second", position: 1})
@@ -71,25 +74,20 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       fixture_item(%{name: "A only", category_uuid: cat_a.uuid})
       fixture_item(%{name: "B only", category_uuid: cat_b.uuid})
 
-      {:ok, view, html} = live(conn, url(catalogue.uuid))
+      {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
       assert html =~ "First"
       assert html =~ "A only"
-      # The second category hasn't been loaded yet.
-      refute html =~ "Second"
-
-      # Fire the load_more event the sentinel would normally push.
-      html_after = render_click(view, "load_more", %{})
-      assert html_after =~ "Second"
-      assert html_after =~ "B only"
+      assert html =~ "Second"
+      assert html =~ "B only"
     end
 
-    test "paging fills a single large category across multiple load_more calls", %{conn: conn} do
+    test "expand_card loads more items into a single category", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
 
-      # @per_page is 100 — create 150 so two loads are needed.
-      for i <- 1..150 do
+      # @per_card is 25 — create 30 so an expand is needed.
+      for i <- 1..30 do
         fixture_item(%{
           name: "Item #{String.pad_leading("#{i}", 3, "0")}",
           category_uuid: category.uuid
@@ -98,48 +96,52 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
 
       {:ok, view, first_html} = live(conn, url(catalogue.uuid))
 
-      # First batch should contain items 001..100 but not 101.
+      # First render: items 001..025 visible, "Show 5 more" button visible.
       assert first_html =~ "Item 001"
-      assert first_html =~ "Item 100"
-      refute first_html =~ "Item 150"
+      assert first_html =~ "Item 025"
+      refute first_html =~ "Item 030"
+      assert first_html =~ "Show 5 more"
 
-      html_after = render_click(view, "load_more", %{})
-      assert html_after =~ "Item 101"
-      assert html_after =~ "Item 150"
+      # `expand_card` is asynchronous: the event handler defers the
+      # actual fetch via send/2 + a recovery `expand_timeout` so the
+      # button can re-render in its loading state. Drain the LV's
+      # mailbox by issuing any synchronous pull (e.g. another render)
+      # — `:sys.get_state` waits for everything queued before it.
+      render_click(view, "expand_card", %{"scope" => category.uuid})
+      :sys.get_state(view.pid)
+      html_after = render(view)
+
+      assert html_after =~ "Item 026"
+      assert html_after =~ "Item 030"
     end
 
-    test "uncategorized items load as the final card", %{conn: conn} do
+    test "Uncategorized renders eagerly when the catalogue has loose items", %{conn: conn} do
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "Cat A"})
 
       fixture_item(%{name: "In Category", category_uuid: cat_a.uuid})
       fixture_item(%{name: "Loose Item", catalogue_uuid: catalogue.uuid})
 
-      {:ok, view, first_html} = live(conn, url(catalogue.uuid))
+      {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
-      assert first_html =~ "Cat A"
-      assert first_html =~ "In Category"
-      # Uncategorized not loaded on the first batch because the
-      # category was loaded first.
-      refute first_html =~ "Uncategorized"
-
-      html_after = render_click(view, "load_more", %{})
-      assert html_after =~ "Uncategorized"
-      assert html_after =~ "Loose Item"
+      assert html =~ "Cat A"
+      assert html =~ "In Category"
+      assert html =~ "Uncategorized"
+      assert html =~ "Loose Item"
     end
 
     test "category card shows the total item count, not the loaded count", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
 
-      for i <- 1..120 do
+      for i <- 1..30 do
         fixture_item(%{name: "I#{i}", category_uuid: category.uuid})
       end
 
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
-      # Badge shows total (120), not the first batch (100)
-      assert html =~ "120"
+      # Badge shows total (30), not the first preview slice (25).
+      assert html =~ "30 items"
     end
   end
 
@@ -205,20 +207,25 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_item (in deleted view) removes it from the deleted list", %{conn: conn} do
+    test "restore_item (from the Items tab Deleted view) marks the item active", %{conn: conn} do
+      # After restore, the deleted view auto-flips back to Active because
+      # `deleted_item_count` hits 0 — the restored item ends up visible
+      # in the active stream rather than removed from the page entirely.
+      # The behavioral pin is: the DB row is "active" and the page
+      # doesn't crash.
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       item = fixture_item(%{name: "Comeback", category_uuid: category.uuid})
       Catalogue.trash_item(item)
 
       {:ok, view, _html} = live(conn, url(catalogue.uuid))
-      # Jump to the deleted tab to see the item
       html = render_click(view, "switch_view", %{"mode" => "deleted"})
       assert html =~ "Comeback"
 
-      html_after = render_click(view, "restore_item", %{"uuid" => item.uuid})
-      refute html_after =~ "Comeback"
+      render_click(view, "restore_item", %{"uuid" => item.uuid})
+
       assert Catalogue.get_item(item.uuid).status == "active"
+      assert Process.alive?(view.pid)
     end
 
     test "delete_item with a bogus uuid doesn't crash and leaves existing items untouched", %{
@@ -255,17 +262,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html =~ "Clickable category"
     end
 
-    test "category name is plain text in deleted mode", %{conn: conn} do
+    test "category name renders without an edit link in the Categories tab Deleted view",
+         %{conn: conn} do
+      # Items tab no longer renders trashed categories at all (the
+      # "separate status" rule). The Categories tab Deleted view shows
+      # the category as a plain row with no edit link — restore /
+      # delete-forever buttons replace the per-card actions.
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue, %{name: "Deleted category"})
       Catalogue.trash_category(category)
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?tab=categories")
       html = render_click(view, "switch_view", %{"mode" => "deleted"})
 
-      # In deleted mode the h3 renders, not the edit link
-      refute html =~ "/en/admin/catalogue/categories/#{category.uuid}/edit"
       assert html =~ "Deleted category"
+      # No edit link to the deleted category — only Restore + Delete Forever.
+      refute html =~ "/en/admin/catalogue/categories/#{category.uuid}/edit"
     end
 
     test "item name in the card body is a link to the item edit page", %{conn: conn} do
@@ -282,7 +294,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   end
 
   describe "category mutations" do
-    test "trash_category removes the category card", %{conn: conn} do
+    test "request_trash_category removes the category card when the subtree is empty",
+         %{conn: conn} do
+      # `request_trash_category` (the renamed event) trashes directly
+      # when the subtree has no active items. With items it would
+      # open the disposition modal first; here both fixtures are empty.
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "Trashable", position: 0})
       _cat_b = fixture_category(catalogue, %{name: "Staying", position: 1})
@@ -290,7 +306,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       {:ok, view, html} = live(conn, url(catalogue.uuid))
       assert html =~ "Trashable"
 
-      html_after = render_click(view, "trash_category", %{"uuid" => cat_a.uuid})
+      html_after = render_click(view, "request_trash_category", %{"uuid" => cat_a.uuid})
       refute html_after =~ "Trashable"
       assert html_after =~ "Staying"
     end
@@ -312,27 +328,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html_after =~ "Brought Back"
     end
 
-    test "move_category_up swaps positions", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      first = fixture_category(catalogue, %{name: "First", position: 0})
-      second = fixture_category(catalogue, %{name: "Second", position: 1})
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
-      render_click(view, "move_category_up", %{"uuid" => second.uuid})
-
-      assert Catalogue.get_category(first.uuid).position == 1
-      assert Catalogue.get_category(second.uuid).position == 0
-    end
-
-    test "move_category_up on the topmost category is a no-op", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      first = fixture_category(catalogue, %{name: "First", position: 0})
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
-      render_click(view, "move_category_up", %{"uuid" => first.uuid})
-
-      assert Catalogue.get_category(first.uuid).position == 0
-    end
+    # `move_category_up` / `move_category_down` events were removed
+    # when category reorder switched to drag-only via the SortableGrid
+    # hook. The new wire is the `reorder_categories` event the hook
+    # pushes; LV-test coverage of drag would need to drive SortableJS
+    # from a browser, out of scope for this fixture-driven stack.
   end
 
   # ─────────────────────────────────────────────────────────────────

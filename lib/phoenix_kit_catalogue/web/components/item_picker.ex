@@ -318,7 +318,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       assigns
       |> assign(
         :placeholder_text,
-        assigns[:placeholder] || Gettext.gettext(PhoenixKitWeb.Gettext, "Search items…")
+        assigns[:placeholder] || Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search items…")
       )
       |> assign(
         :price_fun,
@@ -359,7 +359,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         phx-click="clear"
         phx-target={@myself}
         class="btn btn-xs btn-ghost absolute right-1 top-1/2 -translate-y-1/2"
-        aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Clear")}
+        aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
       >
         <.icon name="hero-x-mark" class="w-3 h-3" />
       </button>
@@ -411,7 +411,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
           aria-disabled="true"
           class="px-3 py-2 text-xs text-base-content/40 italic cursor-default select-none"
         >
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Type to refine search…")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Type to refine search…")}
         </li>
       </ul>
 
@@ -419,7 +419,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         :if={@open and @options == [] and @query != ""}
         class="absolute z-50 mt-1 w-full bg-base-100 border border-base-300 rounded-box shadow-lg px-3 py-2 text-sm text-base-content/50"
       >
-        {Gettext.gettext(PhoenixKitWeb.Gettext, "No items found")}
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items found")}
       </div>
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ItemPicker">

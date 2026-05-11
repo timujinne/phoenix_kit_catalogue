@@ -47,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   def mount(%{"uuid" => uuid}, _session, socket) do
     socket =
       assign(socket,
-        page_title: Gettext.gettext(PhoenixKitWeb.Gettext, "Loading..."),
+        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading..."),
         catalogue_uuid: uuid,
         catalogue: nil,
         category_list: [],
@@ -94,7 +94,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
           {:ok,
            socket
-           |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Catalogue not found."))
+           |> put_flash(
+             :error,
+             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue not found.")
+           )
            |> push_navigate(to: Paths.index())}
       end
     else
@@ -284,7 +287,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
        |> put_flash(
          :error,
          Gettext.gettext(
-           PhoenixKitWeb.Gettext,
+           PhoenixKitCatalogue.Gettext,
            "Loading more items took too long. Please try again."
          )
        )}
@@ -330,7 +333,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
        socket
        |> put_flash(
          :info,
-         Gettext.gettext(PhoenixKitWeb.Gettext, "This catalogue was just deleted.")
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "This catalogue was just deleted.")
        )
        |> push_navigate(to: Paths.index())}
   end
@@ -432,7 +435,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          {:ok, _} <- Catalogue.trash_item(item, actor_opts(socket)) do
       {:noreply,
        socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Item moved to deleted."))
+       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item moved to deleted."))
        |> remove_item_locally(uuid)
        |> refresh_counts()}
     else
@@ -441,7 +444,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found.")
          )}
 
       {:error, reason} ->
@@ -455,7 +458,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete item.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete item.")
          )}
     end
   end
@@ -465,7 +468,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          {:ok, _} <- Catalogue.restore_item(item, actor_opts(socket)) do
       {:noreply,
        socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Item restored."))
+       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item restored."))
        |> remove_item_locally(uuid)
        |> refresh_counts()}
     else
@@ -474,7 +477,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found.")
          )}
 
       {:error, :parent_catalogue_deleted} ->
@@ -491,7 +494,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to restore item.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to restore item.")
          )}
     end
   end
@@ -510,7 +513,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            |> assign(:confirm_delete, nil)
            |> put_flash(
              :info,
-             Gettext.gettext(PhoenixKitWeb.Gettext, "Item permanently deleted.")
+             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item permanently deleted.")
            )
            |> remove_item_locally(uuid)
            |> refresh_counts()}
@@ -519,7 +522,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             {:noreply,
              socket
              |> assign(:confirm_delete, nil)
-             |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found."))}
+             |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found."))}
 
           {:error, reason} ->
             log_operation_error(socket, "permanently_delete_item", %{
@@ -533,7 +536,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
              |> assign(:confirm_delete, nil)
              |> put_flash(
                :error,
-               Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete item.")
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete item.")
              )}
         end
 
@@ -554,7 +557,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Category not found.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found.")
          )}
 
       category ->
@@ -783,7 +786,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          {:ok, _} <- Catalogue.restore_category(category, actor_opts(socket)) do
       {:noreply,
        socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Category restored."))
+       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category restored."))
        |> reset_and_load()}
     else
       nil ->
@@ -791,7 +794,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Category not found.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found.")
          )}
 
       {:error, :parent_catalogue_deleted} ->
@@ -808,7 +811,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to restore category.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to restore category.")
          )}
     end
   end
@@ -823,7 +826,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            |> assign(:confirm_delete, nil)
            |> put_flash(
              :info,
-             Gettext.gettext(PhoenixKitWeb.Gettext, "Category permanently deleted.")
+             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category permanently deleted.")
            )
            |> reset_and_load()}
         else
@@ -833,7 +836,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
              |> assign(:confirm_delete, nil)
              |> put_flash(
                :error,
-               Gettext.gettext(PhoenixKitWeb.Gettext, "Category not found.")
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found.")
              )}
 
           {:error, reason} ->
@@ -848,7 +851,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
              |> assign(:confirm_delete, nil)
              |> put_flash(
                :error,
-               Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete category.")
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete category.")
              )}
         end
 
@@ -892,7 +895,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Wrong catalogue scope.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Wrong catalogue scope.")
          )}
 
       from_catalogue_uuid != to_catalogue_uuid ->
@@ -905,7 +908,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          |> put_flash(
            :error,
            Gettext.gettext(
-             PhoenixKitWeb.Gettext,
+             PhoenixKitCatalogue.Gettext,
              "Items can only be moved within the same catalogue."
            )
          )
@@ -943,7 +946,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           nil ->
             {:noreply,
              socket
-             |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found."))
+             |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found."))
              |> flash_reorder(moved_id, :error)}
 
           {:error, reason} ->
@@ -957,7 +960,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
              socket
              |> put_flash(
                :error,
-               Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to move item.")
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move item.")
              )
              |> reset_and_load()
              |> flash_reorder(moved_id, :error)}
@@ -976,7 +979,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
        put_flash(
          socket,
          :error,
-         Gettext.gettext(PhoenixKitWeb.Gettext, "Wrong catalogue scope.")
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Wrong catalogue scope.")
        )}
     else
       apply_in_scope_item_reorder(socket, catalogue_uuid, category_uuid, ordered_ids, moved_id)
@@ -1028,7 +1031,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> assign(:selected_items, MapSet.new())
     |> put_flash(
       :info,
-      Gettext.gettext(PhoenixKitWeb.Gettext, "Deleted %{count} items.", count: count)
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted %{count} items.", count: count)
     )
     |> reset_and_load()
     |> then(&{:noreply, &1})
@@ -1044,7 +1047,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> assign(:selected_items, MapSet.new())
     |> put_flash(
       :info,
-      Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently deleted %{count} items.", count: count)
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently deleted %{count} items.",
+        count: count
+      )
     )
     |> reset_and_load()
     |> then(&{:noreply, &1})
@@ -1059,7 +1064,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> assign(:selected_items, MapSet.new())
     |> put_flash(
       :info,
-      Gettext.gettext(PhoenixKitWeb.Gettext, "Restored %{count} items.", count: count)
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restored %{count} items.", count: count)
     )
     |> reset_and_load()
     |> then(&{:noreply, &1})
@@ -1082,7 +1087,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         |> assign(:selected_items, MapSet.new())
         |> put_flash(
           :info,
-          Gettext.gettext(PhoenixKitWeb.Gettext, "Moved %{count} items.", count: count)
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moved %{count} items.", count: count)
         )
         |> reset_and_load()
         |> then(&{:noreply, &1})
@@ -1092,7 +1097,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Target category not found.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Target category not found.")
          )}
 
       {:error, scope_err} when scope_err in [:wrong_catalogue_scope, :missing_catalogue_scope] ->
@@ -1103,7 +1108,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            socket,
            :error,
            Gettext.gettext(
-             PhoenixKitWeb.Gettext,
+             PhoenixKitCatalogue.Gettext,
              "Items can only be moved within this catalogue."
            )
          )}
@@ -1128,7 +1133,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         |> assign(:selected_categories, MapSet.new())
         |> put_flash(
           :info,
-          Gettext.gettext(PhoenixKitWeb.Gettext, "Deleted %{count} categories.", count: count)
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted %{count} categories.",
+            count: count
+          )
         )
         |> reset_and_load()
         |> then(&{:noreply, &1})
@@ -1140,7 +1147,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete categories.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete categories.")
          )}
     end
   end
@@ -1162,7 +1169,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       |> assign(:selected_categories, MapSet.new())
       |> put_flash(
         :info,
-        Gettext.gettext(PhoenixKitWeb.Gettext, "Restored %{count} categories.", count: ok)
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restored %{count} categories.", count: ok)
       )
       |> reset_and_load()
 
@@ -1176,7 +1183,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          socket,
          :error,
          Gettext.gettext(
-           PhoenixKitWeb.Gettext,
+           PhoenixKitCatalogue.Gettext,
            "Some categories couldn't be restored. The catalogue may be deleted — restore it first."
          )
        )}
@@ -1200,7 +1207,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       {:ok, _} ->
         {:noreply,
          socket
-         |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Category moved to deleted."))
+         |> put_flash(
+           :info,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category moved to deleted.")
+         )
          |> reset_and_load()}
 
       {:error, reason} ->
@@ -1214,7 +1224,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to delete category.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete category.")
          )}
     end
   end
@@ -1243,7 +1253,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          socket
          |> put_flash(
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to reorder items.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to reorder items.")
          )
          |> reset_and_load()
          |> flash_reorder(moved_id, :error)}
@@ -1276,7 +1286,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
      |> assign(:confirm_delete, nil)
      |> put_flash(
        :error,
-       Gettext.gettext(PhoenixKitWeb.Gettext, "Unexpected request. Please try again.")
+       Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unexpected request. Please try again.")
      )}
   end
 
@@ -1574,7 +1584,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          |> assign(:search_loading, false)
          |> put_flash(
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Search failed. Please try again.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search failed. Please try again.")
          )}
     end
   end
@@ -1621,7 +1631,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          |> assign(:search_loading, false)
          |> put_flash(
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Search failed. Please try again.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search failed. Please try again.")
          )}
     end
   end
@@ -1818,7 +1828,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          socket
          |> put_flash(
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to reorder categories.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to reorder categories.")
          )
          |> reset_and_load()
          |> flash_reorder(moved_id, :error)}
@@ -1845,13 +1855,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         <.admin_page_header back={Paths.index()} title={@catalogue.name}>
           <:actions :if={@view_mode == "active"}>
             <.link navigate={Paths.category_new(@catalogue.uuid)} class="btn btn-outline btn-sm">
-              <.icon name="hero-folder-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitWeb.Gettext, "Add Category")}
+              <.icon name="hero-folder-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add Category")}
             </.link>
             <.link navigate={Paths.item_new(@catalogue.uuid)} class="btn btn-primary btn-sm">
-              <.icon name="hero-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitWeb.Gettext, "Add Item")}
+              <.icon name="hero-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add Item")}
             </.link>
             <.link navigate={Paths.catalogue_edit(@catalogue.uuid)} class="btn btn-ghost btn-sm">
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Edit")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
             </.link>
           </:actions>
         </.admin_page_header>
@@ -1874,7 +1884,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-value-tab="items"
               class={["tab", @tab == "items" && "tab-active"]}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Items")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")}
             </button>
             <button
               type="button"
@@ -1883,7 +1893,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-value-tab="categories"
               class={["tab", @tab == "categories" && "tab-active"]}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Categories")} ({length(@category_list)})
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Categories")} ({length(@category_list)})
             </button>
           </div>
 
@@ -1912,7 +1922,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 )
               ]}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Active")} ({if @tab == "categories",
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")} ({if @tab == "categories",
                 do: @active_category_count,
                 else: @active_item_count})
             </button>
@@ -1928,7 +1938,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 )
               ]}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Deleted")} ({if @tab == "categories",
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")} ({if @tab == "categories",
                 do: @deleted_category_count,
                 else: @deleted_item_count})
             </button>
@@ -1938,7 +1948,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         <%!-- ── Items tab ────────────────────────────────────────── --%>
         <div :if={@tab == "items"} class="flex flex-col gap-6">
           <%!-- Search (Items tab only — Categories tab has no search yet) --%>
-          <.search_input :if={@view_mode == "active"} query={@search_query} placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Search items by name, description, or SKU...")} />
+          <.search_input :if={@view_mode == "active"} query={@search_query} placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search items by name, description, or SKU...")} />
 
           <%!-- Combined row: bulk-action contents on the left (when
                items are selected), card/table view toggle on the right.
@@ -1969,7 +1979,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <div class="flex items-center gap-2">
             <%= if @search_loading and is_nil(@search_results) do %>
               <span class="text-sm text-base-content/60">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Searching for \"%{query}\"...", query: @search_query)}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Searching for \"%{query}\"...", query: @search_query)}
               </span>
             <% else %>
               <.search_results_summary :if={@search_results != nil} count={@search_total} query={@search_query} loaded={length(@search_results)} />
@@ -1977,7 +1987,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             <span :if={@search_loading} class="loading loading-spinner loading-xs text-base-content/40"></span>
           </div>
 
-          <.empty_state :if={@search_results == [] and not @search_loading} message={Gettext.gettext(PhoenixKitWeb.Gettext, "No items match your search.")} />
+          <.empty_state :if={@search_results == [] and not @search_loading} message={Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items match your search.")} />
 
           <%!-- Stale results are dimmed while a newer query is in flight to
                signal that the list is about to update. --%>
@@ -2014,13 +2024,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         <%!-- Empty states --%>
         <div :if={is_nil(@search_results) and not @search_loading and @loaded_cards == [] and @view_mode == "active"} class="card bg-base-100 shadow">
           <div class="card-body items-center text-center py-12">
-            <p class="text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "No categories or items yet. Add a category or item to get started.")}</p>
+            <p class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "No categories or items yet. Add a category or item to get started.")}</p>
           </div>
         </div>
 
         <div :if={is_nil(@search_results) and not @search_loading and @deleted_items == [] and @view_mode == "deleted"} class="card bg-base-100 shadow">
           <div class="card-body items-center text-center py-12">
-            <p class="text-base-content/60">{Gettext.gettext(PhoenixKitWeb.Gettext, "No deleted items.")}</p>
+            <p class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "No deleted items.")}</p>
           </div>
         </div>
 
@@ -2098,11 +2108,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             <div class="card-body items-center text-center py-12">
               <p class="text-base-content/60">
                 {if @view_mode == "deleted",
-                  do: Gettext.gettext(PhoenixKitWeb.Gettext, "No deleted categories."),
-                  else: Gettext.gettext(PhoenixKitWeb.Gettext, "No categories yet. Add one to start organizing items.")}
+                  do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No deleted categories."),
+                  else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No categories yet. Add one to start organizing items.")}
               </p>
               <.link :if={@view_mode == "active"} navigate={Paths.category_new(@catalogue.uuid)} class="btn btn-primary btn-sm mt-2">
-                <.icon name="hero-folder-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitWeb.Gettext, "Add Category")}
+                <.icon name="hero-folder-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add Category")}
               </.link>
             </div>
           </div>
@@ -2140,10 +2150,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         show={match?({"item", _}, @confirm_delete)}
         on_confirm="permanently_delete_item"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Item")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Item")}
         title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitWeb.Gettext, "This item will be permanently deleted. This cannot be undone.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This item will be permanently deleted. This cannot be undone.")}]}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
         danger={true}
       />
 
@@ -2151,10 +2161,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         show={match?({"category", _}, @confirm_delete)}
         on_confirm="permanently_delete_category"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently Delete Category")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Category")}
         title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitWeb.Gettext, "This category and all its items will be permanently deleted. This cannot be undone.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This category and all its items will be permanently deleted. This cannot be undone.")}]}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
         danger={true}
       />
 
@@ -2168,12 +2178,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         show={true}
         on_confirm="confirm_trash_category"
         on_cancel="cancel_trash_category"
-        title={Gettext.gettext(PhoenixKitWeb.Gettext, "Delete category — what about the items?")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete category — what about the items?")}
         title_icon="hero-folder-minus"
         confirm_text={
           if @trash_modal[:disposition] == :cascade,
-            do: Gettext.gettext(PhoenixKitWeb.Gettext, "Delete category and items"),
-            else: Gettext.gettext(PhoenixKitWeb.Gettext, "Move items and delete category")
+            do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete category and items"),
+            else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items and delete category")
         }
         confirm_disabled={
           @trash_modal[:disposition] == :move_to and is_nil(@trash_modal[:target_uuid])
@@ -2183,7 +2193,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         <p class="text-sm text-base-content/70">
           <strong>{@trash_modal[:category].name}</strong>
           {Gettext.gettext(
-            PhoenixKitWeb.Gettext,
+            PhoenixKitCatalogue.Gettext,
             "and its subtree contain %{count} active items. Choose where they should go before the category is deleted.",
             count: @trash_modal[:item_count]
           )}
@@ -2203,11 +2213,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             <div class="flex-1 min-w-0">
               <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Make items uncategorized")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make items uncategorized")}
               </p>
               <p class="text-xs text-base-content/60">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Items stay in this catalogue but are no longer attached to any category."
                 )}
               </p>
@@ -2230,17 +2240,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             <div class="flex-1 min-w-0">
               <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move items to another category")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items to another category")}
               </p>
               <p class="text-xs text-base-content/60 mb-2">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Pick a target category in this catalogue. The category being deleted and its subtree are excluded."
                 )}
               </p>
               <%= if @trash_modal[:targets] == [] do %>
                 <p class="text-xs text-warning">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "No other categories available — use Uncategorized instead.")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No other categories available — use Uncategorized instead.")}
                 </p>
               <% else %>
                 <select
@@ -2249,7 +2259,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   disabled={@trash_modal[:disposition] != :move_to}
                   class="select select-sm select-bordered w-full"
                 >
-                  <option value="">{Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}</option>
+                  <option value="">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select category --")}</option>
                   <%= for {cat, depth} <- @trash_modal[:targets] do %>
                     <option value={cat.uuid} selected={@trash_modal[:target_uuid] == cat.uuid}>
                       {String.duplicate("— ", depth)}{cat.name}
@@ -2276,11 +2286,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             <div class="flex-1 min-w-0">
               <p class="font-medium text-sm text-error">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete items along with the category")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete items along with the category")}
               </p>
               <p class="text-xs text-base-content/60">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Items move to the Deleted view alongside the category. Both can be restored later."
                 )}
               </p>
@@ -2299,15 +2309,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         on_cancel="cancel_bulk_action"
         title={
           case @bulk_confirm[:mode] do
-            :permanent -> Gettext.gettext(PhoenixKitWeb.Gettext, "Permanently delete selected items?")
-            _ -> Gettext.gettext(PhoenixKitWeb.Gettext, "Delete selected items?")
+            :permanent -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete selected items?")
+            _ -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete selected items?")
           end
         }
         title_icon="hero-trash"
         confirm_text={
           case @bulk_confirm[:mode] do
-            :permanent -> Gettext.gettext(PhoenixKitWeb.Gettext, "Delete forever")
-            _ -> Gettext.gettext(PhoenixKitWeb.Gettext, "Delete")
+            :permanent -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")
+            _ -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")
           end
         }
         danger={true}
@@ -2316,13 +2326,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             :permanent ->
               [
                 {:warning,
-                 Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} items will be permanently deleted. This cannot be undone.", count: @bulk_confirm[:count])}
+                 Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} items will be permanently deleted. This cannot be undone.", count: @bulk_confirm[:count])}
               ]
 
             _ ->
               [
                 {:warning,
-                 Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} items will be moved to the Deleted view. They can be restored later.", count: @bulk_confirm[:count])}
+                 Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} items will be moved to the Deleted view. They can be restored later.", count: @bulk_confirm[:count])}
               ]
           end
         }
@@ -2336,15 +2346,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         show={true}
         on_confirm="confirm_bulk_move_items"
         on_cancel="cancel_bulk_move"
-        title={Gettext.gettext(PhoenixKitWeb.Gettext, "Move selected items")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move selected items")}
         title_icon="hero-arrows-right-left"
-        confirm_text={Gettext.gettext(PhoenixKitWeb.Gettext, "Move items")}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items")}
         confirm_disabled={
           @bulk_move_modal[:disposition] == :move_to and is_nil(@bulk_move_modal[:target_uuid])
         }
       >
         <p class="text-sm text-base-content/70">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Pick where %{count} items should go.", count: @bulk_move_modal[:count])}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick where %{count} items should go.", count: @bulk_move_modal[:count])}
         </p>
 
         <div class="space-y-3 mt-4">
@@ -2360,10 +2370,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             <div class="flex-1 min-w-0">
               <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Make items uncategorized")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make items uncategorized")}
               </p>
               <p class="text-xs text-base-content/60">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Items keep their catalogue but lose their category.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items keep their catalogue but lose their category.")}
               </p>
             </div>
           </label>
@@ -2380,11 +2390,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             <div class="flex-1 min-w-0">
               <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move items to another category")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items to another category")}
               </p>
               <%= if @bulk_move_modal[:targets] == [] do %>
                 <p class="text-xs text-warning">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "No categories available — use Uncategorized instead.")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No categories available — use Uncategorized instead.")}
                 </p>
               <% else %>
                 <select
@@ -2393,7 +2403,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   disabled={@bulk_move_modal[:disposition] != :move_to}
                   class="select select-sm select-bordered w-full mt-2"
                 >
-                  <option value="">{Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}</option>
+                  <option value="">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select category --")}</option>
                   <%= for {cat, depth} <- @bulk_move_modal[:targets] do %>
                     <option value={cat.uuid} selected={@bulk_move_modal[:target_uuid] == cat.uuid}>
                       {String.duplicate("— ", depth)}{cat.name}
@@ -2491,12 +2501,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               :if={@view_mode == "active" and @card.category.status == "active"}
               navigate={Paths.category_edit(@card.category.uuid)}
               class="text-base-content/40 hover:text-primary"
-              title={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit category")}
+              title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit category")}
             >
               <.icon name="hero-pencil" class="w-4 h-4" />
             </.link>
             <span :if={@card.category.status == "deleted"} class="badge badge-error badge-xs">deleted</span>
-            <span class="badge badge-ghost badge-sm">{@total} {Gettext.gettext(PhoenixKitWeb.Gettext, "items")}</span>
+            <span class="badge badge-ghost badge-sm">{@total} {Gettext.gettext(PhoenixKitCatalogue.Gettext, "items")}</span>
           </div>
 
           <%!-- Active mode: no per-card buttons. The Items tab is
@@ -2508,10 +2518,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             <button
               phx-click="restore_category"
               phx-value-uuid={@card.category.uuid}
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Restoring...")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
               class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-success/30 bg-success/10 hover:bg-success/20 text-success text-xs font-medium transition-colors cursor-pointer"
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
             </button>
             <button
               phx-click="show_delete_confirm"
@@ -2519,7 +2529,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-value-type="category"
               class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-error/30 bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors cursor-pointer"
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
             </button>
           </div>
         </div>
@@ -2564,10 +2574,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             >
               <%= if @expanding do %>
                 <span class="loading loading-spinner loading-xs"></span>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Loading…")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…")}
               <% else %>
                 <.icon name="hero-chevron-down" class="w-3 h-3" />
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Show %{n} more", n: @total - @loaded)}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Show %{n} more", n: @total - @loaded)}
               <% end %>
             </button>
           </div>
@@ -2590,7 +2600,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         </div>
 
         <p :if={@card.items == [] and @view_mode == "active"} class="text-sm text-base-content/40 text-center py-4">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "No items in this category.")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items in this category.")}
         </p>
       </div>
     </div>
@@ -2604,8 +2614,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     <div class="card bg-base-100 shadow">
       <div class="card-body">
         <div :if={@category_total > 0} class="flex items-center gap-2">
-          <h3 class="card-title text-lg text-base-content/70">{Gettext.gettext(PhoenixKitWeb.Gettext, "Uncategorized")}</h3>
-          <span class="badge badge-ghost badge-sm">{@uncategorized_total} {Gettext.gettext(PhoenixKitWeb.Gettext, "items")}</span>
+          <h3 class="card-title text-lg text-base-content/70">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uncategorized")}</h3>
+          <span class="badge badge-ghost badge-sm">{@uncategorized_total} {Gettext.gettext(PhoenixKitCatalogue.Gettext, "items")}</span>
         </div>
 
         <div class={if @category_total > 0, do: "mt-2", else: ""}>
@@ -2642,10 +2652,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             >
               <%= if @expanding do %>
                 <span class="loading loading-spinner loading-xs"></span>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Loading…")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…")}
               <% else %>
                 <.icon name="hero-chevron-down" class="w-3 h-3" />
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Show %{n} more", n: @uncategorized_total - @loaded)}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Show %{n} more", n: @uncategorized_total - @loaded)}
               <% end %>
             </button>
           </div>
@@ -2671,30 +2681,30 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     ~H"""
     <div class="flex flex-wrap items-center gap-3 grow">
       <span class="text-sm font-medium">
-        {Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} selected", count: @count)}
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} selected", count: @count)}
       </span>
       <div class="flex items-center gap-2">
         <%= if @view_mode == "active" do %>
           <button phx-click="request_bulk_move_items" class="btn btn-sm btn-outline">
             <.icon name="hero-arrows-right-left" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
           </button>
           <button phx-click="request_bulk_delete_items" class="btn btn-sm btn-outline btn-error">
             <.icon name="hero-trash" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
           </button>
         <% else %>
           <button phx-click="request_bulk_restore_items" class="btn btn-sm btn-outline btn-success">
             <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
           </button>
           <button phx-click="request_bulk_delete_items" class="btn btn-sm btn-outline btn-error">
             <.icon name="hero-trash" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete forever")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
           </button>
         <% end %>
         <button phx-click="clear_selection" class="btn btn-sm btn-ghost">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Clear")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
         </button>
       </div>
     </div>
@@ -2708,22 +2718,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     ~H"""
     <div class="sticky top-[72px] z-40 -mx-1 px-3 py-2 rounded-lg bg-base-100/95 border border-primary/40 shadow-md backdrop-blur flex flex-wrap items-center gap-3">
       <span class="text-sm font-medium">
-        {Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} selected", count: @count)}
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} selected", count: @count)}
       </span>
       <div class="flex items-center gap-2 ml-auto">
         <%= if @view_mode == "active" do %>
           <button phx-click="request_bulk_delete_categories" class="btn btn-sm btn-outline btn-error">
             <.icon name="hero-trash" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
           </button>
         <% else %>
           <button phx-click="request_bulk_restore_categories" class="btn btn-sm btn-outline btn-success">
             <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
           </button>
         <% end %>
         <button phx-click="clear_selection" class="btn btn-sm btn-ghost">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Clear")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
         </button>
       </div>
     </div>
@@ -2764,7 +2774,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               <span
                 :if={@sibling_count > 1}
                 class="pk-drag-handle cursor-grab active:cursor-grabbing text-base-content/30 opacity-0 group-hover:opacity-100 transition-opacity"
-                title={Gettext.gettext(PhoenixKitWeb.Gettext, "Drag to reorder (among siblings)")}
+                title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag to reorder (among siblings)")}
               >
                 <.icon name="hero-bars-3" class="w-4 h-4" />
               </span>
@@ -2798,7 +2808,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               :if={@view_mode == "active" and @category.status == "active"}
               navigate={Paths.category_edit(@category.uuid)}
               class="text-base-content/40 hover:text-primary"
-              title={Gettext.gettext(PhoenixKitWeb.Gettext, "Edit category")}
+              title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit category")}
             >
               <.icon name="hero-pencil" class="w-4 h-4" />
             </.link>
@@ -2808,7 +2818,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                  is deleted, its items are managed separately (Items tab
                  Deleted view) — the count here would be confusing under
                  the "separate status" rule. --%>
-            <span :if={@category.status == "active"} class="badge badge-ghost badge-sm">{@count} {Gettext.gettext(PhoenixKitWeb.Gettext, "items")}</span>
+            <span :if={@category.status == "active"} class="badge badge-ghost badge-sm">{@count} {Gettext.gettext(PhoenixKitCatalogue.Gettext, "items")}</span>
           </div>
 
           <%!-- Deleted mode: Restore + Permanent Delete (per-row; bulk
@@ -2818,10 +2828,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             <button
               phx-click="restore_category"
               phx-value-uuid={@category.uuid}
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Restoring...")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
               class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-success/30 bg-success/10 hover:bg-success/20 text-success text-xs font-medium transition-colors cursor-pointer"
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
             </button>
             <button
               phx-click="show_delete_confirm"
@@ -2829,7 +2839,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               phx-value-type="category"
               class="inline-flex items-center gap-1.5 px-2.5 h-[2.5em] rounded-lg border border-error/30 bg-error/10 hover:bg-error/20 text-error text-xs font-medium transition-colors cursor-pointer"
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete Forever")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
             </button>
           </div>
         </div>

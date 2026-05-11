@@ -23,7 +23,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     {:ok,
      socket
      |> assign(
-       page_title: Gettext.gettext(PhoenixKitWeb.Gettext, "Events"),
+       page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events"),
        total: 0,
        page: 1,
        has_more: false,
@@ -162,20 +162,22 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   # `resource_types` is built from DB content and may surface unknown
   # types in the future — fall through to capitalize so they still
   # render readably.
-  defp humanize_resource_type("item"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Item")
-  defp humanize_resource_type("category"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Category")
+  defp humanize_resource_type("item"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item")
+
+  defp humanize_resource_type("category"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")
 
   defp humanize_resource_type("catalogue"),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Catalogue")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")
 
   defp humanize_resource_type("manufacturer"),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Manufacturer")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer")
 
   defp humanize_resource_type("supplier"),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Supplier")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier")
 
   defp humanize_resource_type("smart_rule"),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Smart rule")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Smart rule")
 
   # Unknown resource types fall back to the raw key. Wrapping in
   # `String.capitalize/1` would pin English casing on a value the
@@ -233,16 +235,16 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
 
     cond do
       diff < 60 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "just now")
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "just now")
 
       diff < 3600 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{count}m ago", count: div(diff, 60))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}m ago", count: div(diff, 60))
 
       diff < 86_400 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{count}h ago", count: div(diff, 3600))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}h ago", count: div(diff, 3600))
 
       diff < 604_800 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{count}d ago", count: div(diff, 86_400))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}d ago", count: div(diff, 86_400))
 
       true ->
         Calendar.strftime(datetime, "%b %d, %Y")
@@ -257,7 +259,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     <div class="flex flex-col mx-auto max-w-5xl px-4 py-6 gap-4">
       <div class="flex items-center justify-between">
         <div class="text-sm text-base-content/60">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} events", count: @total)}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} events", count: @total)}
         </div>
       </div>
 
@@ -268,9 +270,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             <.select
               name="filter[action]"
               id="events-filter-action"
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Action")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Action")}
               value={@filter_action}
-              prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "All Actions")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All Actions")}
               options={Enum.map(@action_types, &{&1, &1})}
               class="select-sm"
             />
@@ -280,16 +282,16 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             <.select
               name="filter[resource_type]"
               id="events-filter-resource"
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Resource")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Resource")}
               value={@filter_resource_type}
-              prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "All Types")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All Types")}
               options={Enum.map(@resource_types, &{humanize_resource_type(&1), &1})}
               class="select-sm"
             />
           </div>
 
           <button type="button" phx-click="clear_filters" class="btn btn-ghost btn-sm">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Clear")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
           </button>
         </.form>
       </div>
@@ -355,7 +357,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             <.link
               navigate={Routes.path("/admin/activity/#{entry.uuid}")}
               class="btn btn-ghost btn-xs btn-square"
-              title={Gettext.gettext(PhoenixKitWeb.Gettext, "View details")}
+              title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View details")}
             >
               <.icon name="hero-arrow-top-right-on-square" class="w-3.5 h-3.5" />
             </.link>
@@ -367,7 +369,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       <%= if @total == 0 and not @loading do %>
         <div class="text-center py-12 text-base-content/60">
           <.icon name="hero-bell-slash" class="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>{Gettext.gettext(PhoenixKitWeb.Gettext, "No events recorded yet")}</p>
+          <p>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "No events recorded yet")}</p>
         </div>
       <% end %>
 
@@ -382,7 +384,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
 
       <%= if not @has_more and @total > 0 do %>
         <div class="text-center text-xs text-base-content/40 py-2">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "All events loaded")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "All events loaded")}
         </div>
       <% end %>
     </div>

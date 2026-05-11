@@ -190,8 +190,7 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   rescue
     e in ErlangError ->
       {:error,
-       {:pdftotext_failed, page_number, :enoent,
-        "pdftotext not on PATH: #{Exception.message(e)}"}}
+       {:pdftotext_failed, page_number, :enoent, "pdftotext not on PATH: #{Exception.message(e)}"}}
   end
 
   # Normalize page text:

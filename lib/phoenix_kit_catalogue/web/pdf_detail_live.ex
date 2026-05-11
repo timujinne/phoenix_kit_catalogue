@@ -34,7 +34,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
       nil ->
         {:ok,
          socket
-         |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "PDF not found."))
+         |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF not found."))
          |> push_navigate(to: Paths.pdfs())}
 
       pdf ->
@@ -64,8 +64,8 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
   def handle_event("trash", _params, socket) do
     detail_pdf_action(socket, &Catalogue.trash_pdf/2,
       operation: "trash_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF moved to trash."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not move the PDF to trash."),
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF moved to trash."),
+      failure: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not move the PDF to trash."),
       after_ok: :push_navigate
     )
   end
@@ -74,8 +74,8 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
   def handle_event("restore", _params, socket) do
     detail_pdf_action(socket, &Catalogue.restore_pdf/2,
       operation: "restore_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF restored."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not restore the PDF."),
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF restored."),
+      failure: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not restore the PDF."),
       after_ok: :reload
     )
   end
@@ -84,8 +84,9 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
   def handle_event("permanently_delete", _params, socket) do
     detail_pdf_action(socket, &Catalogue.permanently_delete_pdf/2,
       operation: "permanently_delete_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF permanently deleted."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not permanently delete the PDF."),
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF permanently deleted."),
+      failure:
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not permanently delete the PDF."),
       after_ok: :push_navigate
     )
   end
@@ -156,7 +157,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
             <.link
               navigate={Paths.pdfs()}
               class="btn btn-ghost btn-xs"
-              title={Gettext.gettext(PhoenixKitWeb.Gettext, "Back to library")}
+              title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Back to library")}
             >
               <.icon name="hero-arrow-left" class="w-4 h-4" />
             </.link>
@@ -165,7 +166,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
             </h2>
             <%= if @pdf.status == "trashed" do %>
               <span class="badge badge-sm badge-warning">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Trashed")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trashed")}
               </span>
             <% end %>
           </div>
@@ -176,7 +177,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
             </span>
             <%= if Helpers.pdf_extraction_pages(@pdf) do %>
               <span>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} pages",
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} pages",
                   count: Helpers.pdf_extraction_pages(@pdf)
                 )}
               </span>
@@ -186,9 +187,9 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
             <% end %>
             <%= if Helpers.pdf_extracted_at(@pdf) do %>
               <span>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Extracted")}: {Calendar.strftime(
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Extracted")}: {Calendar.strftime(
                   Helpers.pdf_extracted_at(@pdf),
-                  Gettext.gettext(PhoenixKitWeb.Gettext, "%b %d, %Y %H:%M")
+                  Gettext.gettext(PhoenixKitCatalogue.Gettext, "%b %d, %Y %H:%M")
                 )}
               </span>
             <% end %>
@@ -200,39 +201,39 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
             <button
               type="button"
               phx-click="restore"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Restoring…")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
               class="btn btn-ghost btn-sm"
             >
               <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Restore")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
             </button>
             <button
               type="button"
               phx-click="permanently_delete"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting…")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
               data-confirm={
                 Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Permanently delete this PDF? If no other library entry references the same file content, the underlying file will be queued for hard deletion."
                 )
               }
               class="btn btn-ghost btn-sm text-error"
             >
               <.icon name="hero-x-mark" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Delete forever")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
             </button>
           <% else %>
             <button
               type="button"
               phx-click="trash"
-              phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Trashing…")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trashing…")}
               data-confirm={
-                Gettext.gettext(PhoenixKitWeb.Gettext, "Move this PDF to trash?")
+                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this PDF to trash?")
               }
               class="btn btn-ghost btn-sm text-error"
             >
               <.icon name="hero-trash" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Trash")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trash")}
             </button>
           <% end %>
         </div>
@@ -243,7 +244,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
           <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
           <div>
             <div class="font-semibold">
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Extraction failed")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Extraction failed")}
             </div>
             <div class="text-xs opacity-80">{Helpers.pdf_error_message(@pdf)}</div>
           </div>
@@ -255,11 +256,11 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
           <.icon name="hero-photo" class="w-4 h-4" />
           <div>
             <div class="font-semibold">
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "No extractable text")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No extractable text")}
             </div>
             <div class="text-xs opacity-80">
               {Gettext.gettext(
-                PhoenixKitWeb.Gettext,
+                PhoenixKitCatalogue.Gettext,
                 "This PDF appears to be scanned. OCR support is planned for a future iteration."
               )}
             </div>
@@ -272,7 +273,7 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
           <span class="loading loading-spinner loading-sm"></span>
           <div>
             {Gettext.gettext(
-              PhoenixKitWeb.Gettext,
+              PhoenixKitCatalogue.Gettext,
               "Text extraction in progress. This page will refresh automatically when it completes."
             )}
           </div>

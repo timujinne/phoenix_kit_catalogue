@@ -37,7 +37,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
     {:ok,
      socket
      |> assign(
-       page_title: Gettext.gettext(PhoenixKitWeb.Gettext, "PDFs"),
+       page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDFs"),
        filter: "active",
        pdfs: Catalogue.list_pdfs(status: "active"),
        upload_error: nil
@@ -73,8 +73,8 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   def handle_event("trash", %{"uuid" => uuid}, socket) do
     handle_pdf_action(socket, uuid, &Catalogue.trash_pdf/2,
       operation: "trash_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF moved to trash."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not move the PDF to trash.")
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF moved to trash."),
+      failure: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not move the PDF to trash.")
     )
   end
 
@@ -82,8 +82,8 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   def handle_event("restore", %{"uuid" => uuid}, socket) do
     handle_pdf_action(socket, uuid, &Catalogue.restore_pdf/2,
       operation: "restore_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF restored."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not restore the PDF.")
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF restored."),
+      failure: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not restore the PDF.")
     )
   end
 
@@ -91,8 +91,9 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   def handle_event("permanently_delete", %{"uuid" => uuid}, socket) do
     handle_pdf_action(socket, uuid, &Catalogue.permanently_delete_pdf/2,
       operation: "permanently_delete_pdf",
-      success: Gettext.gettext(PhoenixKitWeb.Gettext, "PDF permanently deleted."),
-      failure: Gettext.gettext(PhoenixKitWeb.Gettext, "Could not permanently delete the PDF.")
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF permanently deleted."),
+      failure:
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not permanently delete the PDF.")
     )
   end
 
@@ -200,14 +201,14 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   defp format_upload_failure({:storage_failed, _}),
     do:
       Gettext.gettext(
-        PhoenixKitWeb.Gettext,
+        PhoenixKitCatalogue.Gettext,
         "Could not save the uploaded file. Please try again or contact support if it persists."
       )
 
   defp format_upload_failure(_),
     do:
       Gettext.gettext(
-        PhoenixKitWeb.Gettext,
+        PhoenixKitCatalogue.Gettext,
         "Upload failed for an unexpected reason. Please try again."
       )
 
@@ -238,7 +239,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
     <div class="flex flex-col mx-auto max-w-5xl px-4 py-6 gap-6">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "PDF library")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF library")}
         </h2>
         <div class="flex items-center gap-3">
           <div class="join">
@@ -248,7 +249,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
               phx-value-filter="active"
               class={"join-item btn btn-sm #{if @filter == "active", do: "btn-primary", else: "btn-ghost"}"}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Active")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")}
             </button>
             <button
               type="button"
@@ -256,11 +257,11 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
               phx-value-filter="trashed"
               class={"join-item btn btn-sm #{if @filter == "trashed", do: "btn-primary", else: "btn-ghost"}"}
             >
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Trash")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trash")}
             </button>
           </div>
           <div class="text-sm text-base-content/60">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "%{count} PDFs", count: length(@pdfs))}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} PDFs", count: length(@pdfs))}
           </div>
         </div>
       </div>
@@ -270,11 +271,11 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
         <div class="bg-base-100 rounded-lg p-4">
           <.file_upload
             upload={@uploads.pdf}
-            label={Gettext.gettext(PhoenixKitWeb.Gettext, "Upload PDF")}
+            label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload PDF")}
             icon="hero-document-arrow-up"
             accept_description={
               Gettext.gettext(
-                PhoenixKitWeb.Gettext,
+                PhoenixKitCatalogue.Gettext,
                 "PDF files only. Identical content is deduplicated; same file uploaded again under a new name shares one underlying file + extraction."
               )
             }
@@ -283,7 +284,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
 
           <div class="text-xs text-base-content/60 mt-2 italic">
             {Gettext.gettext(
-              PhoenixKitWeb.Gettext,
+              PhoenixKitCatalogue.Gettext,
               "The progress bar shows the browser → server upload only. Don't refresh until it completes — interrupted uploads are not resumed."
             )}
           </div>
@@ -307,9 +308,9 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
             <.icon name="hero-document-text" class="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p>
               <%= if @filter == "trashed" do %>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Trash is empty.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trash is empty.")}
               <% else %>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "No PDFs uploaded yet.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No PDFs uploaded yet.")}
               <% end %>
             </p>
           </div>
@@ -317,19 +318,19 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
           <table class="table table-sm">
             <thead class="text-xs uppercase text-base-content/60">
               <tr>
-                <th>{Gettext.gettext(PhoenixKitWeb.Gettext, "Filename")}</th>
-                <th>{Gettext.gettext(PhoenixKitWeb.Gettext, "Status")}</th>
-                <th>{Gettext.gettext(PhoenixKitWeb.Gettext, "Pages")}</th>
-                <th>{Gettext.gettext(PhoenixKitWeb.Gettext, "Size")}</th>
+                <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Filename")}</th>
+                <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}</th>
+                <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pages")}</th>
+                <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Size")}</th>
                 <th>
                   <%= if @filter == "trashed" do %>
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "Trashed")}
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trashed")}
                   <% else %>
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "Uploaded")}
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uploaded")}
                   <% end %>
                 </th>
                 <th class="text-right">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Actions")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Actions")}
                 </th>
               </tr>
             </thead>
@@ -357,7 +358,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                         type="button"
                         phx-click="restore"
                         phx-value-uuid={pdf.uuid}
-                        phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Restoring…")}
+                        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
                         class="btn btn-ghost btn-xs"
                       >
                         <.icon name="hero-arrow-uturn-left" class="w-3.5 h-3.5" />
@@ -366,10 +367,10 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                         type="button"
                         phx-click="permanently_delete"
                         phx-value-uuid={pdf.uuid}
-                        phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Deleting…")}
+                        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
                         data-confirm={
                           Gettext.gettext(
-                            PhoenixKitWeb.Gettext,
+                            PhoenixKitCatalogue.Gettext,
                             "Permanently delete this PDF? If no other library entry references the same file content, the underlying file will be queued for hard deletion."
                           )
                         }
@@ -382,10 +383,10 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                         type="button"
                         phx-click="trash"
                         phx-value-uuid={pdf.uuid}
-                        phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Trashing…")}
+                        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Trashing…")}
                         data-confirm={
                           Gettext.gettext(
-                            PhoenixKitWeb.Gettext,
+                            PhoenixKitCatalogue.Gettext,
                             "Move this PDF to trash?"
                           )
                         }
@@ -438,13 +439,13 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   defp timestamp_for_filter(pdf, _), do: pdf.inserted_at
 
   defp format_upload_error(:too_large),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "File is too large.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File is too large.")
 
   defp format_upload_error(:not_accepted),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Only PDF files are accepted.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Only PDF files are accepted.")
 
   defp format_upload_error(:too_many_files),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Too many files at once.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Too many files at once.")
 
   defp format_upload_error(other), do: inspect(other)
 end

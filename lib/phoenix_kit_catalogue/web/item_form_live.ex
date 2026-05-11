@@ -47,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       {nil, _, _} ->
         {:ok,
          socket
-         |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Item not found."))
+         |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found."))
          |> push_navigate(to: Paths.index())}
 
       {item, changeset, catalogue_uuid} ->
@@ -112,8 +112,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     |> assign(
       page_title:
         if(action == :new,
-          do: Gettext.gettext(PhoenixKitWeb.Gettext, "New Item"),
-          else: Gettext.gettext(PhoenixKitWeb.Gettext, "Edit %{name}", name: item.name)
+          do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Item"),
+          else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: item.name)
         ),
       action: action,
       item: item,
@@ -510,7 +510,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       {:ok, item} ->
         {:noreply,
          socket
-         |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Item moved."))
+         |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item moved."))
          |> push_navigate(to: redirect_target(socket, item))}
 
       {:error, _} ->
@@ -518,7 +518,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Failed to move item.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move item.")
          )}
     end
   end
@@ -533,7 +533,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          :ok <- Attachments.maybe_rename_pending_folder(socket, item) do
       {:noreply,
        socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Item created."))
+       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item created."))
        |> push_navigate(to: redirect_target(socket, item))}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -545,7 +545,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
            socket,
            :error,
            Gettext.gettext(
-             PhoenixKitWeb.Gettext,
+             PhoenixKitCatalogue.Gettext,
              "Each catalogue can only appear once in the rules list."
            )
          )}
@@ -567,7 +567,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          {:ok, _rules} <- maybe_put_rules(socket, item) do
       {:noreply,
        socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Item updated."))
+       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item updated."))
        |> push_navigate(to: redirect_target(socket, item))}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -579,7 +579,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
            socket,
            :error,
            Gettext.gettext(
-             PhoenixKitWeb.Gettext,
+             PhoenixKitCatalogue.Gettext,
              "Each catalogue can only appear once in the rules list."
            )
          )}
@@ -674,12 +674,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           if @action == :new,
             do:
               Gettext.gettext(
-                PhoenixKitWeb.Gettext,
+                PhoenixKitCatalogue.Gettext,
                 "Add a new product or material to the catalogue."
               ),
             else:
               Gettext.gettext(
-                PhoenixKitWeb.Gettext,
+                PhoenixKitCatalogue.Gettext,
                 "Update item details, pricing, and classification."
               )
         }
@@ -691,18 +691,18 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       <div :if={@action == :edit} class="flex items-center justify-between bg-base-200 rounded-lg p-3 gap-3">
         <div class="text-sm">
           <div class="font-medium">
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Find this item in PDFs")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Find this item in PDFs")}
           </div>
           <div class="text-xs text-base-content/60">
             {Gettext.gettext(
-              PhoenixKitWeb.Gettext,
+              PhoenixKitCatalogue.Gettext,
               "Searches the entire PDF library for the item's name across all enabled languages."
             )}
           </div>
         </div>
         <button type="button" phx-click="open_pdf_search" class="btn btn-sm btn-primary">
           <.icon name="hero-magnifying-glass" class="w-4 h-4" />
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Search PDFs")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search PDFs")}
         </button>
       </div>
 
@@ -720,7 +720,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         <div>
           <p class="text-sm font-medium">
             {Gettext.gettext(
-              PhoenixKitWeb.Gettext,
+              PhoenixKitCatalogue.Gettext,
               "This item was imported in %{lang}. Please fill in the %{primary} translation and save to set it as the primary language.",
               lang: lang_name(@language_tabs, @item_primary_language),
               primary: lang_name(@language_tabs, @primary_language)
@@ -740,7 +740,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           class={"tab #{if @current_tab == :details, do: "tab-active"}"}
         >
           <.icon name="hero-document-text" class="w-4 h-4 mr-1" />
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Details")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Details")}
         </button>
         <button
           type="button"
@@ -749,7 +749,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           class={"tab #{if @current_tab == :metadata, do: "tab-active"}"}
         >
           <.icon name="hero-tag" class="w-4 h-4 mr-1" />
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Metadata")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Metadata")}
           <span :if={@meta_state.attached != []} class="badge badge-sm badge-ghost ml-2">
             {length(@meta_state.attached)}
           </span>
@@ -761,7 +761,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           class={"tab #{if @current_tab == :files, do: "tab-active"}"}
         >
           <.icon name="hero-paper-clip" class="w-4 h-4 mr-1" />
-          {Gettext.gettext(PhoenixKitWeb.Gettext, "Files")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Files")}
         </button>
       </div>
 
@@ -788,7 +788,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           <.featured_image_card
             featured_image_uuid={@featured_image_uuid}
             featured_image_file={@featured_image_file}
-            subtitle={Gettext.gettext(PhoenixKitWeb.Gettext, "Shown in lists and detail views.")}
+            subtitle={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Shown in lists and detail views.")}
           />
         </div>
 
@@ -831,8 +831,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 current_lang={@current_lang}
                 primary_language={@primary_language}
                 lang_data={@lang_data}
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Name")}
-                placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "e.g., Oak Panel 18mm")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., Oak Panel 18mm")}
                 required
                 class="w-full"
               />
@@ -846,11 +846,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 current_lang={@current_lang}
                 primary_language={@primary_language}
                 lang_data={@lang_data}
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Description")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")}
                 type="textarea"
                 placeholder={
                   Gettext.gettext(
-                    PhoenixKitWeb.Gettext,
+                    PhoenixKitCatalogue.Gettext,
                     "Product specifications, dimensions, materials..."
                   )
                 }
@@ -880,62 +880,62 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                     d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
                   />
                 </svg>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Pricing & Identification")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pricing & Identification")}
               </h2>
 
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <.input
                   field={@form[:sku]}
                   type="text"
-                  label={Gettext.gettext(PhoenixKitWeb.Gettext, "SKU")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")}
                   class="font-mono"
-                  placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "e.g., KF-001")}
+                  placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., KF-001")}
                 />
                 <div class="form-control">
                   <.input
                     field={@form[:base_price]}
                     type="number"
-                    label={Gettext.gettext(PhoenixKitWeb.Gettext, "Base Price")}
+                    label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base Price")}
                     step="0.01"
                     min="0"
-                    placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "0.00")}
+                    placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "0.00")}
                   />
                   <span class="label-text-alt text-base-content/50 mt-1">
                     {Gettext.gettext(
-                      PhoenixKitWeb.Gettext,
+                      PhoenixKitCatalogue.Gettext,
                       "Cost/purchase price before catalogue markup."
                     )}
                   </span>
                 </div>
                 <.select
                   field={@form[:unit]}
-                  label={Gettext.gettext(PhoenixKitWeb.Gettext, "Unit")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
                   class="transition-colors focus-within:select-primary"
                   options={[
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "Piece"), "piece"},
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "m² (square meter)"), "m2"},
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "Running meter"), "running_meter"}
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Piece"), "piece"},
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "m² (square meter)"), "m2"},
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Running meter"), "running_meter"}
                   ]}
                 />
                 <div class="form-control">
                   <.input
                     field={@form[:markup_percentage]}
                     type="number"
-                    label={Gettext.gettext(PhoenixKitWeb.Gettext, "Markup Override (%)")}
+                    label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup Override (%)")}
                     step="0.01"
                     min="0"
                     placeholder={
                       if @catalogue_markup,
                         do:
-                          Gettext.gettext(PhoenixKitWeb.Gettext, "Inherit: %{markup}%",
+                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inherit: %{markup}%",
                             markup: Decimal.to_string(@catalogue_markup, :normal)
                           ),
-                        else: Gettext.gettext(PhoenixKitWeb.Gettext, "Inherit catalogue markup")
+                        else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inherit catalogue markup")
                     }
                   />
                   <span class="label-text-alt text-base-content/50 mt-1">
                     {Gettext.gettext(
-                      PhoenixKitWeb.Gettext,
+                      PhoenixKitCatalogue.Gettext,
                       "Leave blank to inherit the catalogue's markup. Set (including 0) to override just this item."
                     )}
                   </span>
@@ -944,22 +944,22 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   <.input
                     field={@form[:discount_percentage]}
                     type="number"
-                    label={Gettext.gettext(PhoenixKitWeb.Gettext, "Discount Override (%)")}
+                    label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discount Override (%)")}
                     step="0.01"
                     min="0"
                     max="100"
                     placeholder={
                       if @catalogue_discount,
                         do:
-                          Gettext.gettext(PhoenixKitWeb.Gettext, "Inherit: %{discount}%",
+                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inherit: %{discount}%",
                             discount: Decimal.to_string(@catalogue_discount, :normal)
                           ),
-                        else: Gettext.gettext(PhoenixKitWeb.Gettext, "Inherit catalogue discount")
+                        else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inherit catalogue discount")
                     }
                   />
                   <span class="label-text-alt text-base-content/50 mt-1">
                     {Gettext.gettext(
-                      PhoenixKitWeb.Gettext,
+                      PhoenixKitCatalogue.Gettext,
                       "Leave blank to inherit the catalogue's discount. Set (including 0) to override just this item."
                     )}
                   </span>
@@ -972,11 +972,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <div class="divider my-0"></div>
               <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
                 <.icon name="hero-link" class="w-4 h-4" />
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Catalogue Rules")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue Rules")}
               </h2>
               <p class="text-sm text-base-content/60 -mt-2">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Pick which catalogues this item applies to and set a value + unit per catalogue. Rows left blank inherit the defaults below."
                 )}
               </p>
@@ -986,14 +986,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   <.input
                     field={@form[:default_value]}
                     type="number"
-                    label={Gettext.gettext(PhoenixKitWeb.Gettext, "Default Value")}
+                    label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Default Value")}
                     step="0.0001"
                     min="0"
-                    placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "e.g., 5")}
+                    placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., 5")}
                   />
                   <span class="label-text-alt text-base-content/50 mt-1">
                     {Gettext.gettext(
-                      PhoenixKitWeb.Gettext,
+                      PhoenixKitCatalogue.Gettext,
                       "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g. $50 flat)."
                     )}
                   </span>
@@ -1001,16 +1001,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 <div class="form-control">
                   <.select
                     field={@form[:default_unit]}
-                    label={Gettext.gettext(PhoenixKitWeb.Gettext, "Default Unit")}
+                    label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Default Unit")}
                     class="transition-colors focus-within:select-primary"
                     options={[
-                      {Gettext.gettext(PhoenixKitWeb.Gettext, "Percent (%)"), "percent"},
-                      {Gettext.gettext(PhoenixKitWeb.Gettext, "Flat amount"), "flat"}
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Percent (%)"), "percent"},
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Flat amount"), "flat"}
                     ]}
                   />
                   <span class="label-text-alt text-base-content/50 mt-1">
                     {Gettext.gettext(
-                      PhoenixKitWeb.Gettext,
+                      PhoenixKitCatalogue.Gettext,
                       "Used for any selected catalogue that doesn't have its own unit."
                     )}
                   </span>
@@ -1046,22 +1046,22 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                     d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
                   />
                 </svg>
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Classification")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Classification")}
               </h2>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <.select
                   field={@form[:category_uuid]}
-                  label={Gettext.gettext(PhoenixKitWeb.Gettext, "Category")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")}
                   class="transition-colors focus-within:select-primary"
-                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- No category --")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No category --")}
                   options={Enum.map(@categories, &{&1.name, &1.uuid})}
                 />
                 <.select
                   field={@form[:manufacturer_uuid]}
-                  label={Gettext.gettext(PhoenixKitWeb.Gettext, "Manufacturer")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer")}
                   class="transition-colors focus-within:select-primary"
-                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- No manufacturer --")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No manufacturer --")}
                   options={Enum.map(@manufacturers, &{&1.name, &1.uuid})}
                 />
               </div>
@@ -1070,17 +1070,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
             <div class="form-control">
               <.select
                 field={@form[:status]}
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Status")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
                 class="transition-colors focus-within:select-primary"
                 options={[
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Active"), "active"},
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive"), "inactive"},
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Discontinued"), "discontinued"}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active"), "active"},
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive"), "inactive"},
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discontinued"), "discontinued"}
                 ]}
               />
               <span class="label-text-alt text-base-content/50 mt-1">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Discontinued items are kept for reference but hidden from active listings."
                 )}
               </span>
@@ -1100,7 +1100,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
             id_prefix="item"
             description={
               Gettext.gettext(
-                PhoenixKitWeb.Gettext,
+                PhoenixKitCatalogue.Gettext,
                 "Attach any metadata fields that apply to this item. Blank values are dropped on save."
               )
             }
@@ -1118,7 +1118,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <div class="flex flex-col gap-0.5 min-w-0">
                 <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
                   <.icon name="hero-paper-clip" class="w-4 h-4" />
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Attached Files")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attached Files")}
                   <span
                     :if={@files_state.files != []}
                     class="badge badge-sm badge-ghost ml-1"
@@ -1128,7 +1128,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 </h2>
                 <p class="text-xs text-base-content/50">
                   {Gettext.gettext(
-                    PhoenixKitWeb.Gettext,
+                    PhoenixKitCatalogue.Gettext,
                     "Spec sheets, drawings, photos. Any file type is accepted."
                   )}
                 </p>
@@ -1146,9 +1146,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <.icon name="hero-cloud-arrow-up" class="w-8 h-8 text-base-content/40" />
               <div class="text-sm text-base-content/60">
                 <span class="font-medium text-primary">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Click to upload")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Click to upload")}
                 </span>
-                <span>{Gettext.gettext(PhoenixKitWeb.Gettext, " or drag & drop")}</span>
+                <span>{Gettext.gettext(PhoenixKitCatalogue.Gettext, " or drag & drop")}</span>
               </div>
               <.live_file_input upload={@uploads.attachment_files} class="hidden" />
             </label>
@@ -1175,7 +1175,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   phx-click="cancel_upload"
                   phx-value-ref={entry.ref}
                   class="btn btn-ghost btn-xs btn-square"
-                  title={Gettext.gettext(PhoenixKitWeb.Gettext, "Cancel")}
+                  title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
                 >
                   <.icon name="hero-x-mark" class="w-4 h-4" />
                 </button>
@@ -1191,7 +1191,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <div class="flex flex-col items-center gap-2 py-10 text-center border border-dashed border-base-300 rounded-md">
                 <.icon name="hero-paper-clip" class="w-8 h-8 text-base-content/30" />
                 <p class="text-sm text-base-content/50">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "No files attached yet.")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No files attached yet.")}
                 </p>
               </div>
             <% else %>
@@ -1219,7 +1219,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                       target="_blank"
                       rel="noopener"
                       class="shrink-0 flex items-center justify-center w-14 h-14 rounded bg-base-200 border border-base-300 text-base-content/60"
-                      title={Gettext.gettext(PhoenixKitWeb.Gettext, "Download")}
+                      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Download")}
                     >
                       <.icon name={Attachments.file_icon(file)} class="w-6 h-6" />
                     </a>
@@ -1236,15 +1236,15 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                     type="button"
                     phx-click="remove_file"
                     phx-value-uuid={file.uuid}
-                    phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Removing...")}
+                    phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing...")}
                     data-confirm={
                       Gettext.gettext(
-                        PhoenixKitWeb.Gettext,
+                        PhoenixKitCatalogue.Gettext,
                         "Remove this file from the item? If it's not attached to any other item, it will be moved to trash (admins can restore)."
                       )
                     }
                     class="btn btn-ghost btn-xs btn-square"
-                    title={Gettext.gettext(PhoenixKitWeb.Gettext, "Remove from item")}
+                    title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove from item")}
                   >
                     <.icon name="hero-x-mark" class="w-4 h-4" />
                   </button>
@@ -1267,23 +1267,23 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
             }
             class="btn btn-ghost"
           >
-            {Gettext.gettext(PhoenixKitWeb.Gettext, "Cancel")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
           </.link>
           <button
             type="submit"
             class="btn btn-primary phx-submit-loading:opacity-75"
             disabled={@uploads.attachment_files.entries != []}
-            phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Saving...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
           >
             {cond do
               @uploads.attachment_files.entries != [] ->
-                Gettext.gettext(PhoenixKitWeb.Gettext, "Waiting for uploads...")
+                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Waiting for uploads...")
 
               @action == :new ->
-                Gettext.gettext(PhoenixKitWeb.Gettext, "Create Item")
+                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create Item")
 
               true ->
-                Gettext.gettext(PhoenixKitWeb.Gettext, "Save Changes")
+                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save Changes")
             end}
           </button>
         </div>
@@ -1305,7 +1305,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       >
         <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
           <.icon name="hero-arrows-right-left" class="w-4 h-4 text-base-content/60" />
-          <h3 class="font-semibold text-base">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}</h3>
+          <h3 class="font-semibold text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}</h3>
           <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
         </summary>
 
@@ -1313,9 +1313,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           <%!-- Standard items: move to any category --%>
           <div :if={@catalogue_kind != "smart" && @all_categories != []} class="flex flex-col gap-3">
             <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Category")}</p>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Category")}</p>
               <p class="text-xs text-base-content/60">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move this item to a category in any catalogue.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this item to a category in any catalogue.")}
               </p>
             </div>
             <div class="flex items-end gap-3">
@@ -1324,7 +1324,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   name="category_uuid"
                   id="item-move-category"
                   value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select category --")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select category --")}
                   options={Enum.map(@all_categories, &{&1.name, &1.uuid})}
                   class="select-sm transition-colors focus-within:select-primary"
                   phx-change="select_move_target"
@@ -1333,11 +1333,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <button
                 type="button"
                 phx-click="move_item"
-                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
                 disabled={is_nil(@move_target)}
                 class="btn btn-sm btn-outline"
               >
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
               </button>
             </div>
           </div>
@@ -1345,10 +1345,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           <%!-- Smart items: move to a different smart catalogue --%>
           <div :if={@catalogue_kind == "smart" && @smart_move_targets != []} class="flex flex-col gap-3">
             <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitWeb.Gettext, "Move to Another Smart Catalogue")}</p>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Smart Catalogue")}</p>
               <p class="text-xs text-base-content/60">
                 {Gettext.gettext(
-                  PhoenixKitWeb.Gettext,
+                  PhoenixKitCatalogue.Gettext,
                   "Move this item into a different smart catalogue. Its catalogue rules stay attached."
                 )}
               </p>
@@ -1359,7 +1359,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   name="catalogue_uuid"
                   id="item-move-smart-catalogue"
                   value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitWeb.Gettext, "-- Select catalogue --")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select catalogue --")}
                   options={Enum.map(@smart_move_targets, &{&1.name, &1.uuid})}
                   class="select-sm transition-colors focus-within:select-primary"
                   phx-change="select_move_target"
@@ -1368,11 +1368,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <button
                 type="button"
                 phx-click="move_item"
-                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Moving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
                 disabled={is_nil(@move_target)}
                 class="btn btn-sm btn-outline"
               >
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Move")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
               </button>
             </div>
           </div>

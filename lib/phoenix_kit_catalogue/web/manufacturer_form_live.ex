@@ -42,7 +42,10 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
     if is_nil(manufacturer) and action == :edit do
       {:ok,
        socket
-       |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Manufacturer not found."))
+       |> put_flash(
+         :error,
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer not found.")
+       )
        |> push_navigate(to: Paths.manufacturers())}
     else
       all_suppliers = Catalogue.list_suppliers(status: "active")
@@ -52,8 +55,11 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
        |> assign(
          page_title:
            if(action == :new,
-             do: Gettext.gettext(PhoenixKitWeb.Gettext, "New Manufacturer"),
-             else: Gettext.gettext(PhoenixKitWeb.Gettext, "Edit %{name}", name: manufacturer.name)
+             do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Manufacturer"),
+             else:
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}",
+                 name: manufacturer.name
+               )
            ),
          action: action,
          manufacturer: manufacturer,
@@ -110,7 +116,10 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Manufacturer created."))
+             |> put_flash(
+               :info,
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer created.")
+             )
              |> push_navigate(to: Paths.manufacturers())}
 
           {:error, _} ->
@@ -119,7 +128,7 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
              |> put_flash(
                :warning,
                Gettext.gettext(
-                 PhoenixKitWeb.Gettext,
+                 PhoenixKitCatalogue.Gettext,
                  "Manufacturer created but failed to link some suppliers."
                )
              )
@@ -144,7 +153,10 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Manufacturer updated."))
+             |> put_flash(
+               :info,
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer updated.")
+             )
              |> push_navigate(to: Paths.manufacturers())}
 
           {:error, _} ->
@@ -153,7 +165,7 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
              |> put_flash(
                :warning,
                Gettext.gettext(
-                 PhoenixKitWeb.Gettext,
+                 PhoenixKitCatalogue.Gettext,
                  "Manufacturer updated but failed to sync supplier links."
                )
              )
@@ -173,7 +185,7 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
       <.admin_page_header
         back={Paths.manufacturers()}
         title={@page_title}
-        subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitWeb.Gettext, "Add a new manufacturer to your catalogue system."), else: Gettext.gettext(PhoenixKitWeb.Gettext, "Update manufacturer details and supplier links.")}
+        subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add a new manufacturer to your catalogue system."), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Update manufacturer details and supplier links.")}
       />
 
       <.form for={@form} action="#" phx-change="validate" phx-submit="save">
@@ -182,16 +194,16 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
             <.input
               field={@form[:name]}
               type="text"
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Name *")}
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "e.g., Blum, Hettich")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name *")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., Blum, Hettich")}
               required
             />
 
             <.textarea
               field={@form[:description]}
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Description")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")}
               rows="3"
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Brief description of this manufacturer...")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Brief description of this manufacturer...")}
             />
 
             <div class="divider my-0"></div>
@@ -199,37 +211,37 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
             <%!-- Contact & web --%>
             <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
               <.icon name="hero-envelope" class="h-4 w-4" />
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Contact & Web")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Contact & Web")}
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <.input
                 field={@form[:website]}
                 type="url"
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Website")}
-                placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "https://...")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Website")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "https://...")}
               />
               <.input
                 field={@form[:contact_info]}
                 type="text"
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Contact Info")}
-                placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Email or phone")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Contact Info")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Email or phone")}
               />
             </div>
 
             <.input
               field={@form[:logo_url]}
               type="url"
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Logo URL")}
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "https://...")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Logo URL")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "https://...")}
             />
 
             <.textarea
               field={@form[:notes]}
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Notes")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Notes")}
               rows="2"
               class="min-h-[5rem]"
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Internal notes about this manufacturer...")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Internal notes about this manufacturer...")}
             />
 
             <div class="divider my-0"></div>
@@ -237,15 +249,15 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
             <div class="form-control">
               <.select
                 field={@form[:status]}
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Status")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
                 class="transition-colors focus-within:select-primary"
                 options={[
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Active"), "active"},
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive"), "inactive"}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active"), "active"},
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive"), "inactive"}
                 ]}
               />
               <span class="label-text-alt text-base-content/50 mt-1">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive manufacturers won't appear in item dropdowns.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive manufacturers won't appear in item dropdowns.")}
               </span>
             </div>
 
@@ -255,10 +267,10 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
 
               <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
                 <.icon name="hero-link" class="h-4 w-4" />
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Linked Suppliers")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Linked Suppliers")}
               </h2>
               <p class="text-sm text-base-content/50 -mt-2">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Click to toggle supplier associations.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Click to toggle supplier associations.")}
               </p>
 
               <div class="flex flex-wrap gap-2">
@@ -288,13 +300,13 @@ defmodule PhoenixKitCatalogue.Web.ManufacturerFormLive do
             <div class="divider my-0"></div>
 
             <div class="flex justify-end gap-3">
-              <.link navigate={Paths.manufacturers()} class="btn btn-ghost">{Gettext.gettext(PhoenixKitWeb.Gettext, "Cancel")}</.link>
+              <.link navigate={Paths.manufacturers()} class="btn btn-ghost">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}</.link>
               <button
                 type="submit"
                 class="btn btn-primary phx-submit-loading:opacity-75"
-                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Saving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
               >
-                {if @action == :new, do: Gettext.gettext(PhoenixKitWeb.Gettext, "Create Manufacturer"), else: Gettext.gettext(PhoenixKitWeb.Gettext, "Save Changes")}
+                {if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create Manufacturer"), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save Changes")}
               </button>
             </div>
           </div>

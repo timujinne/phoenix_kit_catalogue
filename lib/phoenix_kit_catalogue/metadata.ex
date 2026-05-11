@@ -48,30 +48,33 @@ defmodule PhoenixKitCatalogue.Metadata do
   Order here is the order used for the "Add metadata" dropdown.
 
   The `:label` values are translated at call time via
-  `PhoenixKitWeb.Gettext` — do not cache the result across locale
+  `PhoenixKitCatalogue.Gettext` — do not cache the result across locale
   changes. The `:key` is stable (it's the JSONB key) and never
   translated.
   """
   @spec definitions(resource_type()) :: [definition()]
   def definitions(:item) do
     [
-      %{key: "color", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Color")},
-      %{key: "weight", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Weight")},
-      %{key: "width", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Width")},
-      %{key: "height", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Height")},
-      %{key: "depth", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Depth")},
-      %{key: "material", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Material")},
-      %{key: "finish", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Finish")}
+      %{key: "color", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Color")},
+      %{key: "weight", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Weight")},
+      %{key: "width", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Width")},
+      %{key: "height", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Height")},
+      %{key: "depth", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Depth")},
+      %{key: "material", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Material")},
+      %{key: "finish", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Finish")}
     ]
   end
 
   def definitions(:catalogue) do
     [
-      %{key: "brand", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Brand")},
-      %{key: "collection", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Collection")},
-      %{key: "season", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Season")},
-      %{key: "region", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Region")},
-      %{key: "vendor_ref", label: Gettext.gettext(PhoenixKitWeb.Gettext, "Vendor Reference")}
+      %{key: "brand", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Brand")},
+      %{key: "collection", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Collection")},
+      %{key: "season", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Season")},
+      %{key: "region", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Region")},
+      %{
+        key: "vendor_ref",
+        label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Vendor Reference")
+      }
     ]
   end
 

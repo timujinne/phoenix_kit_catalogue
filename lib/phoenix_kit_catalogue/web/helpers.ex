@@ -67,13 +67,16 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
   would pin English casing on a value the extractor can't see.
   """
   @spec status_label(String.t() | nil) :: String.t()
-  def status_label("active"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Active")
-  def status_label("inactive"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive")
-  def status_label("archived"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Archived")
-  def status_label("deleted"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Deleted")
-  def status_label("discontinued"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Discontinued")
+  def status_label("active"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")
+  def status_label("inactive"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive")
+  def status_label("archived"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")
+  def status_label("deleted"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")
+
+  def status_label("discontinued"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discontinued")
+
   def status_label(other) when is_binary(other), do: other
-  def status_label(_), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Unknown")
+  def status_label(_), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unknown")
 
   @doc """
   Logs a failed LV mutation in two places at once:
@@ -263,14 +266,17 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
 
   @doc "Translated label for an extraction status."
   @spec pdf_status_label(String.t()) :: String.t()
-  def pdf_status_label("pending"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Pending")
-  def pdf_status_label("extracting"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Extracting")
-  def pdf_status_label("extracted"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Extracted")
+  def pdf_status_label("pending"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pending")
+
+  def pdf_status_label("extracting"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Extracting")
+
+  def pdf_status_label("extracted"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Extracted")
 
   def pdf_status_label("scanned_no_text"),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Scanned (no text)")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Scanned (no text)")
 
-  def pdf_status_label("failed"), do: Gettext.gettext(PhoenixKitWeb.Gettext, "Failed")
+  def pdf_status_label("failed"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed")
   def pdf_status_label(other), do: other
 
   @doc "Human-readable byte size with B / KB / MB / GB suffixes."
@@ -299,21 +305,21 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
 
     cond do
       diff < 60 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "just now")
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "just now")
 
       diff < 3600 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{n}m ago", n: div(diff, 60))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{n}m ago", n: div(diff, 60))
 
       diff < 86_400 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{n}h ago", n: div(diff, 3600))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{n}h ago", n: div(diff, 3600))
 
       diff < 604_800 ->
-        Gettext.gettext(PhoenixKitWeb.Gettext, "%{n}d ago", n: div(diff, 86_400))
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{n}d ago", n: div(diff, 86_400))
 
       true ->
         Calendar.strftime(
           datetime,
-          Gettext.gettext(PhoenixKitWeb.Gettext, "%b %d, %Y")
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "%b %d, %Y")
         )
     end
   end

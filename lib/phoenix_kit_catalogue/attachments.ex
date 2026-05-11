@@ -208,7 +208,7 @@ defmodule PhoenixKitCatalogue.Attachments do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Could not prepare the files folder.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not prepare the files folder.")
          )}
     end
   end
@@ -268,7 +268,7 @@ defmodule PhoenixKitCatalogue.Attachments do
          put_flash(
            socket,
            :error,
-           Gettext.gettext(PhoenixKitWeb.Gettext, "Could not remove file.")
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not remove file.")
          )}
     end
   end
@@ -443,16 +443,19 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   @doc "Translates LiveView upload error atoms to user-facing text."
   def upload_error_message(:too_large),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "File is too large.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File is too large.")
 
   def upload_error_message(:not_accepted),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "File type not accepted.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File type not accepted.")
 
   def upload_error_message(:too_many_files),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Too many files.")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Too many files.")
 
   def upload_error_message(other),
-    do: Gettext.gettext(PhoenixKitWeb.Gettext, "Upload error: %{reason}", reason: inspect(other))
+    do:
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload error: %{reason}",
+        reason: inspect(other)
+      )
 
   # ── Internals ────────────────────────────────────────────────────
 
@@ -589,7 +592,7 @@ defmodule PhoenixKitCatalogue.Attachments do
         put_flash(
           socket,
           :error,
-          Gettext.gettext(PhoenixKitWeb.Gettext, "Selected image could not be loaded.")
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Selected image could not be loaded.")
         )
 
       file ->
@@ -672,7 +675,7 @@ defmodule PhoenixKitCatalogue.Attachments do
     put_flash(
       socket,
       :error,
-      Gettext.gettext(PhoenixKitWeb.Gettext, "Upload failed for %{name}.",
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload failed for %{name}.",
         name: entry.client_name
       )
     )

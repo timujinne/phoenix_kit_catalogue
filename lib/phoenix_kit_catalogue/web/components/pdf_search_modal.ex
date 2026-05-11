@@ -107,7 +107,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
         expanding: MapSet.new(),
         error:
           Gettext.gettext(
-            PhoenixKitWeb.Gettext,
+            PhoenixKitCatalogue.Gettext,
             "Search is temporarily unavailable. Please try again in a moment."
           ),
         last_item_uuid: item.uuid
@@ -166,7 +166,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
            |> assign(
              :error,
              Gettext.gettext(
-               PhoenixKitWeb.Gettext,
+               PhoenixKitCatalogue.Gettext,
                "Could not load more matches. Please try again."
              )
            )}
@@ -229,11 +229,11 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
             <div class="flex items-start justify-between gap-3">
               <div>
                 <h3 class="font-semibold text-lg">
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "PDF search")}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF search")}
                 </h3>
                 <p class="text-xs text-base-content/60 mt-1">
                   {Gettext.gettext(
-                    PhoenixKitWeb.Gettext,
+                    PhoenixKitCatalogue.Gettext,
                     "Searched for: %{name}",
                     name: @item.name
                   )}
@@ -244,7 +244,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
                 phx-click="close"
                 phx-target={@myself}
                 class="btn btn-sm btn-ghost btn-circle"
-                aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Close")}
+                aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Close")}
               >
                 ✕
               </button>
@@ -255,7 +255,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
                 <% @loading -> %>
                   <div class="flex items-center gap-2 text-sm text-base-content/60">
                     <span class="loading loading-spinner loading-sm"></span>
-                    {Gettext.gettext(PhoenixKitWeb.Gettext, "Searching…")}
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Searching…")}
                   </div>
                 <% @error -> %>
                   <div class="alert alert-error">
@@ -267,7 +267,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
                     <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-50" />
                     <p class="text-sm">
                       {Gettext.gettext(
-                        PhoenixKitWeb.Gettext,
+                        PhoenixKitCatalogue.Gettext,
                         "No PDF mentions this item by name."
                       )}
                     </p>
@@ -303,7 +303,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
                               >
                                 <div class="text-xs text-base-content/60">
                                   {Gettext.gettext(
-                                    PhoenixKitWeb.Gettext,
+                                    PhoenixKitCatalogue.Gettext,
                                     "page %{n}",
                                     n: hit.page_number
                                   )}
@@ -327,11 +327,11 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
                               >
                                 <%= if MapSet.member?(@expanding, group.pdf.uuid) do %>
                                   <span class="loading loading-spinner loading-xs"></span>
-                                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Loading…")}
+                                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…")}
                                 <% else %>
                                   <.icon name="hero-chevron-down" class="w-3 h-3" />
                                   {Gettext.gettext(
-                                    PhoenixKitWeb.Gettext,
+                                    PhoenixKitCatalogue.Gettext,
                                     "Show %{n} more",
                                     n: group.total_matches - length(group.hits)
                                   )}
@@ -348,7 +348,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
 
             <div class="modal-action">
               <button type="button" phx-click="close" phx-target={@myself} class="btn btn-sm">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Close")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Close")}
               </button>
             </div>
           </div>
@@ -357,7 +357,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
             phx-click="close"
             phx-target={@myself}
             class="modal-backdrop"
-            aria-label={Gettext.gettext(PhoenixKitWeb.Gettext, "Close modal")}
+            aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Close modal")}
           >
           </button>
         </div>

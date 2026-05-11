@@ -1,0 +1,789 @@
+## This file is a PO Template file.
+##
+## "msgid"s here are often extracted from source code.
+## Add new translations manually or run "mix gettext.extract" to add
+## stale messages to this file.
+##
+## Run "mix gettext.merge priv/gettext --locale LOCALE" to merge
+## this template with a particular locale's PO file.
+msgid ""
+msgstr ""
+
+## Tab labels
+msgid "Catalogue"
+msgstr ""
+
+msgid "Catalogues"
+msgstr ""
+
+msgid "Manufacturers"
+msgstr ""
+
+msgid "Suppliers"
+msgstr ""
+
+msgid "Import"
+msgstr ""
+
+msgid "Events"
+msgstr ""
+
+msgid "PDFs"
+msgstr ""
+
+msgid "PDF"
+msgstr ""
+
+msgid "New Catalogue"
+msgstr ""
+
+msgid "Edit Catalogue"
+msgstr ""
+
+msgid "New Manufacturer"
+msgstr ""
+
+msgid "Edit Manufacturer"
+msgstr ""
+
+msgid "New Supplier"
+msgstr ""
+
+msgid "Edit Supplier"
+msgstr ""
+
+msgid "New Category"
+msgstr ""
+
+msgid "Edit Category"
+msgstr ""
+
+msgid "New Item"
+msgstr ""
+
+msgid "Edit Item"
+msgstr ""
+
+## Page titles / form headings
+msgid "Edit %{name}"
+msgstr ""
+
+msgid "Create a new product catalogue to organize categories and items."
+msgstr ""
+
+msgid "Update catalogue details and settings."
+msgstr ""
+
+msgid "Add a new manufacturer to your catalogue system."
+msgstr ""
+
+msgid "Update manufacturer details and supplier links."
+msgstr ""
+
+msgid "Add a new supplier to your catalogue system."
+msgstr ""
+
+msgid "Update supplier details and manufacturer links."
+msgstr ""
+
+msgid "Add a new category to organize items within this catalogue."
+msgstr ""
+
+msgid "Update category details and ordering."
+msgstr ""
+
+msgid "Create a new category — fill in the details below"
+msgstr ""
+
+## Status labels
+msgid "Active"
+msgstr ""
+
+msgid "Inactive"
+msgstr ""
+
+msgid "Archived"
+msgstr ""
+
+msgid "Deleted"
+msgstr ""
+
+msgid "Discontinued"
+msgstr ""
+
+msgid "Unknown"
+msgstr ""
+
+## PDF status labels
+msgid "Pending"
+msgstr ""
+
+msgid "Extracting"
+msgstr ""
+
+msgid "Extracted"
+msgstr ""
+
+msgid "Scanned (no text)"
+msgstr ""
+
+msgid "Failed"
+msgstr ""
+
+## Metadata field labels
+msgid "Color"
+msgstr ""
+
+msgid "Weight"
+msgstr ""
+
+msgid "Width"
+msgstr ""
+
+msgid "Height"
+msgstr ""
+
+msgid "Depth"
+msgstr ""
+
+msgid "Material"
+msgstr ""
+
+msgid "Finish"
+msgstr ""
+
+msgid "Brand"
+msgstr ""
+
+msgid "Collection"
+msgstr ""
+
+msgid "Season"
+msgstr ""
+
+msgid "Region"
+msgstr ""
+
+msgid "Vendor Reference"
+msgstr ""
+
+## Error messages
+msgid "Cannot move a category under itself or one of its descendants."
+msgstr ""
+
+msgid "Target belongs to a different catalogue. Move the category to the target catalogue first."
+msgstr ""
+
+msgid "Parent category not found."
+msgstr ""
+
+msgid "Categories must share the same parent to be reordered."
+msgstr ""
+
+msgid "Category not found."
+msgstr ""
+
+msgid "Catalogue not found."
+msgstr ""
+
+msgid "Item is already in this catalogue."
+msgstr ""
+
+msgid "You must be logged in to upload files."
+msgstr ""
+
+msgid "Unsupported file format."
+msgstr ""
+
+msgid "Unsupported file format. Please upload .xlsx or .csv."
+msgstr ""
+
+msgid "Not found."
+msgstr ""
+
+msgid "Missing item name."
+msgstr ""
+
+msgid "CSV file is empty."
+msgstr ""
+
+msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+msgstr ""
+
+msgid "Cannot delete: %{count} smart items still reference this catalogue."
+msgstr ""
+
+msgid "Each catalogue can only be referenced once per item."
+msgstr ""
+
+msgid "Invalid price: %{raw}"
+msgstr ""
+
+msgid "Invalid markup: %{raw}"
+msgstr ""
+
+msgid "Sheet '%{sheet}' is empty."
+msgstr ""
+
+msgid "Failed to read sheet '%{sheet}'."
+msgstr ""
+
+msgid "Failed to open XLSX file."
+msgstr ""
+
+msgid "Failed to read XLSX file."
+msgstr ""
+
+msgid "Failed to parse CSV file."
+msgstr ""
+
+msgid "Unexpected error: %{reason}"
+msgstr ""
+
+## Time-ago strings
+msgid "just now"
+msgstr ""
+
+msgid "%{n}m ago"
+msgstr ""
+
+msgid "%{n}h ago"
+msgstr ""
+
+msgid "%{n}d ago"
+msgstr ""
+
+msgid "%b %d, %Y"
+msgstr ""
+
+## Flash messages
+msgid "Catalogue created."
+msgstr ""
+
+msgid "Catalogue updated."
+msgstr ""
+
+msgid "Catalogue moved to deleted."
+msgstr ""
+
+msgid "Catalogue restored."
+msgstr ""
+
+msgid "Catalogue permanently deleted."
+msgstr ""
+
+msgid "Manufacturer created."
+msgstr ""
+
+msgid "Manufacturer not found."
+msgstr ""
+
+msgid "Manufacturer updated."
+msgstr ""
+
+msgid "Supplier created."
+msgstr ""
+
+msgid "Supplier not found."
+msgstr ""
+
+msgid "Supplier updated."
+msgstr ""
+
+msgid "Category created."
+msgstr ""
+
+msgid "Category updated."
+msgstr ""
+
+msgid "Category moved to deleted."
+msgstr ""
+
+msgid "Category restored."
+msgstr ""
+
+msgid "Category permanently deleted."
+msgstr ""
+
+msgid "Category moved."
+msgstr ""
+
+msgid "Category moved to another catalogue."
+msgstr ""
+
+msgid "Item created."
+msgstr ""
+
+msgid "Item updated."
+msgstr ""
+
+msgid "Item moved to deleted."
+msgstr ""
+
+msgid "Item restored."
+msgstr ""
+
+msgid "Item permanently deleted."
+msgstr ""
+
+msgid "Item moved."
+msgstr ""
+
+msgid "Item not found."
+msgstr ""
+
+msgid "Failed to delete catalogue."
+msgstr ""
+
+msgid "Failed to delete category."
+msgstr ""
+
+msgid "Failed to delete categories."
+msgstr ""
+
+msgid "Failed to delete item."
+msgstr ""
+
+msgid "Failed to delete manufacturer."
+msgstr ""
+
+msgid "Failed to delete supplier."
+msgstr ""
+
+msgid "Failed to move category."
+msgstr ""
+
+msgid "Failed to move item."
+msgstr ""
+
+msgid "Failed to reorder categories."
+msgstr ""
+
+msgid "Failed to reorder items."
+msgstr ""
+
+msgid "Failed to restore catalogue."
+msgstr ""
+
+msgid "Failed to restore category."
+msgstr ""
+
+msgid "Failed to restore item."
+msgstr ""
+
+msgid "Failed to save the new order."
+msgstr ""
+
+msgid "PDF moved to trash."
+msgstr ""
+
+msgid "PDF permanently deleted."
+msgstr ""
+
+msgid "PDF restored."
+msgstr ""
+
+msgid "PDF not found."
+msgstr ""
+
+msgid "Could not move the PDF to trash."
+msgstr ""
+
+msgid "Could not permanently delete the PDF."
+msgstr ""
+
+msgid "Could not restore the PDF."
+msgstr ""
+
+## UI strings - general
+msgid "Back"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Save Changes"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Restore"
+msgstr ""
+
+msgid "Delete Forever"
+msgstr ""
+
+msgid "Edit"
+msgstr ""
+
+msgid "View"
+msgstr ""
+
+msgid "Create Catalogue"
+msgstr ""
+
+msgid "Create Category"
+msgstr ""
+
+msgid "Create Manufacturer"
+msgstr ""
+
+msgid "Create Supplier"
+msgstr ""
+
+msgid "Create Item"
+msgstr ""
+
+msgid "Add Category"
+msgstr ""
+
+msgid "Add Item"
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Description"
+msgstr ""
+
+msgid "Status"
+msgstr ""
+
+msgid "Details"
+msgstr ""
+
+msgid "Metadata"
+msgstr ""
+
+msgid "Files"
+msgstr ""
+
+msgid "Notes"
+msgstr ""
+
+msgid "Actions"
+msgstr ""
+
+msgid "Search..."
+msgstr ""
+
+msgid "Search items..."
+msgstr ""
+
+msgid "Upload"
+msgstr ""
+
+msgid "Download"
+msgstr ""
+
+msgid "Move"
+msgstr ""
+
+msgid "Position"
+msgstr ""
+
+msgid "Confirm"
+msgstr ""
+
+msgid "Loading..."
+msgstr ""
+
+msgid "Saving..."
+msgstr ""
+
+msgid "Deleting..."
+msgstr ""
+
+msgid "Featured Image"
+msgstr ""
+
+msgid "No featured image set."
+msgstr ""
+
+msgid "Change"
+msgstr ""
+
+msgid "Remove"
+msgstr ""
+
+msgid "Set featured image"
+msgstr ""
+
+msgid "Open original"
+msgstr ""
+
+msgid "Add metadata"
+msgstr ""
+
+msgid "— Pick a field —"
+msgstr ""
+
+msgid "Legacy"
+msgstr ""
+
+msgid "Attached Files"
+msgstr ""
+
+msgid "No files attached yet."
+msgstr ""
+
+msgid "Drag file here or click to browse"
+msgstr ""
+
+msgid "Click to upload"
+msgstr ""
+
+msgid "or drag & drop"
+msgstr ""
+
+msgid "File is too large (max 10MB)"
+msgstr ""
+
+msgid "File type not accepted."
+msgstr ""
+
+msgid "Only PDF files are accepted."
+msgstr ""
+
+msgid "Category"
+msgstr ""
+
+msgid "Categories"
+msgstr ""
+
+msgid "Manufacturer"
+msgstr ""
+
+msgid "Supplier"
+msgstr ""
+
+msgid "Item"
+msgstr ""
+
+msgid "Items"
+msgstr ""
+
+msgid "SKU"
+msgstr ""
+
+msgid "Price"
+msgstr ""
+
+msgid "Base Price"
+msgstr ""
+
+msgid "Final Price"
+msgstr ""
+
+msgid "Unit"
+msgstr ""
+
+msgid "Unit of Measure"
+msgstr ""
+
+msgid "Kind"
+msgstr ""
+
+msgid "Smart"
+msgstr ""
+
+msgid "Standard — items priced directly"
+msgstr ""
+
+msgid "Smart — items reference other catalogues"
+msgstr ""
+
+msgid "Markup %"
+msgstr ""
+
+msgid "Discount"
+msgstr ""
+
+msgid "Table view"
+msgstr ""
+
+msgid "Card view"
+msgstr ""
+
+msgid "Clear"
+msgstr ""
+
+msgid "Clear all"
+msgstr ""
+
+msgid "Trash"
+msgstr ""
+
+msgid "Trash is empty."
+msgstr ""
+
+msgid "No catalogues yet."
+msgstr ""
+
+msgid "No categories yet. Add one to start organizing items."
+msgstr ""
+
+msgid "No manufacturers yet."
+msgstr ""
+
+msgid "No suppliers yet."
+msgstr ""
+
+msgid "No items found"
+msgstr ""
+
+msgid "No events recorded yet"
+msgstr ""
+
+msgid "No PDFs uploaded yet."
+msgstr ""
+
+msgid "Upload PDF"
+msgstr ""
+
+msgid "PDF library"
+msgstr ""
+
+msgid "PDF search"
+msgstr ""
+
+msgid "Find this item in PDFs"
+msgstr ""
+
+msgid "Pages"
+msgstr ""
+
+msgid "Import Complete"
+msgstr ""
+
+msgid "Import Another"
+msgstr ""
+
+msgid "Confirm Import"
+msgstr ""
+
+msgid "Back to Mapping"
+msgstr ""
+
+msgid "Import Items"
+msgstr ""
+
+msgid "Map Columns"
+msgstr ""
+
+msgid "All events loaded"
+msgstr ""
+
+msgid "Danger Zone"
+msgstr ""
+
+msgid "Permanently Delete Catalogue"
+msgstr ""
+
+msgid "Permanently Delete Category"
+msgstr ""
+
+msgid "Permanently Delete Item"
+msgstr ""
+
+msgid "Created"
+msgstr ""
+
+msgid "Updated"
+msgstr ""
+
+msgid "Uncategorized"
+msgstr ""
+
+msgid "Linked Manufacturers"
+msgstr ""
+
+msgid "Linked Suppliers"
+msgstr ""
+
+msgid "Scope"
+msgstr ""
+
+msgid "Catalogue Rules"
+msgstr ""
+
+msgid "View Catalogue"
+msgstr ""
+
+msgid "View details"
+msgstr ""
+
+msgid "Back to library"
+msgstr ""
+
+msgid "Search PDFs"
+msgstr ""
+
+## Plural forms
+msgid_plural "%{count} items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} item"
+msgid_plural "%{count} items"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} category"
+msgid_plural "%{count} categories"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} catalogue"
+msgid_plural "%{count} catalogues"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{active} of %{total} catalogue selected"
+msgid_plural "%{active} of %{total} catalogues selected"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} result for \"%{query}\""
+msgid_plural "%{count} results for \"%{query}\""
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} PDFs"
+msgid_plural "%{count} PDFs"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} events"
+msgid_plural "%{count} events"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} pages"
+msgid_plural "%{count} pages"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} selected"
+msgid_plural "%{count} selected"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Deleted %{count} categories."
+msgstr ""
+
+msgid "Deleted %{count} items."
+msgstr ""
+
+msgid "Restored %{count} categories."
+msgstr ""
+
+msgid "Restored %{count} items."
+msgstr ""
+
+msgid "Moved %{count} items."
+msgstr ""
+
+msgid "Permanently deleted %{count} items."
+msgstr ""

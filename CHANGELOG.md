@@ -1,3 +1,18 @@
+## 0.2.0 - 2026-05-11
+
+### Added
+- **Per-module gettext backend** — `PhoenixKitCatalogue.Gettext` (`lib/phoenix_kit_catalogue/gettext.ex`). The module now owns its translations instead of borrowing `PhoenixKitWeb.Gettext` from the host app.
+- **i18n-aware tab registration** — all 19 `%Tab{}` structs in `admin_tabs/0` carry `gettext_backend: PhoenixKitCatalogue.Gettext` and `gettext_domain: "default"`. Tab labels are now translated at render-time via `Tab.localized_label/1` (requires `phoenix_kit >= 1.7.107`).
+- **Translation files** — `priv/gettext/{en,ru,et}/LC_MESSAGES/default.po` with complete translations for tab labels, page titles, status strings, error messages, flash messages, and UI copy. Russian uses 3 plural forms per CLDR; Estonian uses 2.
+- **Smoke test** — `test/gettext_test.exs` verifies backend compilation, Russian/Estonian tab-label translation, fallback for tabs without a backend, and fallback to msgid for untranslated strings.
+
+### Changed
+- All `Gettext.gettext(PhoenixKitWeb.Gettext, ...)` and `Gettext.ngettext(PhoenixKitWeb.Gettext, ...)` calls replaced with `PhoenixKitCatalogue.Gettext`. Affects 18 files in `lib/`. This is a transparent change for end users — behaviour is identical as long as translations are kept in sync.
+- Version bumped `0.1.17` → `0.2.0` (minor: tab labels are now locale-dependent, which is a visible behaviour change for downstream callers relying on raw English strings from `Tab.label`).
+
+### Notes
+- `{:phoenix_kit, "~> 1.7"}` constraint kept as-is (core is at 1.7.107 locally). A bump to `~> 1.8` is gated on the core hex release; `Tab.gettext_backend` and `Tab.localized_label/1` are already present at 1.7.107.
+
 ## 0.1.17 - 2026-05-09
 
 ### Added

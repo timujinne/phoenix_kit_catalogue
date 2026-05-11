@@ -42,7 +42,7 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
     if is_nil(supplier) and action == :edit do
       {:ok,
        socket
-       |> put_flash(:error, Gettext.gettext(PhoenixKitWeb.Gettext, "Supplier not found."))
+       |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier not found."))
        |> push_navigate(to: Paths.suppliers())}
     else
       all_manufacturers = Catalogue.list_manufacturers(status: "active")
@@ -52,8 +52,9 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
        |> assign(
          page_title:
            if(action == :new,
-             do: Gettext.gettext(PhoenixKitWeb.Gettext, "New Supplier"),
-             else: Gettext.gettext(PhoenixKitWeb.Gettext, "Edit %{name}", name: supplier.name)
+             do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Supplier"),
+             else:
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: supplier.name)
            ),
          action: action,
          supplier: supplier,
@@ -110,7 +111,10 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Supplier created."))
+             |> put_flash(
+               :info,
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier created.")
+             )
              |> push_navigate(to: Paths.suppliers())}
 
           {:error, _} ->
@@ -119,7 +123,7 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
              |> put_flash(
                :warning,
                Gettext.gettext(
-                 PhoenixKitWeb.Gettext,
+                 PhoenixKitCatalogue.Gettext,
                  "Supplier created but failed to link some manufacturers."
                )
              )
@@ -144,7 +148,10 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
           {:ok, _} ->
             {:noreply,
              socket
-             |> put_flash(:info, Gettext.gettext(PhoenixKitWeb.Gettext, "Supplier updated."))
+             |> put_flash(
+               :info,
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier updated.")
+             )
              |> push_navigate(to: Paths.suppliers())}
 
           {:error, _} ->
@@ -153,7 +160,7 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
              |> put_flash(
                :warning,
                Gettext.gettext(
-                 PhoenixKitWeb.Gettext,
+                 PhoenixKitCatalogue.Gettext,
                  "Supplier updated but failed to sync manufacturer links."
                )
              )
@@ -173,7 +180,7 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
       <.admin_page_header
         back={Paths.suppliers()}
         title={@page_title}
-        subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitWeb.Gettext, "Add a new supplier to your catalogue system."), else: Gettext.gettext(PhoenixKitWeb.Gettext, "Update supplier details and manufacturer links.")}
+        subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add a new supplier to your catalogue system."), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Update supplier details and manufacturer links.")}
       />
 
       <.form for={@form} action="#" phx-change="validate" phx-submit="save">
@@ -182,16 +189,16 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
             <.input
               field={@form[:name]}
               type="text"
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Name *")}
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "e.g., Regional Distributors Inc.")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name *")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., Regional Distributors Inc.")}
               required
             />
 
             <.textarea
               field={@form[:description]}
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Description")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")}
               rows="3"
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Brief description of this supplier...")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Brief description of this supplier...")}
             />
 
             <div class="divider my-0"></div>
@@ -199,30 +206,30 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
             <%!-- Contact & web --%>
             <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
               <.icon name="hero-envelope" class="h-4 w-4" />
-              {Gettext.gettext(PhoenixKitWeb.Gettext, "Contact & Web")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Contact & Web")}
             </h2>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <.input
                 field={@form[:website]}
                 type="url"
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Website")}
-                placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "https://...")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Website")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "https://...")}
               />
               <.input
                 field={@form[:contact_info]}
                 type="text"
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Contact Info")}
-                placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Email or phone")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Contact Info")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Email or phone")}
               />
             </div>
 
             <.textarea
               field={@form[:notes]}
-              label={Gettext.gettext(PhoenixKitWeb.Gettext, "Notes")}
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Notes")}
               rows="2"
               class="min-h-[5rem]"
-              placeholder={Gettext.gettext(PhoenixKitWeb.Gettext, "Internal notes about this supplier...")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Internal notes about this supplier...")}
             />
 
             <div class="divider my-0"></div>
@@ -230,15 +237,15 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
             <div class="form-control">
               <.select
                 field={@form[:status]}
-                label={Gettext.gettext(PhoenixKitWeb.Gettext, "Status")}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
                 class="transition-colors focus-within:select-primary"
                 options={[
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Active"), "active"},
-                  {Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive"), "inactive"}
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active"), "active"},
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive"), "inactive"}
                 ]}
               />
               <span class="label-text-alt text-base-content/50 mt-1">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Inactive suppliers won't appear in manufacturer linking.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive suppliers won't appear in manufacturer linking.")}
               </span>
             </div>
 
@@ -248,10 +255,10 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
 
               <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
                 <.icon name="hero-link" class="h-4 w-4" />
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Linked Manufacturers")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Linked Manufacturers")}
               </h2>
               <p class="text-sm text-base-content/50 -mt-2">
-                {Gettext.gettext(PhoenixKitWeb.Gettext, "Click to toggle manufacturer associations.")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Click to toggle manufacturer associations.")}
               </p>
 
               <div class="flex flex-wrap gap-2">
@@ -281,13 +288,13 @@ defmodule PhoenixKitCatalogue.Web.SupplierFormLive do
             <div class="divider my-0"></div>
 
             <div class="flex justify-end gap-3">
-              <.link navigate={Paths.suppliers()} class="btn btn-ghost">{Gettext.gettext(PhoenixKitWeb.Gettext, "Cancel")}</.link>
+              <.link navigate={Paths.suppliers()} class="btn btn-ghost">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}</.link>
               <button
                 type="submit"
                 class="btn btn-primary phx-submit-loading:opacity-75"
-                phx-disable-with={Gettext.gettext(PhoenixKitWeb.Gettext, "Saving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
               >
-                {if @action == :new, do: Gettext.gettext(PhoenixKitWeb.Gettext, "Create Supplier"), else: Gettext.gettext(PhoenixKitWeb.Gettext, "Save Changes")}
+                {if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create Supplier"), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save Changes")}
               </button>
             </div>
           </div>

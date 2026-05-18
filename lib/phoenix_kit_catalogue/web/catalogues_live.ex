@@ -16,6 +16,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   import PhoenixKitWeb.Components.Core.Modal, only: [confirm_modal: 1]
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
+  import PhoenixKitWeb.Components.Core.EmptyState, only: [empty_state: 1]
 
   import PhoenixKitCatalogue.Web.Components
 
@@ -595,7 +596,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <span :if={@search_loading} class="loading loading-spinner loading-xs text-base-content/40"></span>
         </div>
 
-        <.empty_state :if={@search_results == [] and not @search_loading} message={Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items match your search.")} />
+        <.empty_state :if={@search_results == [] and not @search_loading} variant="card" title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items match your search.")} />
 
         <%!-- Stale results are dimmed while a newer query is in flight to
              signal that the list is about to update. --%>

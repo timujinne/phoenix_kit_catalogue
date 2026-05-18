@@ -528,35 +528,6 @@ defmodule PhoenixKitCatalogue.Web.Components do
   end
 
   # ═══════════════════════════════════════════════════════════════════
-  # Empty state
-  # ═══════════════════════════════════════════════════════════════════
-
-  @doc """
-  Renders an empty state card with a message and optional action slot.
-
-  ## Attributes
-
-    * `message` — the text to display (required)
-
-  ## Slots
-
-    * `inner_block` — optional action content (buttons, links)
-  """
-  attr(:message, :string, required: true)
-  slot(:inner_block)
-
-  def empty_state(assigns) do
-    ~H"""
-    <div class="card bg-base-100 shadow">
-      <div class="card-body items-center text-center py-12">
-        <p class="text-base-content/60">{@message}</p>
-        {render_slot(@inner_block)}
-      </div>
-    </div>
-    """
-  end
-
-  # ═══════════════════════════════════════════════════════════════════
   # View mode toggle
   # ═══════════════════════════════════════════════════════════════════
 

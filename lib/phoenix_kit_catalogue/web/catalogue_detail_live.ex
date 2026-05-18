@@ -25,6 +25,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   import PhoenixKitCatalogue.Web.Helpers,
     only: [actor_opts: 1, actor_uuid: 1, log_operation_error: 3]
 
+  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Errors
@@ -588,7 +589,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   def handle_event("select_trash_target", %{"category_uuid" => uuid}, socket) do
     modal = socket.assigns.trash_modal || %{}
-    {:noreply, assign(socket, :trash_modal, %{modal | target_uuid: blank_to_nil(uuid)})}
+    {:noreply, assign(socket, :trash_modal, %{modal | target_uuid: Values.blank_to_nil(uuid)})}
   end
 
   def handle_event("confirm_trash_category", _params, socket) do
@@ -707,7 +708,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   def handle_event("select_bulk_move_target", %{"category_uuid" => uuid}, socket) do
     modal = socket.assigns.bulk_move_modal || %{}
-    {:noreply, assign(socket, :bulk_move_modal, %{modal | target_uuid: blank_to_nil(uuid)})}
+    {:noreply, assign(socket, :bulk_move_modal, %{modal | target_uuid: Values.blank_to_nil(uuid)})}
   end
 
   def handle_event("confirm_bulk_move_items", _params, socket) do
@@ -887,7 +888,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       )
       when is_list(ordered_ids) and is_binary(moved_id) do
     to_catalogue_uuid = params["catalogueUuid"]
-    to_category_uuid = blank_to_nil(params["categoryUuid"])
+    to_category_uuid = Values.blank_to_nil(params["categoryUuid"])
     from_catalogue_uuid = params["fromCatalogueUuid"]
 
     cond do
@@ -972,7 +973,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   def handle_event("reorder_items", %{"ordered_ids" => ordered_ids} = params, socket)
       when is_list(ordered_ids) do
     catalogue_uuid = params["catalogueUuid"]
-    category_uuid = blank_to_nil(params["categoryUuid"])
+    category_uuid = Values.blank_to_nil(params["categoryUuid"])
     moved_id = params["moved_id"]
 
     if catalogue_uuid != socket.assigns.catalogue_uuid do
@@ -1835,10 +1836,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
          |> flash_reorder(moved_id, :error)}
     end
   end
-
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(value) when is_binary(value), do: value
 
   # ── Render ──────────────────────────────────────────────────────
 

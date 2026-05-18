@@ -62,6 +62,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
     Tree
   }
 
+  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
 
   require Logger
@@ -239,7 +240,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
         category_uuid =
           if Helpers.has_attr?(attrs, :category_uuid),
-            do: attrs |> Helpers.fetch_attr(:category_uuid) |> blank_to_nil(),
+            do: attrs |> Helpers.fetch_attr(:category_uuid) |> Values.blank_to_nil(),
             else: nil
 
         if is_binary(catalogue_uuid) do
@@ -2785,7 +2786,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # an empty string), otherwise the item's current value (nil on create).
   defp effective_category_uuid(item, attrs) do
     if Helpers.has_attr?(attrs, :category_uuid) do
-      attrs |> Helpers.fetch_attr(:category_uuid) |> blank_to_nil()
+      attrs |> Helpers.fetch_attr(:category_uuid) |> Values.blank_to_nil()
     else
       item && Map.get(item, :category_uuid)
     end
@@ -2828,9 +2829,6 @@ defmodule PhoenixKitCatalogue.Catalogue do
         attrs
     end
   end
-
-  defp blank_to_nil(value) when value in [nil, ""], do: nil
-  defp blank_to_nil(value), do: value
 
   @doc "Updates an item with the given attributes."
   @spec update_item(Item.t(), map(), keyword()) ::

@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   import PhoenixKitCatalogue.Web.Components, only: [featured_image_card: 1]
   import PhoenixKitCatalogue.Web.Helpers, only: [actor_opts: 1]
 
+  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Paths
@@ -29,7 +30,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       case action do
         :new ->
           catalogue_uuid = params["catalogue_uuid"]
-          parent_uuid = blank_to_nil(params["parent_uuid"])
+          parent_uuid = Values.blank_to_nil(params["parent_uuid"])
           next_pos = Catalogue.next_category_position(catalogue_uuid, parent_uuid)
 
           cat = %Category{
@@ -116,10 +117,6 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       {String.duplicate("— ", depth) <> category.name, category.uuid}
     end)
   end
-
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(value), do: value
 
   defp assign_changeset(socket, changeset) do
     socket
@@ -241,7 +238,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   end
 
   def handle_event("select_parent_move_target", %{"parent_uuid" => uuid}, socket) do
-    target = blank_to_nil(uuid)
+    target = Values.blank_to_nil(uuid)
     {:noreply, assign(socket, :parent_move_target, target)}
   end
 

@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Paths
 
   @per_page 20
@@ -94,8 +95,8 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
 
   defp apply_params(socket, params) do
     socket
-    |> assign(:filter_action, blank_to_nil(params["action"]))
-    |> assign(:filter_resource_type, blank_to_nil(params["resource_type"]))
+    |> assign(:filter_action, Values.blank_to_nil(params["action"]))
+    |> assign(:filter_resource_type, Values.blank_to_nil(params["resource_type"]))
   end
 
   defp load_filter_options(socket) do
@@ -153,10 +154,6 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   rescue
     _ -> assign(socket, loading: false)
   end
-
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(val), do: val
 
   # Translates the raw resource_type string for the filter dropdown.
   # `resource_types` is built from DB content and may surface unknown

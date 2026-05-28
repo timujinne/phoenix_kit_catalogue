@@ -28,10 +28,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
       item forms (opt-in fields from `Metadata.definitions/1`). Expects
       `add_meta_field` and `remove_meta_field` events wired up in the LV;
       text edits are absorbed via the form's `validate`.
-    * `empty_state/1` — centered empty state card with message and optional action
 
   Several of these (`search_input`, `search_results_summary`,
-  `view_mode_toggle`, `empty_state`) are deliberately generic — no
+  `view_mode_toggle`) are deliberately generic — no
   catalogue-specific schema knowledge — and are candidates for
   promotion to `phoenix_kit` core once a coordinated release lands.
   Keeping them here for now avoids coupling catalogue's hex dep to

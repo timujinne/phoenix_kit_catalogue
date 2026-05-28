@@ -108,6 +108,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defp broadcast_for(%{resource_type: "item", resource_uuid: uuid}, parent),
     do: PubSub.broadcast(:item, uuid, parent || lookup_parent(:item, uuid))
 
+  # Folders are module-global, not scoped to a single catalogue, so there's
+  # no parent_catalogue_uuid to thread — the index LV reloads its whole tree
+  # on any :folder event regardless of the parent slot.
+  defp broadcast_for(%{resource_type: "folder", resource_uuid: uuid}, _parent),
+    do: PubSub.broadcast(:folder, uuid)
+
   # Manufacturer/supplier/smart_rule activity rows never reach this
   # helper today — `Manufacturers`, `Suppliers`, and `Rules` call
   # `PubSub.broadcast/3` directly and bypass `log_activity`. Anything
@@ -2330,26 +2336,29 @@ defmodule PhoenixKitCatalogue.Catalogue do
         {:error, :cycle}
 
       true ->
-        with :ok <- validate_target_folder(new_parent) do
-          attrs = %{parent_uuid: new_parent, position: next_folder_position(new_parent)}
+        do_move_folder(folder, new_parent, opts)
+    end
+  end
 
-          with {:ok, updated} <- folder |> Folder.changeset(attrs) |> repo().update() do
-            log_activity(%{
-              action: "folder.moved",
-              mode: "manual",
-              actor_uuid: opts[:actor_uuid],
-              resource_type: "folder",
-              resource_uuid: folder.uuid,
-              metadata: %{
-                "name" => folder.name,
-                "from_parent_uuid" => folder.parent_uuid,
-                "to_parent_uuid" => new_parent
-              }
-            })
+  defp do_move_folder(folder, new_parent, opts) do
+    attrs = %{parent_uuid: new_parent, position: next_folder_position(new_parent)}
 
-            {:ok, updated}
-          end
-        end
+    with :ok <- validate_target_folder(new_parent),
+         {:ok, updated} <- folder |> Folder.changeset(attrs) |> repo().update() do
+      log_activity(%{
+        action: "folder.moved",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "folder",
+        resource_uuid: folder.uuid,
+        metadata: %{
+          "name" => folder.name,
+          "from_parent_uuid" => folder.parent_uuid,
+          "to_parent_uuid" => new_parent
+        }
+      })
+
+      {:ok, updated}
     end
   end
 
@@ -2473,26 +2482,29 @@ defmodule PhoenixKitCatalogue.Catalogue do
     if target == catalogue.folder_uuid do
       {:ok, catalogue}
     else
-      with :ok <- validate_target_folder(target) do
-        attrs = %{folder_uuid: target, position: next_catalogue_position_in_folder(target)}
+      do_move_catalogue_to_folder(catalogue, target, opts)
+    end
+  end
 
-        with {:ok, updated} <- catalogue |> Catalogue.changeset(attrs) |> repo().update() do
-          log_activity(%{
-            action: "catalogue.moved_to_folder",
-            mode: "manual",
-            actor_uuid: opts[:actor_uuid],
-            resource_type: "catalogue",
-            resource_uuid: catalogue.uuid,
-            metadata: %{
-              "name" => catalogue.name,
-              "from_folder_uuid" => catalogue.folder_uuid,
-              "to_folder_uuid" => target
-            }
-          })
+  defp do_move_catalogue_to_folder(catalogue, target, opts) do
+    attrs = %{folder_uuid: target, position: next_catalogue_position_in_folder(target)}
 
-          {:ok, updated}
-        end
-      end
+    with :ok <- validate_target_folder(target),
+         {:ok, updated} <- catalogue |> Catalogue.changeset(attrs) |> repo().update() do
+      log_activity(%{
+        action: "catalogue.moved_to_folder",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "catalogue",
+        resource_uuid: catalogue.uuid,
+        metadata: %{
+          "name" => catalogue.name,
+          "from_folder_uuid" => catalogue.folder_uuid,
+          "to_folder_uuid" => target
+        }
+      })
+
+      {:ok, updated}
     end
   end
 

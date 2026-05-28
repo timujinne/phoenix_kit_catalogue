@@ -1498,11 +1498,24 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> maybe_auto_flip_to_active()
   end
 
-  # No-op: with a tab shown for every status (including empty ones), an
-  # empty Deleted view is a valid, navigable place — we no longer bounce
-  # the user back to Active. Kept as a named pass-through so the reset/
-  # reload call sites read clearly.
-  defp maybe_auto_flip_to_active(socket), do: socket
+  # When a mutation (restore / trash / permanent-delete) empties the
+  # current non-Active status tab, flip the view back to Active so the
+  # user isn't stranded on an empty tab. Runs only after `load_level` has
+  # refreshed `items_total` (items of the current status) and
+  # `child_categories` (the deleted subcategories shown in the Deleted
+  # tab), so a tab that still lists deleted subcategories — even with no
+  # items of its own — correctly stays put.
+  defp maybe_auto_flip_to_active(%{assigns: %{view_mode: "active"}} = socket), do: socket
+
+  defp maybe_auto_flip_to_active(socket) do
+    if socket.assigns.items_total == 0 and socket.assigns.child_categories == [] do
+      socket
+      |> assign(:view_mode, "active")
+      |> load_level(@per_page)
+    else
+      socket
+    end
+  end
 
   # PubSub-driven refresh. Reloads the current level preserving scroll
   # depth so a cross-tab broadcast (another admin, the import wizard)

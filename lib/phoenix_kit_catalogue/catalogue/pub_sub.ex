@@ -32,6 +32,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PubSub do
           :catalogue
           | :category
           | :item
+          | :folder
           | :manufacturer
           | :supplier
           | :smart_rule

@@ -66,7 +66,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   @impl true
   def handle_info({:catalogue_data_changed, kind, _uuid, _parent}, socket) do
     cond do
-      socket.assigns.active_tab == :index and kind in [:catalogue, :item, :category] ->
+      socket.assigns.active_tab == :index and kind in [:catalogue, :item, :category, :folder] ->
         {:noreply, load_data(socket, :index)}
 
       socket.assigns.active_tab == :manufacturers and kind in [:manufacturer, :links] ->
@@ -872,6 +872,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             :if={@active_tab == :index && @catalogue_view_mode == "active"}
             type="button"
             phx-click="new_folder"
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating...")}
             class="btn btn-ghost btn-sm gap-1"
           >
             <.icon name="hero-folder-plus" class="w-4 h-4" />
@@ -1046,7 +1047,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <button type="button" phx-click="cancel_move" class="btn btn-ghost btn-sm">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
             </button>
-            <button type="submit" class="btn btn-primary btn-sm">
+            <button type="submit" phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")} class="btn btn-primary btn-sm">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
             </button>
           </div>
@@ -1321,14 +1322,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   <td class="text-sm text-base-content/60">{Calendar.strftime(folder.updated_at, "%Y-%m-%d %H:%M")}</td>
                   <td class="text-right whitespace-nowrap">
                     <.table_row_menu :if={@view_mode == "active"} mode="auto" id={"folder-menu-#{folder.uuid}"}>
-                      <.table_row_menu_button phx-click="new_subfolder" phx-value-uuid={folder.uuid} icon="hero-folder-plus" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New subfolder")} />
+                      <.table_row_menu_button phx-click="new_subfolder" phx-value-uuid={folder.uuid} phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating...")} icon="hero-folder-plus" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New subfolder")} />
                       <.table_row_menu_button phx-click="start_rename_folder" phx-value-uuid={folder.uuid} icon="hero-pencil" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Rename")} variant="secondary" />
                       <.table_row_menu_button phx-click="open_move" phx-value-type="folder" phx-value-uuid={folder.uuid} icon="hero-folder-arrow-down" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to folder")} variant="secondary" />
                       <.table_row_menu_divider />
-                      <.table_row_menu_button phx-click="trash_folder" phx-value-uuid={folder.uuid} icon="hero-trash" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")} variant="error" />
+                      <.table_row_menu_button phx-click="trash_folder" phx-value-uuid={folder.uuid} phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")} icon="hero-trash" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")} variant="error" />
                     </.table_row_menu>
                     <.table_row_menu :if={@view_mode == "deleted"} mode="auto" id={"folder-del-menu-#{folder.uuid}"}>
-                      <.table_row_menu_button phx-click="restore_folder" phx-value-uuid={folder.uuid} icon="hero-arrow-path" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")} variant="success" />
+                      <.table_row_menu_button phx-click="restore_folder" phx-value-uuid={folder.uuid} phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")} icon="hero-arrow-path" label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")} variant="success" />
                     </.table_row_menu>
                   </td>
                 </tr>

@@ -810,13 +810,25 @@ defmodule PhoenixKitCatalogue.Catalogue do
         preload: ^preloads
       )
 
-    query =
-      case mode do
-        :active -> where(query, [i], i.status != "deleted")
-        :deleted -> where(query, [i], i.status == "deleted")
-      end
+    query |> apply_item_status_filter(opts, mode) |> apply_item_order(opts) |> repo().all()
+  end
 
-    query |> apply_item_order(opts) |> repo().all()
+  # Status filter shared by the item list/count queries. `:status` (an
+  # exact status string like `"discontinued"`) takes precedence and filters
+  # to that one status — used by the detail page's per-status tabs. Without
+  # it, the coarser `:mode` applies: `:deleted` → deleted only, anything
+  # else → all non-deleted (used for the category-card "N items" totals).
+  defp apply_item_status_filter(query, opts, mode) do
+    cond do
+      status = Keyword.get(opts, :status) ->
+        where(query, [i], i.status == ^status)
+
+      mode == :deleted ->
+        where(query, [i], i.status == "deleted")
+
+      true ->
+        where(query, [i], i.status != "deleted")
+    end
   end
 
   @doc """
@@ -849,13 +861,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
         preload: ^preloads
       )
 
-    query =
-      case mode do
-        :active -> where(query, [i], i.status != "deleted")
-        :deleted -> where(query, [i], i.status == "deleted")
-      end
-
-    query |> apply_item_order(opts) |> repo().all()
+    query |> apply_item_status_filter(opts, mode) |> apply_item_order(opts) |> repo().all()
   end
 
   # ── Item sort + strategy reorder ─────────────────────────────────
@@ -896,13 +902,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
         where: i.catalogue_uuid == ^catalogue_uuid and is_nil(i.category_uuid)
       )
 
-    query =
-      case mode do
-        :active -> where(query, [i], i.status != "deleted")
-        :deleted -> where(query, [i], i.status == "deleted")
-      end
-
-    repo().aggregate(query, :count)
+    query |> apply_item_status_filter(opts, mode) |> repo().aggregate(:count)
   end
 
   @doc """
@@ -922,13 +922,40 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query = from(i in Item, where: i.category_uuid == ^category_uuid)
 
-    query =
-      case mode do
-        :active -> where(query, [i], i.status != "deleted")
-        :deleted -> where(query, [i], i.status == "deleted")
-      end
+    query |> apply_item_status_filter(opts, mode) |> repo().aggregate(:count)
+  end
 
-    repo().aggregate(query, :count)
+  @doc """
+  Returns `%{status => count}` for the items in a single category, across
+  every status (`"active"`, `"inactive"`, `"discontinued"`, `"deleted"`).
+  One grouped query — drives the detail page's per-status item tabs.
+  Missing statuses are simply absent from the map (treat as 0).
+  """
+  @spec item_status_counts_for_category(Ecto.UUID.t()) :: %{String.t() => non_neg_integer()}
+  def item_status_counts_for_category(category_uuid) do
+    from(i in Item,
+      where: i.category_uuid == ^category_uuid,
+      group_by: i.status,
+      select: {i.status, count(i.uuid)}
+    )
+    |> repo().all()
+    |> Map.new()
+  end
+
+  @doc """
+  `%{status => count}` for a catalogue's uncategorized items (`category_uuid
+  IS NULL`), across every status. Per-status sibling of
+  `uncategorized_count_for_catalogue/2`.
+  """
+  @spec item_status_counts_for_uncategorized(Ecto.UUID.t()) :: %{String.t() => non_neg_integer()}
+  def item_status_counts_for_uncategorized(catalogue_uuid) do
+    from(i in Item,
+      where: i.catalogue_uuid == ^catalogue_uuid and is_nil(i.category_uuid),
+      group_by: i.status,
+      select: {i.status, count(i.uuid)}
+    )
+    |> repo().all()
+    |> Map.new()
   end
 
   @doc """

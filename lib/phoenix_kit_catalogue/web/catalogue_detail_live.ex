@@ -108,10 +108,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         items_offset: 0,
         items_has_more: false,
         show_items_section: false,
-        # Per-level Active/Deleted counts: drive the toggle labels and the
-        # auto-flip-back-to-active when this level's Deleted bucket empties.
-        level_active_count: 0,
-        level_deleted_count: 0,
+        # Per-status item counts for the current node — drive the four
+        # per-status tab labels (active / inactive / discontinued / deleted).
+        level_status_counts: %{},
         confirm_delete: nil,
         trash_modal: nil,
         bulk_move_modal: nil,
@@ -377,7 +376,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # ── Event handlers ──────────────────────────────────────────────
 
   @impl true
-  def handle_event("switch_view", %{"mode" => mode}, socket) when mode in ~w(active deleted) do
+  def handle_event("switch_view", %{"mode" => mode}, socket)
+      when mode in ~w(active inactive discontinued deleted) do
     {:noreply,
      socket
      |> assign(:view_mode, mode)
@@ -1350,31 +1350,31 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     uuid = socket.assigns.catalogue_uuid
     catalogue = Catalogue.fetch_catalogue!(uuid)
     current = socket.assigns.current_category
-    mode = view_mode_to_atom(socket.assigns.view_mode)
+    # `status` is the exact item status of the current tab; `cat_mode` is the
+    # active/deleted bucket for the (status-less) subcategory cards.
+    status = socket.assigns.view_mode
+    cat_mode = view_mode_to_atom(status)
+    show_categories? = status in ["active", "deleted"]
 
-    {child_categories, children_with_subs, active_child_count, deleted_child_count} =
-      load_level_children(uuid, current, mode)
+    {child_categories, children_with_subs, _active_child_count, _deleted_child_count} =
+      if show_categories?,
+        do: load_level_children(uuid, current, cat_mode),
+        else: {[], MapSet.new(), 0, 0}
 
-    counts_active = Catalogue.item_counts_by_category_for_catalogue(uuid, mode: :active)
-    counts_deleted = Catalogue.item_counts_by_category_for_catalogue(uuid, mode: :deleted)
-    counts_map = if mode == :deleted, do: counts_deleted, else: counts_active
-
+    counts_map = Catalogue.item_counts_by_category_for_catalogue(uuid, mode: cat_mode)
     uncat_active = Catalogue.uncategorized_count_for_catalogue(uuid, mode: :active)
-    uncat_deleted = Catalogue.uncategorized_count_for_catalogue(uuid, mode: :deleted)
 
-    {node_active_items, node_deleted_items} =
-      node_item_counts(current, counts_active, counts_deleted, uncat_active, uncat_deleted)
+    # Per-status item counts for the current node — drive the four tab labels.
+    status_counts = node_status_counts(current, uuid)
+    node_total = Map.get(status_counts, status, 0)
 
-    # Root in Active mode normally shows only cards (its items — the
-    # uncategorized ones — are reached via the Uncategorized card). But a
-    # catalogue with NO categories has nothing to drill into, so skip the
-    # card and show its items inline. Root in Deleted mode always shows
-    # the deleted uncategorized items inline.
+    # Active root with categories shows only cards (its uncategorized items
+    # are reached via the Uncategorized card). Every other case — a drilled
+    # node, or any non-active tab, or an empty active root with loose items —
+    # shows the node's own item list.
     show_items_section =
-      current != nil or mode == :deleted or
-        (is_nil(current) and active_child_count == 0 and node_active_items > 0)
-
-    node_total = if mode == :deleted, do: node_deleted_items, else: node_active_items
+      current != nil or status != "active" or
+        (child_categories == [] and node_total > 0)
 
     items =
       if show_items_section and node_total > 0,
@@ -1382,7 +1382,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           fetch_card_items(
             node_scope(current),
             uuid,
-            mode,
+            status,
             item_limit,
             0,
             items_sort_opts(socket)
@@ -1392,7 +1392,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     assign(socket,
       page_title: catalogue.name,
       catalogue: catalogue,
-      breadcrumb: build_breadcrumb(current, mode),
+      breadcrumb: build_breadcrumb(current, cat_mode),
       child_categories: child_categories,
       child_counts: counts_map,
       children_with_subs: children_with_subs,
@@ -1402,8 +1402,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       items_offset: length(items),
       items_has_more: length(items) < node_total,
       show_items_section: show_items_section,
-      level_active_count: active_child_count + node_active_items,
-      level_deleted_count: deleted_child_count + node_deleted_items
+      level_status_counts: status_counts
     )
   end
 
@@ -1424,24 +1423,27 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # The current node's own direct-item counts in both modes. Root and the
   # uncategorized bucket count the uncategorized items; a category counts
   # its own direct items.
-  defp node_item_counts(%Category{uuid: u}, counts_active, counts_deleted, _ua, _ud),
-    do: {Map.get(counts_active, u, 0), Map.get(counts_deleted, u, 0)}
+  # `%{status => count}` for the current node's own direct items — drives
+  # the four per-status tabs. Root and the Uncategorized bucket both count
+  # the catalogue's uncategorized items.
+  defp node_status_counts(%Category{uuid: u}, _catalogue_uuid),
+    do: Catalogue.item_status_counts_for_category(u)
 
-  defp node_item_counts(_current, _ca, _cd, uncat_active, uncat_deleted),
-    do: {uncat_active, uncat_deleted}
+  defp node_status_counts(_current, catalogue_uuid),
+    do: Catalogue.item_status_counts_for_uncategorized(catalogue_uuid)
 
   # Loads the next page of the current node's own items (the bottom
   # sentinel during normal browsing — search paging is separate).
   defp load_next_items_page(socket) do
     current = socket.assigns.current_category
-    mode = view_mode_to_atom(socket.assigns.view_mode)
+    status = socket.assigns.view_mode
     offset = socket.assigns.items_offset
 
     page =
       fetch_card_items(
         node_scope(current),
         socket.assigns.catalogue_uuid,
-        mode,
+        status,
         @per_page,
         offset,
         items_sort_opts(socket)
@@ -1496,18 +1498,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> maybe_auto_flip_to_active()
   end
 
-  # Auto-flip: if we're in the Deleted view of a level that no longer has
-  # anything deleted (its subcategories + direct items), bounce back to
-  # Active so the user never lands in an empty Deleted view.
-  defp maybe_auto_flip_to_active(socket) do
-    if socket.assigns.view_mode == "deleted" and socket.assigns.level_deleted_count == 0 do
-      socket
-      |> assign(:view_mode, "active")
-      |> load_level(@per_page)
-    else
-      socket
-    end
-  end
+  # No-op: with a tab shown for every status (including empty ones), an
+  # empty Deleted view is a valid, navigable place — we no longer bounce
+  # the user back to Active. Kept as a named pass-through so the reset/
+  # reload call sites read clearly.
+  defp maybe_auto_flip_to_active(socket), do: socket
 
   # PubSub-driven refresh. Reloads the current level preserving scroll
   # depth so a cross-tab broadcast (another admin, the import wizard)
@@ -1700,10 +1695,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp refresh_card_items(socket, scope, _delta \\ 0) do
     if scope == node_scope(socket.assigns.current_category) do
       catalogue_uuid = socket.assigns.catalogue_uuid
-      mode = view_mode_to_atom(socket.assigns.view_mode)
+      status = socket.assigns.view_mode
       limit = max(socket.assigns.items_offset, @per_page)
-      fresh = fetch_card_items(scope, catalogue_uuid, mode, limit, 0, items_sort_opts(socket))
-      total = card_total(scope, catalogue_uuid, mode)
+      fresh = fetch_card_items(scope, catalogue_uuid, status, limit, 0, items_sort_opts(socket))
+      total = card_total(scope, catalogue_uuid, status)
 
       assign(socket,
         items: fresh,
@@ -1716,38 +1711,40 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  defp card_total(:uncategorized, catalogue_uuid, mode) do
-    Catalogue.uncategorized_count_for_catalogue(catalogue_uuid, mode: mode)
+  # `status` is the exact item status of the current tab
+  # ("active" | "inactive" | "discontinued" | "deleted").
+  defp card_total(:uncategorized, catalogue_uuid, status) do
+    Catalogue.uncategorized_count_for_catalogue(catalogue_uuid, status: status)
   end
 
-  defp card_total(category_uuid, catalogue_uuid, mode) when is_binary(category_uuid) do
-    Catalogue.item_counts_by_category_for_catalogue(catalogue_uuid, mode: mode)
-    |> Map.get(category_uuid, 0)
+  defp card_total(category_uuid, _catalogue_uuid, status) when is_binary(category_uuid) do
+    Catalogue.item_count_for_category(category_uuid, status: status)
   end
 
-  defp fetch_card_items(:uncategorized, catalogue_uuid, mode, limit, offset, sort_opts) do
+  defp fetch_card_items(:uncategorized, catalogue_uuid, status, limit, offset, sort_opts) do
     Catalogue.list_uncategorized_items_paged(
       catalogue_uuid,
-      [mode: mode, offset: offset, limit: limit] ++ sort_opts
+      [status: status, offset: offset, limit: limit] ++ sort_opts
     )
   end
 
-  defp fetch_card_items(category_uuid, _catalogue_uuid, mode, limit, offset, sort_opts)
+  defp fetch_card_items(category_uuid, _catalogue_uuid, status, limit, offset, sort_opts)
        when is_binary(category_uuid) do
     Catalogue.list_items_for_category_paged(
       category_uuid,
-      [mode: mode, offset: offset, limit: limit] ++ sort_opts
+      [status: status, offset: offset, limit: limit] ++ sort_opts
     )
   end
 
   # Sort opts threaded into the active-list paged fetches. Deleted mode
   # keeps the position-default order (the deleted list still renders via
   # the plain item_table without a sort control).
-  defp items_sort_opts(%{assigns: %{view_mode: "active"}} = socket) do
-    [sort_by: socket.assigns.items_sort_by, sort_dir: socket.assigns.items_sort_dir]
-  end
+  # The deleted list renders without a sort control; every other status
+  # (active/inactive/discontinued) uses the core toolkit table with sorting.
+  defp items_sort_opts(%{assigns: %{view_mode: "deleted"}}), do: []
 
-  defp items_sort_opts(_socket), do: []
+  defp items_sort_opts(socket),
+    do: [sort_by: socket.assigns.items_sort_by, sort_dir: socket.assigns.items_sort_dir]
 
   # Re-fetches the current level's child categories in their new order
   # after a sibling DnD reorder. Items are untouched (reorder of the
@@ -1767,8 +1764,35 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     assign(socket, :child_categories, child_categories)
   end
 
-  defp view_mode_to_atom("active"), do: :active
+  # The category bucket for the current view. Categories only have
+  # active/deleted, so the inactive/discontinued item tabs reuse the active
+  # category set (those tabs hide the category cards anyway).
   defp view_mode_to_atom("deleted"), do: :deleted
+  defp view_mode_to_atom(_), do: :active
+
+  # The four item-status tabs (status value + label), in display order.
+  defp item_status_tabs do
+    [
+      {"active", Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")},
+      {"inactive", Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive")},
+      {"discontinued", Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discontinued")},
+      {"deleted", Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")}
+    ]
+  end
+
+  defp status_tab_active_class("deleted"), do: "border-error text-error"
+  defp status_tab_active_class(_), do: "border-primary text-primary"
+
+  # `[{status, label, count}]` for the tabs to render. Empty statuses are
+  # dropped, except Active (always the home tab) and the current tab (so the
+  # user never lands on an invisible tab).
+  defp visible_status_tabs(view_mode, counts) do
+    item_status_tabs()
+    |> Enum.map(fn {status, label} -> {status, label, Map.get(counts, status, 0)} end)
+    |> Enum.filter(fn {status, _label, count} ->
+      status == "active" or status == view_mode or count > 0
+    end)
+  end
 
   # Processes a flat list of category UUIDs that came back from the
   # detail-view DnD. Categories live in a parent-scoped tree, but the
@@ -1896,40 +1920,27 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           />
           <div :if={@view_mode != "active"}></div>
 
+          <%!-- One tab per item status; each shows only that status's items
+               so e.g. discontinued isn't mixed in with active. Empty statuses
+               are hidden — except Active (the home tab) and the current tab. --%>
           <div
-            :if={
-              is_nil(@search_results) and not @search_loading and
-                (@level_deleted_count > 0 or @view_mode == "deleted")
-            }
-            class="flex items-center gap-0.5 pb-1"
+            :if={is_nil(@search_results) and not @search_loading}
+            class="flex items-center gap-0.5 pb-1 flex-wrap"
           >
             <button
+              :for={{status, label, count} <- visible_status_tabs(@view_mode, @level_status_counts)}
               type="button"
               phx-click="switch_view"
-              phx-value-mode="active"
+              phx-value-mode={status}
               class={[
-                "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer",
-                if(@view_mode == "active",
-                  do: "border-primary text-primary",
+                "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap",
+                if(@view_mode == status,
+                  do: status_tab_active_class(status),
                   else: "border-transparent text-base-content/50 hover:text-base-content"
                 )
               ]}
             >
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")} ({@level_active_count})
-            </button>
-            <button
-              type="button"
-              phx-click="switch_view"
-              phx-value-mode="deleted"
-              class={[
-                "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer",
-                if(@view_mode == "deleted",
-                  do: "border-error text-error",
-                  else: "border-transparent text-base-content/50 hover:text-base-content"
-                )
-              ]}
-            >
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")} ({@level_deleted_count})
+              {label} ({count})
             </button>
           </div>
         </div>
@@ -2513,14 +2524,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       assign(
         assigns,
         :draggable?,
-        assigns.items_sort_by == :position and assigns.view_mode == "active"
+        assigns.items_sort_by == :position and assigns.view_mode != "deleted"
       )
 
     ~H"""
     <div class="flex flex-col gap-2">
       <%!-- ── Active list: core List-UI toolkit ── --%>
       <.bulk_select_scope
-        :if={@items != [] and @view_mode == "active"}
+        :if={@items != [] and @view_mode != "deleted"}
         id={"items-bulk-" <> (@current_category_uuid || "root")}
         total_count={@items_total}
         class="flex flex-col gap-2"
@@ -2642,10 +2653,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         cursor={"items-#{@items_offset}"}
       />
 
-      <%!-- Strategy reorder modal (active list). Kept-in-DOM so the
+      <%!-- Strategy reorder modal (non-deleted lists). Kept-in-DOM so the
            toolbar's `data-bulk-opens-dialog` opens it instantly. --%>
       <.reorder_modal
-        :if={@view_mode == "active"}
+        :if={@view_mode != "deleted"}
         id="items-reorder-modal"
         show={@show_items_reorder}
         on_close="close_items_reorder_modal"
@@ -2704,6 +2715,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp level_items_empty(_current, "deleted"),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Nothing deleted here.")
+
+  defp level_items_empty(_current, "inactive"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No inactive items here.")
+
+  defp level_items_empty(_current, "discontinued"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No discontinued items here.")
 
   defp level_items_empty(:uncategorized, _),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No uncategorized items.")

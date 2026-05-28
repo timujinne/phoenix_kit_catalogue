@@ -24,6 +24,15 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
     field(:position, :integer, default: 0)
     field(:data, :map, default: %{})
 
+    # Nullable folder home — NULL = unfiled (root). Folders are module-global
+    # (see PhoenixKitCatalogue.Schemas.Folder); ON DELETE SET NULL at the DB
+    # level so removing a folder unfiles its catalogues rather than deleting.
+    belongs_to(:folder, PhoenixKitCatalogue.Schemas.Folder,
+      foreign_key: :folder_uuid,
+      references: :uuid,
+      type: UUIDv7
+    )
+
     has_many(:categories, PhoenixKitCatalogue.Schemas.Category,
       foreign_key: :catalogue_uuid,
       references: :uuid
@@ -40,7 +49,8 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
     :discount_percentage,
     :status,
     :position,
-    :data
+    :data,
+    :folder_uuid
   ]
 
   def changeset(catalogue, attrs) do
@@ -58,5 +68,6 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
       greater_than_or_equal_to: 0,
       less_than_or_equal_to: 100
     )
+    |> foreign_key_constraint(:folder_uuid)
   end
 end

@@ -63,7 +63,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   }
 
   alias PhoenixKit.Utils.Values
-  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
+  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Folder, Item}
 
   require Logger
 
@@ -211,6 +211,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defp reorder_action_for(:catalogue), do: "catalogue.reordered"
   defp reorder_action_for(:category), do: "category.reordered"
   defp reorder_action_for(:item), do: "item.reordered"
+  defp reorder_action_for(:folder), do: "folder.reordered"
 
   defp maybe_put_metadata(map, _key, nil), do: map
   defp maybe_put_metadata(map, key, value), do: Map.put(map, key, value)
@@ -309,6 +310,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
       When nil (default), returns all non-deleted catalogues.
     * `:kind` — when provided, filters to a specific kind (`:standard`, `:smart`,
       or their string equivalents). When nil (default), returns all kinds.
+    * `:folder_uuid` — when provided, filters by folder home: a folder UUID
+      returns only catalogues filed there, `:unfiled` returns root (NULL-folder)
+      catalogues. When omitted, returns catalogues in any folder. Note this is a
+      strict DB filter and does NOT orphan-promote catalogues whose folder is
+      trashed — the tree view groups in-memory against the active folder set.
 
   ## Examples
 
@@ -317,6 +323,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
       Catalogue.list_catalogues(status: "active")     # only active
       Catalogue.list_catalogues(kind: :smart)         # only smart catalogues
       Catalogue.list_catalogues(kind: :standard)      # only standard catalogues
+      Catalogue.list_catalogues(folder_uuid: :unfiled) # only root (unfiled)
   """
   @spec list_catalogues(keyword()) :: [Catalogue.t()]
   def list_catalogues(opts \\ []) do
@@ -332,6 +339,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
       case Keyword.get(opts, :kind) do
         nil -> query
         kind -> where(query, [c], c.kind == ^to_string(kind))
+      end
+
+    query =
+      case Keyword.get(opts, :folder_uuid, :any) do
+        :any -> query
+        :unfiled -> where(query, [c], is_nil(c.folder_uuid))
+        nil -> where(query, [c], is_nil(c.folder_uuid))
+        uuid -> where(query, [c], c.folder_uuid == ^uuid)
       end
 
     repo().all(query)
@@ -2032,6 +2047,523 @@ defmodule PhoenixKitCatalogue.Catalogue do
       end
 
     query |> repo().all() |> MapSet.new()
+  end
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Catalogue folders
+  #
+  # A module-global nesting layer for organizing catalogues on the admin
+  # index (inline tree-table). Folders are their own dedicated thing —
+  # unrelated to the media-folder system. Catalogues carry a nullable
+  # `folder_uuid` (NULL = unfiled / root). Mirrors the category-tree
+  # helpers above, minus the catalogue scoping (folders are not scoped to
+  # one catalogue). All write invariants (cycle guard, reject-trashed
+  # target, position normalization) live here in the context.
+  # ═══════════════════════════════════════════════════════════════════
+
+  @doc """
+  Returns folders paired with their tree depth, in depth-first display
+  order (`position`, then `name`, recursing into children). Each entry is
+  `{folder, depth}` where depth `0` is a root. Mirrors
+  `list_category_tree/2` but folders are module-global.
+
+  ## Options
+
+    * `:mode` — `:active` (default, excludes deleted) or `:deleted`.
+    * `:exclude_subtree_of` — skip a folder and all its descendants (the
+      folder being moved — you can't parent it under itself/its subtree).
+  """
+  @spec list_folder_tree(keyword()) :: [{Folder.t(), non_neg_integer()}]
+  def list_folder_tree(opts \\ []) do
+    mode = Keyword.get(opts, :mode, :active)
+
+    exclude_uuids =
+      case Keyword.get(opts, :exclude_subtree_of) do
+        nil -> []
+        uuid -> folder_subtree_uuids(uuid)
+      end
+
+    normalized = normalized_folder_rows(mode, exclude_uuids)
+    index = Enum.group_by(normalized, & &1.parent_uuid)
+
+    {acc, _} =
+      Enum.reduce(Map.get(index, nil, []), {[], index}, fn root, {acc, idx} ->
+        {collect_folder_tree(root, idx, 0, acc), idx}
+      end)
+
+    Enum.reverse(acc)
+  end
+
+  defp collect_folder_tree(%Folder{} = folder, index, depth, acc) do
+    acc = [{folder, depth} | acc]
+
+    index
+    |> Map.get(folder.uuid, [])
+    |> Enum.reduce(acc, fn child, acc -> collect_folder_tree(child, index, depth + 1, acc) end)
+  end
+
+  # Loads folders for `mode`, drops the excluded subtree, and
+  # orphan-promotes rows whose parent is missing from the set (a deleted
+  # parent in `:active` mode, or the excluded subtree) to roots by
+  # rewriting `parent_uuid` to nil — so a child never vanishes when its
+  # parent is trashed (trash is non-cascading, parity with categories).
+  defp normalized_folder_rows(mode, exclude_uuids) do
+    base = from(f in Folder, order_by: [asc: f.position, asc: f.name])
+
+    query =
+      case mode do
+        :active -> where(base, [f], f.status != "deleted")
+        :deleted -> base
+      end
+
+    folders =
+      query
+      |> repo().all()
+      |> Enum.reject(&(&1.uuid in exclude_uuids))
+
+    uuid_set = MapSet.new(folders, & &1.uuid)
+
+    Enum.map(folders, fn f ->
+      if f.parent_uuid == nil or MapSet.member?(uuid_set, f.parent_uuid) do
+        f
+      else
+        %{f | parent_uuid: nil}
+      end
+    end)
+  end
+
+  @doc """
+  Lists the folders shown at one level — the direct children of
+  `parent_uuid` (`nil` = root). In `:active` mode reuses the tree's
+  orphan promotion (a folder whose parent is trashed surfaces at root).
+  Ordered by `position` then `name`.
+  """
+  @spec list_child_folders(Ecto.UUID.t() | nil, keyword()) :: [Folder.t()]
+  def list_child_folders(parent_uuid, opts \\ []) do
+    mode = Keyword.get(opts, :mode, :active)
+
+    mode
+    |> normalized_folder_rows([])
+    |> Enum.filter(&(&1.parent_uuid == parent_uuid))
+  end
+
+  @doc """
+  Returns the set of folder UUIDs (in the given `:mode`) that have at
+  least one child folder — lets the tree show an expand affordance
+  without an N+1.
+  """
+  @spec folder_uuids_with_children(keyword()) :: MapSet.t()
+  def folder_uuids_with_children(opts \\ []) do
+    mode = Keyword.get(opts, :mode, :active)
+
+    base =
+      from(f in Folder, where: not is_nil(f.parent_uuid), select: f.parent_uuid, distinct: true)
+
+    query =
+      case mode do
+        :active -> where(base, [f], f.status != "deleted")
+        :deleted -> base
+      end
+
+    query |> repo().all() |> MapSet.new()
+  end
+
+  @doc """
+  Returns a `%{folder_uuid => count}` map of active (non-deleted)
+  catalogues per folder. Catalogues filed under a trashed/missing folder
+  are not counted here (they orphan-promote to root in the tree view).
+  Root/unfiled catalogues are keyed under `nil`.
+  """
+  @spec folder_catalogue_counts() :: %{(Ecto.UUID.t() | nil) => non_neg_integer()}
+  def folder_catalogue_counts do
+    from(c in Catalogue,
+      where: c.status != "deleted",
+      group_by: c.folder_uuid,
+      select: {c.folder_uuid, count(c.uuid)}
+    )
+    |> repo().all()
+    |> Map.new()
+  end
+
+  @doc """
+  Groups non-deleted catalogues by their folder home for the tree view.
+  Returns `%{(folder_uuid | nil) => [Catalogue.t()]}`. A catalogue whose
+  folder is trashed or missing is promoted to the `nil` (root) bucket so it
+  never disappears — parity with the folder/category orphan promotion.
+  Within a bucket, catalogues keep `position, name` order.
+
+  ## Options
+
+    * `:status` — passed through to `list_catalogues/1` (e.g. `"deleted"` for
+      the deleted view). Defaults to non-deleted (active + archived).
+  """
+  @spec catalogues_by_folder(keyword()) :: %{(Ecto.UUID.t() | nil) => [Catalogue.t()]}
+  def catalogues_by_folder(opts \\ []) do
+    active_folders =
+      from(f in Folder, where: f.status != "deleted", select: f.uuid)
+      |> repo().all()
+      |> MapSet.new()
+
+    catalogues =
+      case Keyword.get(opts, :status) do
+        nil -> list_catalogues()
+        status -> list_catalogues(status: status)
+      end
+
+    Enum.group_by(catalogues, fn c ->
+      if c.folder_uuid != nil and MapSet.member?(active_folders, c.folder_uuid),
+        do: c.folder_uuid,
+        else: nil
+    end)
+  end
+
+  @doc "Fetches a folder by UUID. Returns `nil` if not found."
+  @spec get_folder(Ecto.UUID.t()) :: Folder.t() | nil
+  def get_folder(uuid), do: repo().get(Folder, uuid)
+
+  @doc """
+  Creates a folder. `:parent_uuid` (optional) nests it; a new folder is
+  appended (max sibling position + 1) within its parent level.
+  """
+  @spec create_folder(map(), keyword()) ::
+          {:ok, Folder.t()} | {:error, Ecto.Changeset.t(Folder.t())}
+  def create_folder(attrs, opts \\ []) do
+    parent_uuid = normalize_folder_uuid(Map.get(attrs, :parent_uuid))
+
+    attrs =
+      attrs
+      |> Map.put(:parent_uuid, parent_uuid)
+      # New folders sort to the FRONT of their level so they're immediately
+      # visible (not buried after an expanded sibling's children).
+      |> Map.put(:position, front_folder_position(parent_uuid))
+
+    case %Folder{} |> Folder.changeset(attrs) |> repo().insert() do
+      {:ok, folder} = ok ->
+        log_activity(%{
+          action: "folder.created",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "folder",
+          resource_uuid: folder.uuid,
+          metadata: %{"name" => folder.name, "parent_uuid" => folder.parent_uuid}
+        })
+
+        ok
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Updates a folder's own fields (name/status/data). Parent moves go
+  through `move_folder/3` — a `parent_uuid` key here is ignored.
+  """
+  @spec update_folder(Folder.t(), map(), keyword()) ::
+          {:ok, Folder.t()} | {:error, Ecto.Changeset.t(Folder.t())}
+  def update_folder(%Folder{} = folder, attrs, opts \\ []) do
+    attrs = attrs |> Map.delete(:parent_uuid) |> Map.delete(:position)
+
+    case folder |> Folder.changeset(attrs) |> repo().update() do
+      {:ok, updated} = ok ->
+        if changed?(folder, updated, [:name, :status, :data]) do
+          log_activity(%{
+            action: "folder.updated",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "folder",
+            resource_uuid: updated.uuid,
+            metadata: %{"name" => updated.name}
+          })
+        end
+
+        ok
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Moves a folder under `new_parent_uuid` (`nil` = root). Rejects a move
+  into the folder's own subtree (cycle) or into a trashed/missing parent.
+  The folder is appended at the end of the target level. No-op when the
+  parent is unchanged.
+  """
+  @spec move_folder(Folder.t(), Ecto.UUID.t() | nil, keyword()) ::
+          {:ok, Folder.t()} | {:error, :cycle | :folder_not_found | :folder_trashed | term()}
+  def move_folder(%Folder{} = folder, new_parent_uuid, opts \\ []) do
+    new_parent = normalize_folder_uuid(new_parent_uuid)
+
+    cond do
+      new_parent == folder.parent_uuid ->
+        {:ok, folder}
+
+      new_parent != nil and new_parent in folder_subtree_uuids(folder.uuid) ->
+        {:error, :cycle}
+
+      true ->
+        with :ok <- validate_target_folder(new_parent) do
+          attrs = %{parent_uuid: new_parent, position: next_folder_position(new_parent)}
+
+          with {:ok, updated} <- folder |> Folder.changeset(attrs) |> repo().update() do
+            log_activity(%{
+              action: "folder.moved",
+              mode: "manual",
+              actor_uuid: opts[:actor_uuid],
+              resource_type: "folder",
+              resource_uuid: folder.uuid,
+              metadata: %{
+                "name" => folder.name,
+                "from_parent_uuid" => folder.parent_uuid,
+                "to_parent_uuid" => new_parent
+              }
+            })
+
+            {:ok, updated}
+          end
+        end
+    end
+  end
+
+  @doc """
+  Soft-deletes a folder (status `"deleted"`). Non-cascading: child
+  folders and the catalogues filed here keep their `*_uuid`, but
+  orphan-promote to root in the active tree view. Nothing else changes.
+  """
+  @spec trash_folder(Folder.t(), keyword()) ::
+          {:ok, Folder.t()} | {:error, Ecto.Changeset.t(Folder.t())}
+  def trash_folder(%Folder{} = folder, opts \\ []) do
+    case folder |> Folder.changeset(%{status: "deleted"}) |> repo().update() do
+      {:ok, _updated} = ok ->
+        log_activity(%{
+          action: "folder.trashed",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "folder",
+          resource_uuid: folder.uuid,
+          metadata: %{"name" => folder.name}
+        })
+
+        ok
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Restores a soft-deleted folder. If its prior parent is gone or still
+  trashed, the folder is restored to root (appended) so it stays
+  reachable; otherwise it keeps its parent.
+  """
+  @spec restore_folder(Folder.t(), keyword()) ::
+          {:ok, Folder.t()} | {:error, Ecto.Changeset.t(Folder.t())}
+  def restore_folder(%Folder{} = folder, opts \\ []) do
+    parent =
+      case validate_target_folder(folder.parent_uuid) do
+        :ok -> folder.parent_uuid
+        _ -> nil
+      end
+
+    attrs = %{status: "active", parent_uuid: parent, position: next_folder_position(parent)}
+
+    case folder |> Folder.changeset(attrs) |> repo().update() do
+      {:ok, _updated} = ok ->
+        log_activity(%{
+          action: "folder.restored",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "folder",
+          resource_uuid: folder.uuid,
+          metadata: %{"name" => folder.name, "parent_uuid" => parent}
+        })
+
+        ok
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Re-indexes the supplied folder UUIDs into positions `1..N`. The caller
+  passes only the UUIDs of one level (same parent); positions are global
+  integers but the tree groups by `parent_uuid` first, so per-level
+  `1..N` is correct. UUIDs missing from the table are skipped.
+  """
+  @spec reorder_folders([Ecto.UUID.t()], keyword()) ::
+          :ok | {:error, :too_many_uuids | term()}
+  def reorder_folders(ordered_uuids, opts \\ [])
+
+  def reorder_folders(ordered_uuids, opts)
+      when is_list(ordered_uuids) and length(ordered_uuids) > @reorder_max_uuids do
+    log_reorder_rejected(:folder, :too_many_uuids, length(ordered_uuids), nil, opts)
+    {:error, :too_many_uuids}
+  end
+
+  def reorder_folders(ordered_uuids, opts) when is_list(ordered_uuids) do
+    unique_uuids = Helpers.dedupe_keep_last(ordered_uuids)
+
+    result =
+      repo().transaction(fn ->
+        unique_uuids
+        |> Enum.with_index(1)
+        |> Enum.each(fn {uuid, idx} ->
+          from(f in Folder, where: f.uuid == ^uuid) |> repo().update_all(set: [position: idx])
+        end)
+      end)
+
+    case result do
+      {:ok, _} ->
+        log_activity(%{
+          action: "folder.reordered",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "folder",
+          resource_uuid: List.first(unique_uuids),
+          metadata: %{"count" => length(unique_uuids)}
+        })
+
+        :ok
+
+      {:error, reason} ->
+        log_reorder_db_error(:folder, unique_uuids, nil, opts)
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Files a catalogue into `folder_uuid` (`nil`/`:unfiled` = root). Rejects
+  a trashed/missing target folder; appends to the end of the target
+  level. No-op (no write, no log) when already there.
+  """
+  @spec move_catalogue_to_folder(Catalogue.t(), Ecto.UUID.t() | nil | :unfiled, keyword()) ::
+          {:ok, Catalogue.t()} | {:error, :folder_not_found | :folder_trashed | term()}
+  def move_catalogue_to_folder(%Catalogue{} = catalogue, folder_uuid, opts \\ []) do
+    target = normalize_folder_uuid(folder_uuid)
+
+    if target == catalogue.folder_uuid do
+      {:ok, catalogue}
+    else
+      with :ok <- validate_target_folder(target) do
+        attrs = %{folder_uuid: target, position: next_catalogue_position_in_folder(target)}
+
+        with {:ok, updated} <- catalogue |> Catalogue.changeset(attrs) |> repo().update() do
+          log_activity(%{
+            action: "catalogue.moved_to_folder",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "catalogue",
+            resource_uuid: catalogue.uuid,
+            metadata: %{
+              "name" => catalogue.name,
+              "from_folder_uuid" => catalogue.folder_uuid,
+              "to_folder_uuid" => target
+            }
+          })
+
+          {:ok, updated}
+        end
+      end
+    end
+  end
+
+  # ── Folder helpers ───────────────────────────────────────────────
+
+  # `[uuid]` for `root_uuid` + every descendant folder (textual UUIDs).
+  # In-memory walk over the full adjacency list — folders are global and
+  # few, so one cheap scan beats a recursive CTE. `UNION`-style cycle
+  # safety: visited UUIDs are never re-walked.
+  defp folder_subtree_uuids(root_uuid) do
+    index =
+      from(f in Folder, select: {f.parent_uuid, f.uuid})
+      |> repo().all()
+      |> Enum.group_by(fn {parent, _uuid} -> parent end, fn {_parent, uuid} -> uuid end)
+
+    walk_folder_subtree([root_uuid], index, [])
+  end
+
+  defp walk_folder_subtree([], _index, acc), do: acc
+
+  defp walk_folder_subtree([uuid | rest], index, acc) do
+    if uuid in acc do
+      walk_folder_subtree(rest, index, acc)
+    else
+      children = Map.get(index, uuid, [])
+      walk_folder_subtree(children ++ rest, index, [uuid | acc])
+    end
+  end
+
+  # nil/root target is always valid; otherwise the folder must exist and
+  # be active. Used by move_folder/3, restore_folder/2, and
+  # move_catalogue_to_folder/3.
+  defp validate_target_folder(nil), do: :ok
+
+  defp validate_target_folder(uuid) do
+    case repo().one(from(f in Folder, where: f.uuid == ^uuid, select: f.status)) do
+      "active" -> :ok
+      nil -> {:error, :folder_not_found}
+      _ -> {:error, :folder_trashed}
+    end
+  end
+
+  defp next_folder_position(parent_uuid) do
+    base = from(f in Folder, select: max(f.position))
+
+    query =
+      case parent_uuid do
+        nil -> where(base, [f], is_nil(f.parent_uuid))
+        uuid -> where(base, [f], f.parent_uuid == ^uuid)
+      end
+
+    case repo().one(query) do
+      nil -> 1
+      n -> n + 1
+    end
+  end
+
+  # One below the smallest sibling position, so a freshly created folder
+  # sorts first within its level. (Manual reorder later normalizes to 1..N.)
+  defp front_folder_position(parent_uuid) do
+    base = from(f in Folder, select: min(f.position))
+
+    query =
+      case parent_uuid do
+        nil -> where(base, [f], is_nil(f.parent_uuid))
+        uuid -> where(base, [f], f.parent_uuid == ^uuid)
+      end
+
+    case repo().one(query) do
+      nil -> 1
+      n -> n - 1
+    end
+  end
+
+  defp next_catalogue_position_in_folder(folder_uuid) do
+    base = from(c in Catalogue, where: c.status != "deleted", select: max(c.position))
+
+    query =
+      case folder_uuid do
+        nil -> where(base, [c], is_nil(c.folder_uuid))
+        uuid -> where(base, [c], c.folder_uuid == ^uuid)
+      end
+
+    case repo().one(query) do
+      nil -> 1
+      n -> n + 1
+    end
+  end
+
+  # Folder uuid normalization: "", "unfiled", :unfiled, nil all mean root.
+  defp normalize_folder_uuid(nil), do: nil
+  defp normalize_folder_uuid(""), do: nil
+  defp normalize_folder_uuid(:unfiled), do: nil
+  defp normalize_folder_uuid("unfiled"), do: nil
+  defp normalize_folder_uuid(uuid) when is_binary(uuid), do: uuid
+
+  defp changed?(before, after_, fields) do
+    Enum.any?(fields, fn f -> Map.get(before, f) != Map.get(after_, f) end)
   end
 
   @doc """

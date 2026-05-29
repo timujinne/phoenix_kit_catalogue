@@ -22,7 +22,7 @@
 - Dead code: `list_child_folders/2` and `folder_catalogue_counts/0`.
 
 ### Notes
-- **Requires core V123** (catalogue folders + dropping the global unique `cat_items.sku` index). The `{:phoenix_kit, "~> 1.7"}` constraint is intentionally kept loose; ensure the host app is on a `phoenix_kit` release that ships V123 before running migrations.
+- **Requires core V123** (catalogue folders + dropping the global unique `cat_items.sku` index), first shipped in `phoenix_kit 1.7.125`. The dep constraint is now `~> 1.7 and >= 1.7.125` — floored at the V123 release while keeping the `< 2.0.0` upper bound loose. Run migrations against a `phoenix_kit` ≥ 1.7.125 host.
 
 ## 0.2.0 - 2026-05-11
 

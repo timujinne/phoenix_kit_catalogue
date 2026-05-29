@@ -90,6 +90,65 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
     end
   end
 
+  describe "folder.* actions" do
+    test "create_folder logs folder.created with actor + name" do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Brochures"}, actor_opts())
+
+      assert_activity_logged("folder.created",
+        resource_uuid: folder.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"name" => "Brochures"}
+      )
+    end
+
+    test "update_folder logs folder.updated on a real change" do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Old"}, actor_opts())
+      {:ok, _} = Catalogue.update_folder(folder, %{name: "New"}, actor_opts())
+
+      assert_activity_logged("folder.updated", resource_uuid: folder.uuid, actor_uuid: @actor)
+    end
+
+    test "move_folder logs folder.moved carrying the destination parent" do
+      {:ok, parent} = Catalogue.create_folder(%{name: "Parent"}, actor_opts())
+      {:ok, child} = Catalogue.create_folder(%{name: "Child"}, actor_opts())
+      {:ok, _} = Catalogue.move_folder(child, parent.uuid, actor_opts())
+
+      assert_activity_logged("folder.moved",
+        resource_uuid: child.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"to_parent_uuid" => parent.uuid}
+      )
+    end
+
+    test "trash_folder + restore_folder log folder.trashed / folder.restored" do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Temp"}, actor_opts())
+      {:ok, _} = Catalogue.trash_folder(folder, actor_opts())
+      {:ok, _} = Catalogue.restore_folder(folder, actor_opts())
+
+      assert_activity_logged("folder.trashed", resource_uuid: folder.uuid, actor_uuid: @actor)
+      assert_activity_logged("folder.restored", resource_uuid: folder.uuid, actor_uuid: @actor)
+    end
+
+    test "reorder_folders logs folder.reordered" do
+      {:ok, a} = Catalogue.create_folder(%{name: "A"}, actor_opts())
+      {:ok, b} = Catalogue.create_folder(%{name: "B"}, actor_opts())
+      assert :ok = Catalogue.reorder_folders([a.uuid, b.uuid], actor_opts())
+
+      assert_activity_logged("folder.reordered", actor_uuid: @actor)
+    end
+
+    test "move_catalogue_to_folder logs catalogue.moved_to_folder", %{catalogue: cat} do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Filed"}, actor_opts())
+      {:ok, _} = Catalogue.move_catalogue_to_folder(cat, folder.uuid, actor_opts())
+
+      assert_activity_logged("catalogue.moved_to_folder",
+        resource_uuid: cat.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"to_folder_uuid" => folder.uuid}
+      )
+    end
+  end
+
   describe "item.* actions" do
     test "create_item logs item.created with actor", %{catalogue: cat} do
       {:ok, item} =
@@ -222,6 +281,16 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
 
       assert_receive {:catalogue_data_changed, :item, _uuid, parent}
       assert parent == cat.uuid
+    end
+
+    test "create_folder broadcasts {:folder, uuid, nil}", %{catalogue: _cat} do
+      {:ok, folder} = Catalogue.create_folder(%{name: "F"}, actor_opts())
+
+      # Folders are module-global, so there's no catalogue parent to thread —
+      # the index LV reloads its whole tree on any :folder event.
+      assert_receive {:catalogue_data_changed, :folder, uuid, parent}
+      assert uuid == folder.uuid
+      assert parent == nil
     end
   end
 

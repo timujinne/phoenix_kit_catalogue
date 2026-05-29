@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
   alias PhoenixKit.Utils.Routes
+  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Paths
 
   @per_page 20
@@ -94,8 +95,8 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
 
   defp apply_params(socket, params) do
     socket
-    |> assign(:filter_action, blank_to_nil(params["action"]))
-    |> assign(:filter_resource_type, blank_to_nil(params["resource_type"]))
+    |> assign(:filter_action, Values.blank_to_nil(params["action"]))
+    |> assign(:filter_resource_type, Values.blank_to_nil(params["resource_type"]))
   end
 
   defp load_filter_options(socket) do
@@ -153,10 +154,6 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   rescue
     _ -> assign(socket, loading: false)
   end
-
-  defp blank_to_nil(nil), do: nil
-  defp blank_to_nil(""), do: nil
-  defp blank_to_nil(val), do: val
 
   # Translates the raw resource_type string for the filter dropdown.
   # `resource_types` is built from DB content and may surface unknown
@@ -256,7 +253,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="flex flex-col mx-auto max-w-5xl px-4 py-6 gap-4">
+    <div class="flex flex-col w-full px-4 py-6 gap-4">
       <div class="flex items-center justify-between">
         <div class="text-sm text-base-content/60">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} events", count: @total)}
@@ -321,19 +318,17 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             </div>
 
             <%!-- Resource + name --%>
-            <div class="flex-1 min-w-0">
+            <div class="flex-1 min-w-0 flex items-center gap-1.5">
               <%= if entry.resource_type do %>
-                <span class="badge badge-ghost badge-xs">{entry.resource_type}</span>
+                <span class="badge badge-ghost badge-xs shrink-0">{entry.resource_type}</span>
                 <%= if entry.metadata["name"] do %>
-                  <span class="text-sm ml-1 font-medium">{entry.metadata["name"]}</span>
+                  <span class="text-sm font-medium shrink-0">{entry.metadata["name"]}</span>
                 <% end %>
               <% end %>
               <% summary = summarize_metadata(entry.metadata) %>
               <%= if summary do %>
-                <span
-                  class="text-xs text-base-content/50 ml-2 truncate inline-block max-w-[200px] align-bottom"
-                  title={summary}
-                >
+                <%!-- Fills remaining row width; ellipsizes only on real overflow, not a fixed cap. --%>
+                <span class="text-xs text-base-content/50 truncate min-w-0" title={summary}>
                   {summary}
                 </span>
               <% end %>

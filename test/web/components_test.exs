@@ -48,17 +48,6 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
   end
 
   # ─────────────────────────────────────────────────────────────────
-  # empty_state
-  # ─────────────────────────────────────────────────────────────────
-
-  describe "empty_state/1" do
-    test "renders a message" do
-      html = render_component(&empty_state/1, message: "Nothing here")
-      assert html =~ "Nothing here"
-    end
-  end
-
-  # ─────────────────────────────────────────────────────────────────
   # search_input
   # ─────────────────────────────────────────────────────────────────
 

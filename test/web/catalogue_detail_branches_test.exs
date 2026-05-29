@@ -179,11 +179,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       render_click(view, "request_bulk_delete_items", %{})
 
-      assert :sys.get_state(view.pid).socket.assigns.bulk_confirm == %{
-               kind: :items,
-               mode: :trash,
-               count: 2
-             }
+      confirm = :sys.get_state(view.pid).socket.assigns.bulk_confirm
+      assert confirm.kind == :items
+      assert confirm.mode == :trash
+      assert confirm.count == 2
+      # The captured selection is carried on the confirm so the apply
+      # step doesn't re-read the (client-side) selection.
+      assert Enum.sort(confirm.uuids) == Enum.sort([a.uuid, b.uuid])
 
       render_click(view, "confirm_bulk_action", %{})
 
@@ -240,53 +242,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     end
   end
 
-  describe "expand_card per-card pagination" do
-    test "expand_card appends the next slice of items into a single card",
-         %{conn: conn, catalogue: cat} do
-      category = fixture_category(cat)
-      # @per_card is 25; create 30 so a single expand reaches the end.
-      for i <- 1..30 do
-        fixture_item(%{name: "I#{i}", category_uuid: category.uuid})
-      end
-
-      {:ok, view, first_html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-      assert first_html =~ "Show 5 more"
-
-      render_click(view, "expand_card", %{"scope" => category.uuid})
-      :sys.get_state(view.pid)
-      assigns = :sys.get_state(view.pid).socket.assigns
-
-      [card] = Enum.filter(assigns.loaded_cards, &(&1.kind == :category))
-      assert length(card.items) == 30
-      assert MapSet.size(assigns.expanding_cards) == 0
-    end
-
-    test "expand_timeout while still expanding restores the button + flashes a retry message",
-         %{conn: conn, catalogue: cat} do
-      category = fixture_category(cat)
-      _ = fixture_item(%{name: "I", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-
-      # Drop the in-flight :apply_expand message so the timeout
-      # branch fires (simulating a stuck mailbox / lost connection).
-      send(view.pid, {:expand_timeout, category.uuid})
-
-      # First mark the scope as expanding so the timeout branch
-      # actually fires.
-      :sys.replace_state(view.pid, fn state ->
-        socket = state.socket
-        new_assigns = Map.put(socket.assigns, :expanding_cards, MapSet.new([category.uuid]))
-        %{state | socket: %{socket | assigns: new_assigns}}
-      end)
-
-      send(view.pid, {:expand_timeout, category.uuid})
-      :sys.get_state(view.pid)
-
-      assigns = :sys.get_state(view.pid).socket.assigns
-      assert MapSet.size(assigns.expanding_cards) == 0
-    end
-  end
+  # The old per-card "expand_card" / "Show N more" mechanism (loaded_cards,
+  # expanding_cards, @per_card, expand_timeout) was removed when the detail
+  # page became a category drill-down: the root level now lists categories
+  # as bare drill-cards (no inline items), and a category's own items load
+  # via the core list-UI `load_more` toolkit at the category level. Coverage
+  # for the new mechanism lives in catalogue_detail_live_test.exs.
 
   describe "cross-tab live updates" do
     test "catalogue_card_refresh from another pid refreshes only the affected scope",
@@ -300,9 +261,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       send(view.pid, {:catalogue_card_refresh, cat.uuid, category.uuid, nil, :ok, self()})
       :sys.get_state(view.pid)
 
-      # The handler ran (no crash) and the card still renders.
+      # The handler ran (no crash) and the level still renders. The root
+      # level shows category drill-cards (not inline item names), so assert
+      # the category card is present rather than the item name.
       html = render(view)
-      assert html =~ "Original"
+      assert html =~ category.name
     end
 
     test "catalogue_card_refresh from self() is ignored (no double-render)",

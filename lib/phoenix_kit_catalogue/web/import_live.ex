@@ -1165,7 +1165,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="flex flex-col mx-auto max-w-5xl px-4 py-6 gap-6">
+    <div class="flex flex-col w-full px-4 py-6 gap-6">
       <%!-- Step indicator --%>
       <div class="flex items-center justify-center gap-2 text-sm">
         <.step_badge step={:upload} current={@step} label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload")} />

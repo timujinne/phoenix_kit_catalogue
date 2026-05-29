@@ -2470,6 +2470,237 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     end
   end
 
+  describe "item sort opts on paged list fns" do
+    test "list_items_for_category_paged/2 sorts by name asc/desc" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      create_item(%{name: "Cherry", category_uuid: category.uuid})
+      create_item(%{name: "Apple", category_uuid: category.uuid})
+      create_item(%{name: "Banana", category_uuid: category.uuid})
+
+      asc =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged(sort_by: :name, sort_dir: :asc)
+        |> Enum.map(& &1.name)
+
+      desc =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged(sort_by: :name, sort_dir: :desc)
+        |> Enum.map(& &1.name)
+
+      assert asc == ["Apple", "Banana", "Cherry"]
+      assert desc == ["Cherry", "Banana", "Apple"]
+    end
+
+    test "list_items_for_category_paged/2 sorts by base_price" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      create_item(%{name: "Mid", base_price: Decimal.new("50"), category_uuid: category.uuid})
+      create_item(%{name: "Low", base_price: Decimal.new("10"), category_uuid: category.uuid})
+      create_item(%{name: "High", base_price: Decimal.new("99"), category_uuid: category.uuid})
+
+      names =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged(sort_by: :base_price, sort_dir: :asc)
+        |> Enum.map(& &1.name)
+
+      assert names == ["Low", "Mid", "High"]
+    end
+
+    test "list_items_for_category_paged/2 defaults to :position order" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      create_item(%{name: "Zed", position: 0, category_uuid: category.uuid})
+      create_item(%{name: "Alpha", position: 1, category_uuid: category.uuid})
+
+      names =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged()
+        |> Enum.map(& &1.name)
+
+      assert names == ["Zed", "Alpha"]
+    end
+
+    test "list_uncategorized_items_paged/2 honors :sort_by" do
+      cat = create_catalogue()
+      create_item(%{name: "Yak", catalogue_uuid: cat.uuid})
+      create_item(%{name: "Ant", catalogue_uuid: cat.uuid})
+
+      names =
+        cat.uuid
+        |> Catalogue.list_uncategorized_items_paged(sort_by: :name, sort_dir: :asc)
+        |> Enum.map(& &1.name)
+
+      assert names == ["Ant", "Yak"]
+    end
+  end
+
+  describe "reorder_items_by/5" do
+    setup do
+      cat = create_catalogue()
+      category = create_category(cat)
+      {:ok, catalogue: cat, category: category}
+    end
+
+    defp item_positions(category_uuid) do
+      category_uuid
+      |> Catalogue.list_items_for_category_paged(sort_by: :position, sort_dir: :asc)
+      |> Enum.map(&{&1.name, &1.position})
+    end
+
+    # Stamps a distinct `inserted_at` (seconds ago). `inserted_at` is
+    # second-precision and UUIDv7 is random within a millisecond, so
+    # same-instant fixtures have no deterministic creation order — back-
+    # date them so `:created_*` reorders are pinnable.
+    defp backdate_item(item, seconds_ago) do
+      ts = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:second)
+
+      Repo.update_all(
+        from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^item.uuid),
+        set: [inserted_at: ts]
+      )
+
+      item
+    end
+
+    test ":all + :name_asc reindexes the whole scope 1..N alphabetically", ctx do
+      create_item(%{name: "Cherry", category_uuid: ctx.category.uuid})
+      create_item(%{name: "Apple", category_uuid: ctx.category.uuid})
+      create_item(%{name: "Banana", category_uuid: ctx.category.uuid})
+
+      assert :ok =
+               Catalogue.reorder_items_by(ctx.catalogue.uuid, ctx.category.uuid, :name_asc, :all)
+
+      assert item_positions(ctx.category.uuid) == [{"Apple", 1}, {"Banana", 2}, {"Cherry", 3}]
+    end
+
+    test ":all + :name_desc reindexes reverse-alphabetically", ctx do
+      create_item(%{name: "Apple", category_uuid: ctx.category.uuid})
+      create_item(%{name: "Banana", category_uuid: ctx.category.uuid})
+
+      assert :ok =
+               Catalogue.reorder_items_by(ctx.catalogue.uuid, ctx.category.uuid, :name_desc, :all)
+
+      assert item_positions(ctx.category.uuid) == [{"Banana", 1}, {"Apple", 2}]
+    end
+
+    test ":all + :created_asc / :created_desc reindex by insertion order", ctx do
+      first = create_item(%{name: "First", category_uuid: ctx.category.uuid})
+      second = create_item(%{name: "Second", category_uuid: ctx.category.uuid})
+      third = create_item(%{name: "Third", category_uuid: ctx.category.uuid})
+
+      backdate_item(first, 3)
+      backdate_item(second, 2)
+      backdate_item(third, 1)
+
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :created_asc,
+                 :all
+               )
+
+      assert item_positions(ctx.category.uuid) == [{"First", 1}, {"Second", 2}, {"Third", 3}]
+
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :created_desc,
+                 :all
+               )
+
+      assert item_positions(ctx.category.uuid) == [{"Third", 1}, {"Second", 2}, {"First", 3}]
+      assert first.uuid
+    end
+
+    test ":all + :reverse flips the current position order", ctx do
+      create_item(%{name: "P0", position: 0, category_uuid: ctx.category.uuid})
+      create_item(%{name: "P1", position: 1, category_uuid: ctx.category.uuid})
+      create_item(%{name: "P2", position: 2, category_uuid: ctx.category.uuid})
+
+      assert :ok =
+               Catalogue.reorder_items_by(ctx.catalogue.uuid, ctx.category.uuid, :reverse, :all)
+
+      assert item_positions(ctx.category.uuid) == [{"P2", 1}, {"P1", 2}, {"P0", 3}]
+    end
+
+    test "subset permute on distinct positions reorders in place", ctx do
+      a = create_item(%{name: "Cherry", position: 1, category_uuid: ctx.category.uuid})
+      b = create_item(%{name: "Apple", position: 2, category_uuid: ctx.category.uuid})
+      c = create_item(%{name: "Banana", position: 3, category_uuid: ctx.category.uuid})
+
+      # Permute the three distinct-position rows by name asc: their
+      # position slots (1,2,3) get filled in alphabetical order.
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :name_asc,
+                 [a.uuid, b.uuid, c.uuid]
+               )
+
+      assert item_positions(ctx.category.uuid) == [{"Apple", 1}, {"Banana", 2}, {"Cherry", 3}]
+    end
+
+    test "subset permute returns :duplicate_positions when rows share a position", ctx do
+      # Catalogue items default to position 0 — an unreordered scope has
+      # many rows at 0, so a subset permute can't assign distinct slots.
+      a = create_item(%{name: "A", category_uuid: ctx.category.uuid})
+      b = create_item(%{name: "B", category_uuid: ctx.category.uuid})
+
+      assert {:error, :duplicate_positions} =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :name_asc,
+                 [a.uuid, b.uuid]
+               )
+    end
+
+    test "rejects uuids outside the scope", ctx do
+      other_cat = create_category(ctx.catalogue, %{name: "Other"})
+      mine = create_item(%{name: "Mine", position: 1, category_uuid: ctx.category.uuid})
+      foreign = create_item(%{name: "Foreign", position: 1, category_uuid: other_cat.uuid})
+
+      assert {:error, :uuids_outside_scope} =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :name_asc,
+                 [mine.uuid, foreign.uuid]
+               )
+    end
+
+    test "rejects an invalid strategy", ctx do
+      create_item(%{name: "X", category_uuid: ctx.category.uuid})
+
+      assert {:error, :invalid_strategy} =
+               Catalogue.reorder_items_by(ctx.catalogue.uuid, ctx.category.uuid, :bogus, :all)
+    end
+
+    test "uncategorized scope is reachable via :uncategorized normalization", ctx do
+      create_item(%{name: "Loose B", catalogue_uuid: ctx.catalogue.uuid})
+      create_item(%{name: "Loose A", catalogue_uuid: ctx.catalogue.uuid})
+
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 :uncategorized,
+                 :name_asc,
+                 :all
+               )
+
+      names =
+        ctx.catalogue.uuid
+        |> Catalogue.list_uncategorized_items_paged(sort_by: :position, sort_dir: :asc)
+        |> Enum.map(& &1.name)
+
+      assert names == ["Loose A", "Loose B"]
+    end
+  end
+
   # ═══════════════════════════════════════════════════════════════════
   # Active counts
   # ═══════════════════════════════════════════════════════════════════
@@ -4020,6 +4251,39 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       end
 
       assert length(Catalogue.list_deleted_items_for_catalogue(cat.uuid, limit: 2)) == 2
+    end
+  end
+
+  describe "item_status_counts_for_category/1 and _for_uncategorized/1" do
+    test "group a category's items by status (drives the per-status tabs)" do
+      cat = create_catalogue()
+      category = create_category(cat, %{name: "Shelf"})
+
+      create_item(%{name: "a1", category_uuid: category.uuid, status: "active"})
+      create_item(%{name: "a2", category_uuid: category.uuid, status: "active"})
+      create_item(%{name: "i1", category_uuid: category.uuid, status: "inactive"})
+      create_item(%{name: "d1", category_uuid: category.uuid, status: "discontinued"})
+      create_item(%{name: "x1", category_uuid: category.uuid, status: "deleted"})
+
+      counts = Catalogue.item_status_counts_for_category(category.uuid)
+
+      assert counts["active"] == 2
+      assert counts["inactive"] == 1
+      assert counts["discontinued"] == 1
+      assert counts["deleted"] == 1
+    end
+
+    test "uncategorized counts cover the catalogue's loose items by status" do
+      cat = create_catalogue()
+      create_item(%{name: "u1", catalogue_uuid: cat.uuid, status: "active"})
+      create_item(%{name: "u2", catalogue_uuid: cat.uuid, status: "discontinued"})
+
+      counts = Catalogue.item_status_counts_for_uncategorized(cat.uuid)
+
+      assert counts["active"] == 1
+      assert counts["discontinued"] == 1
+      # Absent statuses simply have no key (group_by), not a zero.
+      assert Map.get(counts, "inactive", 0) == 0
     end
   end
 end

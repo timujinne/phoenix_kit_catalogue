@@ -13,7 +13,7 @@ This is a **mature full-featured module** in the PhoenixKit ecosystem; the omiss
 - **No DB migrations of its own** — every schema this module owns is created by versioned migrations in core `phoenix_kit` (V87 catalogue, V89 markup, V96 catalogue_uuid backfill, V97 item markup override, V102 smart catalogues, V103 nested categories). Adding a new column means a phoenix_kit core migration first, then schema + changeset here.
 - **No authorization in the context** — every mutating function in `PhoenixKitCatalogue.Catalogue` accepts an `actor_uuid` only for activity logging. Permission gating happens at the LiveView mount layer via `live_session :phoenix_kit_admin` and the `:catalogue` permission key. Programmatic / IEx callers bypass the gate by design — that's the established phoenix_kit-ecosystem pattern.
 - **No JSONB GIN / pg_trgm search index** — `search_items/2` runs `?::text ILIKE ?` over `Item.data` for the multilang JSONB. Acceptable for the current item volumes; tracked as a perf concern for once a single catalogue exceeds ~50k items.
-- **No background jobs** — the catalogue does not use Oban. Imports run inline in `start_async/1` from the LiveView (see Import System section). The reference / dashboard data flows through PubSub broadcasts on the `"phoenix_kit_catalogue"` topic, not a queue.
+- **Almost no background jobs** — the one exception is the PDF library's `PhoenixKitCatalogue.Workers.PdfExtractor` (Oban queue `:catalogue_pdf`; see PDF library section). Everything else stays inline: imports run in `start_async/1` from the LiveView (see Import System), and reference / dashboard data flows through PubSub broadcasts on the `"phoenix_kit_catalogue"` topic, not a queue.
 - **No HTTP / API surface** — Catalogue is admin-only. No public routes, no JSON endpoints, no webhook receivers. If a consumer needs catalogue data over HTTP, they wire that up in their own host app.
 - **No per-item versioning** — soft-delete (`status: "active" | "deleted"`) is the only history mechanism. Restoring resurrects the row with its current data; we don't keep prior states. The activity log captures every mutation so the audit trail is the version history.
 
@@ -200,43 +200,41 @@ Both catalogue and item forms support a featured image + a folder-scoped file gr
 
 The dropdown is absolutely positioned with `z-50` — the container's ancestors must not clip overflow.
 
-### PDF library (V111, prototype)
+### PDF library (V111)
 
-> **Status: prototype, in development.** First in-flight feature where the catalogue grew background-job and binary-asset surfaces. The full pipeline runs end-to-end (upload → async extract → search → page jump in PDF.js) but several known cuts are deliberate v1 scope (see "Cuts from v1" below). Cross-repo touches in `phoenix_kit` core (V111) and `phoenix_kit_parent` (endpoint static plugs + Oban queue) — see "Resuming the work" at the bottom of this section if the prototype gets re-stashed.
+> **Status: shipped.** Landed in PR #24 (commits `a41b60a` "Add PDF library to catalogue", `b351416` Phase 2 sweep, `7b1094e` precommit cleanup) and is live on `main`. The "no background jobs" and "PDFs deliberately do not go through `phoenix_kit_files`" lines elsewhere in this doc predate it — this feature reversed both. There is no remaining stash; ignore any "Resuming the work" references in older notes.
 
-Admin-facing PDF library at `/admin/catalogue/pdfs` with a per-item "Search PDFs" button on the item edit form. Users upload PDFs of any size; the catalogue extracts per-page text asynchronously via Oban; clicking the button on an item searches the entire library for any of the item's translated names and opens hits in an embedded PDF.js viewer at the matching page.
+Admin-facing PDF library at `/admin/catalogue/pdfs` with a "Search PDFs" trigger on both the item edit form **and** the per-item row dropdown in catalogue detail (`catalogue_detail_live.ex`, `show_pdf_search` event). Users upload PDFs of any size; the catalogue extracts per-page text asynchronously via Oban; the trigger searches the entire library for any of the item's translated names and opens hits in an embedded PDF.js viewer at the matching page.
 
-- **Schemas** (V111 in core, see `phoenix_kit/lib/phoenix_kit/migrations/postgres/v111.ex`):
-  - `phoenix_kit_cat_pdfs` — one row per uploaded PDF. Holds `original_filename`, on-disk `file_path`, `byte_size`, `status`, `page_count`, `extracted_at`, `error_message`. Status flow `pending → extracting → extracted | scanned_no_text | failed`. Deliberately does **not** go through `phoenix_kit_files` — PDFs are non-displayable, large, and have no use for variants/folders/links, so the row owns its file metadata directly. The on-disk filename UUID and the row UUID are generated independently (filename pre-generated at upload time before the row exists); always derive the URL from `pdf.file_path`'s basename, never from `pdf.uuid`.
-  - `phoenix_kit_cat_pdf_pages` — one row per extracted page. UNIQUE on `(pdf_uuid, page_number)`, `ON DELETE CASCADE`. GIN trigram index on `text` (`gin_trgm_ops` from `pg_trgm`, enabled in V111's `up/1`) — load-bearing once the corpus exceeds ~10k pages.
-- **File storage** — uploaded PDFs land in `Application.app_dir(:phoenix_kit_catalogue, "priv/uploads/pdfs/<uuid>.pdf")`. Served by a `Plug.Static` mount on the host endpoint at `/_pdf_uploads/`. PDF.js viewer assets (~1MB, vendored from `pdfjs-dist` v4.10.38) live under `priv/static/pdfjs/`, served at `/_pdfjs/`. Both static plugs are mounts on the host's `endpoint.ex` — see "Resuming the work" for the exact wiring.
-- **Async extraction** — `PhoenixKitCatalogue.Workers.PdfExtractor` is the catalogue's first Oban worker (small pivot from the "no background jobs" line above; phoenix_kit core already provides Oban so it's not new infra). Queue `:catalogue_pdf`, `max_attempts: 3`, recommended host concurrency 2. Reads page count via `pdfinfo`, then runs `pdftotext -layout -enc UTF-8 -f N -l N file -` per page. Page text is normalized at write time: strips soft-hyphens, undoes line-break hyphenation (`Pre-\nmium` → `Premium`), unfolds common ligatures (`ﬁ`, `ﬂ`, `ﬀ`, `ﬃ`, `ﬄ`), collapses whitespace runs to single spaces. If every page comes back empty the row flips to `scanned_no_text` (deliberate signal that OCR is needed; see "Cuts from v1"). Process spawn errors / non-zero pdftotext exits flip to `failed` with a 500-char-truncated stderr.
-- **Context** — `Catalogue.PdfLibrary` submodule. Public surface re-exported via `defdelegate` from `Catalogue`: `list_pdfs/1`, `count_pdfs/1`, `get_pdf/1`, `get_pdf!/1`, `create_pdf/2`, `delete_pdf/2`, `search_pdfs_for_item/2`, `pdf_storage_dir/0`. Worker callbacks (`mark_extracting/1`, `insert_page/3`, `mark_extracted/2`, `mark_scanned_no_text/2`, `mark_failed/2`) are `@doc false` and called only from the worker.
+- **Layered on core `phoenix_kit_files`.** Unlike the original prototype (which owned its own on-disk file metadata), binaries now live in core's `Storage` — core handles bytes, content-checksum dedup, multi-bucket redundancy, and the on-disk lifecycle (`Storage.trash_file/1`, `PruneTrashJob`). The catalogue owns only four small tables (V111 in core, see `phoenix_kit/lib/phoenix_kit/migrations/postgres/v111.ex`):
+  - `phoenix_kit_cat_pdfs` — **per-upload** row ("this name in the library"). `file_uuid` (→ core file), `original_filename`, `byte_size`, `status` (`active` / `trashed`), `trashed_at`. Soft-delete via the `status` sentinel (workspace convention). `file_uuid` FK is `ON DELETE RESTRICT` so core's prune can't remove a file a catalogue row still references.
+  - `phoenix_kit_cat_pdf_extractions` — **per unique file content** (one row per `file_uuid`). Holds the worker state machine in `extraction_status`: `pending → extracting → extracted | scanned_no_text | failed`, plus `page_count`, `extracted_at`, `error_message`.
+  - `phoenix_kit_cat_pdf_pages` — per-page join, keyed by `content_hash`. Write-once (no `updated_at`); re-extraction means delete + re-insert.
+  - `phoenix_kit_cat_pdf_page_contents` — **content-addressed dedup cache**; PK is the SHA-256 hex of the normalized page text. The GIN trigram index (`gin_trgm_ops` from `pg_trgm`) lives **here**, not on the pages join. Insert via `insert_all(on_conflict: :nothing, conflict_target: [:content_hash])`.
+- **Dedup all the way down.** Two uploads of identical content with different filenames produce two `pdfs` rows sharing one `file_uuid`, one extraction, and one set of page rows (core dedupes the file by checksum; the catalogue reuses the existing extraction). Identical page text across different PDFs collapses to one `page_contents` row.
+- **File serving** — raw PDF binary via core's signed-URL path: `Paths.pdf_file/1` → `URLSigner.signed_url(file_uuid, "original")`, routed through the host's `FileController` at `/file/:file_uuid/:variant/:token` (the old `/_pdf_uploads/` Plug.Static mount is gone). PDF.js viewer assets (~1MB, vendored from `pdfjs-dist`) stay under `priv/static/pdfjs/`, served at `/_pdfjs/` via a host `Plug.Static` mount; `Paths.pdf_viewer/1,2` builds `viewer.html?file=<signed>#page=N`, wrapping the signed URL in `URI.encode_www_form` so its `?&=` don't corrupt the `#page` fragment.
+- **Async extraction** — `PhoenixKitCatalogue.Workers.PdfExtractor`, queue `:catalogue_pdf`, `max_attempts: 3`, recommended host concurrency `limit: 2`. Idempotent: re-running on a terminal extraction (`extracted` / `scanned_no_text` / `failed`) no-ops. Reads `pdfinfo` for page count (parse failure fatal → `{:pdfinfo_failed, msg}`), then `pdftotext -layout` per page; normalizes at write time (soft-hyphens, line-break dehyphenation `Pre-\nmium` → `Premium`, ligature unfold `ﬁﬂﬀﬃﬄ`, whitespace collapse), hashes, upserts into `page_contents`. All-empty → `scanned_no_text` (OCR-needed signal). Spawn/non-zero exits → `failed` with `{:pdftotext_failed, page, code, msg}` collapsed to a truncated string in `extraction.error_message`.
+- **Context** — `Catalogue.PdfLibrary` submodule. Public surface re-exported via `defdelegate` from `Catalogue`: `list_pdfs/1`, `count_pdfs/1`, `get_pdf/1`, `get_pdf!/1`, `get_pdf_extraction/1` (as `get_extraction`), `create_pdf_from_upload/3`, `trash_pdf/2`, `restore_pdf/2`, `permanently_delete_pdf/2`, `search_pdfs_for_item/2`, `more_pdf_matches_for_item/3`, `prune_orphan_pdf_page_contents/0` (as `prune_orphan_page_contents`). `create_pdf_from_upload/3` requires a non-nil `:actor_uuid` (core's `phoenix_kit_files.user_uuid` is NOT NULL) — returns `{:error, :missing_actor}` cleanly rather than crashing after writing bytes. Worker callbacks (`mark_extracting/1`, `insert_page/3`, `mark_extracted/2`, `mark_scanned_no_text/2`, `mark_failed/2`) are `@doc false` and called only from the worker.
+- **Soft-delete + permanent-delete** — `trash_pdf/2` flips `status` to `"trashed"` + stamps `trashed_at` (underlying file/extraction/pages untouched); `restore_pdf/2` flips back. `permanently_delete_pdf/2` deletes the row and, **only when no active-or-trashed PDF row still references that `file_uuid`**, hands the file to `Storage.trash_file/1` — the refcount check + handoff run inside a `Repo.transaction(_, isolation: :serializable)` so a concurrent upload can't slip a reference in between the count and the trash. `prune_orphan_page_contents/0` GCs cache rows no page join references.
 - **Search semantics** — `search_pdfs_for_item/2` builds the title list from `item.name` plus every enabled language's `data["translations"][lang]["name"]`, normalises whitespace, dedupes. Two-stage match:
   1. **Literal `ILIKE ANY($titles)`** — fast, precise, returns up to `:limit` (default 50) hits ordered by `(pdf inserted_at DESC, page_number ASC)`.
   2. **Trigram fallback** when literal returns nothing — runs `similarity(text, longest_title) > 0.4` (configurable via `:similarity_threshold` opt) and orders by similarity DESC. The fallback exists because PDF text extraction routinely mangles ligatures, line-break hyphenation, and header/footer noise even after normalisation; literal recall on real PDFs is only ~80%.
   Each hit returns `%{pdf, page_number, snippet, score}`. The 200-char snippet is centred on the first matching title in the page's text (case-insensitive substring match for the window).
 - **PubSub** — every PDF mutation broadcasts `{:catalogue_data_changed, :pdf, uuid, nil}` on the existing `"phoenix_kit_catalogue"` topic. `:pdf` is added to the `kind` typespec in `Catalogue.PubSub`. The library and detail LVs subscribe in `mount/3` (guarded by `connected?/1`) so the worker's status transitions refresh the open page without manual reload.
-- **Search button + modal** — `PhoenixKitCatalogue.Web.Components.PdfSearchModal` LiveComponent, dropped into `ItemFormLive`'s render only when `@action == :edit`. Button click sets `:show_pdf_search` true; modal runs the search on first visible mount via `update/2` (cached per-item-uuid so reopens don't re-query); close button sends `{:pdf_search_modal_closed}` back to the parent LV via `send/2`. Each hit links to `Paths.pdf_detail(pdf_uuid, page_number)` which becomes a query-param URL the detail LV plumbs into the iframe `#page=N` fragment.
-- **Activity logging** — added actions: `pdf.uploaded` (manual, on `create_pdf/2`), `pdf.extracted` (auto, on extraction success with `page_count`), `pdf.scanned_no_text` (auto), `pdf.extraction_failed` (auto, with `error_message`), `pdf.deleted` (manual). All logged via the existing `Catalogue.ActivityLog` `:ok`-only convention.
-- **Errors module** — added atoms: `:pdf_invalid_format`, `:pdf_extraction_failed`, `{:pdftotext_failed, raw}`. Test rows in `test/errors_test.exs` pin each.
+- **Search button + modal** — `PhoenixKitCatalogue.Web.Components.PdfSearchModal` LiveComponent, dropped into `ItemFormLive`'s render when `@action == :edit` and also into `CatalogueDetailLive` (driven by the per-row `show_pdf_search` event + `pdf_search_event` attr on `item_table`). Trigger sets `:show_pdf_search` / `:pdf_search_item`; modal runs the search on first visible mount via `update/2` (cached per-item-uuid so reopens don't re-query); close sends `{:pdf_search_modal_closed}` back to the parent LV via `send/2`. Each hit links to `Paths.pdf_detail(pdf_uuid, page_number)` which the detail LV plumbs into the viewer `#page=N` fragment.
+- **Activity logging** — actions: `pdf.uploaded` (manual, on `create_pdf_from_upload/3`), `pdf.extracted` (auto, on extraction success with `page_count`), `pdf.scanned_no_text` (auto), `pdf.extraction_failed` (auto, with `error_message`), `pdf.trashed` / `pdf.restored` / `pdf.permanently_deleted` (manual). All logged via the `Catalogue.ActivityLog` `:ok`-only convention.
+- **Errors module** — the prototype's `:pdf_invalid_format` / `:pdf_extraction_failed` / `{:pdftotext_failed, raw}` atoms were **removed in the 2026-05-06 Phase 2 sweep** (no callers: the LV's upload `accept` rejects non-PDF MIME, and the worker stores its raw error inline in `extraction.error_message` rather than routing through `Errors`). See the removal note at the top of `errors.ex`.
 
-**Cuts from v1 (deliberate)** — none of the below was implemented; each is a clean follow-up rather than throwaway work:
+**Remaining deferred work (deliberate cuts)** — each is a clean follow-up rather than throwaway work:
 
-- **OCR fallback** for scanned PDFs. The `scanned_no_text` status badge is the user-visible signal; integrating Tesseract via port (`tesseract input.pdf - -l eng`) is the right shape but adds 1–5s/page and external-binary dependency.
-- **Re-extraction UI** — current flow is delete + re-upload. Re-extract button on the detail page is a 10-line addition once needed.
-- **Per-catalogue scoping** — the library is global; the search button searches across all PDFs. If catalogues become reference-doc silos, add a `catalogue_uuid` FK on `phoenix_kit_cat_pdfs` and gate the search.
-- **AI / embeddings** — the per-page text rows are intentionally a clean shape for an embeddings pipeline. The `text` column doubles as input to a future `phoenix_kit_cat_pdf_embeddings(page_uuid, vector)` table.
-- **Search-click activity log** — search button clicks are not logged. Would be noisy and aren't audit-worthy at this stage.
-- **File size cap** — soft cap at 200MB in the LV upload config; no server-side enforcement beyond that. Server-side cap would live as a Setting once needed.
-- **Search button on item table rows** — only on the item edit form for v1; adding it to `item_table` rows on the catalogue detail / search results is straightforward but adds visual noise to a row-dense UI.
+- **OCR fallback** for scanned PDFs. The `scanned_no_text` status is the user-visible signal (`PdfDetailLive` surfaces "OCR support is planned"); integrating Tesseract via port (`tesseract input.pdf - -l eng`) is the right shape but adds 1–5s/page and an external-binary dependency.
+- **Re-extraction UI** — current flow is delete + re-upload. A re-extract button on the detail page is a small addition once needed.
+- **Per-catalogue scoping** — the library is global; the search trigger searches across all PDFs. If catalogues become reference-doc silos, add a `catalogue_uuid` FK on `phoenix_kit_cat_pdfs` and gate the search.
+- **AI / embeddings** — the per-page text rows (`page_contents`) are intentionally a clean shape for an embeddings pipeline; the `text` column doubles as input to a future `phoenix_kit_cat_pdf_embeddings(content_hash, vector)` table.
+- **Search-click activity log** — search-trigger clicks are not logged (noisy, not audit-worthy at this stage).
+- **File size cap** — soft cap in the LV upload config; no server-side enforcement beyond that. A server-side cap would live as a Setting once needed.
 
-**Resuming the work** — this prototype is currently stashed (see git stash list in `phoenix_kit` and `phoenix_kit_catalogue`). To resume:
-
-1. `cd phoenix_kit && git stash pop` — restores the V111 migration and orchestrator bump.
-2. `cd phoenix_kit_catalogue && git stash pop` — restores the schemas, context, worker, LVs, components, errors, vendored PDF.js, and this AGENTS.md section.
-3. Apply the V111 migration: `cd phoenix_kit_parent && mix run -e 'Ecto.Migrator.run(PhoenixKitParent.Repo, [{0, PhoenixKit.Migration}], :up, all: true)'`. The host endpoint already has the two `Plug.Static` mounts (`/_pdfjs`, `/_pdf_uploads`) and the `:catalogue_pdf` Oban queue config — those edits live in `phoenix_kit_parent` and were left unstashed because the parent is disposable.
-4. `cd phoenix_kit_parent && mix phx.server` — boot. Browse to `/phoenix_kit/<locale>/admin/catalogue/pdfs` to upload. Worker fires automatically.
+> **Implemented since the prototype** (no longer cuts): four-table model on top of `phoenix_kit_files`, soft-delete (`active`/`trashed`) + refcount-aware permanent delete, content-addressed page-text dedup cache, and the search trigger on item-table rows in catalogue detail (was edit-form-only in the prototype).
 
 ### Errors API
 
@@ -331,36 +329,117 @@ The `scope_selector/1` component in `web/components.ex` renders a disclosure wit
 - **Routes**: Admin routes auto-generated from `admin_tabs/0`
 - **Paths**: Centralized path helpers in `Paths` module — always use these instead of hardcoding URLs
 
-#### CatalogueDetailLive layout (2026-05-08)
+#### CatalogueDetailLive layout (drill-down, 2026-05-28)
 
-The detail page splits into two scoped tabs reflected into the URL via
-`?tab=items|categories` (`handle_params/3` → `push_patch` from
-`switch_tab`). Default is "items"; unknown values fall back.
+The detail page is a **category drill-down** (replaced the two-tab
+`?tab=items|categories` UI on 2026-05-28 — the boss disliked the tabs).
+The drilled-into node lives in `?category=` (`handle_params/3` →
+`push_patch`, deep-linkable + back-button friendly):
 
-- **Items tab → Active**: streamed cards (one per category + an
-  Uncategorized bucket), infinite-scroll cursor (`@cursor`,
-  `@loaded_cards`, `@has_more`). Category DnD lives only on the
-  Categories tab; items reorder within their category card.
-- **Items tab → Deleted**: flat list ordered by deletion date desc
-  (`Catalogue.list_deleted_items_for_catalogue/2`, capped at 500).
-  No category grouping, no infinite scroll. Restore + Delete Forever
-  per row; restore detaches from any deleted parent.
-- **Categories tab → Active**: depth-indented compact category rows
-  with drag handles (when ≥2 siblings), Edit + Delete actions. The
-  "Delete category" path opens the item-disposition modal when the
-  subtree has any active items.
-- **Categories tab → Deleted**: list of deleted categories with
-  Restore + Delete Forever pill buttons. No item count badge on the
-  row (separate-status: items aren't tied to the category's deleted
-  state in the Categories tab UI).
+- absent → **root level**
+- `?category=uncategorized` → the **uncategorized bucket**
+- `?category=<uuid>` → that **category** (validated against the catalogue;
+  a missing/foreign UUID bounces to root)
 
-The Active/Deleted status switcher is **per-tab**: Items tab shows
-`active_item_count` / `deleted_item_count`; Categories tab shows
-`active_category_count` / `deleted_category_count`. The auto-flip back
-to Active also runs against the per-tab count via
-`maybe_auto_flip_to_active/1` — invoked from `reset_and_load`,
-`refresh_counts`, `refresh_in_place`, and `handle_params` so the user
-never lands in an empty Deleted view of either tab.
+`current_category` resolves to `nil | :uncategorized | %Category{}`.
+Each level renders: a **breadcrumb** (only when drilled in), a scoped
+**search** box (Active mode only), the **Active/Deleted** toggle, the
+direct **child categories** as drill cards, and the current node's own
+**direct items**.
+
+- **Root → Active**: child = root categories (orphan-promoted, see below)
+  as `<.category_drill_card>` + an `<.uncategorized_drill_card>` (when
+  uncategorized items exist). No inline item list at root.
+- **Root → Deleted**: deleted root categories + the deleted uncategorized
+  items inline (root's "own items" are the uncategorized ones).
+- **Inside a category**: breadcrumb `Catalogue ▸ … ▸ <name>`, that
+  category's **subcategories** as drill cards (keep drilling), and its
+  **own direct items** (`list_items_for_category_paged/2`, single
+  `InfiniteScroll` sentinel). DnD reorders the subcategory cards (sibling
+  scope) and the active item list (node scope, see below).
+- **Inside Uncategorized**: breadcrumb `Catalogue ▸ Uncategorized`, no
+  subcategories, the uncategorized items list.
+
+**Per-level Deleted.** The Active/Deleted toggle shows
+`@level_active_count` / `@level_deleted_count` for the *current* node
+(its child categories + its direct items, both modes). `maybe_auto_flip_to_active/1`
+bounces out of an empty Deleted view (keyed on `@level_deleted_count`).
+Deleted drill cards stay clickable so you can drill the deleted subtree;
+`view_mode` persists in socket state across the patch.
+
+**Search scope** follows the level: root → `search_items_in_catalogue/3`;
+category → `search_items_in_category/3` (subtree); uncategorized →
+`search_items(only: :uncategorized_only)`. Search is **Active-mode only**
+(the context search excludes deleted rows), so the input hides in Deleted
+view.
+
+**Orphan reachability.** Child categories come from the new
+`Catalogue.list_child_categories/3`. In `:active` mode it reuses
+`list_category_tree/2`'s orphan promotion (shared `normalized_category_rows/3`
+helper) so a category restored under a still-trashed parent
+(`restore_category/2` is non-cascading by design) still surfaces at the
+root level — a strict direct-children query would strand it. The Active
+breadcrumb is likewise trimmed to its contiguous active-ancestor chain so
+it never links a deleted ancestor. `category_uuids_with_children/2` marks
+cards that have subcategories.
+
+Loading: `reset_and_load/1` (full reload, item offset → 0) and
+`refresh_counts/1` / `refresh_in_place/1` (PubSub + post-mutation,
+offset-preserving) both funnel through `load_level/2`.
+
+#### Active item list — core List-UI toolkit (2026-05-28)
+
+The **active** item list (`level_items/1` active branch) uses the core
+`phoenix_kit` List-UI toolkit, mirroring `phoenix_kit_projects`' Tasks
+page — a sort dropdown, client-side bulk-select with a floating actions
+toolbar, DnD reorder, and a strategy **Reorder** modal. The **Deleted**
+list and **search results** stay on the plain `<.item_table>` (no
+reorder).
+
+- **Sort.** `<.sort_selector ... event="sort_items" manual_field={:position}>`
+  in the toolbar's `:leading` slot + `<.sort_header_cell ... event="toggle_sort_items">`
+  on the name/sku/base_price/status headers. The select sends
+  `%{"sort_by" => …}`, the arrow `%{"sort_dir" => …}`, the headers
+  `%{"by" => field}`; the handler derives the missing half from assigns.
+  Fields are whitelisted (`@items_sort_fields`); `apply_items_sort/3`
+  resets `items_offset → 0` and reloads page 1 (else infinite-scroll
+  dupes/gaps). `items_sort_opts/1` threads `:sort_by`/`:sort_dir` into
+  `fetch_card_items/6` → `list_items_for_category_paged/2` /
+  `list_uncategorized_items_paged/2`. Deleted mode passes no sort opts.
+- **Bulk-select (client-side).** `<.bulk_select_scope id={"items-bulk-" <> (@current_category_uuid || "root")}>`
+  re-keys per node so selection can't leak across drills. The
+  `BulkSelectScope` hook pushes captured uuids as `%{"uuids" => […]}`.
+  `<.bulk_actions_toolbar on_bulk_delete="request_bulk_delete_items">`
+  ships Reorder/Delete/Clear; **Move** is a custom `data-bulk-action="request_bulk_move_items"`
+  button in the `:leading` slot (the toolbar has no built-in Move). The
+  bulk handlers (`request_bulk_delete_items` / `request_bulk_move_items`)
+  read `%{"uuids" => …}` via `sanitize_uuids/1` when present, else fall
+  back to the server-side `@selected_items` MapSet (the **Deleted** list
+  still uses server-side select + `toggle_select_item`). Every bulk op
+  ends with `push_event("bulk_select:clear", %{})` (`clear_item_selection/1`)
+  so stale client checkmarks can't persist.
+- **DnD reorder.** `<.sortable_tbody enabled={@items_sort_by == :position and active}>`
+  — drag only in manual mode. The `reorder_items` handler takes scope
+  from **socket** (`@catalogue_uuid` + `normalize_category_uuid(@current_category)`),
+  NOT DOM attrs (core `<.sortable_tbody>` carries no `data-sortable-scope-*`).
+- **Strategy reorder.** `<.reorder_modal id="items-reorder-modal" …>` (kept-in-DOM)
+  opened via the toolbar's `data-bulk-opens-dialog`. `open_items_reorder_modal`
+  captures `sanitize_uuids/1`, collapsing 0–1 uuids to `[]` ("reorder all").
+  `apply_items_reorder` maps the strategy string through the hardcoded
+  `@items_reorder_strategy_map` whitelist (never `String.to_existing_atom`
+  on input) → `Catalogue.reorder_items_by/5` with scope `:all` (captured
+  == `[]`) or the captured uuid list. `:duplicate_positions` flashes
+  "Apply Reorder all first to normalise" (catalogue items default to
+  `position: 0`, so a subset permute on an unreordered scope collides).
+- **Shared cells.** `<.item_pricing_cell>` + `<.item_row_menu>` (in
+  `Web.Components`) render name/sku/sale-price/unit/status and the
+  Edit/Search-PDFs/Delete row menu, reusing the same pricing/markup
+  helpers as `<.item_table>` so the two surfaces don't drift. Pricing
+  via `Catalogue.item_pricing/1`.
+- **Tradeoff.** Card view is dropped on the active list (the toolkit is
+  table-only; mobile uses the horizontal-scroll table). DnD only sees
+  the loaded prefix of a paginated list — **Reorder all** (server-side,
+  reindexes the whole scope) is the robust path for >100-item nodes.
 
 #### Item-disposition modal
 

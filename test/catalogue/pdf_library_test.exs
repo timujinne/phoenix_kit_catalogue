@@ -349,7 +349,10 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
           unit: "piece"
         })
 
-      {:ok, file: file, pdf: pdf, item: item}
+      # NB: don't expose `file:` — `:file` is a reserved ExUnit context
+      # key (test-metadata) and setting it raises. The tests only need
+      # the pdf + item anyway.
+      {:ok, pdf: pdf, item: item}
     end
 
     test "literal search finds matching pages grouped under the PDF", %{item: item, pdf: pdf} do

@@ -357,14 +357,14 @@ defmodule PhoenixKitCatalogue.SmartPricingTest do
       end
     end
 
-    test "non-exact float qty is accepted; carries Decimal.from_float imprecision" do
-      # Pins the moduledoc's "Numeric precision for `:qty`" caveat:
-      # `1.1` has no exact binary representation. Floats are accepted
-      # (no crash, no validation rejection) but
-      # `Decimal.from_float(1.1) != Decimal.new("1.1")` is the tax
-      # callers pay. This test pins both halves of the contract:
-      #   1. float qty does not crash and produces a price
-      #   2. `Decimal.from_float(1.1) != Decimal.new("1.1")`
+    test "non-exact float qty is accepted (no crash, produces a price)" do
+      # Pins the moduledoc's "Numeric precision for `:qty`" caveat: a float
+      # qty like `1.1` (no exact binary representation) is accepted — no
+      # crash, no validation rejection — and still produces a price. We do
+      # NOT pin the exact `Decimal.from_float/1` round-trip: its
+      # representation is library-version-dependent and not part of this
+      # function's contract. Callers needing cent-exact billing pass
+      # `Decimal.t()` or `integer()` per the moduledoc.
       kitchen = standard_catalogue()
       services = smart_catalogue()
       panel = standard_item(kitchen, %{base_price: Decimal.new("100")})
@@ -378,12 +378,6 @@ defmodule PhoenixKitCatalogue.SmartPricingTest do
 
       # Float input is accepted; no raise, no validation rejection.
       assert %Decimal{} = out_float.smart_price
-
-      # The conversion tax: Decimal.from_float(1.1) ≠ Decimal.new("1.1").
-      # Callers needing cent-exact billing must pass `Decimal.t()` or
-      # `integer()` per the moduledoc.
-      refute Decimal.equal?(Decimal.from_float(1.1), Decimal.new("1.1"))
-      assert Decimal.compare(Decimal.from_float(1.1), Decimal.new("1.1")) == :gt
     end
   end
 

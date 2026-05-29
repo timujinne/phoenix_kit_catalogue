@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
   alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction}
+  alias PhoenixKitCatalogue.Test.Repo
 
   @lib_path "/en/admin/catalogue/pdfs"
   @detail_path "/en/admin/catalogue/pdfs"
@@ -99,7 +100,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
       assert html =~ "PDF library"
       assert html =~ "kitchen.pdf"
       # Active filter shows upload zone
-      assert html =~ "Drop PDF files here or click to upload"
+      assert html =~ "Drag files here or click to browse"
       assert html =~ pdf.original_filename
     end
 
@@ -111,7 +112,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
       html = view |> element("button", "Trash") |> render_click()
 
       assert html =~ trashed.original_filename
-      refute html =~ "Drop PDF files here or click to upload"
+      refute html =~ "Drag files here or click to browse"
     end
   end
 

@@ -236,7 +236,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="flex flex-col mx-auto max-w-5xl px-4 py-6 gap-6">
+    <div class="flex flex-col w-full px-4 py-6 gap-6">
       <div class="flex items-center justify-between">
         <h2 class="text-xl font-semibold">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF library")}

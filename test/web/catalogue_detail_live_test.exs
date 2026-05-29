@@ -1,8 +1,10 @@
 defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   @moduledoc """
-  End-to-end tests for CatalogueDetailLive — infinite scroll paging,
-  view-mode toggle, search, item mutations preserving scroll, category
-  reorder/trash/restore/permanent_delete, not-found redirect.
+  End-to-end tests for CatalogueDetailLive — the category drill-down:
+  root landing (category cards + Uncategorized card), drilling into a
+  category (`?category=<uuid>`) to see its subcategories + own items,
+  the uncategorized bucket, per-level Active/Deleted, scoped search,
+  item/category mutations, orphan reachability, and not-found handling.
   """
   use PhoenixKitCatalogue.LiveCase
 
@@ -11,13 +13,24 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   @base "/en/admin/catalogue"
 
   defp url(uuid), do: "#{@base}/#{uuid}"
+  defp cat_url(cat_uuid, category_uuid), do: "#{url(cat_uuid)}?category=#{category_uuid}"
+  defp uncat_url(cat_uuid), do: "#{url(cat_uuid)}?category=uncategorized"
+
+  # Character index of `needle` in `html` — for asserting relative
+  # render order of two item names.
+  defp position_of(html, needle) do
+    case :binary.match(html, needle) do
+      {idx, _len} -> idx
+      :nomatch -> flunk("expected #{inspect(needle)} in rendered HTML")
+    end
+  end
 
   # ─────────────────────────────────────────────────────────────────
-  # Mount / render
+  # Mount / root landing
   # ─────────────────────────────────────────────────────────────────
 
   describe "mount" do
-    test "renders catalogue name and header actions in active mode", %{conn: conn} do
+    test "renders catalogue name and header actions", %{conn: conn} do
       catalogue = fixture_catalogue(%{name: "Kitchen"})
 
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
@@ -43,122 +56,158 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
     end
   end
 
-  # ─────────────────────────────────────────────────────────────────
-  # Infinite scroll
-  # ─────────────────────────────────────────────────────────────────
-
-  describe "infinite scroll" do
-    test "initial mount loads the first category's card", %{conn: conn} do
+  describe "root landing" do
+    test "shows root categories as drill cards and the catalogue-wide search", %{conn: conn} do
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "First", position: 0})
       _cat_b = fixture_category(catalogue, %{name: "Second", position: 1})
 
-      for i <- 1..3 do
-        fixture_item(%{name: "A#{i}", category_uuid: cat_a.uuid})
-      end
-
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
       assert html =~ "First"
-      assert html =~ "A1"
-    end
-
-    test "every category renders eagerly with its own preview slice", %{conn: conn} do
-      # 2026-05-09: Items tab swapped infinite scroll for per-card
-      # expand (mirrors PdfSearchModal). All categories show on first
-      # render with a 25-item preview + per-card "Show N more" button.
-      catalogue = fixture_catalogue()
-      cat_a = fixture_category(catalogue, %{name: "First", position: 0})
-      cat_b = fixture_category(catalogue, %{name: "Second", position: 1})
-
-      fixture_item(%{name: "A only", category_uuid: cat_a.uuid})
-      fixture_item(%{name: "B only", category_uuid: cat_b.uuid})
-
-      {:ok, _view, html} = live(conn, url(catalogue.uuid))
-
-      assert html =~ "First"
-      assert html =~ "A only"
       assert html =~ "Second"
-      assert html =~ "B only"
+      # Each card is a drill link into the category.
+      assert html =~ "?category=#{cat_a.uuid}"
+      # The pencil keeps a one-click path to the edit form.
+      assert html =~ "/en/admin/catalogue/categories/#{cat_a.uuid}/edit"
+      # Root search is catalogue-wide.
+      assert html =~ "Search items by name, description, or SKU"
     end
 
-    test "expand_card loads more items into a single category", %{conn: conn} do
+    test "shows an Uncategorized drill card when there are categories + loose items",
+         %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-
-      # @per_card is 25 — create 30 so an expand is needed.
-      for i <- 1..30 do
-        fixture_item(%{
-          name: "Item #{String.pad_leading("#{i}", 3, "0")}",
-          category_uuid: category.uuid
-        })
-      end
-
-      {:ok, view, first_html} = live(conn, url(catalogue.uuid))
-
-      # First render: items 001..025 visible, "Show 5 more" button visible.
-      assert first_html =~ "Item 001"
-      assert first_html =~ "Item 025"
-      refute first_html =~ "Item 030"
-      assert first_html =~ "Show 5 more"
-
-      # `expand_card` is asynchronous: the event handler defers the
-      # actual fetch via send/2 + a recovery `expand_timeout` so the
-      # button can re-render in its loading state. Drain the LV's
-      # mailbox by issuing any synchronous pull (e.g. another render)
-      # — `:sys.get_state` waits for everything queued before it.
-      render_click(view, "expand_card", %{"scope" => category.uuid})
-      :sys.get_state(view.pid)
-      html_after = render(view)
-
-      assert html_after =~ "Item 026"
-      assert html_after =~ "Item 030"
-    end
-
-    test "Uncategorized renders eagerly when the catalogue has loose items", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      cat_a = fixture_category(catalogue, %{name: "Cat A"})
-
-      fixture_item(%{name: "In Category", category_uuid: cat_a.uuid})
+      # A category must exist for the Uncategorized card to appear — with no
+      # categories the loose items render inline instead (see next test).
+      fixture_category(catalogue, %{name: "A Category"})
       fixture_item(%{name: "Loose Item", catalogue_uuid: catalogue.uuid})
 
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
-      assert html =~ "Cat A"
-      assert html =~ "In Category"
       assert html =~ "Uncategorized"
-      assert html =~ "Loose Item"
+      assert html =~ "?category=uncategorized"
     end
 
-    test "category card shows the total item count, not the loaded count", %{conn: conn} do
+    test "with no categories, the catalogue's loose items render inline at root",
+         %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-
-      for i <- 1..30 do
-        fixture_item(%{name: "I#{i}", category_uuid: category.uuid})
-      end
+      fixture_item(%{name: "Loose Alpha", catalogue_uuid: catalogue.uuid})
 
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
-      # Badge shows total (30), not the first preview slice (25).
-      assert html =~ "30 items"
+      # Items show directly — no redundant Uncategorized drill card to click.
+      assert html =~ "Loose Alpha"
+      refute html =~ "?category=uncategorized"
+    end
+
+    test "does NOT render category items inline at the root level", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue, %{name: "Cat A"})
+      fixture_item(%{name: "Deep Inside Item", category_uuid: category.uuid})
+
+      {:ok, _view, html} = live(conn, url(catalogue.uuid))
+
+      assert html =~ "Cat A"
+      # Categorised items only show once you drill into the category.
+      refute html =~ "Deep Inside Item"
+    end
+
+    test "no breadcrumb at the root level", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      fixture_category(catalogue, %{name: "Cat"})
+
+      {:ok, _view, html} = live(conn, url(catalogue.uuid))
+
+      refute html =~ "breadcrumbs"
     end
   end
 
   # ─────────────────────────────────────────────────────────────────
-  # View mode (active / deleted tabs)
+  # Drilling into a category
   # ─────────────────────────────────────────────────────────────────
 
-  describe "view_mode toggle" do
-    test "switch_view resets the cursor and reloads with deleted items", %{conn: conn} do
+  describe "drill into a category" do
+    test "shows the breadcrumb, the scoped search, and the category's own items", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Catalogue X"})
+      category = fixture_category(catalogue, %{name: "Hardware"})
+      fixture_item(%{name: "Hinge 90", category_uuid: category.uuid})
+
+      {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      # The breadcrumb is folded into the page title: catalogue name (a
+      # link back to root) ▸ current category name.
+      assert html =~ "Catalogue X"
+      assert html =~ "Hardware"
+      assert html =~ "Hinge 90"
+      # The breadcrumb root crumb patches back to the catalogue root.
+      assert html =~ ~s(href="#{url(catalogue.uuid)}")
+      # Search is scoped to this category.
+      assert html =~ "Search within this category"
+    end
+
+    test "shows subcategories as drill cards alongside the category's own items", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      parent = fixture_category(catalogue, %{name: "Parent"})
+      child = fixture_category(catalogue, %{name: "Child", parent_uuid: parent.uuid})
+      fixture_item(%{name: "Parent direct item", category_uuid: parent.uuid})
+
+      {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, parent.uuid))
+
+      # Subcategory card (drillable) + the parent's own direct item.
+      assert html =~ "Child"
+      assert html =~ "?category=#{child.uuid}"
+      assert html =~ "Parent direct item"
+    end
+
+    test "an item in the level list links to its edit page", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      item = fixture_item(%{name: "Clickable item", category_uuid: category.uuid})
+
+      {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      assert html =~ ~s(href="/en/admin/catalogue/items/#{item.uuid}/edit")
+      assert html =~ "Clickable item"
+    end
+
+    test "a missing / foreign category bounces back to the root level", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      bogus = "00000000-0000-0000-0000-000000000000"
+
+      case live(conn, cat_url(catalogue.uuid, bogus)) do
+        {:ok, _view, html} -> assert html =~ "Add Category"
+        {:error, {:live_redirect, %{to: to}}} -> assert to =~ url(catalogue.uuid)
+      end
+    end
+  end
+
+  describe "uncategorized bucket" do
+    test "shows the catalogue's loose items", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      _categorised = fixture_category(catalogue, %{name: "Cat A"})
+      fixture_item(%{name: "Loose Item", catalogue_uuid: catalogue.uuid})
+
+      {:ok, _view, html} = live(conn, uncat_url(catalogue.uuid))
+
+      assert html =~ "Uncategorized"
+      assert html =~ "Loose Item"
+      assert html =~ "Search uncategorized items"
+    end
+  end
+
+  # ─────────────────────────────────────────────────────────────────
+  # Per-level Active / Deleted
+  # ─────────────────────────────────────────────────────────────────
+
+  describe "view_mode toggle (per-level)" do
+    test "switch_view shows the current category's deleted items", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       active = fixture_item(%{name: "Active item", category_uuid: category.uuid})
       deleted = fixture_item(%{name: "Deleted item", category_uuid: category.uuid})
       Catalogue.trash_item(deleted)
 
-      {:ok, view, html} = live(conn, url(catalogue.uuid))
-
+      {:ok, view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
       assert html =~ "Active item"
       refute html =~ "Deleted item"
 
@@ -168,7 +217,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       refute html_after =~ active.uuid
     end
 
-    test "Active tab badge shows the non-deleted item count", %{conn: conn} do
+    test "the toggle reflects the level's active + deleted counts", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       fixture_item(%{name: "A", category_uuid: category.uuid})
@@ -176,8 +225,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       gone = fixture_item(%{name: "Gone", category_uuid: category.uuid})
       Catalogue.trash_item(gone)
 
-      {:ok, _view, html} = live(conn, url(catalogue.uuid))
-      # Active (2) and Deleted (1) tabs are present; check the Active count appears.
+      {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
       assert html =~ "Active"
       assert html =~ "(2)"
       assert html =~ "Deleted"
@@ -186,39 +235,33 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   end
 
   # ─────────────────────────────────────────────────────────────────
-  # Item mutations (local updates — scroll is preserved)
+  # Item mutations (inside a category)
   # ─────────────────────────────────────────────────────────────────
 
   describe "item mutations" do
-    test "delete_item removes the item from the card without a full reload", %{conn: conn} do
+    test "delete_item removes the item and trashes it in the DB", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       item = fixture_item(%{name: "Doomed", category_uuid: category.uuid})
       fixture_item(%{name: "Survivor", category_uuid: category.uuid})
 
-      {:ok, view, html} = live(conn, url(catalogue.uuid))
+      {:ok, view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
       assert html =~ "Doomed"
 
       html_after = render_click(view, "delete_item", %{"uuid" => item.uuid})
 
       refute html_after =~ "Doomed"
       assert html_after =~ "Survivor"
-      # DB reflects the trash (status = "deleted")
       assert Catalogue.get_item(item.uuid).status == "deleted"
     end
 
-    test "restore_item (from the Items tab Deleted view) marks the item active", %{conn: conn} do
-      # After restore, the deleted view auto-flips back to Active because
-      # `deleted_item_count` hits 0 — the restored item ends up visible
-      # in the active stream rather than removed from the page entirely.
-      # The behavioral pin is: the DB row is "active" and the page
-      # doesn't crash.
+    test "restore_item from the level's Deleted view marks the item active", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       item = fixture_item(%{name: "Comeback", category_uuid: category.uuid})
       Catalogue.trash_item(item)
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
       html = render_click(view, "switch_view", %{"mode" => "deleted"})
       assert html =~ "Comeback"
 
@@ -228,19 +271,16 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert Process.alive?(view.pid)
     end
 
-    test "delete_item with a bogus uuid doesn't crash and leaves existing items untouched", %{
-      conn: conn
-    } do
+    test "delete_item with a bogus uuid doesn't crash", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       survivor = fixture_item(%{name: "Survivor", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
 
       html =
         render_click(view, "delete_item", %{"uuid" => "00000000-0000-0000-0000-000000000000"})
 
-      # Page still renders; survivor is still listed.
       assert html =~ "Survivor"
       assert Catalogue.get_item(survivor.uuid).status == "active"
     end
@@ -250,55 +290,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   # Category mutations
   # ─────────────────────────────────────────────────────────────────
 
-  describe "clickable names" do
-    test "category name is a link to the category edit page in active mode", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue, %{name: "Clickable category"})
-
-      {:ok, _view, html} = live(conn, url(catalogue.uuid))
-
-      expected_href = "/en/admin/catalogue/categories/#{category.uuid}/edit"
-      assert html =~ ~s(href="#{expected_href}")
-      assert html =~ "Clickable category"
-    end
-
-    test "category name renders without an edit link in the Categories tab Deleted view",
-         %{conn: conn} do
-      # Items tab no longer renders trashed categories at all (the
-      # "separate status" rule). The Categories tab Deleted view shows
-      # the category as a plain row with no edit link — restore /
-      # delete-forever buttons replace the per-card actions.
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue, %{name: "Deleted category"})
-      Catalogue.trash_category(category)
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?tab=categories")
-      html = render_click(view, "switch_view", %{"mode" => "deleted"})
-
-      assert html =~ "Deleted category"
-      # No edit link to the deleted category — only Restore + Delete Forever.
-      refute html =~ "/en/admin/catalogue/categories/#{category.uuid}/edit"
-    end
-
-    test "item name in the card body is a link to the item edit page", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-      item = fixture_item(%{name: "Clickable item", category_uuid: category.uuid})
-
-      {:ok, _view, html} = live(conn, url(catalogue.uuid))
-
-      expected_href = "/en/admin/catalogue/items/#{item.uuid}/edit"
-      assert html =~ ~s(href="#{expected_href}")
-      assert html =~ "Clickable item"
-    end
-  end
-
   describe "category mutations" do
-    test "request_trash_category removes the category card when the subtree is empty",
-         %{conn: conn} do
-      # `request_trash_category` (the renamed event) trashes directly
-      # when the subtree has no active items. With items it would
-      # open the disposition modal first; here both fixtures are empty.
+    test "request_trash_category removes an empty category card from the root", %{conn: conn} do
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "Trashable", position: 0})
       _cat_b = fixture_category(catalogue, %{name: "Staying", position: 1})
@@ -311,9 +304,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html_after =~ "Staying"
     end
 
-    test "restore_category in deleted mode brings it back and auto-flips to active", %{
-      conn: conn
-    } do
+    test "restore_category brings a trashed category back", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue, %{name: "Brought Back"})
       Catalogue.trash_category(category)
@@ -322,68 +313,241 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       _deleted_html = render_click(view, "switch_view", %{"mode" => "deleted"})
 
       html_after = render_click(view, "restore_category", %{"uuid" => category.uuid})
-      # Either the category is now shown in the page (if we're still on
-      # deleted mode and there are other deleted things) or the view
-      # auto-flipped back to active. Either way it must now be visible.
       assert html_after =~ "Brought Back"
     end
 
-    # `move_category_up` / `move_category_down` events were removed
-    # when category reorder switched to drag-only via the SortableGrid
-    # hook. The new wire is the `reorder_categories` event the hook
-    # pushes; LV-test coverage of drag would need to drive SortableJS
-    # from a browser, out of scope for this fixture-driven stack.
+    test "a child restored under a still-trashed parent stays reachable at the root",
+         %{conn: conn} do
+      # restore_category/2 is non-cascading: restoring the child leaves the
+      # parent trashed. list_child_categories/3 orphan-promotes the child to
+      # the root so the drill-down can still reach it.
+      catalogue = fixture_catalogue()
+      parent = fixture_category(catalogue, %{name: "TrashedParent"})
+      child = fixture_category(catalogue, %{name: "OrphanChild", parent_uuid: parent.uuid})
+
+      # Trashing the parent cascades the subtree (parent + child → deleted).
+      Catalogue.trash_category(parent, items: :cascade)
+      # Restore only the child.
+      {:ok, _} = Catalogue.restore_category(Catalogue.get_category(child.uuid))
+
+      {:ok, _view, html} = live(conn, url(catalogue.uuid))
+
+      assert html =~ "OrphanChild"
+      assert html =~ "?category=#{child.uuid}"
+    end
   end
 
   # ─────────────────────────────────────────────────────────────────
-  # Search
+  # Active item list: core List-UI toolkit (sort + reorder + bulk)
+  # ─────────────────────────────────────────────────────────────────
+
+  describe "active item list — sort dropdown" do
+    test "sort_items changes the rendered order", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      fixture_item(%{name: "Cherry", position: 0, category_uuid: category.uuid})
+      fixture_item(%{name: "Apple", position: 1, category_uuid: category.uuid})
+
+      {:ok, view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+      # Manual (position) order: Cherry before Apple.
+      assert position_of(html, "Cherry") < position_of(html, "Apple")
+
+      html_after = render_change(view, "sort_items", %{"sort_by" => "name"})
+      # Name-asc order: Apple before Cherry.
+      assert position_of(html_after, "Apple") < position_of(html_after, "Cherry")
+    end
+
+    test "sort_items ignores an unknown field", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      fixture_item(%{name: "Solo", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+      html = render_change(view, "sort_items", %{"sort_by" => "evil; DROP"})
+
+      assert html =~ "Solo"
+      assert Process.alive?(view.pid)
+    end
+  end
+
+  describe "active item list — strategy reorder modal" do
+    test "open → apply renumbers items by strategy", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      fixture_item(%{name: "Cherry", category_uuid: category.uuid})
+      fixture_item(%{name: "Apple", category_uuid: category.uuid})
+      fixture_item(%{name: "Banana", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      # Open the modal with no selection captured → "reorder all".
+      render_hook(view, "open_items_reorder_modal", %{"uuids" => []})
+      render_hook(view, "apply_items_reorder", %{"strategy" => "name_asc"})
+
+      positions =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged(sort_by: :position, sort_dir: :asc)
+        |> Enum.map(&{&1.name, &1.position})
+
+      assert positions == [{"Apple", 1}, {"Banana", 2}, {"Cherry", 3}]
+    end
+
+    test "apply with a selected subset sharing positions flashes a normalise hint", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      a = fixture_item(%{name: "A", category_uuid: category.uuid})
+      b = fixture_item(%{name: "B", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      render_hook(view, "open_items_reorder_modal", %{"uuids" => [a.uuid, b.uuid]})
+      html = render_hook(view, "apply_items_reorder", %{"strategy" => "name_asc"})
+
+      assert html =~ "Reorder all"
+      # Positions untouched (both still 0).
+      assert Catalogue.get_item(a.uuid).position == 0
+      assert Catalogue.get_item(b.uuid).position == 0
+    end
+
+    test "apply with an unknown strategy asks for one", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      fixture_item(%{name: "X", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+      html = render_hook(view, "apply_items_reorder", %{"strategy" => "bogus"})
+
+      assert html =~ "Pick a strategy"
+    end
+  end
+
+  describe "active item list — DnD reorder (scope from socket)" do
+    test "reorder_items persists the dropped order using the current node scope", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      a = fixture_item(%{name: "A", position: 0, category_uuid: category.uuid})
+      b = fixture_item(%{name: "B", position: 1, category_uuid: category.uuid})
+      c = fixture_item(%{name: "C", position: 2, category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      # Drag C to the front. No catalogueUuid/categoryUuid in the payload —
+      # the handler must take scope from socket assigns.
+      render_hook(view, "reorder_items", %{
+        "ordered_ids" => [c.uuid, a.uuid, b.uuid],
+        "moved_id" => c.uuid
+      })
+
+      positions =
+        category.uuid
+        |> Catalogue.list_items_for_category_paged(sort_by: :position, sort_dir: :asc)
+        |> Enum.map(& &1.name)
+
+      assert positions == ["C", "A", "B"]
+    end
+  end
+
+  describe "active item list — bulk delete via captured uuids" do
+    test "request → confirm trashes the captured items", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      doomed = fixture_item(%{name: "Doomed", category_uuid: category.uuid})
+      survivor = fixture_item(%{name: "Survivor", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      # The toolbar pushes the client-captured uuids.
+      render_hook(view, "request_bulk_delete_items", %{"uuids" => [doomed.uuid]})
+      render_click(view, "confirm_bulk_action", %{})
+
+      assert Catalogue.get_item(doomed.uuid).status == "deleted"
+      assert Catalogue.get_item(survivor.uuid).status == "active"
+    end
+
+    test "bulk move via captured uuids uncategorizes the items", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+      item = fixture_item(%{name: "Mover", category_uuid: category.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+
+      render_hook(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
+      render_click(view, "confirm_bulk_move_items", %{})
+
+      assert Catalogue.get_item(item.uuid).category_uuid == nil
+    end
+  end
+
+  describe "active item list — load_more still pages" do
+    test "load_more appends the next page of items", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue)
+
+      for i <- 1..130 do
+        fixture_item(%{
+          name: "Item #{String.pad_leading("#{i}", 3, "0")}",
+          position: i,
+          category_uuid: category.uuid
+        })
+      end
+
+      {:ok, view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
+      # First page is 100 items.
+      assert html =~ "Item 100"
+      refute html =~ "Item 130"
+
+      html_after = render_hook(view, "load_more", %{})
+      assert html_after =~ "Item 130"
+    end
+  end
+
+  # ─────────────────────────────────────────────────────────────────
+  # Search (scoped per level)
   # ─────────────────────────────────────────────────────────────────
 
   describe "search" do
-    test "search shows matching items and hides the infinite-scroll cards", %{conn: conn} do
+    test "root search spans the whole catalogue", %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue, %{name: "Hidden while searching"})
+      category = fixture_category(catalogue, %{name: "Some category"})
       fixture_item(%{name: "Oak panel", category_uuid: category.uuid})
       fixture_item(%{name: "Pine board", category_uuid: category.uuid})
 
       {:ok, view, _html} = live(conn, url(catalogue.uuid))
 
       render_change(view, "search", %{"query" => "oak"})
-      # Search runs via start_async — wait for handle_async to land before asserting.
       html_after = render_async(view)
 
-      # Search results visible
       assert html_after =~ "Oak panel"
-      # Pine board excluded from results
       refute html_after =~ "Pine board"
     end
 
-    test "empty search query falls back to normal paged view", %{conn: conn} do
+    test "search inside a category is scoped to that category", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      cat_a = fixture_category(catalogue, %{name: "Cat A"})
+      cat_b = fixture_category(catalogue, %{name: "Cat B"})
+      fixture_item(%{name: "Oak in A", category_uuid: cat_a.uuid})
+      fixture_item(%{name: "Oak in B", category_uuid: cat_b.uuid})
+
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, cat_a.uuid))
+
+      render_change(view, "search", %{"query" => "oak"})
+      html_after = render_async(view)
+
+      assert html_after =~ "Oak in A"
+      refute html_after =~ "Oak in B"
+    end
+
+    test "clear_search restores the level view", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)
       fixture_item(%{name: "Only item", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
-
-      render_change(view, "search", %{"query" => "anything"})
-      _after_search = render_async(view)
-      html_after = render_change(view, "search", %{"query" => ""})
-
-      # Back to the normal view
-      assert html_after =~ "Only item"
-    end
-
-    test "clear_search restores the paged view", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-      fixture_item(%{name: "Item", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
       render_change(view, "search", %{"query" => "nothing matches"})
       _ = render_async(view)
       html_after = render_click(view, "clear_search", %{})
 
-      assert html_after =~ "Item"
+      assert html_after =~ "Only item"
     end
 
     test "shows a loading indicator for the first search before results land", %{conn: conn} do
@@ -391,39 +555,16 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       category = fixture_category(catalogue)
       fixture_item(%{name: "Oak panel", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
       html_pending = render_change(view, "search", %{"query" => "oak"})
 
-      # While the async task is still running, the user sees a "Searching"
-      # indicator — not stale data or silence.
       assert html_pending =~ "Searching for"
       assert html_pending =~ "loading-spinner"
 
       html_after = render_async(view)
 
-      # Once the async lands, the spinner is gone and results are visible.
       refute html_after =~ "Searching for"
       assert html_after =~ "Oak panel"
-    end
-
-    test "dims previous results while a newer query is loading", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-      fixture_item(%{name: "Oak panel", category_uuid: category.uuid})
-      fixture_item(%{name: "Pine board", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
-
-      # First search settles.
-      render_change(view, "search", %{"query" => "oak"})
-      _ = render_async(view)
-
-      # Second search fires — while pending, prior "oak" results are dimmed.
-      html_pending = render_change(view, "search", %{"query" => "pine"})
-
-      assert html_pending =~ "opacity-50"
-      # Spinner visible next to the summary
-      assert html_pending =~ "loading-spinner"
     end
   end
 end

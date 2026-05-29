@@ -28,10 +28,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
       item forms (opt-in fields from `Metadata.definitions/1`). Expects
       `add_meta_field` and `remove_meta_field` events wired up in the LV;
       text edits are absorbed via the form's `validate`.
-    * `empty_state/1` — centered empty state card with message and optional action
 
   Several of these (`search_input`, `search_results_summary`,
-  `view_mode_toggle`, `empty_state`) are deliberately generic — no
+  `view_mode_toggle`) are deliberately generic — no
   catalogue-specific schema knowledge — and are candidates for
   promotion to `phoenix_kit` core once a coordinated release lands.
   Keeping them here for now avoids coupling catalogue's hex dep to
@@ -67,6 +66,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKitCatalogue.Attachments
+  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Schemas.Item
 
@@ -524,35 +524,6 @@ defmodule PhoenixKitCatalogue.Web.Components do
           @count, count: @count, query: @query)}
       <% end %>
     </span>
-    """
-  end
-
-  # ═══════════════════════════════════════════════════════════════════
-  # Empty state
-  # ═══════════════════════════════════════════════════════════════════
-
-  @doc """
-  Renders an empty state card with a message and optional action slot.
-
-  ## Attributes
-
-    * `message` — the text to display (required)
-
-  ## Slots
-
-    * `inner_block` — optional action content (buttons, links)
-  """
-  attr(:message, :string, required: true)
-  slot(:inner_block)
-
-  def empty_state(assigns) do
-    ~H"""
-    <div class="card bg-base-100 shadow">
-      <div class="card-body items-center text-center py-12">
-        <p class="text-base-content/60">{@message}</p>
-        {render_slot(@inner_block)}
-      </div>
-    </div>
     """
   end
 
@@ -1328,6 +1299,94 @@ defmodule PhoenixKitCatalogue.Web.Components do
         />
       </:card_actions>
     </.table_default>
+    """
+  end
+
+  # ── Shared item cells (reused by item_table AND the core-toolkit
+  #    table in CatalogueDetailLive's active list, so the two surfaces
+  #    don't drift on pricing / action markup) ───────────────────────
+
+  @doc """
+  The name + SKU + sale-price cells for an item, rendered as standalone
+  `<td>`s for a core-toolkit `<.table_default>` row. Pricing uses
+  `Catalogue.item_pricing/1` so the figures match the rest of the
+  module. Pass `edit_path` (a 1-arity `uuid -> path` fn) to make the
+  name a link.
+
+  Renders four cells: name (link), SKU, sale price, unit.
+  """
+  attr(:item, :any, required: true)
+  attr(:edit_path, :any, default: nil)
+
+  def item_pricing_cell(assigns) do
+    pricing = Catalogue.item_pricing(assigns.item)
+    assigns = assign(assigns, :sale_price, pricing.sale_price)
+
+    ~H"""
+    <.table_default_cell class="font-medium">
+      <.link
+        :if={@edit_path && @item.uuid}
+        navigate={safe_call(@edit_path, @item.uuid)}
+        class="link link-hover"
+      >
+        {@item.name || "—"}
+      </.link>
+      <span :if={!@edit_path || !@item.uuid}>{@item.name || "—"}</span>
+    </.table_default_cell>
+    <.table_default_cell class="text-sm font-mono text-base-content/60">
+      {@item.sku || "—"}
+    </.table_default_cell>
+    <.table_default_cell class="text-sm font-semibold">
+      {format_price(@sale_price)}
+    </.table_default_cell>
+    <.table_default_cell class="text-sm">{format_unit(@item.unit)}</.table_default_cell>
+    <.table_default_cell>
+      <.status_badge status={@item.status || "unknown"} size={:xs} />
+    </.table_default_cell>
+    """
+  end
+
+  @doc """
+  The per-row action menu for an active item (Edit / Search PDFs /
+  Delete), rendered as a standalone `<td>` for a core-toolkit row.
+  Mirrors `item_table`'s `item_actions` action set for the active list.
+  """
+  attr(:item, :any, required: true)
+  attr(:edit_path, :any, default: nil)
+  attr(:on_delete, :string, default: nil)
+  attr(:pdf_search_event, :string, default: nil)
+
+  def item_row_menu(assigns) do
+    ~H"""
+    <.table_default_cell class="text-right whitespace-nowrap">
+      <.table_row_menu id={"item-row-menu-#{@item.uuid}"}>
+        <.table_row_menu_link
+          :if={@edit_path}
+          navigate={safe_call(@edit_path, @item.uuid)}
+          icon="hero-pencil"
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
+        />
+        <.table_row_menu_button
+          :if={@pdf_search_event}
+          phx-click={@pdf_search_event}
+          phx-value-uuid={@item.uuid}
+          icon="hero-document-magnifying-glass"
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search PDFs")}
+        />
+        <.table_row_menu_divider :if={
+          (@edit_path || @pdf_search_event) && @on_delete
+        } />
+        <.table_row_menu_button
+          :if={@on_delete}
+          phx-click={@on_delete}
+          phx-value-uuid={@item.uuid}
+          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+          icon="hero-trash"
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
+          variant="error"
+        />
+      </.table_row_menu>
+    </.table_default_cell>
     """
   end
 

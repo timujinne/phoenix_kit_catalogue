@@ -216,7 +216,9 @@ defmodule PhoenixKitCatalogueTest do
 
   describe "version/0" do
     test "returns version string" do
-      assert PhoenixKitCatalogue.version() == "0.1.17"
+      # Assert the shape, not a pinned literal — the version is bumped on
+      # every release and a hardcoded value goes stale immediately.
+      assert PhoenixKitCatalogue.version() =~ ~r/^\d+\.\d+\.\d+/
     end
   end
 

@@ -27,7 +27,9 @@ defmodule PhoenixKitCatalogue.Test.Router do
   scope "/en/admin/catalogue", PhoenixKitCatalogue.Web do
     pipe_through(:browser)
 
-    live_session :catalogue_test, layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
+    live_session :catalogue_test,
+      on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
+      layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
       # Catalogues / Manufacturers / Suppliers — CataloguesLive owns
       # all three tabs.
       live("/", CataloguesLive, :index)
@@ -57,6 +59,11 @@ defmodule PhoenixKitCatalogue.Test.Router do
 
       # Events / activity feed
       live("/events", EventsLive, :index)
+
+      # PDF library (literal "/pdfs" prefix; declared before the "/:uuid"
+      # catch-all so it isn't swallowed by CatalogueDetailLive).
+      live("/pdfs", PdfLibraryLive, :index)
+      live("/pdfs/:uuid", PdfDetailLive, :show)
 
       # Catalogue detail (last so it doesn't swallow the static routes above)
       live("/:uuid", CatalogueDetailLive, :show)

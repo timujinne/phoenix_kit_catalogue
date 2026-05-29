@@ -17,6 +17,17 @@ defmodule PhoenixKitCatalogue.Paths do
   def catalogue_detail(uuid), do: Routes.path("#{@base}/#{uuid}")
   def catalogue_edit(uuid), do: Routes.path("#{@base}/#{uuid}/edit")
 
+  # Drill-down levels on the catalogue detail page. The current category is
+  # carried in a `?category=` query param (in-page push_patch), so these
+  # are deep-linkable and back-button friendly. Root level is plain
+  # `catalogue_detail/1`; `category_browse/2` drills into a category;
+  # `uncategorized_browse/1` opens the uncategorized bucket.
+  def category_browse(catalogue_uuid, category_uuid),
+    do: Routes.path("#{@base}/#{catalogue_uuid}?category=#{category_uuid}")
+
+  def uncategorized_browse(catalogue_uuid),
+    do: Routes.path("#{@base}/#{catalogue_uuid}?category=uncategorized")
+
   # ── Import ───────────────────────────────────────────────────────
 
   def import, do: Routes.path("#{@base}/import")

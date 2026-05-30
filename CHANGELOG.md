@@ -1,3 +1,15 @@
+## 0.4.0 - 2026-05-30
+
+### Added
+- **ItemPicker display options** (#29) — four backward-compatible attrs on `<.item_picker>` and the underlying `ItemPicker` LiveComponent, all defaulting to current behaviour: `show_unit` (opt-in; render the item's measurement unit beside the price in each dropdown row), `format_unit` (1-arity `unit -> label` function, mirroring `format_price`; defaults to the shared abbreviation map, return `""` to omit), `highlight_selected` (default `true`; pass `false` to drop the `input-primary` border on always-rendered pickers), and `initial_query` (optional seed string that prefills the search input and opens matching results once on first render, never clobbering a real selection or mid-typing query).
+
+### Changed
+- `ItemPicker` `category_uuids` / `catalogue_uuids` attrs relaxed from `:list` to `:any` so callers can pass an explicit `nil` (the documented "all categories" scope) without a Phoenix attr-type warning.
+- Unit-abbreviation labels (`piece`→`pc`, `m2`→`m²`, `running_meter`→`rm`, …) are now centralised in `PhoenixKitCatalogue.Schemas.Item.unit_label/1` — a single source of truth shared by the items table and the item picker, instead of two divergent copies.
+
+### Fixed
+- **PDF extraction enqueue** refuses to enqueue when the `:catalogue_pdf` Oban queue isn't running (not configured, or Oban not started). Instead of piling up never-processed jobs it flips the extraction to a terminal failed status with an actionable message + activity row.
+
 ## 0.3.0 - 2026-05-29
 
 ### Added

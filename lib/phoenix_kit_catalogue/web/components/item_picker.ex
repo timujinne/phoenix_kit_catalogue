@@ -58,6 +58,24 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       returning a display string or `nil`. Defaults to a Decimal
       stringifier of `item_pricing(item).final_price`. Return `nil` to
       omit the price column entirely.
+    * `:show_unit` — when `true`, renders the item's measurement unit
+      (via `:format_unit`) as a small muted label next to the price in
+      each dropdown row. Defaults to `false` (no unit) so existing
+      consumers are unaffected.
+    * `:format_unit` — 1-arity function taking the item's unit string and
+      returning a display label (`""` to omit). Only used when
+      `:show_unit` is `true`. Defaults to a built-in mapping of common
+      abbreviations (`piece`→`pc`, `set`→`set`, `pair`→`pair`,
+      `sheet`→`sheet`, `m2`→`m²`, `running_meter`→`rm`; unknown strings
+      pass through). Supply your own to use a different unit vocabulary.
+    * `:highlight_selected` — when `true` (default), the input gets the
+      `input-primary` border while an item is selected. Pass `false` to
+      suppress that highlight. Default preserves existing behaviour.
+    * `:initial_query` — optional seed string for the search input. When
+      provided (and nothing is selected and the user hasn't typed), the
+      input is prefilled with this string and the dropdown opens with
+      matching results on first render. Fires once; subsequent updates
+      leave the query alone. Defaults to `nil` (no seeding).
 
   ### Keyboard / a11y
 
@@ -107,6 +125,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
        page_size: @default_page_size,
        disabled: false,
        format_price: nil,
+       format_unit: nil,
+       show_unit: false,
+       highlight_selected: true,
+       initial_query: nil,
+       seeded_initial_query: false,
        locale: "en"
      )}
   end
@@ -131,6 +154,30 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       else
         locale = socket.assigns.locale
         assign(socket, :query, item_display_name(assigns[:selected_item], locale) || "")
+      end
+
+    # Opt-in: seed the input with an arbitrary search string the first time
+    # `initial_query` is provided, and run the search so results appear
+    # immediately. Only fires once (guarded by `:seeded_initial_query`) and
+    # only when nothing is selected and the user hasn't typed yet, so it never
+    # clobbers a real selection or mid-typing query.
+    initial_query = socket.assigns.initial_query
+
+    socket =
+      cond do
+        socket.assigns.seeded_initial_query ->
+          socket
+
+        is_binary(initial_query) and initial_query != "" and is_nil(incoming_uuid) and
+            String.trim(socket.assigns.query || "") == "" ->
+          socket
+          |> assign(:query, initial_query)
+          |> assign(:seeded_initial_query, true)
+          |> assign(:open, true)
+          |> run_search()
+
+        true ->
+          socket
       end
 
     {:ok, socket}
@@ -297,6 +344,24 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     fun.(item)
   end
 
+  # Default measurement-unit label used when no `:format_unit` function is
+  # supplied. Common abbreviations (piece→pc, set→set, pair→pair, sheet→sheet,
+  # m2→m², running_meter→rm); `nil`/unknown collapses to "" so the column is
+  # omitted. Consumers with a different unit vocabulary pass their own
+  # `:format_unit` 1-arity function instead.
+  defp default_unit_label(nil), do: ""
+  defp default_unit_label("piece"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "pc")
+  defp default_unit_label("set"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "set")
+  defp default_unit_label("pair"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "pair")
+  defp default_unit_label("sheet"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "sheet")
+  defp default_unit_label("m2"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m²")
+
+  defp default_unit_label("running_meter"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "rm")
+
+  defp default_unit_label(other) when is_binary(other), do: other
+  defp default_unit_label(_), do: ""
+
   defp default_format_price(%Item{} = item) do
     pricing = Catalogue.item_pricing(item)
 
@@ -324,6 +389,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         :price_fun,
         assigns[:format_price] || (&default_format_price/1)
       )
+      |> assign(
+        :unit_fun,
+        assigns[:format_unit] || (&default_unit_label/1)
+      )
 
     ~H"""
     <div
@@ -349,7 +418,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         phx-focus="open"
         class={[
           "input input-sm w-full pr-8",
-          @selected_item && "input-primary"
+          @highlight_selected and (@selected_item && "input-primary")
         ]}
       />
 
@@ -387,6 +456,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
           phx-value-uuid={item.uuid}
           phx-target={@myself}
         >
+          <% price = format_price_display(item, @price_fun) %>
+          <% unit = if @show_unit, do: @unit_fun.(item.unit), else: "" %>
           <div class="min-w-0 flex-1">
             <div class="font-medium text-sm truncate">
               {item_display_name(item, @locale)}
@@ -398,11 +469,13 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
               {item_breadcrumb(item, @locale)}
             </div>
           </div>
-          <div
-            :if={(price = format_price_display(item, @price_fun)) && price != ""}
-            class="text-sm font-medium ml-4 shrink-0"
-          >
-            {price}
+          <div :if={(price && price != "") or unit != ""} class="text-right ml-4 shrink-0">
+            <div :if={price && price != ""} class="text-sm font-medium">
+              {price}
+            </div>
+            <div :if={unit != ""} class="text-xs text-base-content/50">
+              {unit}
+            </div>
           </div>
         </li>
         <li

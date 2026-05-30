@@ -1774,6 +1774,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:page_size, :integer, default: 20)
   attr(:disabled, :boolean, default: false)
   attr(:format_price, :any, default: nil)
+  attr(:format_unit, :any, default: nil)
+  attr(:show_unit, :boolean, default: false)
+  attr(:highlight_selected, :boolean, default: true)
+  attr(:initial_query, :string, default: nil)
 
   def item_picker(assigns) do
     ~H"""
@@ -1792,6 +1796,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
       page_size={@page_size}
       disabled={@disabled}
       format_price={@format_price}
+      format_unit={@format_unit}
+      show_unit={@show_unit}
+      highlight_selected={@highlight_selected}
+      initial_query={@initial_query}
     />
     """
   end

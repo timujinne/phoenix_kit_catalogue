@@ -26,10 +26,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
     }
   end
 
-  defp fake_item(uuid, name) do
+  defp fake_item(uuid, name, unit \\ "piece") do
     %Item{
       uuid: uuid,
       name: name,
+      unit: unit,
       base_price: Decimal.new("100.00"),
       markup_percentage: nil,
       discount_percentage: nil,
@@ -214,6 +215,68 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
     end
   end
 
+  describe "show_unit (opt-in unit column)" do
+    test "show_unit=true renders the mapped unit label in the row" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_unit: true,
+            options: [fake_item("item-1", "Oak Plank", "running_meter")],
+            has_more: false
+          })
+        )
+
+      assert html =~ "rm"
+    end
+
+    test "show_unit=true maps m2 to m²" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_unit: true,
+            options: [fake_item("item-1", "Glass Pane", "m2")],
+            has_more: false
+          })
+        )
+
+      assert html =~ "m²"
+    end
+
+    test "show_unit defaults to false and hides the unit (backward compatible)" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            options: [fake_item("item-1", "Oak Plank", "running_meter")],
+            has_more: false
+          })
+        )
+
+      refute html =~ ">rm<"
+    end
+
+    test "show_unit=true with nil unit omits the unit label" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_unit: true,
+            options: [fake_item("item-1", "Oak Plank", nil)],
+            has_more: false
+          })
+        )
+
+      # No unit row text leaks in; name still renders
+      assert html =~ "Oak Plank"
+    end
+  end
+
   describe "selected_item styling" do
     test "selected_item non-nil adds input-primary class" do
       item = fake_item("item-1", "Oak Plank")
@@ -234,6 +297,66 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
 
       refute html =~ "input-primary"
       refute html =~ ~s(phx-click="clear")
+    end
+
+    test "highlight_selected=false suppresses the primary border even when selected" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, highlight_selected: false})
+        )
+
+      refute html =~ "input-primary"
+      # The selection itself is unaffected — the clear button still renders.
+      assert html =~ ~s(phx-click="clear")
+    end
+  end
+
+  describe "format_unit (custom unit labels)" do
+    test "format_unit overrides the default unit label" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_unit: true,
+            format_unit: fn "running_meter" -> "lm" end,
+            options: [fake_item("item-1", "Beam", "running_meter")],
+            has_more: false
+          })
+        )
+
+      assert html =~ "lm"
+      refute html =~ ">rm<"
+    end
+  end
+
+  # initial_query SEEDING here only covers the DB-free guard branches (the
+  # positive "search runs and prefills" path needs the catalogue Repo and lives
+  # in the integration suite). update/2 must never clobber a real selection or a
+  # blank input.
+  describe "initial_query seeding (guards)" do
+    test "does not clobber the input when an item is already selected" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, initial_query: "ignored seed"})
+        )
+
+      # The selected item's name wins; the seed string is ignored.
+      assert html =~ "Oak Plank"
+      refute html =~ "ignored seed"
+    end
+
+    test "a blank seed leaves the input empty and the dropdown closed" do
+      html = render_component(ItemPicker, base_assigns(%{initial_query: ""}))
+
+      assert html =~ ~s(value="")
+      assert html =~ ~s(aria-expanded="false")
     end
   end
 end

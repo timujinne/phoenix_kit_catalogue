@@ -14,6 +14,8 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
   """
   use PhoenixKitCatalogue.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PdfLibrary
@@ -366,6 +368,50 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
     test "returns [] for an item with no name", %{item: _} do
       orphan = %PhoenixKitCatalogue.Schemas.Item{name: nil, status: "active", unit: "piece"}
       assert Catalogue.search_pdfs_for_item(orphan) == []
+    end
+  end
+
+  describe "enqueue_extraction/1 — graceful fallback when the :catalogue_pdf queue is unavailable" do
+    # The catalogue test env never starts Oban, so `Oban.config()` is
+    # unreachable and `catalogue_pdf_queue_available?/0` reports the
+    # queue as not running — exactly the misconfiguration where PDFs get
+    # uploaded but the queue isn't wired. The guard must refuse to
+    # enqueue and flip the extraction to a terminal, visible `failed`
+    # state instead of inserting a dead Oban job that never moves.
+    test "flips a pending extraction to failed with an actionable message (no dead job)" do
+      file_uuid = insert_file!()
+      _pdf = insert_pdf!(file_uuid)
+      _ext = insert_extraction!(file_uuid, %{extraction_status: "pending"})
+
+      log =
+        capture_log(fn ->
+          assert {:error, :extraction_queue_unavailable} =
+                   PdfLibrary.enqueue_extraction(file_uuid)
+        end)
+
+      # The refusal is logged loudly so operators notice the misconfig.
+      assert log =~ "refusing to enqueue PDF extraction"
+
+      reloaded = Repo.get(PdfExtraction, file_uuid)
+      assert reloaded.extraction_status == "failed"
+      assert reloaded.error_message =~ "catalogue_pdf"
+      assert reloaded.error_message =~ "Oban"
+    end
+
+    test "logs a pdf.extraction_failed activity row so the failure is auditable" do
+      file_uuid = insert_file!()
+      pdf = insert_pdf!(file_uuid)
+      _ext = insert_extraction!(file_uuid, %{extraction_status: "pending"})
+
+      capture_log(fn ->
+        assert {:error, :extraction_queue_unavailable} =
+                 PdfLibrary.enqueue_extraction(file_uuid)
+      end)
+
+      assert_activity_logged("pdf.extraction_failed",
+        resource_uuid: pdf.uuid,
+        metadata_has: %{"file_uuid" => file_uuid}
+      )
     end
   end
 end

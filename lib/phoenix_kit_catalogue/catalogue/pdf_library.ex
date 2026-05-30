@@ -56,6 +56,11 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
 
   alias PhoenixKitCatalogue.Workers.PdfExtractor
 
+  # Stored on the extraction row (and shown by PdfDetailLive + the
+  # activity feed) when we deliberately refuse to enqueue because the
+  # job could never run. Actionable on purpose.
+  @queue_unavailable_message "PDF text extraction did not start: the :catalogue_pdf Oban queue is not running in this app. Add `catalogue_pdf` to your Oban `queues:` config (or run `mix phoenix_kit.update`), then re-upload."
+
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
   # ── List / read ─────────────────────────────────────────────────────
@@ -990,29 +995,94 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
     count
   end
 
-  defp enqueue_extraction(file_uuid) do
-    if Code.ensure_loaded?(PdfExtractor) do
-      try do
-        %{"file_uuid" => file_uuid}
-        |> PdfExtractor.new()
-        |> Oban.insert()
-      rescue
-        # Realistic Oban.insert failure modes: DB connectivity, schema
-        # drift on `oban_jobs` (Ecto.QueryError / Postgrex.Error), or
-        # ArgumentError when Oban hasn't been started in the host app
-        # (e.g. test env without the supervisor). Anything else
-        # re-raises so it surfaces in telemetry.
-        e in [
-          DBConnection.ConnectionError,
-          Postgrex.Error,
-          Ecto.QueryError,
-          ArgumentError
-        ] ->
-          Logger.warning("PdfExtractor enqueue failed: #{Exception.message(e)}")
-          :error
-      end
-    else
-      :ok
+  # Enqueue the per-file extraction job — but only when it can actually
+  # run. A misconfigured host (no `:catalogue_pdf` queue, or Oban not
+  # started at all) would otherwise pile up `available` jobs that never
+  # move while every extraction sits `pending` forever — invisible to
+  # the operator. Instead we refuse to enqueue and flip the extraction
+  # to a terminal `failed` status with an actionable message, so the
+  # problem surfaces (library list + activity feed + logs) and no dead
+  # jobs accumulate. The upload itself still succeeds and the PDF is
+  # viewable; only text search is unavailable until the queue is fixed
+  # and the file re-uploaded.
+  #
+  # Public (`@doc false`) for testability — see the enqueue-guard tests
+  # in `PdfLibraryTest`. Called only from the upload pipeline.
+  @doc false
+  @spec enqueue_extraction(Ecto.UUID.t()) ::
+          :ok | {:ok, Oban.Job.t()} | {:error, atom()}
+  def enqueue_extraction(file_uuid) do
+    cond do
+      not Code.ensure_loaded?(PdfExtractor) ->
+        # Worker not compiled in — abnormal build; leave the row pending.
+        :ok
+
+      catalogue_pdf_queue_available?() ->
+        insert_extraction_job(file_uuid)
+
+      true ->
+        Logger.error(
+          "PhoenixKitCatalogue: refusing to enqueue PDF extraction for " <>
+            "#{inspect(file_uuid)} — :catalogue_pdf Oban queue is not running. " <>
+            "Marking extraction failed so no dead jobs accumulate."
+        )
+
+        _ = mark_failed(file_uuid, @queue_unavailable_message)
+        {:error, :extraction_queue_unavailable}
     end
+  end
+
+  defp insert_extraction_job(file_uuid) do
+    case %{"file_uuid" => file_uuid} |> PdfExtractor.new() |> Oban.insert() do
+      {:ok, _job} = ok ->
+        ok
+
+      {:error, reason} ->
+        Logger.warning("PdfExtractor enqueue rejected: #{inspect(reason)}")
+        _ = mark_failed(file_uuid, "Could not queue PDF text extraction: #{inspect(reason)}.")
+        {:error, :enqueue_rejected}
+    end
+  rescue
+    # Realistic Oban.insert failure modes: DB connectivity, schema drift
+    # on `oban_jobs` (Ecto.QueryError / Postgrex.Error), or ArgumentError
+    # when Oban hasn't been started. Anything else re-raises so it
+    # surfaces in telemetry. We mark the extraction failed (rather than
+    # leaving it pending) because nothing re-enqueues it — a silent
+    # `pending` row is worse than a visible failure the operator can fix.
+    e in [DBConnection.ConnectionError, Postgrex.Error, Ecto.QueryError, ArgumentError] ->
+      Logger.warning("PdfExtractor enqueue failed: #{Exception.message(e)}")
+      _ = mark_failed(file_uuid, "Could not queue PDF text extraction: #{Exception.message(e)}.")
+      {:error, :enqueue_failed}
+  end
+
+  # True when an Oban instance is running and `:catalogue_pdf` jobs can
+  # actually be processed. Reads the default `Oban` instance (matching
+  # `Oban.insert/1`'s target); any failure to read the config (Oban not
+  # started) counts as "not available".
+  defp catalogue_pdf_queue_available? do
+    case fetch_oban_config() do
+      {:ok, config} -> queue_runnable?(config)
+      :error -> false
+    end
+  end
+
+  defp fetch_oban_config do
+    {:ok, Oban.config()}
+  rescue
+    _ -> :error
+  catch
+    :exit, _ -> :error
+  end
+
+  @doc false
+  # Public (`@doc false`) for testability — pure decision over an Oban
+  # config (or any map exposing `:testing` / `:queues`): a `:catalogue_pdf`
+  # job can run when Oban is in a testing mode (`Oban.insert/1` is honored
+  # without a live queue, e.g. a host's integration tests) OR the
+  # `:catalogue_pdf` queue is configured to process jobs.
+  @spec queue_runnable?(Oban.Config.t() | map()) :: boolean()
+  def queue_runnable?(config) do
+    Map.get(config, :testing, :disabled) != :disabled or
+      Keyword.has_key?(Map.get(config, :queues, []), :catalogue_pdf)
   end
 end

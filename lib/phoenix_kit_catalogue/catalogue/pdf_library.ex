@@ -1389,7 +1389,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
 
       true ->
         live = live_extraction_job_file_uuids(file_uuids)
-        {fresh, skipped} = Enum.split_with(file_uuids, &(not MapSet.member?(live, &1)))
+        {fresh, skipped} = Enum.split_with(file_uuids, &(not Map.has_key?(live, &1)))
         Map.put(do_bulk_enqueue(fresh), :skipped, length(skipped))
     end
   end
@@ -1419,7 +1419,11 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   # these file_uuids already have a non-terminal `PdfExtractor` job. Same
   # four-states-only rationale and same fail-open behavior — any query
   # failure returns an empty set so we proceed to enqueue (a duplicate the
-  # idempotent worker collapses beats a dropped extraction).
+  # idempotent worker collapses beats a dropped extraction). Returns a
+  # membership map (`%{file_uuid => true}`) rather than a `MapSet` — the set
+  # would trip a dialyzer opaqueness false-positive at the `Map.has_key?`
+  # caller, and a plain map is just as good for the O(1) lookup here.
+  @spec live_extraction_job_file_uuids([Ecto.UUID.t()]) :: %{optional(String.t()) => true}
   defp live_extraction_job_file_uuids(file_uuids) do
     repo().all(
       from(j in Oban.Job,
@@ -1429,14 +1433,14 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
         select: fragment("? ->> 'file_uuid'", j.args)
       )
     )
-    |> MapSet.new()
+    |> Map.from_keys(true)
   rescue
     e in [DBConnection.ConnectionError, Postgrex.Error, Ecto.QueryError, ArgumentError] ->
       Logger.warning(
         "PdfExtractor bulk dedup check failed (proceeding to enqueue all): #{Exception.message(e)}"
       )
 
-      MapSet.new()
+      %{}
   end
 
   # True when an Oban instance is running and `:catalogue_pdf` jobs can

@@ -112,17 +112,47 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
 
   @impl true
   def handle_event("requeue_stuck", _params, socket) do
-    {:ok, count} = Catalogue.requeue_stuck_extractions()
+    {:ok, %{requeued: requeued, failed: failed}} = Catalogue.requeue_stuck_extractions()
 
-    {:noreply,
-     socket
-     |> put_flash(
-       :info,
-       Gettext.gettext(PhoenixKitCatalogue.Gettext, "Re-queued %{count} stuck extraction(s).",
-         count: count
-       )
-     )
-     |> assign(:pdfs, Catalogue.list_pdfs(status: socket.assigns.filter))}
+    socket =
+      socket
+      |> flash_requeue_result(requeued, failed)
+      |> assign(:pdfs, Catalogue.list_pdfs(status: socket.assigns.filter))
+
+    {:noreply, socket}
+  end
+
+  # Honest flash: a warning (not "success") when some/all enqueues were
+  # refused — which is exactly the queue-missing case this button targets.
+  defp flash_requeue_result(socket, 0, 0) do
+    put_flash(
+      socket,
+      :info,
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "No stuck extractions to re-queue.")
+    )
+  end
+
+  defp flash_requeue_result(socket, requeued, 0) do
+    put_flash(
+      socket,
+      :info,
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Re-queued %{count} stuck extraction(s).",
+        count: requeued
+      )
+    )
+  end
+
+  defp flash_requeue_result(socket, requeued, failed) do
+    put_flash(
+      socket,
+      :warning,
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "Re-queued %{ok}; %{failed} could not be queued — the :catalogue_pdf queue may not be running.",
+        ok: requeued,
+        failed: failed
+      )
+    )
   end
 
   defp handle_pdf_action(socket, uuid, action_fn, messages) do

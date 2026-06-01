@@ -95,16 +95,33 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   end
 
   defp do_extract(file_uuid, file_path) do
-    with {:ok, _} <- PdfLibrary.mark_extracting(file_uuid),
-         {:ok, page_count} <- pdfinfo_page_count(file_path),
+    case PdfLibrary.mark_extracting(file_uuid) do
+      # A concurrent worker already reached a terminal state for this
+      # file — nothing to do (and we must NOT pull it back to extracting).
+      {:ok, :superseded} ->
+        :ok
+
+      {:ok, _extraction} ->
+        run_extraction(file_uuid, file_path)
+
+      {:error, reason} ->
+        fail(file_uuid, reason)
+    end
+  end
+
+  defp run_extraction(file_uuid, file_path) do
+    with {:ok, page_count} <- pdfinfo_page_count(file_path),
          :ok <- extract_pages(file_uuid, file_path, page_count) do
       finalize(file_uuid, page_count)
     else
-      {:error, reason} ->
-        message = inspect_reason(reason)
-        _ = PdfLibrary.mark_failed(file_uuid, message)
-        {:error, message}
+      {:error, reason} -> fail(file_uuid, reason)
     end
+  end
+
+  defp fail(file_uuid, reason) do
+    message = inspect_reason(reason)
+    _ = PdfLibrary.mark_failed(file_uuid, message)
+    {:error, message}
   end
 
   defp finalize(file_uuid, page_count) do

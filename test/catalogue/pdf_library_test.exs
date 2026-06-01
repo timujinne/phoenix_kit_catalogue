@@ -441,8 +441,11 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
       _ = insert_pdf!(failed)
       _ = insert_extraction!(failed, %{extraction_status: "failed", error_message: "x"})
 
+      # Oban is unavailable in this env, so each enqueue takes the
+      # graceful-fallback path and counts as `failed` (not `requeued`) —
+      # the point of this test is the *selection*: 2 rows picked up.
       capture_log(fn ->
-        assert {:ok, 2} = PdfLibrary.requeue_stuck_extractions()
+        assert {:ok, %{requeued: 0, failed: 2}} = PdfLibrary.requeue_stuck_extractions()
       end)
     end
 
@@ -453,8 +456,10 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
       backdate_extraction!(file_uuid, -120)
 
       capture_log(fn ->
-        # 300s threshold: the 120s-old row is still considered live.
-        assert {:ok, 0} = PdfLibrary.requeue_stuck_extractions(stale_after_seconds: 300)
+        # 300s threshold: the 120s-old row is still considered live — not
+        # selected, so nothing is touched.
+        assert {:ok, %{requeued: 0, failed: 0}} =
+                 PdfLibrary.requeue_stuck_extractions(stale_after_seconds: 300)
       end)
     end
 
@@ -465,7 +470,8 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
       backdate_extraction!(file_uuid, -120)
 
       capture_log(fn ->
-        assert {:ok, 1} = PdfLibrary.requeue_stuck_extractions(stale_after_seconds: 60)
+        assert {:ok, %{requeued: 0, failed: 1}} =
+                 PdfLibrary.requeue_stuck_extractions(stale_after_seconds: 60)
       end)
     end
   end
@@ -485,6 +491,62 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
 
       capture_log(fn ->
         assert {:error, :extraction_queue_unavailable} = PdfLibrary.retry_extraction(pdf)
+      end)
+    end
+  end
+
+  describe "guarded status transitions (concurrent-worker safety)" do
+    test "mark_failed does NOT clobber an already-extracted row" do
+      file_uuid = insert_file!()
+      _ = insert_pdf!(file_uuid)
+      _ = insert_extraction!(file_uuid, %{extraction_status: "extracted", page_count: 5})
+
+      capture_log(fn ->
+        assert {:ok, :superseded} = PdfLibrary.mark_failed(file_uuid, "boom")
+      end)
+
+      # The successful extraction stands — a racing worker's failure must
+      # not silently drop it (would break search).
+      assert %PdfExtraction{extraction_status: "extracted", page_count: 5} =
+               Repo.get(PdfExtraction, file_uuid)
+    end
+
+    test "mark_failed does NOT clobber a scanned_no_text row" do
+      file_uuid = insert_file!()
+      _ = insert_pdf!(file_uuid)
+      _ = insert_extraction!(file_uuid, %{extraction_status: "scanned_no_text", page_count: 2})
+
+      capture_log(fn ->
+        assert {:ok, :superseded} = PdfLibrary.mark_failed(file_uuid, "boom")
+      end)
+
+      assert %PdfExtraction{extraction_status: "scanned_no_text"} =
+               Repo.get(PdfExtraction, file_uuid)
+    end
+
+    test "mark_failed applies to a pending/extracting row" do
+      file_uuid = insert_file!()
+      _ = insert_pdf!(file_uuid)
+      _ = insert_extraction!(file_uuid, %{extraction_status: "extracting"})
+
+      capture_log(fn ->
+        assert {:ok, %PdfExtraction{extraction_status: "failed", error_message: "boom"}} =
+                 PdfLibrary.mark_failed(file_uuid, "boom")
+      end)
+    end
+
+    test "mark_extracting is superseded when the row already reached a terminal state" do
+      file_uuid = insert_file!()
+      _ = insert_pdf!(file_uuid)
+      _ = insert_extraction!(file_uuid, %{extraction_status: "extracted", page_count: 5})
+
+      assert {:ok, :superseded} = PdfLibrary.mark_extracting(file_uuid)
+      assert %PdfExtraction{extraction_status: "extracted"} = Repo.get(PdfExtraction, file_uuid)
+    end
+
+    test "mark_failed returns {:error, :not_found} when no extraction row exists" do
+      capture_log(fn ->
+        assert {:error, :not_found} = PdfLibrary.mark_failed(Ecto.UUID.generate(), "x")
       end)
     end
   end

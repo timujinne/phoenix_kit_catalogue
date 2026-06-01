@@ -91,6 +91,20 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
     )
   end
 
+  @impl true
+  def handle_event("retry_extraction", _params, socket) do
+    detail_pdf_action(socket, &Catalogue.retry_extraction/2,
+      operation: "retry_extraction",
+      success: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Re-queued text extraction."),
+      failure:
+        Gettext.gettext(
+          PhoenixKitCatalogue.Gettext,
+          "Could not start extraction. The :catalogue_pdf Oban queue may not be running."
+        ),
+      after_ok: :reload
+    )
+  end
+
   defp detail_pdf_action(socket, action_fn, opts) do
     pdf = socket.assigns.pdf
 
@@ -197,6 +211,16 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
         </div>
 
         <div class="flex items-center gap-2">
+          <a
+            href={Paths.pdf_file(@pdf)}
+            target="_blank"
+            rel="noopener"
+            class="btn btn-ghost btn-sm"
+            title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open the PDF in a new tab")}
+          >
+            <.icon name="hero-arrow-top-right-on-square" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open")}
+          </a>
           <%= if @pdf.status == "trashed" do %>
             <button
               type="button"
@@ -242,12 +266,21 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
       <%= if Helpers.pdf_extraction_status(@pdf) == "failed" and Helpers.pdf_error_message(@pdf) do %>
         <div class="alert alert-error">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-          <div>
+          <div class="flex-1">
             <div class="font-semibold">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Extraction failed")}
             </div>
             <div class="text-xs opacity-80">{Helpers.pdf_error_message(@pdf)}</div>
           </div>
+          <button
+            type="button"
+            phx-click="retry_extraction"
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Retrying…")}
+            class="btn btn-sm"
+          >
+            <.icon name="hero-arrow-path" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Retry")}
+          </button>
         </div>
       <% end %>
 
@@ -280,7 +313,18 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
         </div>
       <% end %>
 
-      <%!-- PDF.js embedded viewer --%>
+      <%!-- Embedded vendored PDF.js viewer.
+
+      The `/_pdfjs/...` assets are served either by the host endpoint's
+      `Plug.Static` mount or — on a host whose endpoint never got that mount
+      — by core's router-served `PdfViewerController` fallback (it rides the
+      `phoenix_kit_routes()` macro, so it's present whenever the host mounts
+      PhoenixKit at all). The header "Open" link is the universal escape: it
+      points at the always-present signed `/file/` route, so even if this
+      frame can't load, the PDF is one click away in the browser's native
+      viewer. (No JS fallback hook: library colocated hooks aren't bundled
+      into consumer apps, and the router fallback already keeps the assets
+      reachable.) --%>
       <div class="rounded-lg border border-base-300 overflow-hidden bg-base-200" style="height: 80vh">
         <iframe
           src={viewer_url(@pdf, @page)}

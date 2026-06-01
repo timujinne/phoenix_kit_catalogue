@@ -30,6 +30,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       bulk_actions_toolbar: 1
     ]
 
+  import PhoenixKitWeb.Components.Core.BulkActionsBar, only: [bulk_actions_bar: 1]
+
   import PhoenixKitWeb.Components.Core.Sortable, only: [sortable_tbody: 1, sortable_row: 1]
   import PhoenixKitWeb.Components.Core.ReorderModal, only: [reorder_modal: 1]
   import PhoenixKitWeb.Components.Core.SortSelector, only: [sort_selector: 1]
@@ -2016,11 +2018,29 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               @uncategorized_active_count > 0 and @child_categories != [] %>
 
           <%!-- Category bulk-action bar (when subcategories selected) --%>
-          <.categories_bulk_bar
+          <.bulk_actions_bar
             :if={MapSet.size(@selected_categories) > 0}
             count={MapSet.size(@selected_categories)}
-            view_mode={@view_mode}
-          />
+            clear_event="clear_selection"
+            wrapper_class="sticky top-[72px] z-40 -mx-1 px-3 py-2 rounded-lg bg-base-100/95 border border-primary/40 shadow-md backdrop-blur"
+          >
+            <button
+              :if={@view_mode == "active"}
+              phx-click="request_bulk_delete_categories"
+              class="btn btn-sm btn-outline btn-error"
+            >
+              <.icon name="hero-trash" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
+            </button>
+            <button
+              :if={@view_mode != "active"}
+              phx-click="request_bulk_restore_categories"
+              class="btn btn-sm btn-outline btn-success"
+            >
+              <.icon name="hero-arrow-path" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
+            </button>
+          </.bulk_actions_bar>
 
           <%!-- Subcategory rows (+ Uncategorized row at root/active),
                one per line. Sibling reorder via SortableGrid in active mode. --%>
@@ -2058,12 +2078,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <%!-- Deleted-list bulk-action bar (server-side select). The
                active list owns its selection client-side via the core
                BulkSelectScope toolkit inside `level_items`. --%>
-          <div
+          <.bulk_actions_bar
             :if={@view_mode == "deleted" and MapSet.size(@selected_items) > 0}
-            class="sticky top-[72px] z-40 -mx-1 px-3 py-2 rounded-lg bg-base-100/95 border border-primary/40 shadow-md backdrop-blur flex items-center"
+            count={MapSet.size(@selected_items)}
+            clear_event="clear_selection"
+            wrapper_class="sticky top-[72px] z-40 -mx-1 px-3 py-2 rounded-lg bg-base-100/95 border border-primary/40 shadow-md backdrop-blur"
           >
-            <.items_bulk_actions count={MapSet.size(@selected_items)} view_mode={@view_mode} />
-          </div>
+            <button phx-click="request_bulk_restore_items" class="btn btn-sm btn-outline btn-success">
+              <.icon name="hero-arrow-path" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
+            </button>
+            <button phx-click="request_bulk_delete_items" class="btn btn-sm btn-outline btn-error">
+              <.icon name="hero-trash" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
+            </button>
+          </.bulk_actions_bar>
 
           <%!-- Card/table view toggle — deleted list only (it still
                renders via `item_table` with a card view). The active
@@ -2747,65 +2776,4 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp level_items_empty(_current, _),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items in this category.")
-
-  # ── Bulk-action bars ─────────────────────────────────────────────
-
-  attr(:count, :integer, required: true)
-  attr(:view_mode, :string, required: true)
-
-  # Inline bulk-actions content for the DELETED items list (Restore /
-  # Delete forever / Clear). The active list owns its own client-side
-  # toolbar via the core BulkSelectScope toolkit, so this bar only
-  # serves the server-side `@selected_items` selection in Deleted mode.
-  defp items_bulk_actions(assigns) do
-    ~H"""
-    <div class="flex flex-wrap items-center gap-3 grow">
-      <span class="text-sm font-medium">
-        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} selected", count: @count)}
-      </span>
-      <div class="flex items-center gap-2">
-        <button phx-click="request_bulk_restore_items" class="btn btn-sm btn-outline btn-success">
-          <.icon name="hero-arrow-path" class="w-4 h-4" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
-        </button>
-        <button phx-click="request_bulk_delete_items" class="btn btn-sm btn-outline btn-error">
-          <.icon name="hero-trash" class="w-4 h-4" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
-        </button>
-        <button phx-click="clear_selection" class="btn btn-sm btn-ghost">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
-        </button>
-      </div>
-    </div>
-    """
-  end
-
-  attr(:count, :integer, required: true)
-  attr(:view_mode, :string, required: true)
-
-  defp categories_bulk_bar(assigns) do
-    ~H"""
-    <div class="sticky top-[72px] z-40 -mx-1 px-3 py-2 rounded-lg bg-base-100/95 border border-primary/40 shadow-md backdrop-blur flex flex-wrap items-center gap-3">
-      <span class="text-sm font-medium">
-        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} selected", count: @count)}
-      </span>
-      <div class="flex items-center gap-2 ml-auto">
-        <%= if @view_mode == "active" do %>
-          <button phx-click="request_bulk_delete_categories" class="btn btn-sm btn-outline btn-error">
-            <.icon name="hero-trash" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
-          </button>
-        <% else %>
-          <button phx-click="request_bulk_restore_categories" class="btn btn-sm btn-outline btn-success">
-            <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
-          </button>
-        <% end %>
-        <button phx-click="clear_selection" class="btn btn-sm btn-ghost">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
-        </button>
-      </div>
-    </div>
-    """
-  end
 end

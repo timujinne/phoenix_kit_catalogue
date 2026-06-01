@@ -28,6 +28,22 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   Configured via the host app's Oban queue config. Recommend
   `queue: :catalogue_pdf, limit: 2` so a 1000-page PDF doesn't pin
   CPU or block other queues.
+
+  ## Deduplication
+
+  Re-enqueueing the same content (duplicate-content upload, the self-heal
+  `requeue_stuck_extractions/1`, or the per-PDF Retry button) is deduped
+  *application-side* in `PdfLibrary.insert_extraction_job/1` — it skips
+  the insert when a non-terminal `PdfExtractor` job already exists for the
+  `file_uuid`. We deliberately do **not** use Oban's built-in `unique:`
+  option: satisfying its compile-time check requires listing every
+  incomplete state including `:suspended`, but that enum value is absent
+  from the `oban_job_state` enum on hosts that upgraded the Oban *library*
+  without running its latest *migration* — the uniqueness query then
+  raises `22P02` and kills every enqueue. The app-side guard queries only
+  the four states (`available` / `scheduled` / `executing` / `retryable`)
+  present in every Oban version. Races are harmless: this worker
+  short-circuits on a terminal status and page inserts are upserts.
   """
 
   use Oban.Worker,
@@ -79,16 +95,33 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   end
 
   defp do_extract(file_uuid, file_path) do
-    with {:ok, _} <- PdfLibrary.mark_extracting(file_uuid),
-         {:ok, page_count} <- pdfinfo_page_count(file_path),
+    case PdfLibrary.mark_extracting(file_uuid) do
+      # A concurrent worker already reached a terminal state for this
+      # file — nothing to do (and we must NOT pull it back to extracting).
+      {:ok, :superseded} ->
+        :ok
+
+      {:ok, _extraction} ->
+        run_extraction(file_uuid, file_path)
+
+      {:error, reason} ->
+        fail(file_uuid, reason)
+    end
+  end
+
+  defp run_extraction(file_uuid, file_path) do
+    with {:ok, page_count} <- pdfinfo_page_count(file_path),
          :ok <- extract_pages(file_uuid, file_path, page_count) do
       finalize(file_uuid, page_count)
     else
-      {:error, reason} ->
-        message = inspect_reason(reason)
-        _ = PdfLibrary.mark_failed(file_uuid, message)
-        {:error, message}
+      {:error, reason} -> fail(file_uuid, reason)
     end
+  end
+
+  defp fail(file_uuid, reason) do
+    message = inspect_reason(reason)
+    _ = PdfLibrary.mark_failed(file_uuid, message)
+    {:error, message}
   end
 
   defp finalize(file_uuid, page_count) do

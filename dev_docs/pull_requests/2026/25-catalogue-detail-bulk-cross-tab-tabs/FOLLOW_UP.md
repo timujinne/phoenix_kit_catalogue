@@ -90,11 +90,27 @@ Re-verified by code inspection 2026-05-18:
 `mix test` not re-run in this sweep — the post-merge tests cover the
 closed paths; no new code introduced here.
 
+## Fixed (Batch 2 — 2026-06-01)
+
+- ~~**#11 (NIT) — fold the two bulk bars onto core `<.bulk_actions_bar>`**~~
+  — done. `categories_bulk_bar/1` and `items_bulk_actions/1` deleted from
+  `catalogue_detail_live.ex`; both call sites now render core's
+  `PhoenixKitWeb.Components.Core.BulkActionsBar.bulk_actions_bar/1` with the
+  same sticky `wrapper_class`, `clear_event="clear_selection"`, and
+  Delete / Restore / Delete-forever buttons in the slot (the component's
+  own moduledoc lists these exact two as its canonical use cases). Removes
+  ~50 lines of duplicate component markup. Browser-verified: selecting a
+  subcategory shows "1 selected" + Delete + Clear; Clear deselects.
+  `mix precommit` clean, 1115 tests pass.
+
 ## Open
 
 - **#3** — window-function query for `build_loaded_cards/5`. Wants
   its own PR.
 - **#4** — per-catalogue PubSub topic. Wants its own PR (broadcast
-  + subscribe + receiver edits + cross-tab tests).
-- **#11** — fold catalogue's two bulk bars onto the new core
-  `<.bulk_actions_bar>` when convenient. Test surface modest.
+  + subscribe + receiver edits + cross-tab tests). **Surfaced to Max
+  2026-06-01 and deliberately left:** it's a scale-only performance
+  optimization that would *add* complexity (folder/pdf/index events
+  aren't catalogue-scoped, forcing a hybrid per-catalogue + global topic
+  scheme) plus a back-compat decision (external subscribers to the legacy
+  `"phoenix_kit_catalogue"` topic) — not a code-quality win.

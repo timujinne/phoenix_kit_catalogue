@@ -113,6 +113,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         # Per-status item counts for the current node — drive the four
         # per-status tab labels (active / inactive / discontinued / deleted).
         level_status_counts: %{},
+        # `[{status, label, count}]` for the tabs to actually render — only
+        # populated statuses; the strip hides itself when there's ≤1.
+        status_tabs: [],
         confirm_delete: nil,
         trash_modal: nil,
         bulk_move_modal: nil,
@@ -1352,9 +1355,23 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     uuid = socket.assigns.catalogue_uuid
     catalogue = Catalogue.fetch_catalogue!(uuid)
     current = socket.assigns.current_category
-    # `status` is the exact item status of the current tab; `cat_mode` is the
-    # active/deleted bucket for the (status-less) subcategory cards.
-    status = socket.assigns.view_mode
+
+    # Per-status item counts for the current node — drive the tab labels and
+    # the default-tab pick below.
+    status_counts = node_status_counts(current, uuid)
+
+    # `status` is the exact item status shown. The root is a pure navigation
+    # step (always Active, no tabs). Inside a node we auto-select a populated
+    # tab: keep the chosen status if it has items, else fall to the first one
+    # that does — so e.g. a category with only deleted items opens straight on
+    # Deleted instead of an empty Active. `cat_mode` is the active/deleted
+    # bucket for the (status-less) subcategory cards.
+    status =
+      if is_nil(current),
+        do: "active",
+        else: effective_view_mode(socket.assigns.view_mode, status_counts)
+
+    socket = assign(socket, :view_mode, status)
     cat_mode = view_mode_to_atom(status)
     show_categories? = status in ["active", "deleted"]
 
@@ -1373,8 +1390,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
     uncat_active = Catalogue.uncategorized_count_for_catalogue(uuid, mode: :active)
 
-    # Per-status item counts for the current node — drive the four tab labels.
-    status_counts = node_status_counts(current, uuid)
     node_total = Map.get(status_counts, status, 0)
 
     # Active root with categories shows only cards (its uncategorized items
@@ -1411,7 +1426,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       items_offset: length(items),
       items_has_more: length(items) < node_total,
       show_items_section: show_items_section,
-      level_status_counts: status_counts
+      level_status_counts: status_counts,
+      status_tabs: visible_status_tabs(status, status_counts)
     )
   end
 
@@ -1805,15 +1821,42 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp status_tab_active_class("deleted"), do: "border-error text-error"
   defp status_tab_active_class(_), do: "border-primary text-primary"
 
-  # `[{status, label, count}]` for the tabs to render. Empty statuses are
-  # dropped, except Active (always the home tab) and the current tab (so the
-  # user never lands on an invisible tab).
+  # The status to actually show for a node: keep the selected `view_mode` if it
+  # has items, otherwise fall to the first populated status (active → inactive →
+  # discontinued → deleted), or "active" when the node is empty in every status.
+  defp effective_view_mode(view_mode, counts) do
+    if Map.get(counts, view_mode, 0) > 0 do
+      view_mode
+    else
+      item_status_tabs()
+      |> Enum.map(&elem(&1, 0))
+      |> Enum.find(&(Map.get(counts, &1, 0) > 0))
+      |> case do
+        nil -> "active"
+        populated -> populated
+      end
+    end
+  end
+
+  # `[{status, label, count}]` for the tabs to render — only populated statuses,
+  # so an empty Active no longer sits next to a populated Deleted. When nothing
+  # is populated, surface just the current tab (count 0) so it's representable;
+  # the strip is hidden anyway whenever there's ≤1 tab (see render).
   defp visible_status_tabs(view_mode, counts) do
     item_status_tabs()
     |> Enum.map(fn {status, label} -> {status, label, Map.get(counts, status, 0)} end)
-    |> Enum.filter(fn {status, _label, count} ->
-      status == "active" or status == view_mode or count > 0
-    end)
+    |> Enum.filter(fn {_status, _label, count} -> count > 0 end)
+    |> case do
+      [] ->
+        label =
+          Enum.find_value(item_status_tabs(), fn {status, l} -> status == view_mode && l end) ||
+            ""
+
+        [{view_mode, label, 0}]
+
+      tabs ->
+        tabs
+    end
   end
 
   # Processes a flat list of category UUIDs that came back from the
@@ -1942,15 +1985,18 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           />
           <div :if={@view_mode != "active"}></div>
 
-          <%!-- One tab per item status; each shows only that status's items
-               so e.g. discontinued isn't mixed in with active. Empty statuses
-               are hidden — except Active (the home tab) and the current tab. --%>
+          <%!-- One tab per populated item status; each shows only that status's
+               items so e.g. discontinued isn't mixed in with active. The strip
+               renders only alongside an actual item list (`show_items_section`)
+               AND only when there's more than one status to choose between — the
+               root category step is pure navigation, and a node with a single
+               populated status just shows those items with no redundant tab. --%>
           <div
-            :if={is_nil(@search_results) and not @search_loading}
+            :if={@show_items_section and length(@status_tabs) > 1 and is_nil(@search_results) and not @search_loading}
             class="flex items-center gap-0.5 pb-1 flex-wrap"
           >
             <button
-              :for={{status, label, count} <- visible_status_tabs(@view_mode, @level_status_counts)}
+              :for={{status, label, count} <- @status_tabs}
               type="button"
               phx-click="switch_view"
               phx-value-mode={status}

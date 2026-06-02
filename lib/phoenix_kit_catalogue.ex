@@ -95,6 +95,15 @@ defmodule PhoenixKitCatalogue do
   def css_sources, do: [:phoenix_kit_catalogue]
 
   @impl PhoenixKit.Module
+  def ai_translatables do
+    [
+      {"catalogue", PhoenixKitCatalogue.AITranslatable},
+      {"catalogue_category", PhoenixKitCatalogue.AITranslatable},
+      {"catalogue_item", PhoenixKitCatalogue.AITranslatable}
+    ]
+  end
+
+  @impl PhoenixKit.Module
   def permission_metadata do
     %{
       key: module_key(),

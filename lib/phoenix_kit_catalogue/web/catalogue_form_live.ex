@@ -15,7 +15,27 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   import PhoenixKitCatalogue.Web.Components,
     only: [featured_image_card: 1, metadata_editor: 1]
 
-  import PhoenixKitCatalogue.Web.Helpers, only: [actor_opts: 1]
+  import PhoenixKitCatalogue.Web.Helpers,
+    only: [
+      actor_opts: 1,
+      assign_ai_translation: 3,
+      ai_translate_config: 1,
+      toggle_ai_modal: 1,
+      select_ai_endpoint: 2,
+      select_ai_prompt: 2,
+      select_ai_scope: 2,
+      generate_ai_prompt: 1,
+      dispatch_ai_translate: 2,
+      handle_ai_translation_event: 4
+    ]
+
+  import PhoenixKitWeb.Components.AITranslate,
+    only: [
+      ai_translate_button: 1,
+      ai_translate_modal: 1,
+      ai_translate_progress: 1,
+      ai_translate_hint: 1
+    ]
 
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKitCatalogue.Attachments
@@ -77,7 +97,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
        |> Attachments.mount_attachments(catalogue)
        |> Attachments.allow_attachment_upload()
        |> assign_changeset(changeset)
-       |> mount_multilang()}
+       |> mount_multilang()
+       |> assign_ai_translation("catalogue", if(action == :edit, do: catalogue, else: nil))}
     end
   end
 
@@ -92,6 +113,24 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   end
 
   @impl true
+  def handle_event("ai_toggle_modal", _params, socket),
+    do: {:noreply, toggle_ai_modal(socket)}
+
+  def handle_event("ai_select_endpoint", %{"endpoint_uuid" => uuid}, socket),
+    do: {:noreply, select_ai_endpoint(socket, uuid)}
+
+  def handle_event("ai_select_prompt", %{"prompt_uuid" => uuid}, socket),
+    do: {:noreply, select_ai_prompt(socket, uuid)}
+
+  def handle_event("ai_select_scope", %{"scope" => scope}, socket),
+    do: {:noreply, select_ai_scope(socket, scope)}
+
+  def handle_event("ai_generate_prompt", _params, socket),
+    do: {:noreply, generate_ai_prompt(socket)}
+
+  def handle_event("ai_translate_lang", %{"lang" => lang}, socket),
+    do: {:noreply, dispatch_ai_translate(socket, lang)}
+
   def handle_event("switch_language", %{"lang" => lang_code}, socket) do
     {:noreply, handle_switch_language(socket, lang_code)}
   end
@@ -220,6 +259,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   end
 
   @impl true
+  def handle_info({:ai_translation, event, payload}, socket) do
+    {:noreply, handle_ai_translation_event(socket, event, payload, &assign_changeset/2)}
+  end
+
   def handle_info({:media_selected, file_uuids}, socket),
     do: Attachments.handle_media_selected(socket, file_uuids)
 
@@ -347,6 +390,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
             current_lang={@current_lang}
             class="card-body pb-0 pt-4"
           />
+
+          <div :if={@ai_translation_available?} class="px-6 -mt-1 mb-2">
+            <div class="flex items-center gap-3">
+              <.ai_translate_button ai_translate={ai_translate_config(assigns)} />
+              <.ai_translate_progress ai_translate={ai_translate_config(assigns)} />
+            </div>
+            <.ai_translate_hint ai_translate={ai_translate_config(assigns)} />
+          </div>
 
           <.multilang_fields_wrapper
             multilang_enabled={@multilang_enabled}
@@ -644,6 +695,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
           </button>
         </div>
       </.form>
+
+      <%!-- AI translate modal — outside the form (its selectors are their
+           own <form>; nested forms are invalid). --%>
+      <.ai_translate_modal ai_translate={ai_translate_config(assigns)} />
 
       <%!-- Danger zone — collapsed by default to match the integrations
            page pattern; user clicks to reveal the destructive action. --%>

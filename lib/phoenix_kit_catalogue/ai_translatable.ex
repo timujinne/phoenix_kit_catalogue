@@ -82,6 +82,11 @@ defmodule PhoenixKitCatalogue.AITranslatable do
     repo = RepoHelper.repo()
     {schema, update_fn} = persist_target(resource)
     uuid = resource.uuid
+    # `broadcast: false` — the write happens inside this FOR UPDATE
+    # transaction, so suppress the updater's own resource broadcast (it would
+    # fire pre-commit / look like a user edit). Translation completion is
+    # signalled by core's `:translation_completed` after this returns.
+    opts = Keyword.put(opts, :broadcast, false)
 
     # Re-read the row FOR UPDATE inside the transaction so concurrent
     # per-language jobs (enqueue_all_missing) serialize on the row lock and

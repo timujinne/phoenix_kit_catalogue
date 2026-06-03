@@ -522,14 +522,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def update_catalogue(%Catalogue{} = catalogue, attrs, opts \\ []) do
     case catalogue |> Catalogue.changeset(attrs) |> repo().update() do
       {:ok, updated} = ok ->
-        log_activity(%{
-          action: "catalogue.updated",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "catalogue",
-          resource_uuid: updated.uuid,
-          metadata: %{"name" => updated.name}
-        })
+        log_activity(
+          %{
+            action: "catalogue.updated",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "catalogue",
+            resource_uuid: updated.uuid,
+            metadata: %{"name" => updated.name}
+          },
+          opts
+        )
 
         ok
 
@@ -1215,15 +1218,18 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case repo().update(changeset) do
       {:ok, updated} = ok ->
-        log_activity(%{
-          action: "category.updated",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          resource_uuid: updated.uuid,
-          parent_catalogue_uuid: updated.catalogue_uuid,
-          metadata: %{"name" => updated.name}
-        })
+        log_activity(
+          %{
+            action: "category.updated",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "category",
+            resource_uuid: updated.uuid,
+            parent_catalogue_uuid: updated.catalogue_uuid,
+            metadata: %{"name" => updated.name}
+          },
+          opts
+        )
 
         ok
 
@@ -3783,15 +3789,18 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case result do
       {:ok, updated} ->
-        log_activity(%{
-          action: "item.updated",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "item",
-          resource_uuid: updated.uuid,
-          parent_catalogue_uuid: updated.catalogue_uuid,
-          metadata: %{"name" => updated.name, "sku" => updated.sku || ""}
-        })
+        log_activity(
+          %{
+            action: "item.updated",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "item",
+            resource_uuid: updated.uuid,
+            parent_catalogue_uuid: updated.catalogue_uuid,
+            metadata: %{"name" => updated.name, "sku" => updated.sku || ""}
+          },
+          opts
+        )
 
         {:ok, updated}
 

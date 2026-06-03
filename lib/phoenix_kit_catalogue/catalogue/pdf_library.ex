@@ -38,7 +38,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   to disk. Returns `{:error, :missing_actor}` cleanly when missing.
   """
 
-  import Ecto.Query, warn: false
+  import Ecto.Query
   require Logger
 
   alias PhoenixKit.Modules.Storage

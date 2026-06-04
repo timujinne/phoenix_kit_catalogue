@@ -1,3 +1,21 @@
+## 0.6.0 - 2026-06-04
+
+### Added
+- **AI translation for catalogue resources** (#32) — catalogues, categories, and items can machine-translate their `name` + `description` into the multilang `data` JSONB via core's shared AI-translation pipeline. A `PhoenixKitCatalogue.AITranslatable` adapter (registered through the new `ai_translatables/0` module callback for `"catalogue"` / `"catalogue_category"` / `"catalogue_item"`) handles fetch / source-field extraction / persist for all three resource types, and `PhoenixKitCatalogue.AITranslateBinding` supplies the form-side storage glue; the translate button, modal, progress bar, and "taking a while" hint render on each form LiveView. Per-language overrides are written under the multilang `_`-prefixed keys the form reads, and a result is **force-stored even when identical to the source** (a product code, text already in the target language) so a field never reads as a failed translation. No new `phoenix_kit_ai` dependency — the enqueue, AI call, retry policy, broadcasts, and audit log all live in core.
+
+### Changed
+- **Catalogue-detail status filter scoped to inside categories** (#32) — the category drill step is pure navigation, so the active / inactive / discontinued / deleted tab strip now renders only alongside an actual item list and only when more than one status is populated; a node auto-opens on its first populated status instead of an empty Active.
+- **Item reorder affordances skip no-ops** (#32) — the drag handle is hidden for a single-item list and a same-position drop short-circuits the DB write / broadcast / flash. The handle's column space is reserved (empty spacer cell) so deleting down to one row doesn't shift the layout.
+- **AI-translate LiveView glue delegates to core `FormGlue`** (#32) — ~570 lines of inline modal / dispatch / PubSub state collapsed into nine delegators plus the small catalogue-specific `AITranslateBinding`.
+- **Quieter AI-translation writes** (#32) — the per-row resource PubSub fan-out is suppressed on AI-translation `update_*` writes (they run inside a `FOR UPDATE` transaction and would otherwise fire pre-commit and look like a user edit); the `broadcast: false` opt is now forwarded through `update_catalogue/3`, `update_category/3`, and `update_item/3` so it actually takes effect. Normal admin edits still broadcast.
+
+### Quality
+- Post-merge review of #32 (writeup in `dev_docs/pull_requests/2026/32-ai-translation-shared-glue/CLAUDE_REVIEW.md`): dropped a dead `_ = primary` discard; replaced a runtime `String.to_existing_atom/1` + `rescue` with a compile-time field→column map in the AI adapter; flattened `put_translation/4` nesting (extracted `merge_translation!/6`) and aliased a fully-qualified `Web.Helpers` call to satisfy `credo --strict`; expanded the adapter unit tests 10 → 15 (source-field override / legacy-key paths, catalogue + category round-trips). Also dropped a redundant `import Ecto.Query, warn: false` from the PDF library context.
+
+### Notes
+- **Requires phoenix_kit 1.7.130+** — the generic AI-translation pipeline this release plugs into (`PhoenixKit.Modules.AI.{Translatable,Translations}`, `PhoenixKitWeb.Components.AITranslate.{FormGlue,FormBinding}`; BeamLabEU/phoenix_kit#582) first shipped in core **1.7.130**. The `mix.exs` constraint stays loose (`~> 1.7 and >= 1.7.125`) — pin a `phoenix_kit >= 1.7.130` in the parent app. Catalogue compiles and `mix precommit` (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `dialyzer`) is clean against 1.7.130.
+- Verification: ExUnit suites are DB-gated and run against a host whose schema is at core V111+; the new adapter tests pass against a local core (not exercised in CI without a database).
+
 ## 0.5.0 - 2026-06-01
 
 ### Added

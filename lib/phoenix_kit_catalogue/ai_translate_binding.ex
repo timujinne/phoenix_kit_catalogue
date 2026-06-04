@@ -14,6 +14,7 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
   @behaviour PhoenixKitWeb.Components.AITranslate.FormBinding
 
   alias PhoenixKitCatalogue.AITranslatable
+  alias PhoenixKitCatalogue.Web.Helpers
 
   @impl true
   def existing_translation_langs(_resource_type, assigns) do
@@ -45,5 +46,5 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
   end
 
   @impl true
-  def actor_uuid(socket), do: PhoenixKitCatalogue.Web.Helpers.actor_uuid(socket)
+  def actor_uuid(socket), do: Helpers.actor_uuid(socket)
 end

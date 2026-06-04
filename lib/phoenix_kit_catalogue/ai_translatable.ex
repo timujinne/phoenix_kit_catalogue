@@ -98,21 +98,24 @@ defmodule PhoenixKitCatalogue.AITranslatable do
       query = schema |> where([r], r.uuid == ^uuid) |> lock("FOR UPDATE")
 
       case repo.one(query) do
-        nil ->
-          repo.rollback(:resource_not_found)
-
-        fresh ->
-          # Re-prefix plain engine field names to the multilang `_`-form the
-          # form reads (`_name`/`_description`), so the translation shows.
-          lang_fields = Map.new(fields, fn {k, v} -> {"_" <> k, v} end)
-          new_data = force_put_language(fresh.data || %{}, target_lang, lang_fields)
-
-          case update_fn.(fresh, %{data: new_data}, opts) do
-            {:ok, updated} -> updated
-            {:error, reason} -> repo.rollback(reason)
-          end
+        nil -> repo.rollback(:resource_not_found)
+        fresh -> merge_translation!(repo, fresh, target_lang, fields, update_fn, opts)
       end
     end)
+  end
+
+  # Merge `fields` into the freshly-locked row's `data` and persist, rolling
+  # the surrounding transaction back on a changeset error.
+  defp merge_translation!(repo, fresh, target_lang, fields, update_fn, opts) do
+    # Re-prefix plain engine field names to the multilang `_`-form the form
+    # reads (`_name`/`_description`), so the translation shows.
+    lang_fields = Map.new(fields, fn {k, v} -> {"_" <> k, v} end)
+    new_data = force_put_language(fresh.data || %{}, target_lang, lang_fields)
+
+    case update_fn.(fresh, %{data: new_data}, opts) do
+      {:ok, updated} -> updated
+      {:error, reason} -> repo.rollback(reason)
+    end
   end
 
   @doc """

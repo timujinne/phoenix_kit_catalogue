@@ -15,9 +15,10 @@ adapter unit tests).
 Solid, well-commented PR. The risky parts (multilang `data` merge semantics,
 concurrent per-language writes, broadcast suppression) are handled correctly
 and the design respects the relevant skill "iron laws". Findings below are
-small. Three are applied in this pass (dead-code cleanup, `column_value/2`
-de-exception-ing, and expanded adapter tests); one (per-LiveView wiring
-duplication) is deferred by recommendation.
+small. Most are applied in this pass (dead-code cleanup, `column_value/2`
+de-exception-ing, expanded adapter tests, and two `credo --strict` /
+`mix precommit` fixes); one (per-LiveView wiring duplication) is deferred by
+recommendation.
 
 ---
 
@@ -97,6 +98,26 @@ current explicit delegation is verbose but greppable and warning-free. Net
 recommendation: **leave as-is** unless a 4th consumer appears; revisit then
 with a `@before_compile`-based injection that keeps clauses grouped.
 
+### 5. [APPLIED] `mix precommit` (`credo --strict`) failures
+
+The PR notes claimed `credo --strict` clean, but this repo's `mix precommit`
+(`compile --warnings-as-errors`, `deps.unlock --check-unused`,
+`format --check-formatted`, `credo --strict`, `dialyzer`) reported two
+strict-mode issues in the new code — likely the PR author ran credo against
+the integration app's looser config. Both fixed:
+
+- **[F] nesting too deep** (`ai_translatable.ex` `put_translation/4`) — the
+  `transaction → case → case` block hit depth 3 (max 2). Extracted the inner
+  merge-and-persist branch into a private `merge_translation!/6`, so the
+  transaction body is a flat `case` and the helper holds the update `case`.
+- **[D] nested module not aliased** (`ai_translate_binding.ex`
+  `actor_uuid/1`) — the fully-qualified
+  `PhoenixKitCatalogue.Web.Helpers.actor_uuid/1` call now goes through an
+  `alias … Web.Helpers` (`Helpers.actor_uuid/1`).
+
+After the fixes `mix precommit` exits 0 (credo: "no issues"; dialyzer:
+"passed successfully").
+
 ### 4. [APPLIED] `column_value/2` `String.to_existing_atom` + rescue
 
 For the fixed field set, the runtime `String.to_existing_atom/1` +
@@ -110,11 +131,13 @@ is now a total `Map.fetch!/2` lookup with no `rescue`.
 
 ## Quality gates
 
-- `mix compile --warnings-as-errors` — clean (core release with
-  BeamLabEU/phoenix_kit#582 present).
-- Test suite not runnable in this environment (no local Postgres / `psql`);
-  PR notes report `mix format --check-formatted`, `credo --strict`, and the
-  10 adapter tests green against a local core.
+- `mix precommit` — **passes** (exit 0): `compile --warnings-as-errors`,
+  `deps.unlock --check-unused`, `format --check-formatted`, `credo --strict`
+  ("no issues"), `dialyzer` ("passed successfully"). Core release with
+  BeamLabEU/phoenix_kit#582 present.
+- Test suite (ExUnit) not runnable in this environment (no local Postgres /
+  `psql`); the new adapter tests are format-/syntax-verified only. PR notes
+  report the original 10 adapter tests green against a local core.
 
 ## Applied in this pass
 
@@ -123,9 +146,12 @@ is now a total `Map.fetch!/2` lookup with no `rescue`.
 | `lib/phoenix_kit_catalogue/ai_translatable.ex` | Drop dead `_ = primary` discard + correct comment in `force_put_language/3` (Finding 1) |
 | `lib/phoenix_kit_catalogue/ai_translatable.ex` | Replace `String.to_existing_atom` + `rescue` in `column_value/2` with a compile-time `@field_columns` map; derive `@translatable_fields` from it (Finding 4) |
 | `test/phoenix_kit_catalogue/ai_translatable_test.exs` | Add `source_fields` override + legacy-key tests, and `fetch`/`put_translation` coverage for `catalogue` + `category` (Finding 2) — 10 → 15 tests |
+| `lib/phoenix_kit_catalogue/ai_translatable.ex` | Extract `merge_translation!/6` to flatten `put_translation/4` nesting (Finding 5) |
+| `lib/phoenix_kit_catalogue/ai_translate_binding.ex` | Alias `Web.Helpers` instead of a fully-qualified call in `actor_uuid/1` (Finding 5) |
 
-All changes recompile clean with `mix compile --warnings-as-errors`;
-`mix format --check-formatted` passes.
+Full `mix precommit` (`compile --warnings-as-errors`,
+`deps.unlock --check-unused`, `format --check-formatted`, `credo --strict`,
+`dialyzer`) passes — exit 0, credo "no issues", dialyzer "passed successfully".
 
 ## Open / recommended (not applied)
 

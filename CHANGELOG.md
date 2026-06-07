@@ -1,3 +1,24 @@
+## Unreleased
+
+### Fixed
+- **European number formats in price import** — `Import.Mapper.normalize_price/1` mis-parsed the European `"1.234,56"` convention (dot thousands, comma decimal): it stripped the comma and read the value as `1.23456` — silently off by ~1000×. It now decides the decimal separator by whichever of `.`/`,` appears last, so both `"1,234.56"` (US/UK) and `"1.234,56"` (EU) parse correctly, including multi-group values and currency-prefixed strings.
+- **CSV delimiter mis-detection on quoted headers** — `Import.Parser` chose the delimiter by counting raw `,`/`;`/`\t` characters on the first line, so a quoted header cell containing a comma (e.g. `"Name, full";…`) picked the comma parser and collapsed every row to a single column, silently importing garbage. Detection now parses a sampled set of lines with each candidate parser and scores by column count + consistency, which is immune to delimiters inside quotes.
+- **PDF extraction enqueue could be silently dropped** — the post-insert enqueue was gated on a 1-second wall-clock "was I the inserter?" heuristic; under DB/GC latency the inserting caller could arrive later and skip the enqueue, leaving a `pending` extraction with no job (only the manual *Retry stuck* path would heal it). It now (re-)enqueues on any `pending` observation — `enqueue_extraction/1` is already idempotent against live jobs, so this is safe and self-healing.
+- **One bad PDF page no longer fails the whole document** — `Workers.PdfExtractor` halted extraction on the first page error and marked the entire PDF `failed`, discarding every successfully-extracted page and burning all retries on a single corrupt page. It now continues past per-page failures, keeps the usable partial result (logging the unreadable pages), and only fails — for retry — when *every* page fails.
+
+### Changed
+- **Import upload guards** — `Import.Parser.parse/3` and `list_sheets/1` now reject oversized inputs up front (`:file_too_large` above 25 MB, `:too_many_rows` above 50 000) instead of materializing a pathological upload into memory. Both atoms have user-facing `Errors.message/1` copy.
+- **Bounded duplicate-detection query** — `Import.Mapper.detect_existing_duplicates/3` narrows its existence query to items whose name appears in the import (a match requires name equality) instead of loading every non-deleted item in the catalogue into memory.
+- **AI-translate LiveView wiring via the `AITranslate.Embed` macro** (#33) — the catalogue/category/item form LiveViews replaced their hand-wired AI-translate handlers (six `ai_*` `handle_event` clauses + the `{:ai_translation}` `handle_info`) with `use PhoenixKitWeb.Components.AITranslate.Embed` from core, which attaches the modal/dispatch/PubSub handlers as lifecycle hooks. Requires the macro shipped in core (BeamLabEU/phoenix_kit#585).
+- **`nimble_csv` declared as a direct dependency** — the CSV import parser uses it directly (`NimbleCSV.define/2`); it was only pulled transitively via `phoenix_kit`. Loosely constrained (`~> 1.2`).
+
+### Docs
+- Fixed a stale "SKU is unique" note in the `create_item/update_item` docs — core V123 dropped that index; item SKUs are non-unique by design.
+
+### Notes
+- Verification: `mix compile --warnings-as-errors`, `mix credo --strict`, and `mix format --check-formatted` are clean; the new pure-function behavior (price normalization, delimiter detection, size/row caps) is covered by added unit tests. The full ExUnit suite is DB-gated — run `mix test` against a host with PostgreSQL.
+- Deferred follow-up: several form LiveViews still issue DB queries directly in `mount/3` (which runs twice). Documented in `dev_docs/followup_2026_06_07_mount_connected_guard.md`; deferred because validating the disconnected-render change needs the DB-backed LiveView test suite.
+
 ## 0.6.1 - 2026-06-04
 
 ### Fixed

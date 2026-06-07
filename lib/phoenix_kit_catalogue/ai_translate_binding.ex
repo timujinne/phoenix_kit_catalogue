@@ -1,6 +1,6 @@
 defmodule PhoenixKitCatalogue.AITranslateBinding do
   @moduledoc """
-  `PhoenixKitWeb.Components.AITranslate.FormBinding` for catalogue forms —
+  `PhoenixKitAI.Components.AITranslate.FormBinding` for catalogue forms —
   the storage-specific half of the shared AI-translate glue.
 
   Catalogue stores translations in the multilang `data` JSONB via
@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
   still fills the field instead of looking like a failed translation).
   """
 
-  @behaviour PhoenixKitWeb.Components.AITranslate.FormBinding
+  @behaviour PhoenixKitAI.Components.AITranslate.FormBinding
 
   alias PhoenixKitCatalogue.AITranslatable
   alias PhoenixKitCatalogue.Web.Helpers

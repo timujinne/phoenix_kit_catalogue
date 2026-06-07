@@ -25,7 +25,7 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
   require Logger
 
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
-  alias PhoenixKitWeb.Components.AITranslate.FormGlue
+  alias PhoenixKitAI.Components.AITranslate.FormGlue
 
   @typedoc "Convenience alias for the keyword list shape mutating ctx fns accept."
   @type actor_opts :: [actor_uuid: Ecto.UUID.t()] | []
@@ -233,7 +233,7 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
 
   # ── AI translation (delegates to the shared core glue) ───────────────
   # All modal/progress/stall state + dispatch + PubSub handling lives in
-  # `PhoenixKitWeb.Components.AITranslate.FormGlue`; the catalogue-specific
+  # `PhoenixKitAI.Components.AITranslate.FormGlue`; the catalogue-specific
   # storage (multilang `data`, `_`-prefixed keys) is in
   # `PhoenixKitCatalogue.AITranslateBinding`.
 

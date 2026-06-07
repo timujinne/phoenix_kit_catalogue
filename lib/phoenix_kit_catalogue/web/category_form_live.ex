@@ -2,7 +2,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   @moduledoc "Create/edit form for categories within a catalogue."
 
   use Phoenix.LiveView
-  use PhoenixKitWeb.Components.AITranslate.Embed
+  use PhoenixKitAI.Components.AITranslate.Embed
 
   require Logger
 
@@ -21,7 +21,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       ai_translate_config: 1
     ]
 
-  import PhoenixKitWeb.Components.AITranslate,
+  import PhoenixKitAI.Components.AITranslate,
     only: [
       ai_translate_button: 1,
       ai_translate_modal: 1,

@@ -2,6 +2,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   @moduledoc "Create/edit form for categories within a catalogue."
 
   use Phoenix.LiveView
+  use PhoenixKitWeb.Components.AITranslate.Embed
 
   require Logger
 
@@ -17,14 +18,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     only: [
       actor_opts: 1,
       assign_ai_translation: 3,
-      ai_translate_config: 1,
-      toggle_ai_modal: 1,
-      select_ai_endpoint: 2,
-      select_ai_prompt: 2,
-      select_ai_scope: 2,
-      generate_ai_prompt: 1,
-      dispatch_ai_translate: 2,
-      handle_ai_translation_event: 4
+      ai_translate_config: 1
     ]
 
   import PhoenixKitWeb.Components.AITranslate,
@@ -146,25 +140,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     |> assign(:form, to_form(changeset))
   end
 
+  # AI-translate modal events handled by `use ...AITranslate.Embed`.
   @impl true
-  def handle_event("ai_toggle_modal", _params, socket),
-    do: {:noreply, toggle_ai_modal(socket)}
-
-  def handle_event("ai_select_endpoint", %{"endpoint_uuid" => uuid}, socket),
-    do: {:noreply, select_ai_endpoint(socket, uuid)}
-
-  def handle_event("ai_select_prompt", %{"prompt_uuid" => uuid}, socket),
-    do: {:noreply, select_ai_prompt(socket, uuid)}
-
-  def handle_event("ai_select_scope", %{"scope" => scope}, socket),
-    do: {:noreply, select_ai_scope(socket, scope)}
-
-  def handle_event("ai_generate_prompt", _params, socket),
-    do: {:noreply, generate_ai_prompt(socket)}
-
-  def handle_event("ai_translate_lang", %{"lang" => lang}, socket),
-    do: {:noreply, dispatch_ai_translate(socket, lang)}
-
   def handle_event("switch_language", %{"lang" => lang_code}, socket) do
     {:noreply, handle_switch_language(socket, lang_code)}
   end
@@ -332,11 +309,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     {:noreply, assign(socket, :confirm_delete_all, false)}
   end
 
+  # {:ai_translation, ...} events folded into the form by `use ...AITranslate.Embed`.
   @impl true
-  def handle_info({:ai_translation, event, payload}, socket) do
-    {:noreply, handle_ai_translation_event(socket, event, payload, &assign_changeset/2)}
-  end
-
   def handle_info({:media_selected, file_uuids}, socket),
     do: Attachments.handle_media_selected(socket, file_uuids)
 

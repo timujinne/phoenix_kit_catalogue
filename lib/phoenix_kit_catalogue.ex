@@ -94,7 +94,6 @@ defmodule PhoenixKitCatalogue do
   @impl PhoenixKit.Module
   def css_sources, do: [:phoenix_kit_catalogue]
 
-  @impl PhoenixKit.Module
   def ai_translatables do
     [
       {"catalogue", PhoenixKitCatalogue.AITranslatable},

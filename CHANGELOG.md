@@ -9,14 +9,14 @@
 ### Changed
 - **Import upload guards** — `Import.Parser.parse/3` and `list_sheets/1` now reject oversized inputs up front (`:file_too_large` above 25 MB, `:too_many_rows` above 50 000) instead of materializing a pathological upload into memory. Both atoms have user-facing `Errors.message/1` copy.
 - **Bounded duplicate-detection query** — `Import.Mapper.detect_existing_duplicates/3` narrows its existence query to items whose name appears in the import (a match requires name equality) instead of loading every non-deleted item in the catalogue into memory.
-- **AI-translate LiveView wiring via the `AITranslate.Embed` macro** (#33) — the catalogue/category/item form LiveViews replaced their hand-wired AI-translate handlers (six `ai_*` `handle_event` clauses + the `{:ai_translation}` `handle_info`) with `use PhoenixKitWeb.Components.AITranslate.Embed` from core, which attaches the modal/dispatch/PubSub handlers as lifecycle hooks. Requires the macro shipped in core (BeamLabEU/phoenix_kit#585).
+- **AI-translate LiveView wiring via the shared `AITranslate.Embed` macro** (#33/#34) — the catalogue/category/item form LiveViews replaced their hand-wired AI-translate handlers (six `ai_*` `handle_event` clauses + the `{:ai_translation}` `handle_info`) with the shared PhoenixKitAI embed macro, which attaches the modal/dispatch/PubSub handlers as lifecycle hooks.
 - **`nimble_csv` declared as a direct dependency** — the CSV import parser uses it directly (`NimbleCSV.define/2`); it was only pulled transitively via `phoenix_kit`. Loosely constrained (`~> 1.2`).
 
 ### Docs
 - Fixed a stale "SKU is unique" note in the `create_item/update_item` docs — core V123 dropped that index; item SKUs are non-unique by design.
 
 ### Notes
-- **Requires a phoenix_kit release containing `PhoenixKitWeb.Components.AITranslate.Embed`** (BeamLabEU/phoenix_kit#585) — the macro the form LiveViews now `use`. Developed and locked against core **1.7.132**; the `mix.exs` constraint stays loose (`~> 1.7 and >= 1.7.125`), so pin a `phoenix_kit >= 1.7.132` in the parent app.
+- **Requires `phoenix_kit_ai ~> 0.3` for AI translation** — the shared embed macro and translation pipeline now live in the AI plugin. Catalogue's core constraint stays focused on its database/UI requirements.
 - Verification: `mix precommit` is clean (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `deps.unlock --check-unused` + `dialyzer`). The new pure-function behavior (price normalization, delimiter detection, size/row caps) is covered by added unit tests. The full ExUnit suite is DB-gated — run `mix test` against a host with PostgreSQL.
 - Deferred follow-up: several form LiveViews still issue DB queries directly in `mount/3` (which runs twice). Documented in `dev_docs/followup_2026_06_07_mount_connected_guard.md`; deferred because validating the disconnected-render change needs the DB-backed LiveView test suite.
 
@@ -40,7 +40,7 @@
 - Post-merge review of #32 (writeup in `dev_docs/pull_requests/2026/32-ai-translation-shared-glue/CLAUDE_REVIEW.md`): dropped a dead `_ = primary` discard; replaced a runtime `String.to_existing_atom/1` + `rescue` with a compile-time field→column map in the AI adapter; flattened `put_translation/4` nesting (extracted `merge_translation!/6`) and aliased a fully-qualified `Web.Helpers` call to satisfy `credo --strict`; expanded the adapter unit tests 10 → 15 (source-field override / legacy-key paths, catalogue + category round-trips). Also dropped a redundant `import Ecto.Query, warn: false` from the PDF library context.
 
 ### Notes
-- **Requires phoenix_kit 1.7.130+** — the generic AI-translation pipeline this release plugs into (`PhoenixKit.Modules.AI.{Translatable,Translations}`, `PhoenixKitWeb.Components.AITranslate.{FormGlue,FormBinding}`; BeamLabEU/phoenix_kit#582) first shipped in core **1.7.130**. The `mix.exs` constraint stays loose (`~> 1.7 and >= 1.7.125`) — pin a `phoenix_kit >= 1.7.130` in the parent app. Catalogue compiles and `mix precommit` (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `dialyzer`) is clean against 1.7.130.
+- **Requires the shared AI-translation pipeline** — catalogue now plugs into PhoenixKitAI (`PhoenixKitAI.{Translatable,Translations}` and `PhoenixKitAI.Components.AITranslate.{FormGlue,FormBinding}`). Catalogue compiles and `mix precommit` (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `dialyzer`) is clean against the corresponding local dependency set.
 - Verification: ExUnit suites are DB-gated and run against a host whose schema is at core V111+; the new adapter tests pass against a local core (not exercised in CI without a database).
 
 ## 0.5.0 - 2026-06-01

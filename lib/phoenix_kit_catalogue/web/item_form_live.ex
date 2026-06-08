@@ -2,7 +2,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   @moduledoc "Create/edit form for catalogue items with multilang support."
 
   use Phoenix.LiveView
-  use PhoenixKitWeb.Components.AITranslate.Embed
+  use PhoenixKitAI.Components.AITranslate.Embed
 
   require Logger
 
@@ -22,7 +22,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       ai_translate_config: 1
     ]
 
-  import PhoenixKitWeb.Components.AITranslate,
+  import PhoenixKitAI.Components.AITranslate,
     only: [
       ai_translate_button: 1,
       ai_translate_modal: 1,

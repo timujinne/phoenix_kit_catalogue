@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.AITranslatable do
   @moduledoc """
-  `PhoenixKit.Modules.AI.Translatable` adapter for catalogue resources —
-  the small per-module hook into core's generic AI-translation pipeline.
+  `PhoenixKitAI.Translatable` adapter for catalogue resources —
+  the small per-module hook into PhoenixKitAI's generic AI-translation pipeline.
 
   Serves three resource types (`"catalogue"`, `"catalogue_category"`,
   `"catalogue_item"`), each translating `name` + `description`. Source text
@@ -26,7 +26,7 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   and the audit log all live in core.
   """
 
-  @behaviour PhoenixKit.Modules.AI.Translatable
+  @behaviour PhoenixKitAI.Translatable
 
   import Ecto.Query
 

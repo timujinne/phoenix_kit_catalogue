@@ -1,3 +1,16 @@
+## 0.8.0 - 2026-06-08
+
+### Changed
+- **AI translation moved to the `phoenix_kit_ai` plugin** (#34) — the AI-translation pipeline and AI-translate UI moved out of core into the standalone `phoenix_kit_ai` plugin (core now keeps only the AI table migrations). Catalogue's consumer was rewired accordingly: the `AITranslatable`/`AITranslateBinding` behaviours and the form-LiveView macro/imports moved `PhoenixKit.Modules.AI.{Translatable,Translations}` + `PhoenixKitWeb.Components.AITranslate.{…}` → `PhoenixKitAI.{Translatable,Translations}` + `PhoenixKitAI.Components.AITranslate.{…}`. `ai_translatables/0` is now a plain public function — core dropped the `PhoenixKit.Module` callback, and the plugin discovers the function by duck-typing — so the `@impl PhoenixKit.Module` was removed. No behavior change; the moved adapter logic (multilang `_`-prefix mapping, `FOR UPDATE` merge, force-put) is untouched.
+- **Dependency upgrades** — `phoenix_kit` 1.7.132 → 1.7.133, `req` 0.5 → 0.6.
+
+### Added
+- **Local cross-repo development via `<APP>_PATH`** — `mix.exs` gained an env-gated `pk_dep/3` helper: export e.g. `PHOENIX_KIT_PATH=../phoenix_kit` or `PHOENIX_KIT_AI_PATH=../phoenix_kit_ai` to build/test against a local checkout of a `phoenix_kit*` dep (Mix swaps the Hex pin for a `path:` + `override: true` dep at resolve time). Unset = the published pin, so `mix deps.get` / `mix hex.publish` / CI resolve exactly as before. Documented in `AGENTS.md`.
+
+### Notes
+- **Adds `phoenix_kit_ai ~> 0.4` as a direct dependency.** AI translation (the embed macro + translation pipeline: `PhoenixKitAI.{Translatable,Translations}`, `PhoenixKitAI.Components.AITranslate.{Embed,FormBinding,FormGlue}`) now lives in the AI plugin and first shipped in **0.4.0** — the 0.3.x line does not contain it. The constraint is `~> 0.4` (loose, `< 1.0`); pin `phoenix_kit_ai >= 0.4.0` in the parent app.
+- Verification: `mix precommit` is clean (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `deps.unlock --check-unused` + `dialyzer`) against the published dependency set — no local-path overrides. The full ExUnit suite is DB-gated — run `mix test` against a host with PostgreSQL.
+
 ## 0.7.0 - 2026-06-07
 
 ### Fixed
@@ -9,14 +22,14 @@
 ### Changed
 - **Import upload guards** — `Import.Parser.parse/3` and `list_sheets/1` now reject oversized inputs up front (`:file_too_large` above 25 MB, `:too_many_rows` above 50 000) instead of materializing a pathological upload into memory. Both atoms have user-facing `Errors.message/1` copy.
 - **Bounded duplicate-detection query** — `Import.Mapper.detect_existing_duplicates/3` narrows its existence query to items whose name appears in the import (a match requires name equality) instead of loading every non-deleted item in the catalogue into memory.
-- **AI-translate LiveView wiring via the shared `AITranslate.Embed` macro** (#33/#34) — the catalogue/category/item form LiveViews replaced their hand-wired AI-translate handlers (six `ai_*` `handle_event` clauses + the `{:ai_translation}` `handle_info`) with the shared PhoenixKitAI embed macro, which attaches the modal/dispatch/PubSub handlers as lifecycle hooks.
+- **AI-translate LiveView wiring via the `AITranslate.Embed` macro** (#33) — the catalogue/category/item form LiveViews replaced their hand-wired AI-translate handlers (six `ai_*` `handle_event` clauses + the `{:ai_translation}` `handle_info`) with `use PhoenixKitWeb.Components.AITranslate.Embed` from core, which attaches the modal/dispatch/PubSub handlers as lifecycle hooks. Requires the macro shipped in core (BeamLabEU/phoenix_kit#585).
 - **`nimble_csv` declared as a direct dependency** — the CSV import parser uses it directly (`NimbleCSV.define/2`); it was only pulled transitively via `phoenix_kit`. Loosely constrained (`~> 1.2`).
 
 ### Docs
 - Fixed a stale "SKU is unique" note in the `create_item/update_item` docs — core V123 dropped that index; item SKUs are non-unique by design.
 
 ### Notes
-- **Requires `phoenix_kit_ai >= 0.4.0` for AI translation** — the shared embed macro and translation pipeline (`PhoenixKitAI.{Translatable,Translations}`, `PhoenixKitAI.Components.AITranslate.{Embed,FormBinding,FormGlue}`) first shipped in the AI plugin's **0.4.0** release; the earlier 0.3.x line does not contain them. The `mix.exs` constraint is `~> 0.4` (loose, `< 1.0`). Catalogue's core constraint stays focused on its database/UI requirements.
+- **Requires a phoenix_kit release containing `PhoenixKitWeb.Components.AITranslate.Embed`** (BeamLabEU/phoenix_kit#585) — the macro the form LiveViews now `use`. Developed and locked against core **1.7.132**; the `mix.exs` constraint stays loose (`~> 1.7 and >= 1.7.125`), so pin a `phoenix_kit >= 1.7.132` in the parent app.
 - Verification: `mix precommit` is clean (compile `--warnings-as-errors` + `format --check-formatted` + `credo --strict` + `deps.unlock --check-unused` + `dialyzer`). The new pure-function behavior (price normalization, delimiter detection, size/row caps) is covered by added unit tests. The full ExUnit suite is DB-gated — run `mix test` against a host with PostgreSQL.
 - Deferred follow-up: several form LiveViews still issue DB queries directly in `mount/3` (which runs twice). Documented in `dev_docs/followup_2026_06_07_mount_connected_guard.md`; deferred because validating the disconnected-render change needs the DB-backed LiveView test suite.
 

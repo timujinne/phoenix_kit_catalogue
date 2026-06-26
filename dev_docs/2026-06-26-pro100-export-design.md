@@ -61,7 +61,9 @@ Common encoding rules for the PRO100 text formats:
 - Encoding: **UTF-8**.
 - `index` = `System.os_time(:second)` (unix timestamp).
 - `base_price` → 2-decimal string (e.g. `2222.00`); `nil` ⇒ `0.00`.
-- Sanitize `name` / `sku` / `unit`: strip TAB and CR/LF.
+- **ID column (column 2) is digits-only**: PRO100 requires a numeric ID, so the
+  SKU is reduced to digits (`"76.0026.12"` → `"76002612"`; `nil`/no-digit ⇒ `""`).
+- Sanitize `name` / `unit`: strip TAB and CR/LF.
 
 ### PRO100 — Furniture (header `# Parts`)
 

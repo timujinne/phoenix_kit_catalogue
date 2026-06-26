@@ -152,10 +152,11 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       row_data = String.trim_leading(hd(rows), "\t\t")
       fields = String.split(row_data, "\t")
 
-      # 7 fields: name, sku, 0, price, 1.0, (empty), 0.0
+      # 7 fields: name, id, 0, price, 1.0, (empty), 0.0
       assert length(fields) == 7
       assert Enum.at(fields, 0) == "Chair"
-      assert Enum.at(fields, 1) == "C-01"
+      # ID column is digits-only: "C-01" -> "01"
+      assert Enum.at(fields, 1) == "01"
       assert Enum.at(fields, 2) == "0"
       assert Enum.at(fields, 3) == "2222.00"
       assert Enum.at(fields, 4) == "1.0"
@@ -181,6 +182,17 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       row_data = String.trim_leading(hd(rows), "\t\t")
       fields = String.split(row_data, "\t")
       assert Enum.at(fields, 1) == ""
+    end
+
+    test "ID column keeps digits only (PRO100 requires a numeric ID)" do
+      items = [item(sku: "76.0026.12")]
+      {_, content, _} = Pro100.render(:furniture, ctx(items))
+      binary = IO.iodata_to_binary(content)
+      [_header | rows] = String.split(binary, "\r\n", trim: true)
+      fields = hd(rows) |> String.trim_leading("\t\t") |> String.split("\t")
+      assert Enum.at(fields, 1) == "76002612"
+      # nothing but digits in the ID column
+      assert Enum.at(fields, 1) =~ ~r/\A\d*\z/
     end
 
     test "lines end with CRLF" do
@@ -255,10 +267,11 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       row_data = String.trim_leading(hd(rows), "\t\t")
       fields = String.split(row_data, "\t")
 
-      # 6 fields: name, sku, 0, price, 1.0, unit
+      # 6 fields: name, id, 0, price, 1.0, unit
       assert length(fields) == 6
       assert Enum.at(fields, 0) == "Plywood"
-      assert Enum.at(fields, 1) == "PW-01"
+      # ID column is digits-only: "PW-01" -> "01"
+      assert Enum.at(fields, 1) == "01"
       assert Enum.at(fields, 2) == "0"
       assert Enum.at(fields, 3) == "111.00"
       assert Enum.at(fields, 4) == "1.0"

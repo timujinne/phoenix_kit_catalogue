@@ -18,6 +18,9 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
                   \\t\\t<name>\\t<sku>\\t0\\t<price>\\t1.0\\t<unit>\\r\\n
 
   `index` is `System.os_time(:second)` at export time (unix timestamp).
+  `<sku>` (the ID column, column 2) is reduced to digits only — PRO100 requires
+  a numeric ID, so non-digit characters are stripped (e.g. `"76.0026.12"` →
+  `"76002612"`).
   `price` is formatted to 2 decimal places; nil becomes `"0.00"`.
   `unit` is the abbreviated label from `PhoenixKitCatalogue.Schemas.Item.unit_label/1`.
   """
@@ -68,7 +71,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
       @tab,
       sanitize(item.name),
       @tab,
-      sanitize(item.sku || ""),
+      pro100_id(item.sku),
       @tab,
       "0",
       @tab,
@@ -89,7 +92,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
       @tab,
       sanitize(item.name),
       @tab,
-      sanitize(item.sku || ""),
+      pro100_id(item.sku),
       @tab,
       "0",
       @tab,
@@ -118,4 +121,12 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
 
   def sanitize(str) when is_binary(str),
     do: String.replace(str, ["\t", "\r", "\n"], "")
+
+  # PRO100 requires the ID column (column 2) to contain digits only, so keep
+  # only 0-9 from the SKU (e.g. "76.0026.12" -> "76002612"). nil/no-digit -> "".
+  @doc false
+  def pro100_id(nil), do: ""
+
+  def pro100_id(sku) when is_binary(sku),
+    do: String.replace(sku, ~r/\D/, "")
 end

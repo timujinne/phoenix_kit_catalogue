@@ -87,7 +87,8 @@ Per-item row (after two leading TABs):
 Items from all selected catalogues are merged into a single flat list under
 ONE `# Parts` header. No grouping by catalogue.
 
-Filename: `Furniture <YYYY-MM-DD>.txt` (export date appended).
+Filename: `Furniture <YYYY-MM-DD HH-MM>.txt` (export date + local time appended;
+`:` is rendered as `-` for Windows-filename safety).
 
 ### PRO100 — Materials (header `# Materials`)
 
@@ -103,12 +104,12 @@ Per-item row: `name ⇥ sku ⇥ 0 ⇥ base_price ⇥ 1.0 ⇥ unit`
 
 Items from all selected catalogues merged flat under ONE `# Materials` header.
 
-Filename: `Materials <YYYY-MM-DD>.txt` (export date appended).
+Filename: `Materials <YYYY-MM-DD HH-MM>.txt` (export date + local time appended).
 
 ### Universal JSON
 
-Filename: `<catalogue-name> <YYYY-MM-DD>.json` for a single catalogue,
-`Catalogues <YYYY-MM-DD>.json` for multiple. Content-type `application/json`,
+Filename: `<catalogue-name> <YYYY-MM-DD HH-MM>.json` for a single catalogue,
+`Catalogues <YYYY-MM-DD HH-MM>.json` for multiple. Content-type `application/json`,
 UTF-8, pretty-printed.
 
 ```json

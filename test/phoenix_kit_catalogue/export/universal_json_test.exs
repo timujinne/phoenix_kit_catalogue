@@ -69,7 +69,7 @@ defmodule PhoenixKitCatalogue.Export.UniversalJsonTest do
     end
 
     test "filename is <catalogue_name>.json for single catalogue", %{filename: filename} do
-      assert filename =~ ~r/\ATest_Catalogue \d{4}-\d{2}-\d{2}\.json\z/
+      assert filename =~ ~r/\ATest_Catalogue \d{4}-\d{2}-\d{2} \d{2}-\d{2}\.json\z/
     end
 
     test "top-level catalogues array", %{json: json} do
@@ -148,7 +148,7 @@ defmodule PhoenixKitCatalogue.Export.UniversalJsonTest do
     end
 
     test "filename is Catalogues.json for multiple catalogues", %{filename: filename} do
-      assert filename =~ ~r/\ACatalogues \d{4}-\d{2}-\d{2}\.json\z/
+      assert filename =~ ~r/\ACatalogues \d{4}-\d{2}-\d{2} \d{2}-\d{2}\.json\z/
     end
 
     test "catalogues array contains both entries", %{json: json} do

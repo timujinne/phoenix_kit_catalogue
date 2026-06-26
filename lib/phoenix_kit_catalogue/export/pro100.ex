@@ -56,7 +56,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
     prefix? = Map.get(ctx, :prefix_catalogue, false)
     header = ["# Parts", @tab, Integer.to_string(index), @crlf]
     rows = Enum.map(items, &furniture_row(&1, prefix?))
-    {"Furniture #{date_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
+    {"Furniture #{datetime_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
   def render(:materials, ctx) do
@@ -64,7 +64,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
     prefix? = Map.get(ctx, :prefix_catalogue, false)
     header = ["# Materials", @tab, Integer.to_string(index), @crlf]
     rows = Enum.map(items, &materials_row(&1, prefix?))
-    {"Materials #{date_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
+    {"Materials #{datetime_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
   # ---------------------------------------------------------------------------
@@ -127,11 +127,21 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  # Date suffix for filenames (UTC date of the export, derived from the index
-  # timestamp so the value is deterministic). Format: "YYYY-MM-DD".
+  # Date-time suffix for filenames: local-time "YYYY-MM-DD HH-MM" derived from
+  # the export's unix-second index (deterministic given the server timezone).
+  # ":" is rendered as "-" because Windows filenames cannot contain a colon.
   @doc false
-  def date_str(index) when is_integer(index),
-    do: index |> DateTime.from_unix!() |> DateTime.to_date() |> Date.to_iso8601()
+  def datetime_str(index) when is_integer(index) do
+    utc = DateTime.from_unix!(index)
+
+    {{y, mo, d}, {h, mi, s}} =
+      :calendar.universal_time_to_local_time(
+        {{utc.year, utc.month, utc.day}, {utc.hour, utc.minute, utc.second}}
+      )
+
+    NaiveDateTime.new!(y, mo, d, h, mi, s)
+    |> Calendar.strftime("%Y-%m-%d %H-%M")
+  end
 
   @doc false
   def format_price(nil), do: "0.00"

@@ -123,15 +123,21 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       assert filename == "Furniture.txt"
     end
 
-    test "returns text/plain mime" do
+    test "returns text/plain; charset=utf-8 mime" do
       {_filename, _content, mime} = Pro100.render(:furniture, ctx([]))
-      assert mime == "text/plain"
+      assert mime == "text/plain; charset=utf-8"
     end
 
-    test "header line is # Parts TAB index CRLF" do
+    test "file begins with the UTF-8 BOM" do
       {_, content, _} = Pro100.render(:furniture, ctx([]))
       binary = IO.iodata_to_binary(content)
-      assert String.starts_with?(binary, "# Parts\t1111111111\r\n")
+      assert String.starts_with?(binary, <<0xEF, 0xBB, 0xBF>>)
+    end
+
+    test "header line is BOM then # Parts TAB index CRLF" do
+      {_, content, _} = Pro100.render(:furniture, ctx([]))
+      binary = IO.iodata_to_binary(content)
+      assert String.starts_with?(binary, <<0xEF, 0xBB, 0xBF>> <> "# Parts\t1111111111\r\n")
     end
 
     test "each item row starts with two TABs" do
@@ -250,13 +256,13 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
 
     test "returns text/plain mime" do
       {_, _, mime} = Pro100.render(:materials, ctx([]))
-      assert mime == "text/plain"
+      assert mime == "text/plain; charset=utf-8"
     end
 
     test "header line is # Materials TAB index CRLF" do
       {_, content, _} = Pro100.render(:materials, ctx([]))
       binary = IO.iodata_to_binary(content)
-      assert String.starts_with?(binary, "# Materials\t1111111111\r\n")
+      assert String.starts_with?(binary, <<0xEF, 0xBB, 0xBF>> <> "# Materials\t1111111111\r\n")
     end
 
     test "item row has correct TAB-delimited fields with unit" do

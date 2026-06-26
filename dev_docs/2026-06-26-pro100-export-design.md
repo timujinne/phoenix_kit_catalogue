@@ -58,7 +58,9 @@ an attachment via `send_download/3`. Completely stateless.
 Common encoding rules for the PRO100 text formats:
 - Field separator: TAB (`\t`).
 - Line terminator: CRLF (`\r\n`).
-- Encoding: **UTF-8**.
+- Encoding: **UTF-8 with a leading BOM** (`EF BB BF`) — PRO100 needs the BOM to
+  detect UTF-8 and render Cyrillic correctly. (Universal JSON stays UTF-8 **without**
+  BOM, per the JSON standard.)
 - `index` = `System.os_time(:second)` (unix timestamp).
 - `base_price` → 2-decimal string (e.g. `2222.00`); `nil` ⇒ `0.00`.
 - **ID column (column 2) is digits-only**: PRO100 requires a numeric ID, so the

@@ -9,7 +9,8 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
 
   ## Format layout
 
-  Both text formats share common encoding rules (UTF-8, TAB separator, CRLF):
+  Both text formats are UTF-8 **with a leading BOM** (so PRO100 detects the
+  encoding and renders Cyrillic correctly), TAB-separated, CRLF line endings:
 
       Furniture:  # Parts\\t<index>\\r\\n
                   \\t\\t<name>\\t<sku>\\t0\\t<price>\\t1.0\\t\\t0.0\\r\\n
@@ -31,6 +32,9 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
 
   @tab "\t"
   @crlf "\r\n"
+  # UTF-8 byte-order mark. PRO100 (and Windows tools generally) rely on the BOM
+  # to detect UTF-8; without it Cyrillic is misread as the ANSI codepage.
+  @bom <<0xEF, 0xBB, 0xBF>>
 
   @impl true
   def key, do: :pro100
@@ -51,14 +55,14 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
     %{items: items, index: index} = ctx
     header = ["# Parts", @tab, Integer.to_string(index), @crlf]
     rows = Enum.map(items, &furniture_row/1)
-    {"Furniture.txt", [header | rows], "text/plain"}
+    {"Furniture.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
   def render(:materials, ctx) do
     %{items: items, index: index} = ctx
     header = ["# Materials", @tab, Integer.to_string(index), @crlf]
     rows = Enum.map(items, &materials_row/1)
-    {"Materials.txt", [header | rows], "text/plain"}
+    {"Materials.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
   # ---------------------------------------------------------------------------

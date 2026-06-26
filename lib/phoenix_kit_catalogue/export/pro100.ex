@@ -53,15 +53,17 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   @impl true
   def render(:furniture, ctx) do
     %{items: items, index: index} = ctx
+    prefix? = Map.get(ctx, :prefix_catalogue, false)
     header = ["# Parts", @tab, Integer.to_string(index), @crlf]
-    rows = Enum.map(items, &furniture_row/1)
+    rows = Enum.map(items, &furniture_row(&1, prefix?))
     {"Furniture #{date_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
   def render(:materials, ctx) do
     %{items: items, index: index} = ctx
+    prefix? = Map.get(ctx, :prefix_catalogue, false)
     header = ["# Materials", @tab, Integer.to_string(index), @crlf]
-    rows = Enum.map(items, &materials_row/1)
+    rows = Enum.map(items, &materials_row(&1, prefix?))
     {"Materials #{date_str(index)}.txt", [@bom, header | rows], "text/plain; charset=utf-8"}
   end
 
@@ -69,11 +71,11 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   # Row builders
   # ---------------------------------------------------------------------------
 
-  defp furniture_row(item) do
+  defp furniture_row(item, prefix?) do
     [
       @tab,
       @tab,
-      sanitize(item.name),
+      sanitize(display_name(item, prefix?)),
       @tab,
       pro100_id(item.sku),
       @tab,
@@ -90,11 +92,11 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
     ]
   end
 
-  defp materials_row(item) do
+  defp materials_row(item, prefix?) do
     [
       @tab,
       @tab,
-      sanitize(item.name),
+      sanitize(display_name(item, prefix?)),
       @tab,
       pro100_id(item.sku),
       @tab,
@@ -108,6 +110,18 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
       @crlf
     ]
   end
+
+  # Column 1 (name). When prefix? is true, prepend the item's catalogue name as
+  # "<catalogue> / <item>". Falls back to the bare name if the :catalogue
+  # association is not loaded.
+  defp display_name(item, true) do
+    case item.catalogue do
+      %{name: name} when is_binary(name) -> "#{name} / #{item.name}"
+      _ -> item.name
+    end
+  end
+
+  defp display_name(item, _prefix?), do: item.name
 
   # ---------------------------------------------------------------------------
   # Helpers

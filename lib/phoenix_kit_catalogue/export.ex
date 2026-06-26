@@ -100,6 +100,8 @@ defmodule PhoenixKitCatalogue.Export do
   - `:destination` — atom or string destination key (e.g. `:pro100` or `"pro100"`)
   - `:format` — atom or string format key (e.g. `:furniture` or `"furniture"`)
   - `:catalogue_uuids` — list of catalogue UUIDs to export
+  - `:prefix_catalogue` — optional; when truthy, PRO100 text formats prefix each
+    item name with its catalogue name (`"<catalogue> / <item>"`). Default false.
 
   Returns `{filename, iodata, mime_type}`.
 
@@ -109,6 +111,7 @@ defmodule PhoenixKitCatalogue.Export do
   @spec build(map()) :: {String.t(), iodata(), String.t()}
   def build(%{destination: destination_key, format: format_key} = params) do
     catalogue_uuids = Map.get(params, :catalogue_uuids, [])
+    prefix_catalogue = Map.get(params, :prefix_catalogue, false) in [true, "true", "on", "1"]
 
     destination_mod =
       destination_by_key(to_atom(destination_key)) ||
@@ -127,7 +130,8 @@ defmodule PhoenixKitCatalogue.Export do
     ctx = %{
       items: items,
       index: System.os_time(:second),
-      catalogues: catalogues
+      catalogues: catalogues,
+      prefix_catalogue: prefix_catalogue
     }
 
     destination_mod.render(format_atom, ctx)

@@ -45,15 +45,22 @@ defmodule PhoenixKitCatalogue.Paths do
   `catalogue_uuids[]` query parameters.
   """
   @spec export_download(map()) :: String.t()
-  def export_download(%{destination: destination, format: format, catalogue_uuids: uuids}) do
+  def export_download(
+        %{destination: destination, format: format, catalogue_uuids: uuids} = params
+      ) do
     base_pairs = [
       {"destination", to_string(destination)},
       {"format", to_string(format)}
     ]
 
+    prefix_pairs =
+      if Map.get(params, :prefix_catalogue) in [true, "true", "on", "1"],
+        do: [{"prefix_catalogue", "true"}],
+        else: []
+
     uuid_pairs = Enum.map(uuids, fn uuid -> {"catalogue_uuids[]", uuid} end)
 
-    query = URI.encode_query(base_pairs ++ uuid_pairs)
+    query = URI.encode_query(base_pairs ++ prefix_pairs ++ uuid_pairs)
     Routes.path("#{@base}/export/download?#{query}")
   end
 

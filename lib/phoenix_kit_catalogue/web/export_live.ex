@@ -29,7 +29,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
        selected_destination: selected_destination,
        catalogues: catalogues,
        selected_catalogue_uuids: [],
-       selected_format: nil
+       selected_format: nil,
+       selected_prefix_catalogue: false
      )}
   end
 
@@ -113,6 +114,28 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
                 }
               />
             </div>
+
+            <%!-- PRO100 option: prefix each item name with its catalogue name --%>
+            <div
+              :if={@selected_destination && @selected_destination.key() == :pro100}
+              class="form-control w-full max-w-lg"
+            >
+              <label class="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="prefix_catalogue"
+                  value="true"
+                  checked={@selected_prefix_catalogue}
+                  class="checkbox checkbox-sm checkbox-primary shrink-0"
+                />
+                <span class="text-sm">
+                  {Gettext.gettext(
+                    PhoenixKitCatalogue.Gettext,
+                    "Add the catalogue name to the item name"
+                  )}
+                </span>
+              </label>
+            </div>
           </form>
 
           <%!-- Export button — plain <a> so the browser triggers a file download --%>
@@ -140,13 +163,15 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   defp download_url(%{
          selected_catalogue_uuids: [_ | _] = uuids,
          selected_destination: destination,
-         selected_format: format
+         selected_format: format,
+         selected_prefix_catalogue: prefix?
        })
        when not is_nil(destination) and not is_nil(format) do
     Paths.export_download(%{
       destination: Atom.to_string(destination.key()),
       format: format,
-      catalogue_uuids: uuids
+      catalogue_uuids: uuids,
+      prefix_catalogue: prefix?
     })
   end
 
@@ -185,10 +210,18 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
         nil
       end
 
+    # The "prefix with catalogue name" option only applies to PRO100; reset it
+    # to false whenever another destination is selected.
+    pro100? = selected_destination != nil and selected_destination.key() == :pro100
+
+    selected_prefix_catalogue =
+      pro100? and Map.get(params, "prefix_catalogue") in ["true", "on", "1"]
+
     assign(socket,
       selected_destination: selected_destination,
       selected_catalogue_uuids: selected_catalogue_uuids,
-      selected_format: selected_format
+      selected_format: selected_format,
+      selected_prefix_catalogue: selected_prefix_catalogue
     )
   end
 

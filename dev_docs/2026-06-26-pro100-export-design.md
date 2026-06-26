@@ -40,7 +40,13 @@ Form fields:
 3. **Format** — select; options come from the chosen destination.
    - PRO100: `Фурнитура (Furniture)`, `Материалы (Materials)`
    - Universal: `JSON`
-4. **Export** button → triggers a file download.
+4. **Add the catalogue name to the item name** — checkbox, shown **only for
+   PRO100**. When checked, the PRO100 text formats render column 1 as
+   `<catalogue name> / <item name>` instead of the bare item name. Threaded via
+   an optional `prefix_catalogue` flag (param `prefix_catalogue=true`); ignored
+   by the Universal/JSON destination. Reset to off when a non-PRO100 destination
+   is selected.
+5. **Export** button → triggers a file download.
    Rendered as `<a href=...>` only when destination + format + ≥1 catalogue
    are all selected; otherwise a `disabled` button.
 

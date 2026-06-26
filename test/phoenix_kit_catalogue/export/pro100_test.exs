@@ -201,6 +201,25 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       assert Enum.at(fields, 1) =~ ~r/\A\d*\z/
     end
 
+    test "prefixes name with catalogue when prefix_catalogue is true" do
+      items = [item(name: "Door", catalogue: %{uuid: "c1", name: "Kitchen"})]
+      ctx = Map.put(ctx(items), :prefix_catalogue, true)
+      {_, content, _} = Pro100.render(:furniture, ctx)
+      binary = IO.iodata_to_binary(content)
+      [_header | rows] = String.split(binary, "\r\n", trim: true)
+      name = hd(rows) |> String.trim_leading("\t\t") |> String.split("\t") |> Enum.at(0)
+      assert name == "Kitchen / Door"
+    end
+
+    test "keeps bare name when prefix_catalogue is false/absent" do
+      items = [item(name: "Door", catalogue: %{uuid: "c1", name: "Kitchen"})]
+      {_, content, _} = Pro100.render(:furniture, ctx(items))
+      binary = IO.iodata_to_binary(content)
+      [_header | rows] = String.split(binary, "\r\n", trim: true)
+      name = hd(rows) |> String.trim_leading("\t\t") |> String.split("\t") |> Enum.at(0)
+      assert name == "Door"
+    end
+
     test "lines end with CRLF" do
       items = [item()]
       {_, content, _} = Pro100.render(:furniture, ctx(items))
@@ -282,6 +301,16 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       assert Enum.at(fields, 3) == "111.00"
       assert Enum.at(fields, 4) == "1.0"
       assert Enum.at(fields, 5) == "pc"
+    end
+
+    test "prefixes name with catalogue when prefix_catalogue is true" do
+      items = [item(name: "Shelf", catalogue: %{uuid: "c1", name: "Storage"})]
+      ctx = Map.put(ctx(items), :prefix_catalogue, true)
+      {_, content, _} = Pro100.render(:materials, ctx)
+      binary = IO.iodata_to_binary(content)
+      [_header | rows] = String.split(binary, "\r\n", trim: true)
+      name = hd(rows) |> String.trim_leading("\t\t") |> String.split("\t") |> Enum.at(0)
+      assert name == "Storage / Shelf"
     end
 
     test "unit piece maps to pc" do

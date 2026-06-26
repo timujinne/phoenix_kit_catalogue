@@ -2,7 +2,7 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   @moduledoc """
   Export tab LiveView.
 
-  Lets the user select a source, catalogue, optional category, and format,
+  Lets the user select a destination, one or more catalogues, and a format,
   then download the generated file in-memory via a stateless controller GET.
   """
 
@@ -17,20 +17,18 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    sources = Export.sources()
-    selected_source = List.first(sources)
+    destinations = Export.destinations()
+    selected_destination = List.first(destinations)
     catalogues = Catalogue.list_catalogues()
 
     {:ok,
      socket
      |> assign(
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export"),
-       sources: sources,
-       selected_source: selected_source,
+       destinations: destinations,
+       selected_destination: selected_destination,
        catalogues: catalogues,
-       selected_catalogue: nil,
-       catalogue_categories: [],
-       selected_category_uuid: nil,
+       selected_catalogue_uuids: [],
        selected_format: nil
      )}
   end
@@ -50,50 +48,43 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
       <div class="card bg-base-100 shadow-sm">
         <div class="card-body gap-6">
           <h2 class="card-title">
-            <.icon name="hero-arrow-down-tray" class="w-5 h-5" />
+            <.icon name="hero-arrow-up-tray" class="w-5 h-5" />
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export Items")}
           </h2>
 
           <form id="export-form" phx-change="change_form" class="flex flex-col gap-4">
-            <%!-- Source select --%>
+            <%!-- Destination select --%>
             <div class="form-control w-full max-w-md">
               <span class="block mb-2 text-sm font-medium">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Source")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Destination")}
               </span>
               <.select
-                name="source"
-                id="export-source"
-                value={@selected_source && @selected_source.key() |> Atom.to_string()}
-                options={Enum.map(@sources, &{&1.label(), Atom.to_string(&1.key())})}
+                name="destination"
+                id="export-destination"
+                value={@selected_destination && @selected_destination.key() |> Atom.to_string()}
+                options={Enum.map(@destinations, &{&1.label(), Atom.to_string(&1.key())})}
               />
             </div>
 
-            <%!-- Catalogue select --%>
+            <%!-- Catalogues checkbox list --%>
             <div class="form-control w-full max-w-md">
               <span class="block mb-2 text-sm font-medium">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
               </span>
-              <.select
-                name="catalogue_uuid"
-                id="export-catalogue"
-                value={@selected_catalogue && @selected_catalogue.uuid}
-                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a catalogue...")}
-                options={Enum.map(@catalogues, &{&1.name, &1.uuid})}
-              />
-            </div>
-
-            <%!-- Category select --%>
-            <div class="form-control w-full max-w-md">
-              <span class="block mb-2 text-sm font-medium">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")}
-              </span>
-              <.select
-                name="category_uuid"
-                id="export-category"
-                value={@selected_category_uuid}
-                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All categories")}
-                options={Enum.map(@catalogue_categories, &{&1.name, &1.uuid})}
-              />
+              <div class="max-h-64 overflow-y-auto border border-base-300 rounded-box p-3 flex flex-col gap-2">
+                <%= for catalogue <- @catalogues do %>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="catalogue_uuids[]"
+                      value={catalogue.uuid}
+                      checked={catalogue.uuid in @selected_catalogue_uuids}
+                      class="checkbox checkbox-sm"
+                    />
+                    <span class="text-sm">{catalogue.name}</span>
+                  </label>
+                <% end %>
+              </div>
             </div>
 
             <%!-- Format select --%>
@@ -107,8 +98,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
                 value={@selected_format}
                 prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a format...")}
                 options={
-                  if @selected_source do
-                    Enum.map(@selected_source.formats(), fn {k, label} ->
+                  if @selected_destination do
+                    Enum.map(@selected_destination.formats(), fn {k, label} ->
                       {label, Atom.to_string(k)}
                     end)
                   else
@@ -142,75 +133,56 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   # ---------------------------------------------------------------------------
 
   defp download_url(%{
-         selected_catalogue: %{uuid: cat_uuid},
-         selected_source: source,
-         selected_format: format,
-         selected_category_uuid: category_uuid
+         selected_catalogue_uuids: [_ | _] = uuids,
+         selected_destination: destination,
+         selected_format: format
        })
-       when not is_nil(source) and not is_nil(format) do
-    params =
-      %{source: Atom.to_string(source.key()), format: format, catalogue_uuid: cat_uuid}
-      |> maybe_put(:category_uuid, category_uuid)
-
-    Paths.export_download(params)
+       when not is_nil(destination) and not is_nil(format) do
+    Paths.export_download(%{
+      destination: Atom.to_string(destination.key()),
+      format: format,
+      catalogue_uuids: uuids
+    })
   end
 
   defp download_url(_), do: nil
 
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
   defp apply_form_params(socket, params) do
-    source_key = Map.get(params, "source")
-    catalogue_uuid = presence(Map.get(params, "catalogue_uuid"))
-    category_uuid = presence(Map.get(params, "category_uuid"))
+    destination_key = Map.get(params, "destination")
+    catalogue_uuids = Map.get(params, "catalogue_uuids", [])
     format_str = presence(Map.get(params, "format"))
 
-    selected_source =
-      if source_key do
-        Enum.find(socket.assigns.sources, fn mod ->
-          Atom.to_string(mod.key()) == source_key
+    selected_destination =
+      if destination_key do
+        Enum.find(socket.assigns.destinations, fn mod ->
+          Atom.to_string(mod.key()) == destination_key
         end)
       else
-        socket.assigns.selected_source
+        socket.assigns.selected_destination
       end
 
-    selected_catalogue =
-      if catalogue_uuid do
-        Enum.find(socket.assigns.catalogues, fn c -> c.uuid == catalogue_uuid end)
-      else
-        nil
-      end
+    # Validate that the selected uuids are known catalogues
+    known_uuids = Enum.map(socket.assigns.catalogues, & &1.uuid)
 
-    catalogue_categories =
-      if selected_catalogue do
-        Catalogue.list_categories_metadata_for_catalogue(selected_catalogue.uuid)
-      else
-        []
-      end
+    selected_catalogue_uuids =
+      catalogue_uuids
+      |> List.wrap()
+      |> Enum.filter(fn uuid -> uuid in known_uuids end)
 
-    # Reset category selection if it no longer belongs to the new catalogue
-    selected_category_uuid =
-      if Enum.any?(catalogue_categories, fn c -> c.uuid == category_uuid end) do
-        category_uuid
-      else
-        nil
-      end
-
-    # Reset format if the source changed and the format is no longer valid
+    # Reset format if the destination changed and the format is no longer valid
     selected_format =
-      if selected_source && format_str &&
-           Enum.any?(selected_source.formats(), fn {k, _} -> Atom.to_string(k) == format_str end) do
+      if selected_destination && format_str &&
+           Enum.any?(selected_destination.formats(), fn {k, _} ->
+             Atom.to_string(k) == format_str
+           end) do
         format_str
       else
         nil
       end
 
     assign(socket,
-      selected_source: selected_source,
-      selected_catalogue: selected_catalogue,
-      catalogue_categories: catalogue_categories,
-      selected_category_uuid: selected_category_uuid,
+      selected_destination: selected_destination,
+      selected_catalogue_uuids: selected_catalogue_uuids,
       selected_format: selected_format
     )
   end

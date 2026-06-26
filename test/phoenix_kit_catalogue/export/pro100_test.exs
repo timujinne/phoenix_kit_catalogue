@@ -1,10 +1,10 @@
 defmodule PhoenixKitCatalogue.Export.Pro100Test do
   @moduledoc """
-  Pure formatter tests for the PRO100 export source.
+  Pure formatter tests for the PRO100 export destination.
 
   No database access — all item data is constructed inline.
-  Tests assert byte-exact output structure for Furniture, Materials,
-  and Universal JSON formats.
+  Tests assert byte-exact output structure for Furniture and Materials formats.
+  JSON format has moved to the Universal destination; see universal_json_test.exs.
   """
 
   use ExUnit.Case, async: true
@@ -22,28 +22,28 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       sku: "W-001",
       base_price: Decimal.new("100.00"),
       unit: "piece",
-      category: %{uuid: "cat-uuid-1", name: "Category A"}
+      category: %{uuid: "cat-uuid-1", name: "Category A"},
+      catalogue: %{uuid: "catalogue-uuid-1", name: "Test Catalogue"}
     }
 
     Map.merge(base, Map.new(attrs))
   end
 
   defp catalogue do
-    %{uuid: "cat-uuid-1", name: "Test Catalogue"}
+    %{uuid: "catalogue-uuid-1", name: "Test Catalogue"}
   end
 
-  defp ctx(items, category \\ nil) do
+  defp ctx(items) do
     %{
       items: items,
       # Fixed timestamp so tests are deterministic
       index: 1_111_111_111,
-      catalogue: catalogue(),
-      category: category
+      catalogues: [catalogue()]
     }
   end
 
   # ---------------------------------------------------------------------------
-  # Source metadata
+  # Destination metadata
   # ---------------------------------------------------------------------------
 
   test "key/0 returns :pro100" do
@@ -54,11 +54,11 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
     assert Pro100.label() == "PRO100"
   end
 
-  test "formats/0 returns furniture, materials, json" do
+  test "formats/0 returns furniture and materials (no json)" do
     keys = Pro100.formats() |> Enum.map(&elem(&1, 0))
     assert :furniture in keys
     assert :materials in keys
-    assert :json in keys
+    refute :json in keys
   end
 
   # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
     end
 
     test "header line is # Parts TAB index CRLF" do
-      {_, content, _} = Pro100.render(:furniture, ctx([], nil))
+      {_, content, _} = Pro100.render(:furniture, ctx([]))
       binary = IO.iodata_to_binary(content)
       assert String.starts_with?(binary, "# Parts\t1111111111\r\n")
     end
@@ -332,88 +332,6 @@ defmodule PhoenixKitCatalogue.Export.Pro100Test do
       binary = IO.iodata_to_binary(content)
       assert String.valid?(binary)
       assert String.contains?(binary, "Стол")
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Universal JSON (via Pro100)
-  # ---------------------------------------------------------------------------
-
-  describe "render(:json, ctx)" do
-    setup do
-      items = [
-        item(name: "Chair", sku: "CH-1", base_price: Decimal.new("500"), unit: "piece"),
-        item(
-          name: "Table",
-          sku: "TB-1",
-          base_price: nil,
-          unit: "m2",
-          category: %{uuid: "cat-2", name: "Tables"}
-        )
-      ]
-
-      category = %{uuid: "cat-uuid-1", name: "Chairs"}
-      {filename, content, mime} = Pro100.render(:json, ctx(items, category))
-      {:ok, filename: filename, json: Jason.decode!(IO.iodata_to_binary(content)), mime: mime}
-    end
-
-    test "mime is application/json", %{mime: mime} do
-      assert mime == "application/json"
-    end
-
-    test "filename ends with .json", %{filename: filename} do
-      assert String.ends_with?(filename, ".json")
-    end
-
-    test "top-level catalogue key", %{json: json} do
-      assert %{"uuid" => "cat-uuid-1", "name" => "Test Catalogue"} = json["catalogue"]
-    end
-
-    test "top-level category key when category given", %{json: json} do
-      assert %{"uuid" => "cat-uuid-1", "name" => "Chairs"} = json["category"]
-    end
-
-    test "category is null when no category" do
-      {_, content, _} = Pro100.render(:json, ctx([item()], nil))
-      json = Jason.decode!(IO.iodata_to_binary(content))
-      assert json["category"] == nil
-    end
-
-    test "exported_at is an ISO 8601 timestamp", %{json: json} do
-      assert {:ok, _, _} = DateTime.from_iso8601(json["exported_at"])
-    end
-
-    test "index is an integer", %{json: json} do
-      assert is_integer(json["index"])
-    end
-
-    test "items array has correct length", %{json: json} do
-      assert length(json["items"]) == 2
-    end
-
-    test "item has name field", %{json: json} do
-      assert hd(json["items"])["name"] == "Chair"
-    end
-
-    test "item has sku field", %{json: json} do
-      assert hd(json["items"])["sku"] == "CH-1"
-    end
-
-    test "item base_price is 2dp string", %{json: json} do
-      assert hd(json["items"])["base_price"] == "500.00"
-    end
-
-    test "item nil base_price becomes 0.00", %{json: json} do
-      table_item = Enum.find(json["items"], &(&1["name"] == "Table"))
-      assert table_item["base_price"] == "0.00"
-    end
-
-    test "item unit field is present", %{json: json} do
-      assert hd(json["items"])["unit"] == "piece"
-    end
-
-    test "item category field is the category name", %{json: json} do
-      assert hd(json["items"])["category"] == "Category A"
     end
   end
 end

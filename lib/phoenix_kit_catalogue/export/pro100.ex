@@ -1,12 +1,11 @@
 defmodule PhoenixKitCatalogue.Export.Pro100 do
   @moduledoc """
-  PRO100 export source.
+  PRO100 export destination.
 
   Produces two text formats used by the PRO100 furniture-design application:
 
   * `:furniture` — "Parts" list, tab-delimited with CRLF line endings.
   * `:materials` — "Materials" list, tab-delimited with CRLF line endings.
-  * `:json` — delegates to the universal JSON encoder.
 
   ## Format layout
 
@@ -23,9 +22,8 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   `unit` is the abbreviated label from `PhoenixKitCatalogue.Schemas.Item.unit_label/1`.
   """
 
-  @behaviour PhoenixKitCatalogue.Export.Source
+  @behaviour PhoenixKitCatalogue.Export.Destination
 
-  alias PhoenixKitCatalogue.Export.UniversalJson
   alias PhoenixKitCatalogue.Schemas.Item
 
   @tab "\t"
@@ -41,8 +39,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   def formats do
     [
       {:furniture, "Фурнитура (Furniture)"},
-      {:materials, "Материалы (Materials)"},
-      {:json, "Универсальный JSON (Universal JSON)"}
+      {:materials, "Материалы (Materials)"}
     ]
   end
 
@@ -59,10 +56,6 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
     header = ["# Materials", @tab, Integer.to_string(index), @crlf]
     rows = Enum.map(items, &materials_row/1)
     {"Materials.txt", [header | rows], "text/plain"}
-  end
-
-  def render(:json, ctx) do
-    UniversalJson.render(ctx)
   end
 
   # ---------------------------------------------------------------------------

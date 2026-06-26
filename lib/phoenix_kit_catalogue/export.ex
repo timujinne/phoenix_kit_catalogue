@@ -2,56 +2,52 @@ defmodule PhoenixKitCatalogue.Export do
   @moduledoc """
   Export context for the Catalogue module.
 
-  Drives the Export tab: registry of sources, item selection, and
+  Drives the Export tab: registry of destinations, item selection, and
   in-memory file generation. Nothing is persisted to disk.
 
   ## Usage
 
-      sources = Export.sources()
-      items   = Export.list_export_items(catalogue_uuid)
-      # or with category scope:
-      items   = Export.list_export_items(catalogue_uuid, category_uuid)
+      destinations = Export.destinations()
+      items        = Export.list_export_items(catalogue_uuids)
 
       {filename, content, mime} = Export.build(%{
-        source: :pro100,
+        destination: :pro100,
         format: :furniture,
-        catalogue_uuid: catalogue_uuid,
-        category_uuid: nil
+        catalogue_uuids: [uuid1, uuid2]
       })
   """
 
   import Ecto.Query, warn: false
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitCatalogue.Catalogue.Tree
   alias PhoenixKitCatalogue.Schemas.{Category, Item}
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
   # ---------------------------------------------------------------------------
-  # Source registry
+  # Destination registry
   # ---------------------------------------------------------------------------
 
-  @sources [PhoenixKitCatalogue.Export.Pro100]
+  @destinations [PhoenixKitCatalogue.Export.Pro100, PhoenixKitCatalogue.Export.Universal]
 
   @doc """
-  Returns the list of registered export source modules.
-  Each element implements `PhoenixKitCatalogue.Export.Source`.
+  Returns the list of registered export destination modules.
+  Each element implements `PhoenixKitCatalogue.Export.Destination`.
   """
-  @spec sources() :: [module()]
-  def sources, do: @sources
+  @spec destinations() :: [module()]
+  def destinations, do: @destinations
 
   @doc """
-  Finds a source module by its atom key, or `nil` if not found.
+  Finds a destination module by its atom key, or `nil` if not found.
   """
-  @spec source_by_key(atom() | String.t()) :: module() | nil
-  def source_by_key(key) when is_atom(key) do
-    Enum.find(@sources, fn mod -> mod.key() == key end)
+  @spec destination_by_key(atom() | String.t()) :: module() | nil
+  def destination_by_key(key) when is_atom(key) do
+    Enum.find(@destinations, fn mod -> mod.key() == key end)
   end
 
-  def source_by_key(key) when is_binary(key) do
+  def destination_by_key(key) when is_binary(key) do
     atom_key = String.to_existing_atom(key)
-    source_by_key(atom_key)
+    destination_by_key(atom_key)
   rescue
     ArgumentError -> nil
   end
@@ -61,36 +57,36 @@ defmodule PhoenixKitCatalogue.Export do
   # ---------------------------------------------------------------------------
 
   @doc """
-  Lists non-deleted items for export.
+  Lists non-deleted items for export across one or more catalogues.
 
-  - No `category_uuid` (or `nil`) → returns all active items in the catalogue.
-  - `category_uuid` given → returns items in that category and all descendant
-    categories (subtree expansion via `Catalogue.Tree`).
+  Returns all active items where `catalogue_uuid in ^catalogue_uuids` and
+  `status != "deleted"`, ordered by catalogue, then category position, then
+  item position, then name. The `:catalogue` and `:category` associations are
+  preloaded on every item.
 
-  Items are ordered by category position, then item position, then name.
-  The `:category` association is preloaded on every item.
+  Returns `[]` when `catalogue_uuids` is empty.
   """
-  @spec list_export_items(Ecto.UUID.t(), Ecto.UUID.t() | nil) :: [Item.t()]
-  def list_export_items(catalogue_uuid, category_uuid \\ nil)
-
-  def list_export_items(catalogue_uuid, nil) do
-    Catalogue.list_items_for_catalogue(catalogue_uuid)
-  end
-
-  def list_export_items(catalogue_uuid, category_uuid) when is_binary(category_uuid) do
-    subtree = Tree.subtree_uuids(category_uuid)
-
-    from(i in Item,
-      left_join: c in Category,
-      on: i.category_uuid == c.uuid,
-      where:
-        i.catalogue_uuid == ^catalogue_uuid and
-          i.category_uuid in ^subtree and
-          i.status != "deleted",
-      order_by: [asc_nulls_last: c.position, asc: i.position, asc: i.name],
-      preload: [:catalogue, category: :catalogue, manufacturer: []]
-    )
-    |> repo().all()
+  @spec list_export_items([Ecto.UUID.t()]) :: [Item.t()]
+  def list_export_items(catalogue_uuids) when is_list(catalogue_uuids) do
+    if catalogue_uuids == [] do
+      []
+    else
+      from(i in Item,
+        left_join: c in Category,
+        on: i.category_uuid == c.uuid,
+        where:
+          i.catalogue_uuid in ^catalogue_uuids and
+            i.status != "deleted",
+        order_by: [
+          asc: i.catalogue_uuid,
+          asc_nulls_last: c.position,
+          asc: i.position,
+          asc: i.name
+        ],
+        preload: [:catalogue, :category]
+      )
+      |> repo().all()
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -101,49 +97,40 @@ defmodule PhoenixKitCatalogue.Export do
   Builds the export file in memory.
 
   `params` is a map with keys:
-  - `:source` — atom or string source key (e.g. `:pro100` or `"pro100"`)
+  - `:destination` — atom or string destination key (e.g. `:pro100` or `"pro100"`)
   - `:format` — atom or string format key (e.g. `:furniture` or `"furniture"`)
-  - `:catalogue_uuid` — UUID of the catalogue to export
-  - `:category_uuid` — optional UUID; `nil` exports the whole catalogue
+  - `:catalogue_uuids` — list of catalogue UUIDs to export
 
   Returns `{filename, iodata, mime_type}`.
 
-  Raises `ArgumentError` if the source or format is not recognised.
+  Raises `ArgumentError` if the destination or format is not recognised, or if
+  `catalogue_uuids` is nil/missing.
   """
   @spec build(map()) :: {String.t(), iodata(), String.t()}
-  def build(%{source: source_key, format: format_key} = params) do
-    catalogue_uuid = Map.fetch!(params, :catalogue_uuid)
-    category_uuid = Map.get(params, :category_uuid)
+  def build(%{destination: destination_key, format: format_key} = params) do
+    catalogue_uuids = Map.get(params, :catalogue_uuids, [])
 
-    source_mod =
-      source_by_key(to_atom(source_key)) ||
-        raise ArgumentError, "unknown export source: #{inspect(source_key)}"
+    destination_mod =
+      destination_by_key(to_atom(destination_key)) ||
+        raise ArgumentError, "unknown export destination: #{inspect(destination_key)}"
 
     format_atom = to_atom(format_key)
 
-    unless Enum.any?(source_mod.formats(), fn {k, _} -> k == format_atom end) do
+    unless Enum.any?(destination_mod.formats(), fn {k, _} -> k == format_atom end) do
       raise ArgumentError,
-            "unknown format #{inspect(format_key)} for source #{inspect(source_mod.key())}"
+            "unknown format #{inspect(format_key)} for destination #{inspect(destination_mod.key())}"
     end
 
-    items = list_export_items(catalogue_uuid, category_uuid)
-    catalogue = Catalogue.get_catalogue!(catalogue_uuid)
-
-    category =
-      if is_binary(category_uuid) and byte_size(category_uuid) > 0 do
-        Catalogue.get_category!(category_uuid)
-      else
-        nil
-      end
+    items = list_export_items(catalogue_uuids)
+    catalogues = Enum.map(catalogue_uuids, &Catalogue.get_catalogue!/1)
 
     ctx = %{
       items: items,
       index: System.os_time(:second),
-      catalogue: catalogue,
-      category: category
+      catalogues: catalogues
     }
 
-    source_mod.render(format_atom, ctx)
+    destination_mod.render(format_atom, ctx)
   end
 
   # ---------------------------------------------------------------------------

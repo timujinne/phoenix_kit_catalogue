@@ -2,21 +2,23 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
   @moduledoc """
   Universal JSON export encoder.
 
-  Produces a generic, source-agnostic JSON dump of catalogue items.
-  Used by `PhoenixKitCatalogue.Export.Pro100` for its `:json` format,
-  but also callable directly from any other source.
+  Produces a generic, destination-agnostic JSON dump of catalogue items
+  across one or more catalogues.
 
   ## Output shape
 
       {
-        "catalogue": {"uuid": "...", "name": "..."},
-        "category":  {"uuid": "...", "name": "..."},  // null if whole catalogue
+        "catalogues": [{"uuid": "...", "name": "..."}, ...],
         "exported_at": "2026-06-26T16:00:00Z",
         "index": 1111111111,
         "items": [
-          {"name": "...", "sku": "...", "base_price": "2222.00", "unit": "piece", "category": "..."}
+          {"name": "...", "sku": "...", "base_price": "2222.00", "unit": "piece", "catalogue": "..."}
         ]
       }
+
+  Filename: when a single catalogue is exported, the file is named after the
+  catalogue (e.g. `"My Catalogue.json"`). When multiple catalogues are exported
+  the file is named `"Catalogues.json"`.
   """
 
   alias PhoenixKitCatalogue.Export.Pro100
@@ -24,35 +26,35 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
   @doc """
   Renders the universal JSON export.
 
-  `ctx` must have keys: `:items`, `:index`, `:catalogue`, `:category`
-  (`:category` may be `nil` for a whole-catalogue export).
+  `ctx` must have keys:
+  - `:items` — list of items (with `:catalogue` association preloaded)
+  - `:index` — unix timestamp integer
+  - `:catalogues` — list of catalogue structs
 
   Returns `{filename, iodata, mime_type}`.
   """
   def render(ctx) do
-    %{items: items, index: index, catalogue: catalogue, category: category} = ctx
+    %{items: items, index: index, catalogues: catalogues} = ctx
 
     payload = %{
-      "catalogue" => %{"uuid" => catalogue.uuid, "name" => catalogue.name},
-      "category" => encode_category(category),
+      "catalogues" => Enum.map(catalogues, &encode_catalogue/1),
       "exported_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "index" => index,
       "items" => Enum.map(items, &encode_item/1)
     }
 
-    filename = "#{sanitize_filename(catalogue.name)}.json"
+    filename = build_filename(catalogues)
     json = Jason.encode!(payload, pretty: true)
     {filename, json, "application/json"}
   end
 
-  defp encode_category(nil), do: nil
-
-  defp encode_category(category),
-    do: %{"uuid" => category.uuid, "name" => category.name}
+  defp encode_catalogue(catalogue) do
+    %{"uuid" => catalogue.uuid, "name" => catalogue.name}
+  end
 
   defp encode_item(item) do
-    category_name =
-      case item.category do
+    catalogue_name =
+      case item.catalogue do
         %{name: name} -> name
         _ -> nil
       end
@@ -62,9 +64,15 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
       "sku" => item.sku,
       "base_price" => Pro100.format_price(item.base_price),
       "unit" => item.unit,
-      "category" => category_name
+      "catalogue" => catalogue_name
     }
   end
+
+  defp build_filename([catalogue]) do
+    "#{sanitize_filename(catalogue.name)}.json"
+  end
+
+  defp build_filename(_), do: "Catalogues.json"
 
   defp sanitize_filename(name) when is_binary(name) do
     name

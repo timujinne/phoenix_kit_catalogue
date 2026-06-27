@@ -92,6 +92,9 @@ defmodule PhoenixKitCatalogue do
   def version, do: "0.2.0"
 
   @impl PhoenixKit.Module
+  def route_module, do: PhoenixKitCatalogue.Web.Routes
+
+  @impl PhoenixKit.Module
   def css_sources, do: [:phoenix_kit_catalogue]
 
   def ai_translatables do
@@ -158,7 +161,8 @@ defmodule PhoenixKitCatalogue do
         # parent "Catalogue" tab is the only thing that lights up on
         # detail/form pages — which looks wrong in the sidebar.
         match:
-          {:regex, ~r"^/admin/catalogue(/(?!manufacturers|suppliers|import|events|pdfs).*)?$"},
+          {:regex,
+           ~r"^/admin/catalogue(/(?!manufacturers|suppliers|import|export|events|pdfs).*)?$"},
         parent: :admin_catalogue,
         live_view: {PhoenixKitCatalogue.Web.CataloguesLive, :index}
       },
@@ -194,13 +198,27 @@ defmodule PhoenixKitCatalogue do
         label: "Import",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
-        icon: "hero-arrow-up-tray",
+        icon: "hero-arrow-down-tray",
         path: "catalogue/import",
         priority: 664,
         level: :admin,
         permission: module_key(),
         parent: :admin_catalogue,
         live_view: {PhoenixKitCatalogue.Web.ImportLive, :index}
+      },
+      # Export tab
+      %Tab{
+        id: :admin_catalogue_export,
+        label: "Export",
+        gettext_backend: PhoenixKitCatalogue.Gettext,
+        gettext_domain: "default",
+        icon: "hero-arrow-up-tray",
+        path: "catalogue/export",
+        priority: 665,
+        level: :admin,
+        permission: module_key(),
+        parent: :admin_catalogue,
+        live_view: {PhoenixKitCatalogue.Web.ExportLive, :index}
       },
       # Events tab
       %Tab{
@@ -210,7 +228,7 @@ defmodule PhoenixKitCatalogue do
         gettext_domain: "default",
         icon: "hero-clock",
         path: "catalogue/events",
-        priority: 665,
+        priority: 666,
         level: :admin,
         permission: module_key(),
         parent: :admin_catalogue,

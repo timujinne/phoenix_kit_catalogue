@@ -139,8 +139,9 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
           </form>
 
           <%!-- Export button — plain <a> so the browser triggers a file download --%>
-          <%= if download_url(assigns) do %>
-            <a href={download_url(assigns)} class="btn btn-primary w-fit">
+          <% url = download_url(assigns) %>
+          <%= if url do %>
+            <a href={url} class="btn btn-primary w-fit">
               <.icon name="hero-arrow-down-tray" class="w-4 h-4" />
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export")}
             </a>

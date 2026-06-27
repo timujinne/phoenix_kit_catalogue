@@ -18,7 +18,7 @@ defmodule PhoenixKitCatalogue.Web.ExportController do
     catalogue_uuids = Map.get(params, "catalogue_uuids", [])
     prefix_catalogue = Map.get(params, "prefix_catalogue", false)
 
-    {filename, content, _mime} =
+    {filename, content, mime} =
       PhoenixKitCatalogue.Export.build(%{
         destination: destination,
         format: format,
@@ -26,6 +26,9 @@ defmodule PhoenixKitCatalogue.Web.ExportController do
         prefix_catalogue: prefix_catalogue
       })
 
-    send_download(conn, {:binary, IO.iodata_to_binary(content)}, filename: filename)
+    send_download(conn, {:binary, IO.iodata_to_binary(content)},
+      filename: filename,
+      content_type: mime
+    )
   end
 end

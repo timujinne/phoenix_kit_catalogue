@@ -226,4 +226,12 @@ defmodule PhoenixKitCatalogue.Export.UniversalJsonTest do
       assert is_list(json["items"])
     end
   end
+
+  describe "filename sanitization" do
+    test "keeps a Cyrillic catalogue name (regression: \\w must be Unicode-aware)" do
+      cat = %{uuid: "cyr-1", name: "Кухня"}
+      {filename, _content, _mime} = UniversalJson.render(ctx([], [cat]))
+      assert filename =~ ~r/\AКухня \d{4}-\d{2}-\d{2} \d{2}-\d{2}\.json\z/
+    end
+  end
 end

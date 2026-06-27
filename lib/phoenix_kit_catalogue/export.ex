@@ -19,7 +19,6 @@ defmodule PhoenixKitCatalogue.Export do
 
   import Ecto.Query, warn: false
 
-  alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Schemas.{Category, Item}
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
@@ -114,18 +113,18 @@ defmodule PhoenixKitCatalogue.Export do
     prefix_catalogue = Map.get(params, :prefix_catalogue, false) in [true, "true", "on", "1"]
 
     destination_mod =
-      destination_by_key(to_atom(destination_key)) ||
+      destination_by_key(destination_key) ||
         raise ArgumentError, "unknown export destination: #{inspect(destination_key)}"
 
-    format_atom = to_atom(format_key)
+    format_atom = safe_atom(format_key)
 
-    unless Enum.any?(destination_mod.formats(), fn {k, _} -> k == format_atom end) do
+    unless format_atom && Enum.any?(destination_mod.formats(), fn {k, _} -> k == format_atom end) do
       raise ArgumentError,
             "unknown format #{inspect(format_key)} for destination #{inspect(destination_mod.key())}"
     end
 
     items = list_export_items(catalogue_uuids)
-    catalogues = Enum.map(catalogue_uuids, &Catalogue.get_catalogue!/1)
+    catalogues = list_catalogue_headers(catalogue_uuids)
 
     ctx = %{
       items: items,
@@ -141,6 +140,23 @@ defmodule PhoenixKitCatalogue.Export do
   # Helpers
   # ---------------------------------------------------------------------------
 
-  defp to_atom(value) when is_atom(value), do: value
-  defp to_atom(value) when is_binary(value), do: String.to_existing_atom(value)
+  defp safe_atom(value) when is_atom(value), do: value
+
+  defp safe_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> nil
+  end
+
+  # Lightweight catalogue headers (uuid + name only) for the export context.
+  # Avoids Catalogue.get_catalogue!/1, which preloads the whole category+item
+  # tree per catalogue — items are already loaded by list_export_items/1.
+  defp list_catalogue_headers(catalogue_uuids) do
+    from(c in PhoenixKitCatalogue.Schemas.Catalogue,
+      where: c.uuid in ^catalogue_uuids,
+      order_by: c.name,
+      select: %{uuid: c.uuid, name: c.name}
+    )
+    |> repo().all()
+  end
 end

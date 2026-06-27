@@ -77,7 +77,9 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
 
   defp sanitize_filename(name) when is_binary(name) do
     name
-    |> String.replace(~r/[^\w\s-]/, "")
+    # `u` flag keeps Unicode word chars (Cyrillic, etc.); without it `\w` is
+    # ASCII-only and would strip a whole Cyrillic catalogue name.
+    |> String.replace(~r/[^\w\s-]/u, "")
     |> String.replace(~r/\s+/, "_")
     |> String.trim("_")
   end

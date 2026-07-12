@@ -144,7 +144,6 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     |> validate_inclusion(:default_unit, @default_units ++ [nil])
     |> foreign_key_constraint(:catalogue_uuid)
     |> foreign_key_constraint(:category_uuid)
-    |> foreign_key_constraint(:primary_supplier_uuid)
   end
 
   @doc """

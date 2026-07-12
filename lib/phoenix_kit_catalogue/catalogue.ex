@@ -50,6 +50,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
     ActivityLog,
     Counts,
     Helpers,
+    ItemSupplierInfo,
     Links,
     Manufacturers,
     PdfLibrary,
@@ -285,6 +286,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate delete_supplier(supplier, opts \\ []), to: Suppliers
   defdelegate change_supplier(supplier, attrs \\ %{}), to: Suppliers
 
+  # CRM federation (additive — see Suppliers moduledoc section)
+  defdelegate resolve_supplier(supplier_uuid), to: Suppliers
+  defdelegate list_federated_suppliers(opts \\ []), to: Suppliers
+
   # ═══════════════════════════════════════════════════════════════════
   # Manufacturer ↔ Supplier links — see PhoenixKitCatalogue.Catalogue.Links
   # ═══════════════════════════════════════════════════════════════════
@@ -301,6 +306,16 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   defdelegate sync_supplier_manufacturers(supplier_uuid, manufacturer_uuids, opts \\ []),
     to: Links
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Item ↔ Supplier info — see PhoenixKitCatalogue.Catalogue.ItemSupplierInfo
+  # ═══════════════════════════════════════════════════════════════════
+
+  defdelegate list_for_item(item_uuid), to: ItemSupplierInfo
+  defdelegate upsert(attrs, opts \\ []), to: ItemSupplierInfo
+  defdelegate delete(uuid, opts \\ []), to: ItemSupplierInfo
+  defdelegate set_primary(item_uuid, isi_uuid, opts \\ []), to: ItemSupplierInfo
+  defdelegate change(item_supplier_info, attrs \\ %{}), to: ItemSupplierInfo
 
   # ═══════════════════════════════════════════════════════════════════
   # Catalogues

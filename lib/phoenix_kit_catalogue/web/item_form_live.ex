@@ -37,6 +37,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Schemas.ItemSupplierInfo
 
   @translatable_fields ["name", "description"]
   @preserve_fields %{
@@ -148,6 +149,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       categories: categories,
       manufacturers: Catalogue.list_manufacturers(status: "active"),
       suppliers: Catalogue.list_suppliers(status: "active"),
+      federated_suppliers: Catalogue.list_federated_suppliers(status: "active"),
+      item_supplier_infos: if(action == :edit, do: Catalogue.list_for_item(item.uuid), else: []),
+      editing_supplier_info_uuid: nil,
+      supplier_info_form: to_form(blank_supplier_info_changeset(item), as: :item_supplier_info),
       all_categories: all_categories,
       smart_move_targets: smart_move_targets,
       move_target: nil,
@@ -277,6 +282,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   defp discount_from_catalogue(%{discount_percentage: discount}), do: discount
   defp discount_from_catalogue(_), do: nil
+
+  defp blank_supplier_info_changeset(item) do
+    Catalogue.change(%ItemSupplierInfo{item_uuid: item.uuid})
+  end
 
   defp adjust_multilang_for_item(socket, item) do
     if socket.assigns.multilang_enabled do
@@ -492,6 +501,132 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     else
       {:noreply, socket}
     end
+  end
+
+  # ── Suppliers & pricing (item ↔ supplier junction) ──────────────────
+  # Persisted immediately via the context (like the Files tab), not
+  # deferred to the main item "Save" button — rows reference a real
+  # item_uuid, which doesn't exist yet for `:new` items (the section is
+  # only rendered on `:edit`).
+
+  def handle_event("validate_supplier_info", %{"item_supplier_info" => params}, socket) do
+    changeset =
+      socket
+      |> supplier_info_target()
+      |> Catalogue.change(params)
+      |> Map.put(:action, :validate)
+
+    {:noreply, assign(socket, :supplier_info_form, to_form(changeset, as: :item_supplier_info))}
+  end
+
+  def handle_event("save_supplier_info", %{"item_supplier_info" => params}, socket) do
+    attrs =
+      params
+      |> Map.put("item_uuid", socket.assigns.item.uuid)
+      |> maybe_put_editing_uuid(socket.assigns.editing_supplier_info_uuid)
+
+    case Catalogue.upsert(attrs, actor_opts(socket)) do
+      {:ok, _record} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier info saved."))
+         |> reload_supplier_infos()
+         |> reset_supplier_info_form()}
+
+      {:error, changeset} ->
+        {:noreply,
+         assign(socket, :supplier_info_form, to_form(changeset, as: :item_supplier_info))}
+    end
+  end
+
+  def handle_event("edit_supplier_info", %{"uuid" => uuid}, socket) do
+    case Enum.find(socket.assigns.item_supplier_infos, &(&1.uuid == uuid)) do
+      nil ->
+        {:noreply, socket}
+
+      record ->
+        {:noreply,
+         socket
+         |> assign(:editing_supplier_info_uuid, uuid)
+         |> assign(
+           :supplier_info_form,
+           to_form(Catalogue.change(record), as: :item_supplier_info)
+         )}
+    end
+  end
+
+  def handle_event("cancel_edit_supplier_info", _params, socket) do
+    {:noreply, reset_supplier_info_form(socket)}
+  end
+
+  def handle_event("delete_supplier_info", %{"uuid" => uuid}, socket) do
+    case Catalogue.delete(uuid, actor_opts(socket)) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier info removed.")
+         )
+         |> reload_supplier_infos()
+         |> reset_supplier_info_form()}
+
+      {:error, _} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to remove supplier info.")
+         )}
+    end
+  end
+
+  def handle_event("set_primary_supplier_info", %{"uuid" => uuid}, socket) do
+    case Catalogue.set_primary(socket.assigns.item.uuid, uuid, actor_opts(socket)) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary supplier updated.")
+         )
+         |> reload_supplier_infos()}
+
+      {:error, _} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to update primary supplier.")
+         )}
+    end
+  end
+
+  defp supplier_info_target(socket) do
+    case socket.assigns.editing_supplier_info_uuid do
+      nil ->
+        %ItemSupplierInfo{item_uuid: socket.assigns.item.uuid}
+
+      uuid ->
+        Enum.find(socket.assigns.item_supplier_infos, &(&1.uuid == uuid)) ||
+          %ItemSupplierInfo{item_uuid: socket.assigns.item.uuid}
+    end
+  end
+
+  defp maybe_put_editing_uuid(attrs, nil), do: attrs
+  defp maybe_put_editing_uuid(attrs, uuid), do: Map.put(attrs, "uuid", uuid)
+
+  defp reload_supplier_infos(socket) do
+    assign(socket, :item_supplier_infos, Catalogue.list_for_item(socket.assigns.item.uuid))
+  end
+
+  defp reset_supplier_info_form(socket) do
+    socket
+    |> assign(:editing_supplier_info_uuid, nil)
+    |> assign(
+      :supplier_info_form,
+      to_form(blank_supplier_info_changeset(socket.assigns.item), as: :item_supplier_info)
+    )
   end
 
   defp parse_tab("metadata"), do: :metadata
@@ -1336,6 +1471,172 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         </div>
       </.form>
 
+      <%!-- Suppliers & pricing — rendered OUTSIDE the main form (its own
+           <.form>; nested forms are invalid). Edit-only: rows reference
+           a real item_uuid, which doesn't exist yet for a `:new` item. --%>
+      <div :if={@action == :edit} class="card bg-base-100 shadow-lg">
+        <div class="card-body flex flex-col gap-4">
+          <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
+            <.icon name="hero-truck" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Suppliers & Pricing")}
+          </h2>
+          <p class="text-sm text-base-content/60 -mt-2">
+            {Gettext.gettext(
+              PhoenixKitCatalogue.Gettext,
+              "Track per-supplier SKU, cost, lead time, and minimum order quantity for this item. Suppliers can be local catalogue suppliers or federated CRM parties."
+            )}
+          </p>
+
+          <div :if={@item_supplier_infos != []} class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier")}</th>
+                  <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")}</th>
+                  <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cost")}</th>
+                  <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Lead time")}</th>
+                  <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "MOQ")}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={isi <- @item_supplier_infos}>
+                  <td>
+                    <span class="flex items-center gap-1.5">
+                      {supplier_info_name(isi)}
+                      <span :if={isi.is_primary} class="badge badge-primary badge-xs">
+                        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary")}
+                      </span>
+                    </span>
+                  </td>
+                  <td class="font-mono text-xs">{isi.supplier_sku}</td>
+                  <td>
+                    <span :if={isi.unit_cost}>{isi.unit_cost} {isi.currency}</span>
+                  </td>
+                  <td>
+                    <span :if={isi.lead_time_days}>
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{days}d",
+                        days: isi.lead_time_days
+                      )}
+                    </span>
+                  </td>
+                  <td>{isi.min_order_qty}</td>
+                  <td class="flex items-center gap-1 justify-end">
+                    <button
+                      :if={!isi.is_primary}
+                      type="button"
+                      phx-click="set_primary_supplier_info"
+                      phx-value-uuid={isi.uuid}
+                      class="btn btn-ghost btn-xs btn-square"
+                      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make primary")}
+                    >
+                      <.icon name="hero-star" class="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="edit_supplier_info"
+                      phx-value-uuid={isi.uuid}
+                      class="btn btn-ghost btn-xs btn-square"
+                      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
+                    >
+                      <.icon name="hero-pencil" class="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="delete_supplier_info"
+                      phx-value-uuid={isi.uuid}
+                      data-confirm={
+                        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove this supplier info?")
+                      }
+                      class="btn btn-ghost btn-xs btn-square"
+                      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
+                    >
+                      <.icon name="hero-x-mark" class="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p :if={@item_supplier_infos == []} class="text-sm text-base-content/50">
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No supplier sourcing info yet.")}
+          </p>
+
+          <div class="divider my-0"></div>
+
+          <.form
+            for={@supplier_info_form}
+            id="item-supplier-info-form"
+            phx-change="validate_supplier_info"
+            phx-submit="save_supplier_info"
+            class="flex flex-col gap-4"
+          >
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <.select
+                field={@supplier_info_form[:supplier_uuid]}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier")}
+                class="transition-colors focus-within:select-primary"
+                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select supplier --")}
+                options={Enum.map(@federated_suppliers, &{supplier_option_label(&1), &1.uuid})}
+              />
+              <.input
+                field={@supplier_info_form[:supplier_sku]}
+                type="text"
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier SKU")}
+                class="font-mono"
+              />
+              <div class="grid grid-cols-2 gap-2">
+                <.input
+                  field={@supplier_info_form[:unit_cost]}
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit cost")}
+                />
+                <.input
+                  field={@supplier_info_form[:currency]}
+                  type="text"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Currency")}
+                  placeholder="USD"
+                  maxlength="3"
+                  class="uppercase"
+                />
+              </div>
+              <.input
+                field={@supplier_info_form[:lead_time_days]}
+                type="number"
+                min="0"
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Lead time (days)")}
+              />
+              <.input
+                field={@supplier_info_form[:min_order_qty]}
+                type="number"
+                step="0.0001"
+                min="0"
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Minimum order qty")}
+              />
+            </div>
+
+            <div class="flex justify-end gap-2">
+              <button
+                :if={@editing_supplier_info_uuid}
+                type="button"
+                phx-click="cancel_edit_supplier_info"
+                class="btn btn-ghost btn-sm"
+              >
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
+              </button>
+              <button type="submit" class="btn btn-primary btn-sm">
+                {if @editing_supplier_info_uuid,
+                  do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Update supplier info"),
+                  else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add supplier info")}
+              </button>
+            </div>
+          </.form>
+        </div>
+      </div>
+
       <%!-- AI translate modal — rendered OUTSIDE the form (its endpoint/
            prompt selectors are their own <form>; nested forms are invalid). --%>
       <.ai_translate_modal ai_translate={ai_translate_config(assigns)} />
@@ -1433,6 +1734,21 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     </PhoenixKitWeb.Components.LayoutWrapper.app_layout>
     """
   end
+
+  # Uses the snapshot captured at write time rather than a live
+  # `Catalogue.resolve_supplier/1` lookup — avoids an N+1 resolve per
+  # row and stays accurate even if the source supplier is later renamed
+  # or removed.
+  defp supplier_info_name(%ItemSupplierInfo{supplier_name_snapshot: name})
+       when is_binary(name) and name != "",
+       do: name
+
+  defp supplier_info_name(%ItemSupplierInfo{supplier_uuid: uuid}), do: uuid
+
+  defp supplier_option_label(%{name: name, source: :crm}),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{name} (CRM)", name: name)
+
+  defp supplier_option_label(%{name: name}), do: name
 
   defp lang_name(language_tabs, code) do
     case Enum.find(language_tabs, &(&1.code == code)) do

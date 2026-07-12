@@ -90,14 +90,13 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
       type: UUIDv7
     )
 
-    # Default supplier to order this item from, independent of manufacturer —
-    # set directly when there's no brand to resolve through (generic materials)
-    # or when a manufacturer has several suppliers and one should always win.
-    belongs_to(:primary_supplier, PhoenixKitCatalogue.Schemas.Supplier,
-      foreign_key: :primary_supplier_uuid,
-      references: :uuid,
-      type: UUIDv7
-    )
+    # Warehouse-facing "default supplier to order from". A soft ref (no FK):
+    # it mirrors the `is_primary` row in the item_supplier_info junction and
+    # may point at a local cat_supplier OR a CRM party, so it is NOT a
+    # `belongs_to :primary_supplier` (that would query cat_suppliers and
+    # silently return nil for a CRM uuid). It's set only by the junction
+    # context's set_primary/3; resolve the name via Suppliers.resolve_supplier/1.
+    field(:primary_supplier_uuid, UUIDv7)
 
     has_many(:catalogue_rules, PhoenixKitCatalogue.Schemas.CatalogueRule,
       foreign_key: :item_uuid,
@@ -121,7 +120,6 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     :position,
     :category_uuid,
     :manufacturer_uuid,
-    :primary_supplier_uuid,
     :data
   ]
 

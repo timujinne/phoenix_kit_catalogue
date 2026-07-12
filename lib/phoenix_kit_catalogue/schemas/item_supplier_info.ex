@@ -45,37 +45,45 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
   end
 
   @required_fields [:item_uuid, :supplier_uuid]
-  @optional_fields [
+  # User-editable via the item form. Deliberately EXCLUDES the fields that
+  # must never be mass-assigned from raw params:
+  #   * is_primary — flipped only through the context's `set_primary/3`
+  #     (transactional clear-then-set), never a form field;
+  #   * supplier_name_snapshot — stamped by the context from the resolved
+  #     supplier name at write time;
+  #   * metadata — context-only.
+  # `position` stays user-settable (benign display ordering), though the item
+  # form doesn't expose it yet.
+  @user_fields [
     :supplier_sku,
-    :supplier_name_snapshot,
     :unit_cost,
     :currency,
     :lead_time_days,
     :min_order_qty,
-    :is_primary,
     :valid_from,
     :valid_to,
     :position
   ]
 
   @doc """
-  Builds a changeset. `metadata` is intentionally excluded from the
-  castable field list — it's only ever set programmatically by the
-  context, never from raw (e.g. LiveView form) params.
+  Builds a changeset from user-supplied attrs. Only `@user_fields` (plus the
+  required `item_uuid`/`supplier_uuid`) are castable; `is_primary`,
+  `supplier_name_snapshot`, `position`, and `metadata` are set only by the
+  context and cannot be forged through a LiveView payload.
   """
   @spec changeset(t() | Ecto.Changeset.t(t()), map()) :: Ecto.Changeset.t(t())
   def changeset(item_supplier_info, attrs) do
     item_supplier_info
-    |> cast(attrs, @required_fields ++ @optional_fields)
+    |> cast(attrs, @required_fields ++ @user_fields)
     |> validate_required(@required_fields)
     |> validate_length(:supplier_sku, max: 100)
-    |> validate_length(:supplier_name_snapshot, max: 255)
     |> validate_length(:currency, is: 3)
     |> validate_number(:unit_cost, greater_than_or_equal_to: 0)
     |> validate_number(:min_order_qty, greater_than_or_equal_to: 0)
     |> validate_number(:lead_time_days, greater_than_or_equal_to: 0)
     |> validate_valid_to()
     |> foreign_key_constraint(:item_uuid)
+    |> unique_constraint(:uuid, name: :phoenix_kit_cat_item_supplier_info_pkey)
     |> unique_constraint(:is_primary,
       name: :phoenix_kit_cat_item_supplier_info_primary_uniq,
       message: "only one supplier can be marked primary per item"

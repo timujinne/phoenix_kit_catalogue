@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
   import Ecto.Query, warn: false
 
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Helpers, PubSub, Suppliers}
-  alias PhoenixKitCatalogue.Schemas.ItemSupplierInfo
+  alias PhoenixKitCatalogue.Schemas.{Item, ItemSupplierInfo}
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
@@ -24,7 +24,9 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
   def list_for_item(item_uuid) do
     from(isi in ItemSupplierInfo,
       where: isi.item_uuid == ^item_uuid,
-      order_by: [desc: isi.is_primary, asc: isi.position]
+      # asc: isi.uuid is the stable tiebreaker — new rows all default to
+      # position 0, so without it Postgres may reorder ties between renders.
+      order_by: [desc: isi.is_primary, asc: isi.position, asc: isi.uuid]
     )
     |> repo().all()
   end
@@ -41,11 +43,15 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
           {:ok, ItemSupplierInfo.t()} | {:error, Ecto.Changeset.t(ItemSupplierInfo.t())}
   def upsert(attrs, opts \\ []) do
     {target, action} = fetch_target(attrs)
-    attrs = snapshot_supplier_name(attrs)
 
     result =
       ActivityLog.with_log(
-        fn -> target |> ItemSupplierInfo.changeset(attrs) |> repo().insert_or_update() end,
+        fn ->
+          target
+          |> ItemSupplierInfo.changeset(attrs)
+          |> put_supplier_snapshot()
+          |> repo().insert_or_update()
+        end,
         fn record ->
           %{
             action: action,
@@ -62,8 +68,30 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
       )
 
     with {:ok, record} <- result do
+      # Editing the row that is already primary must keep the item's
+      # warehouse-facing scalar (primary_supplier_uuid) in sync with it.
+      if record.is_primary, do: set_item_primary_supplier(record.item_uuid, record.supplier_uuid)
       broadcast(record.uuid, record.item_uuid)
       {:ok, record}
+    end
+  end
+
+  # Stamps supplier_name_snapshot from the resolved supplier (local
+  # cat_supplier or CRM-federated party) via put_change — never from raw
+  # params, so a forged snapshot can't be persisted.
+  defp put_supplier_snapshot(changeset) do
+    case Ecto.Changeset.get_field(changeset, :supplier_uuid) do
+      nil ->
+        changeset
+
+      supplier_uuid ->
+        case Suppliers.resolve_supplier(supplier_uuid) do
+          %{name: name} when is_binary(name) ->
+            Ecto.Changeset.put_change(changeset, :supplier_name_snapshot, name)
+
+          _ ->
+            changeset
+        end
     end
   end
 
@@ -80,51 +108,42 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
     end
   end
 
-  defp snapshot_supplier_name(attrs) do
-    case Helpers.fetch_attr(attrs, :supplier_uuid) do
-      nil ->
-        attrs
-
-      supplier_uuid ->
-        case Suppliers.resolve_supplier(supplier_uuid) do
-          %{name: name} -> Helpers.put_attr(attrs, :supplier_name_snapshot, name)
-          nil -> attrs
-        end
-    end
-  end
-
   @doc "Deletes a supplier-info row by UUID. Returns `{:error, :not_found}` if missing."
   @spec delete(Ecto.UUID.t(), keyword()) ::
           {:ok, ItemSupplierInfo.t()}
           | {:error, :not_found | Ecto.Changeset.t(ItemSupplierInfo.t())}
   def delete(uuid, opts \\ []) do
     case repo().get(ItemSupplierInfo, uuid) do
-      nil ->
-        {:error, :not_found}
+      nil -> {:error, :not_found}
+      record -> do_delete(record, opts)
+    end
+  end
 
-      record ->
-        result =
-          ActivityLog.with_log(
-            fn -> repo().delete(record) end,
-            fn _ ->
-              %{
-                action: "item_supplier_info.deleted",
-                mode: "manual",
-                actor_uuid: opts[:actor_uuid],
-                resource_type: "item_supplier_info",
-                resource_uuid: record.uuid,
-                metadata: %{
-                  "item_uuid" => record.item_uuid,
-                  "supplier_uuid" => record.supplier_uuid
-                }
-              }
-            end
-          )
-
-        with {:ok, deleted} <- result do
-          broadcast(record.uuid, record.item_uuid)
-          {:ok, deleted}
+  defp do_delete(record, opts) do
+    result =
+      ActivityLog.with_log(
+        fn -> repo().delete(record) end,
+        fn _ ->
+          %{
+            action: "item_supplier_info.deleted",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "item_supplier_info",
+            resource_uuid: record.uuid,
+            metadata: %{
+              "item_uuid" => record.item_uuid,
+              "supplier_uuid" => record.supplier_uuid
+            }
+          }
         end
+      )
+
+    with {:ok, deleted} <- result do
+      # Removing the primary row leaves the item with no primary supplier —
+      # clear the warehouse-facing scalar so it can't dangle.
+      if record.is_primary, do: set_item_primary_supplier(record.item_uuid, nil)
+      broadcast(record.uuid, record.item_uuid)
+      {:ok, deleted}
     end
   end
 
@@ -143,8 +162,15 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
         clear_other_primaries(item_uuid, isi_uuid)
 
         case repo().get(ItemSupplierInfo, isi_uuid) do
-          %ItemSupplierInfo{item_uuid: ^item_uuid} = record -> flip_to_primary(record)
-          _ -> repo().rollback(:not_found)
+          %ItemSupplierInfo{item_uuid: ^item_uuid} = record ->
+            updated = flip_to_primary(record)
+            # Mirror the choice onto the item's warehouse-facing scalar so the
+            # junction's is_primary row is the single source of truth.
+            set_item_primary_supplier(item_uuid, updated.supplier_uuid)
+            updated
+
+          _ ->
+            repo().rollback(:not_found)
         end
       end)
 
@@ -171,11 +197,30 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
   end
 
   defp flip_to_primary(record) do
-    case record |> ItemSupplierInfo.changeset(%{is_primary: true}) |> repo().update() do
+    # is_primary is not user-castable, so set it via a direct change; keep the
+    # unique_constraint so a concurrent primary still rolls back as a clean
+    # changeset error rather than a raw Postgrex exception.
+    changeset =
+      record
+      |> Ecto.Changeset.change(is_primary: true)
+      |> Ecto.Changeset.unique_constraint(:is_primary,
+        name: :phoenix_kit_cat_item_supplier_info_primary_uniq
+      )
+
+    case repo().update(changeset) do
       {:ok, updated} -> updated
       {:error, changeset} -> repo().rollback(changeset)
     end
   end
+
+  # Keeps the item's warehouse-facing scalar column in lockstep with the
+  # junction's is_primary row. `supplier_uuid` may be nil (primary cleared).
+  defp set_item_primary_supplier(item_uuid, supplier_uuid) do
+    from(i in Item, where: i.uuid == ^item_uuid)
+    |> repo().update_all(set: [primary_supplier_uuid: supplier_uuid, updated_at: now()])
+  end
+
+  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   @doc "Returns a changeset for tracking supplier-info changes."
   @spec change(ItemSupplierInfo.t(), map()) :: Ecto.Changeset.t(ItemSupplierInfo.t())

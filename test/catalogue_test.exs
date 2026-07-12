@@ -4298,7 +4298,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier(%{name: "Acme Corp"})
 
       assert {:ok, isi} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  supplier_sku: "SKU-1"
@@ -4312,7 +4312,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     end
 
     test "upsert/1 requires item_uuid and supplier_uuid" do
-      assert {:error, changeset} = Catalogue.upsert(%{})
+      assert {:error, changeset} = Catalogue.upsert_item_supplier_info(%{})
       errors = errors_on(changeset)
       assert errors.item_uuid
       assert errors.supplier_uuid
@@ -4321,7 +4321,9 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     test "upsert/1 with a blank supplier_uuid returns a validation error instead of raising" do
       item = create_item()
 
-      assert {:error, changeset} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: ""})
+      assert {:error, changeset} =
+               Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: ""})
+
       assert errors_on(changeset).supplier_uuid
     end
 
@@ -4329,7 +4331,10 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       item = create_item()
 
       assert {:error, changeset} =
-               Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: "not-a-uuid"})
+               Catalogue.upsert_item_supplier_info(%{
+                 item_uuid: item.uuid,
+                 supplier_uuid: "not-a-uuid"
+               })
 
       assert errors_on(changeset).supplier_uuid
     end
@@ -4339,7 +4344,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier()
 
       assert {:error, changeset} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  currency: "USDX"
@@ -4353,7 +4358,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier()
 
       assert {:error, changeset} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  unit_cost: -1,
@@ -4372,7 +4377,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier()
 
       assert {:error, changeset} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  valid_from: ~D[2026-02-01],
@@ -4387,14 +4392,14 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier()
 
       assert {:ok, isi} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  supplier_sku: "A"
                })
 
       assert {:ok, updated} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  uuid: isi.uuid,
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
@@ -4403,7 +4408,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
 
       assert updated.uuid == isi.uuid
       assert updated.supplier_sku == "B"
-      assert length(Catalogue.list_for_item(item.uuid)) == 1
+      assert length(Catalogue.list_supplier_infos_for_item(item.uuid)) == 1
     end
 
     test "upsert/1 does not cast metadata from raw attrs" do
@@ -4411,7 +4416,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       supplier = create_supplier()
 
       assert {:ok, isi} =
-               Catalogue.upsert(%{
+               Catalogue.upsert_item_supplier_info(%{
                  item_uuid: item.uuid,
                  supplier_uuid: supplier.uuid,
                  metadata: %{"hack" => true}
@@ -4420,18 +4425,67 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert isi.metadata == %{}
     end
 
-    test "upsert/1 with is_primary: true conflicts gracefully when another primary already exists" do
+    test "upsert ignores a forged is_primary (primary is managed only by set_primary)" do
+      item = create_item()
+      s = create_supplier()
+
+      # A crafted payload can't mark a row primary through upsert — is_primary
+      # isn't castable; only set_primary/3 flips it (transactionally).
+      assert {:ok, isi} =
+               Catalogue.upsert_item_supplier_info(%{
+                 item_uuid: item.uuid,
+                 supplier_uuid: s.uuid,
+                 is_primary: true
+               })
+
+      refute isi.is_primary
+    end
+
+    test "upsert ignores a forged supplier_name_snapshot and stamps the resolved name" do
+      item = create_item()
+      s = create_supplier(%{name: "Real Supplier Co"})
+
+      assert {:ok, isi} =
+               Catalogue.upsert_item_supplier_info(%{
+                 item_uuid: item.uuid,
+                 supplier_uuid: s.uuid,
+                 supplier_name_snapshot: "Forged Co"
+               })
+
+      assert isi.supplier_name_snapshot == "Real Supplier Co"
+    end
+
+    test "set_primary_supplier mirrors the choice onto the item's primary_supplier_uuid scalar" do
       item = create_item()
       s1 = create_supplier()
       s2 = create_supplier()
 
-      assert {:ok, _isi1} =
-               Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s1.uuid, is_primary: true})
+      {:ok, isi1} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s1.uuid})
 
-      assert {:error, changeset} =
-               Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s2.uuid, is_primary: true})
+      {:ok, isi2} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s2.uuid})
 
-      assert errors_on(changeset).is_primary
+      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi1.uuid)
+      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s1.uuid
+
+      # Re-pointing the primary follows through to the scalar.
+      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi2.uuid)
+      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s2.uuid
+    end
+
+    test "deleting the primary row clears the item's primary_supplier_uuid scalar" do
+      item = create_item()
+      s = create_supplier()
+
+      {:ok, isi} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
+
+      {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi.uuid)
+      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s.uuid
+
+      assert {:ok, _} = Catalogue.delete_item_supplier_info(isi.uuid)
+      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == nil
     end
 
     test "list_for_item/1 orders primary first, then by position" do
@@ -4440,13 +4494,30 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       s2 = create_supplier(%{name: "S2"})
       s3 = create_supplier(%{name: "S3"})
 
-      {:ok, isi1} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s1.uuid, position: 1})
-      {:ok, isi2} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s2.uuid, position: 0})
-      {:ok, isi3} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s3.uuid, position: 2})
+      {:ok, isi1} =
+        Catalogue.upsert_item_supplier_info(%{
+          item_uuid: item.uuid,
+          supplier_uuid: s1.uuid,
+          position: 1
+        })
 
-      assert {:ok, _} = Catalogue.set_primary(item.uuid, isi3.uuid)
+      {:ok, isi2} =
+        Catalogue.upsert_item_supplier_info(%{
+          item_uuid: item.uuid,
+          supplier_uuid: s2.uuid,
+          position: 0
+        })
 
-      assert Enum.map(Catalogue.list_for_item(item.uuid), & &1.uuid) ==
+      {:ok, isi3} =
+        Catalogue.upsert_item_supplier_info(%{
+          item_uuid: item.uuid,
+          supplier_uuid: s3.uuid,
+          position: 2
+        })
+
+      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi3.uuid)
+
+      assert Enum.map(Catalogue.list_supplier_infos_for_item(item.uuid), & &1.uuid) ==
                [isi3.uuid, isi2.uuid, isi1.uuid]
     end
 
@@ -4455,18 +4526,21 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       s1 = create_supplier()
       s2 = create_supplier()
 
-      {:ok, isi1} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s1.uuid})
-      {:ok, isi2} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s2.uuid})
+      {:ok, isi1} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s1.uuid})
 
-      assert {:ok, _} = Catalogue.set_primary(item.uuid, isi1.uuid)
+      {:ok, isi2} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s2.uuid})
 
-      assert Catalogue.list_for_item(item.uuid)
+      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi1.uuid)
+
+      assert Catalogue.list_supplier_infos_for_item(item.uuid)
              |> Enum.find(&(&1.uuid == isi1.uuid))
              |> Map.get(:is_primary)
 
-      assert {:ok, _} = Catalogue.set_primary(item.uuid, isi2.uuid)
+      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi2.uuid)
 
-      rows = Catalogue.list_for_item(item.uuid)
+      rows = Catalogue.list_supplier_infos_for_item(item.uuid)
       assert Enum.find(rows, &(&1.uuid == isi2.uuid)).is_primary
       refute Enum.find(rows, &(&1.uuid == isi1.uuid)).is_primary
     end
@@ -4476,45 +4550,52 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       item2 = create_item()
       s = create_supplier()
 
-      {:ok, isi} = Catalogue.upsert(%{item_uuid: item2.uuid, supplier_uuid: s.uuid})
+      {:ok, isi} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item2.uuid, supplier_uuid: s.uuid})
 
-      assert {:error, :not_found} = Catalogue.set_primary(item1.uuid, isi.uuid)
+      assert {:error, :not_found} = Catalogue.set_primary_supplier(item1.uuid, isi.uuid)
     end
 
     test "delete/1 removes the row" do
       item = create_item()
       s = create_supplier()
-      {:ok, isi} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
 
-      assert {:ok, _} = Catalogue.delete(isi.uuid)
-      assert Catalogue.list_for_item(item.uuid) == []
+      {:ok, isi} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
+
+      assert {:ok, _} = Catalogue.delete_item_supplier_info(isi.uuid)
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
     end
 
     test "delete/1 returns {:error, :not_found} for an unknown uuid" do
-      assert {:error, :not_found} = Catalogue.delete(Ecto.UUID.generate())
+      assert {:error, :not_found} = Catalogue.delete_item_supplier_info(Ecto.UUID.generate())
     end
 
     test "change/2 returns a changeset" do
       item = create_item()
 
       assert %Ecto.Changeset{} =
-               Catalogue.change(%ItemSupplierInfo{item_uuid: item.uuid})
+               Catalogue.change_item_supplier_info(%ItemSupplierInfo{item_uuid: item.uuid})
     end
 
     test "rows are removed when the parent item is hard-deleted (ON DELETE CASCADE)" do
       item = create_item()
       s = create_supplier()
-      {:ok, _isi} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
+
+      {:ok, _isi} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
 
       Repo.delete!(item)
 
-      assert Catalogue.list_for_item(item.uuid) == []
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
     end
 
     test "the :item association preloads" do
       item = create_item()
       s = create_supplier()
-      {:ok, isi} = Catalogue.upsert(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
+
+      {:ok, isi} =
+        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
 
       preloaded = Repo.preload(isi, :item)
       assert preloaded.item.uuid == item.uuid

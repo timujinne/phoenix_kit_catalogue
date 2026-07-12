@@ -50,8 +50,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     "unit" => :unit,
     "status" => :status,
     "category_uuid" => :category_uuid,
-    "manufacturer_uuid" => :manufacturer_uuid,
-    "primary_supplier_uuid" => :primary_supplier_uuid
+    "manufacturer_uuid" => :manufacturer_uuid
   }
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
@@ -95,7 +94,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       item ->
         item =
           item
-          |> PhoenixKit.RepoHelper.repo().preload([:category, :manufacturer, :primary_supplier])
+          |> PhoenixKit.RepoHelper.repo().preload([:category, :manufacturer])
           |> normalize_display_decimals()
 
         {item, Catalogue.change_item(item), item.catalogue_uuid}
@@ -148,9 +147,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       catalogue_discount: discount_from_catalogue(parent_catalogue),
       categories: categories,
       manufacturers: Catalogue.list_manufacturers(status: "active"),
-      suppliers: Catalogue.list_suppliers(status: "active"),
       federated_suppliers: Catalogue.list_federated_suppliers(status: "active"),
-      item_supplier_infos: if(action == :edit, do: Catalogue.list_for_item(item.uuid), else: []),
+      item_supplier_infos:
+        if(action == :edit, do: Catalogue.list_supplier_infos_for_item(item.uuid), else: []),
       editing_supplier_info_uuid: nil,
       supplier_info_form: to_form(blank_supplier_info_changeset(item), as: :item_supplier_info),
       all_categories: all_categories,
@@ -284,7 +283,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp discount_from_catalogue(_), do: nil
 
   defp blank_supplier_info_changeset(item) do
-    Catalogue.change(%ItemSupplierInfo{item_uuid: item.uuid})
+    Catalogue.change_item_supplier_info(%ItemSupplierInfo{item_uuid: item.uuid})
   end
 
   defp adjust_multilang_for_item(socket, item) do
@@ -513,29 +512,44 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     changeset =
       socket
       |> supplier_info_target()
-      |> Catalogue.change(params)
+      |> Catalogue.change_item_supplier_info(params)
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, :supplier_info_form, to_form(changeset, as: :item_supplier_info))}
   end
 
   def handle_event("save_supplier_info", %{"item_supplier_info" => params}, socket) do
-    attrs =
-      params
-      |> Map.put("item_uuid", socket.assigns.item.uuid)
-      |> maybe_put_editing_uuid(socket.assigns.editing_supplier_info_uuid)
+    if valid_supplier_choice?(socket, params["supplier_uuid"]) do
+      attrs =
+        params
+        |> safe_supplier_info_attrs()
+        |> Map.put("item_uuid", socket.assigns.item.uuid)
+        |> maybe_put_editing_uuid(socket.assigns.editing_supplier_info_uuid)
 
-    case Catalogue.upsert(attrs, actor_opts(socket)) do
-      {:ok, _record} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier info saved."))
-         |> reload_supplier_infos()
-         |> reset_supplier_info_form()}
+      case Catalogue.upsert_item_supplier_info(attrs, actor_opts(socket)) do
+        {:ok, _record} ->
+          {:noreply,
+           socket
+           |> put_flash(
+             :info,
+             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier info saved.")
+           )
+           |> reload_supplier_infos()
+           |> reset_supplier_info_form()}
 
-      {:error, changeset} ->
-        {:noreply,
-         assign(socket, :supplier_info_form, to_form(changeset, as: :item_supplier_info))}
+        {:error, changeset} ->
+          {:noreply,
+           assign(socket, :supplier_info_form, to_form(changeset, as: :item_supplier_info))}
+      end
+    else
+      # The last phx-change already kept the entered SKU/price in the form,
+      # so just surface the error — don't reset.
+      {:noreply,
+       put_flash(
+         socket,
+         :error,
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Please choose a supplier from the list.")
+       )}
     end
   end
 
@@ -550,7 +564,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          |> assign(:editing_supplier_info_uuid, uuid)
          |> assign(
            :supplier_info_form,
-           to_form(Catalogue.change(record), as: :item_supplier_info)
+           to_form(Catalogue.change_item_supplier_info(record), as: :item_supplier_info)
          )}
     end
   end
@@ -560,7 +574,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   end
 
   def handle_event("delete_supplier_info", %{"uuid" => uuid}, socket) do
-    case Catalogue.delete(uuid, actor_opts(socket)) do
+    case Catalogue.delete_item_supplier_info(uuid, actor_opts(socket)) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -582,7 +596,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   end
 
   def handle_event("set_primary_supplier_info", %{"uuid" => uuid}, socket) do
-    case Catalogue.set_primary(socket.assigns.item.uuid, uuid, actor_opts(socket)) do
+    case Catalogue.set_primary_supplier(socket.assigns.item.uuid, uuid, actor_opts(socket)) do
       {:ok, _} ->
         {:noreply,
          socket
@@ -602,6 +616,24 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     end
   end
 
+  # Allowlist the user-editable fields only — is_primary, position,
+  # supplier_name_snapshot and metadata are managed by the context and must
+  # never be assignable from a raw LiveView payload.
+  defp safe_supplier_info_attrs(params) do
+    Map.take(
+      params,
+      ~w(supplier_uuid supplier_sku unit_cost currency lead_time_days min_order_qty valid_from valid_to)
+    )
+  end
+
+  # The chosen supplier must be one the picker actually offered (a real
+  # cat_supplier or CRM supplier-party) — supplier_uuid is a soft ref with no
+  # DB FK, so a forged uuid would otherwise persist pointing at anything.
+  defp valid_supplier_choice?(socket, supplier_uuid) do
+    is_binary(supplier_uuid) and supplier_uuid != "" and
+      Enum.any?(socket.assigns.federated_suppliers, &(to_string(&1.uuid) == supplier_uuid))
+  end
+
   defp supplier_info_target(socket) do
     case socket.assigns.editing_supplier_info_uuid do
       nil ->
@@ -617,7 +649,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp maybe_put_editing_uuid(attrs, uuid), do: Map.put(attrs, "uuid", uuid)
 
   defp reload_supplier_infos(socket) do
-    assign(socket, :item_supplier_infos, Catalogue.list_for_item(socket.assigns.item.uuid))
+    assign(
+      socket,
+      :item_supplier_infos,
+      Catalogue.list_supplier_infos_for_item(socket.assigns.item.uuid)
+    )
   end
 
   defp reset_supplier_info_form(socket) do
@@ -1239,13 +1275,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No manufacturer --")}
                   options={Enum.map(@manufacturers, &{&1.name, &1.uuid})}
                 />
-                <.select
-                  field={@form[:primary_supplier_uuid]}
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary supplier")}
-                  class="transition-colors focus-within:select-primary"
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No primary supplier --")}
-                  options={Enum.map(@suppliers, &{&1.name, &1.uuid})}
-                />
+                <%!-- Primary supplier is chosen in the "Suppliers & Pricing"
+                      section below (the ★ on a supplier row), which drives the
+                      item's primary_supplier_uuid. A separate scalar picker here
+                      would be a second, divergent source of truth. --%>
               </div>
             </div>
 

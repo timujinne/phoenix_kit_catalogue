@@ -253,10 +253,15 @@ defmodule PhoenixKitCatalogue.Catalogue.Suppliers do
   # isn't a compile-time dependency here — `Contact` has no `:website`
   # field at all, so a plain `party.website` would raise `KeyError`.
   defp normalize_crm(party) do
+    email = Map.get(party, :email)
+
     %{
       uuid: Map.get(party, :uuid),
-      name: Map.get(party, :name),
-      email: Map.get(party, :email),
+      # Mirror the fallback CRM's own get_supplier/1 uses (Company/Contact
+      # display_name → email → "Unnamed") so the picker label and the
+      # snapshot stored on selection agree for blank-name parties.
+      name: Map.get(party, :name) || email || "Unnamed",
+      email: email,
       phone: Map.get(party, :phone),
       website: Map.get(party, :website),
       source: :crm

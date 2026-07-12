@@ -311,11 +311,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # Item ↔ Supplier info — see PhoenixKitCatalogue.Catalogue.ItemSupplierInfo
   # ═══════════════════════════════════════════════════════════════════
 
-  defdelegate list_for_item(item_uuid), to: ItemSupplierInfo
-  defdelegate upsert(attrs, opts \\ []), to: ItemSupplierInfo
-  defdelegate delete(uuid, opts \\ []), to: ItemSupplierInfo
-  defdelegate set_primary(item_uuid, isi_uuid, opts \\ []), to: ItemSupplierInfo
-  defdelegate change(item_supplier_info, attrs \\ %{}), to: ItemSupplierInfo
+  defdelegate list_supplier_infos_for_item(item_uuid), to: ItemSupplierInfo, as: :list_for_item
+  defdelegate upsert_item_supplier_info(attrs, opts \\ []), to: ItemSupplierInfo, as: :upsert
+  defdelegate delete_item_supplier_info(uuid, opts \\ []), to: ItemSupplierInfo, as: :delete
+
+  defdelegate set_primary_supplier(item_uuid, isi_uuid, opts \\ []),
+    to: ItemSupplierInfo,
+    as: :set_primary
+
+  defdelegate change_item_supplier_info(item_supplier_info, attrs \\ %{}),
+    to: ItemSupplierInfo,
+    as: :change
 
   # ═══════════════════════════════════════════════════════════════════
   # Catalogues
@@ -3585,9 +3591,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   @doc """
-  Fetches an item by UUID with preloaded `:catalogue`, `:category`,
-  `:manufacturer`, and `:primary_supplier`. Raises `Ecto.NoResultsError` if
-  not found.
+  Fetches an item by UUID with preloaded `:catalogue`, `:category`, and
+  `:manufacturer`. Raises `Ecto.NoResultsError` if not found.
+
+  The primary supplier is no longer a `belongs_to` (it's a soft ref that may
+  point at a CRM party) — resolve it with `resolve_supplier/1` on
+  `item.primary_supplier_uuid` when a name is needed.
 
   Pass `:preload` to add more associations (concatenated with the
   defaults).
@@ -3596,9 +3605,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def get_item!(uuid, opts \\ []) do
     Item
     |> repo().get!(uuid)
-    |> repo().preload(
-      Helpers.merge_preloads([:catalogue, :category, :manufacturer, :primary_supplier], opts)
-    )
+    |> repo().preload(Helpers.merge_preloads([:catalogue, :category, :manufacturer], opts))
   end
 
   @doc """

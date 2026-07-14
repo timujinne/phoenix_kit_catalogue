@@ -315,10 +315,6 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate upsert_item_supplier_info(attrs, opts \\ []), to: ItemSupplierInfo, as: :upsert
   defdelegate delete_item_supplier_info(uuid, opts \\ []), to: ItemSupplierInfo, as: :delete
 
-  defdelegate set_primary_supplier(item_uuid, isi_uuid, opts \\ []),
-    to: ItemSupplierInfo,
-    as: :set_primary
-
   defdelegate change_item_supplier_info(item_supplier_info, attrs \\ %{}),
     to: ItemSupplierInfo,
     as: :change
@@ -3591,12 +3587,9 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   @doc """
-  Fetches an item by UUID with preloaded `:catalogue`, `:category`, and
-  `:manufacturer`. Raises `Ecto.NoResultsError` if not found.
-
-  The primary supplier is no longer a `belongs_to` (it's a soft ref that may
-  point at a CRM party) — resolve it with `resolve_supplier/1` on
-  `item.primary_supplier_uuid` when a name is needed.
+  Fetches an item by UUID with preloaded `:catalogue`, `:category`,
+  `:manufacturer`, and `:primary_supplier`. Raises `Ecto.NoResultsError` if
+  not found.
 
   Pass `:preload` to add more associations (concatenated with the
   defaults).
@@ -3605,7 +3598,9 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def get_item!(uuid, opts \\ []) do
     Item
     |> repo().get!(uuid)
-    |> repo().preload(Helpers.merge_preloads([:catalogue, :category, :manufacturer], opts))
+    |> repo().preload(
+      Helpers.merge_preloads([:catalogue, :category, :manufacturer, :primary_supplier], opts)
+    )
   end
 
   @doc """

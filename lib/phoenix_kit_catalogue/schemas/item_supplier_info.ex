@@ -3,16 +3,18 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
   Schema for per-supplier sourcing info on a catalogue item — SKU, unit
   cost, currency, lead time, and minimum order quantity.
 
-  `item_uuid` is a real FK (`ON DELETE CASCADE` in V144). `supplier_uuid`
-  is a **soft ref, no FK** — it resolves to a local `cat_supplier` or a
+  `item_uuid` is a real FK (`ON DELETE CASCADE`). `supplier_uuid` is a
+  **soft ref, no FK** — it resolves to a local `cat_supplier` or a
   federated CRM party via
   `PhoenixKitCatalogue.Catalogue.Suppliers.resolve_supplier/1`.
 
-  At most one row per item may have `is_primary: true`, enforced by a
-  partial unique index (`item_uuid` `WHERE is_primary`).
+  There is no "primary" among these rows — the item's default supplier is
+  the `Item.primary_supplier` scalar (a hard FK to `cat_suppliers`). This
+  table is purely the per-supplier pricing layer alongside it.
   """
 
   use Ecto.Schema
+  use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
   @type t :: %__MODULE__{}
@@ -35,7 +37,6 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
     field(:currency, :string)
     field(:lead_time_days, :integer)
     field(:min_order_qty, :decimal)
-    field(:is_primary, :boolean, default: false)
     field(:valid_from, :date)
     field(:valid_to, :date)
     field(:position, :integer, default: 0)
@@ -47,8 +48,6 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
   @required_fields [:item_uuid, :supplier_uuid]
   # User-editable via the item form. Deliberately EXCLUDES the fields that
   # must never be mass-assigned from raw params:
-  #   * is_primary — flipped only through the context's `set_primary/3`
-  #     (transactional clear-then-set), never a form field;
   #   * supplier_name_snapshot — stamped by the context from the resolved
   #     supplier name at write time;
   #   * metadata — context-only.
@@ -67,9 +66,9 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
 
   @doc """
   Builds a changeset from user-supplied attrs. Only `@user_fields` (plus the
-  required `item_uuid`/`supplier_uuid`) are castable; `is_primary`,
-  `supplier_name_snapshot`, `position`, and `metadata` are set only by the
-  context and cannot be forged through a LiveView payload.
+  required `item_uuid`/`supplier_uuid`) are castable; `supplier_name_snapshot`
+  and `metadata` are set only by the context and cannot be forged through a
+  LiveView payload.
   """
   @spec changeset(t() | Ecto.Changeset.t(t()), map()) :: Ecto.Changeset.t(t())
   def changeset(item_supplier_info, attrs) do
@@ -84,10 +83,6 @@ defmodule PhoenixKitCatalogue.Schemas.ItemSupplierInfo do
     |> validate_valid_to()
     |> foreign_key_constraint(:item_uuid)
     |> unique_constraint(:uuid, name: :phoenix_kit_cat_item_supplier_info_pkey)
-    |> unique_constraint(:is_primary,
-      name: :phoenix_kit_cat_item_supplier_info_primary_uniq,
-      message: "only one supplier can be marked primary per item"
-    )
   end
 
   defp validate_valid_to(changeset) do

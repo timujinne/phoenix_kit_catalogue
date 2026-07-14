@@ -4308,7 +4308,6 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert isi.supplier_uuid == supplier.uuid
       assert isi.supplier_sku == "SKU-1"
       assert isi.supplier_name_snapshot == "Acme Corp"
-      assert isi.is_primary == false
     end
 
     test "upsert/1 requires item_uuid and supplier_uuid" do
@@ -4425,22 +4424,6 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert isi.metadata == %{}
     end
 
-    test "upsert ignores a forged is_primary (primary is managed only by set_primary)" do
-      item = create_item()
-      s = create_supplier()
-
-      # A crafted payload can't mark a row primary through upsert — is_primary
-      # isn't castable; only set_primary/3 flips it (transactionally).
-      assert {:ok, isi} =
-               Catalogue.upsert_item_supplier_info(%{
-                 item_uuid: item.uuid,
-                 supplier_uuid: s.uuid,
-                 is_primary: true
-               })
-
-      refute isi.is_primary
-    end
-
     test "upsert ignores a forged supplier_name_snapshot and stamps the resolved name" do
       item = create_item()
       s = create_supplier(%{name: "Real Supplier Co"})
@@ -4455,40 +4438,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert isi.supplier_name_snapshot == "Real Supplier Co"
     end
 
-    test "set_primary_supplier mirrors the choice onto the item's primary_supplier_uuid scalar" do
-      item = create_item()
-      s1 = create_supplier()
-      s2 = create_supplier()
-
-      {:ok, isi1} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s1.uuid})
-
-      {:ok, isi2} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s2.uuid})
-
-      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi1.uuid)
-      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s1.uuid
-
-      # Re-pointing the primary follows through to the scalar.
-      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi2.uuid)
-      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s2.uuid
-    end
-
-    test "deleting the primary row clears the item's primary_supplier_uuid scalar" do
-      item = create_item()
-      s = create_supplier()
-
-      {:ok, isi} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s.uuid})
-
-      {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi.uuid)
-      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == s.uuid
-
-      assert {:ok, _} = Catalogue.delete_item_supplier_info(isi.uuid)
-      assert Catalogue.get_item!(item.uuid).primary_supplier_uuid == nil
-    end
-
-    test "list_for_item/1 orders primary first, then by position" do
+    test "list_for_item/1 orders rows by position (stable tiebreaker on uuid)" do
       item = create_item()
       s1 = create_supplier(%{name: "S1"})
       s2 = create_supplier(%{name: "S2"})
@@ -4515,45 +4465,8 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
           position: 2
         })
 
-      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi3.uuid)
-
       assert Enum.map(Catalogue.list_supplier_infos_for_item(item.uuid), & &1.uuid) ==
-               [isi3.uuid, isi2.uuid, isi1.uuid]
-    end
-
-    test "set_primary/2 flips is_primary and clears any previous primary" do
-      item = create_item()
-      s1 = create_supplier()
-      s2 = create_supplier()
-
-      {:ok, isi1} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s1.uuid})
-
-      {:ok, isi2} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item.uuid, supplier_uuid: s2.uuid})
-
-      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi1.uuid)
-
-      assert Catalogue.list_supplier_infos_for_item(item.uuid)
-             |> Enum.find(&(&1.uuid == isi1.uuid))
-             |> Map.get(:is_primary)
-
-      assert {:ok, _} = Catalogue.set_primary_supplier(item.uuid, isi2.uuid)
-
-      rows = Catalogue.list_supplier_infos_for_item(item.uuid)
-      assert Enum.find(rows, &(&1.uuid == isi2.uuid)).is_primary
-      refute Enum.find(rows, &(&1.uuid == isi1.uuid)).is_primary
-    end
-
-    test "set_primary/2 rejects a row that belongs to a different item" do
-      item1 = create_item()
-      item2 = create_item()
-      s = create_supplier()
-
-      {:ok, isi} =
-        Catalogue.upsert_item_supplier_info(%{item_uuid: item2.uuid, supplier_uuid: s.uuid})
-
-      assert {:error, :not_found} = Catalogue.set_primary_supplier(item1.uuid, isi.uuid)
+               [isi2.uuid, isi1.uuid, isi3.uuid]
     end
 
     test "delete/1 removes the row" do

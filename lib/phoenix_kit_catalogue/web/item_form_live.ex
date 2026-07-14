@@ -50,7 +50,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     "unit" => :unit,
     "status" => :status,
     "category_uuid" => :category_uuid,
-    "manufacturer_uuid" => :manufacturer_uuid
+    "manufacturer_uuid" => :manufacturer_uuid,
+    "primary_supplier_uuid" => :primary_supplier_uuid
   }
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
@@ -94,7 +95,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       item ->
         item =
           item
-          |> PhoenixKit.RepoHelper.repo().preload([:category, :manufacturer])
+          |> PhoenixKit.RepoHelper.repo().preload([:category, :manufacturer, :primary_supplier])
           |> normalize_display_decimals()
 
         {item, Catalogue.change_item(item), item.catalogue_uuid}
@@ -147,6 +148,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       catalogue_discount: discount_from_catalogue(parent_catalogue),
       categories: categories,
       manufacturers: Catalogue.list_manufacturers(status: "active"),
+      suppliers: Catalogue.list_suppliers(status: "active"),
       federated_suppliers: Catalogue.list_federated_suppliers(status: "active"),
       item_supplier_infos:
         if(action == :edit, do: Catalogue.list_supplier_infos_for_item(item.uuid), else: []),
@@ -595,30 +597,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     end
   end
 
-  def handle_event("set_primary_supplier_info", %{"uuid" => uuid}, socket) do
-    case Catalogue.set_primary_supplier(socket.assigns.item.uuid, uuid, actor_opts(socket)) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary supplier updated.")
-         )
-         |> reload_supplier_infos()}
-
-      {:error, _} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to update primary supplier.")
-         )}
-    end
-  end
-
-  # Allowlist the user-editable fields only — is_primary, position,
-  # supplier_name_snapshot and metadata are managed by the context and must
-  # never be assignable from a raw LiveView payload.
+  # Allowlist the user-editable fields only — supplier_name_snapshot and
+  # metadata are managed by the context and must never be assignable from a
+  # raw LiveView payload.
   defp safe_supplier_info_attrs(params) do
     Map.take(
       params,
@@ -1275,10 +1256,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No manufacturer --")}
                   options={Enum.map(@manufacturers, &{&1.name, &1.uuid})}
                 />
-                <%!-- Primary supplier is chosen in the "Suppliers & Pricing"
-                      section below (the ★ on a supplier row), which drives the
-                      item's primary_supplier_uuid. A separate scalar picker here
-                      would be a second, divergent source of truth. --%>
+                <.select
+                  field={@form[:primary_supplier_uuid]}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary supplier")}
+                  class="transition-colors focus-within:select-primary"
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- No primary supplier --")}
+                  options={Enum.map(@suppliers, &{&1.name, &1.uuid})}
+                />
               </div>
             </div>
 
@@ -1534,14 +1518,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               </thead>
               <tbody>
                 <tr :for={isi <- @item_supplier_infos}>
-                  <td>
-                    <span class="flex items-center gap-1.5">
-                      {supplier_info_name(isi)}
-                      <span :if={isi.is_primary} class="badge badge-primary badge-xs">
-                        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Primary")}
-                      </span>
-                    </span>
-                  </td>
+                  <td>{supplier_info_name(isi)}</td>
                   <td class="font-mono text-xs">{isi.supplier_sku}</td>
                   <td>
                     <span :if={isi.unit_cost}>{isi.unit_cost} {isi.currency}</span>
@@ -1555,16 +1532,6 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   </td>
                   <td>{isi.min_order_qty}</td>
                   <td class="flex items-center gap-1 justify-end">
-                    <button
-                      :if={!isi.is_primary}
-                      type="button"
-                      phx-click="set_primary_supplier_info"
-                      phx-value-uuid={isi.uuid}
-                      class="btn btn-ghost btn-xs btn-square"
-                      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make primary")}
-                    >
-                      <.icon name="hero-star" class="w-4 h-4" />
-                    </button>
                     <button
                       type="button"
                       phx-click="edit_supplier_info"

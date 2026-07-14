@@ -5,9 +5,9 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
   soft ref (no FK): it resolves to a local `cat_supplier` or a federated
   CRM party via `PhoenixKitCatalogue.Catalogue.Suppliers.resolve_supplier/1`.
 
-  At most one row per item can have `is_primary: true` (enforced by a
-  partial unique index); use `set_primary/3` to flip it safely instead
-  of setting `is_primary` through `upsert/2` directly.
+  There is no "primary" among these rows — the item's default supplier is
+  the `Item.primary_supplier` scalar (a hard FK to `cat_suppliers`). This
+  context is purely the per-supplier pricing layer alongside it.
 
   Public surface is re-exported from `PhoenixKitCatalogue.Catalogue`.
   """
@@ -15,18 +15,18 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
   import Ecto.Query, warn: false
 
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Helpers, PubSub, Suppliers}
-  alias PhoenixKitCatalogue.Schemas.{Item, ItemSupplierInfo}
+  alias PhoenixKitCatalogue.Schemas.ItemSupplierInfo
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
-  @doc "Lists an item's supplier-info rows, primary first, then by position."
+  @doc "Lists an item's supplier-info rows, by position (stable tiebreaker on uuid)."
   @spec list_for_item(Ecto.UUID.t()) :: [ItemSupplierInfo.t()]
   def list_for_item(item_uuid) do
     from(isi in ItemSupplierInfo,
       where: isi.item_uuid == ^item_uuid,
       # asc: isi.uuid is the stable tiebreaker — new rows all default to
       # position 0, so without it Postgres may reorder ties between renders.
-      order_by: [desc: isi.is_primary, asc: isi.position, asc: isi.uuid]
+      order_by: [asc: isi.position, asc: isi.uuid]
     )
     |> repo().all()
   end
@@ -68,9 +68,6 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
       )
 
     with {:ok, record} <- result do
-      # Editing the row that is already primary must keep the item's
-      # warehouse-facing scalar (primary_supplier_uuid) in sync with it.
-      if record.is_primary, do: set_item_primary_supplier(record.item_uuid, record.supplier_uuid)
       broadcast(record.uuid, record.item_uuid)
       {:ok, record}
     end
@@ -139,88 +136,10 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfo do
       )
 
     with {:ok, deleted} <- result do
-      # Removing the primary row leaves the item with no primary supplier —
-      # clear the warehouse-facing scalar so it can't dangle.
-      if record.is_primary, do: set_item_primary_supplier(record.item_uuid, nil)
       broadcast(record.uuid, record.item_uuid)
       {:ok, deleted}
     end
   end
-
-  @doc """
-  Sets `isi_uuid` as the primary supplier-info row for `item_uuid`,
-  clearing `is_primary` on any other row for the same item first (inside
-  a transaction) so the partial unique index never sees two primaries
-  for the same item at once.
-  """
-  @spec set_primary(Ecto.UUID.t(), Ecto.UUID.t(), keyword()) ::
-          {:ok, ItemSupplierInfo.t()}
-          | {:error, :not_found | Ecto.Changeset.t(ItemSupplierInfo.t())}
-  def set_primary(item_uuid, isi_uuid, opts \\ []) do
-    result =
-      repo().transaction(fn ->
-        clear_other_primaries(item_uuid, isi_uuid)
-
-        case repo().get(ItemSupplierInfo, isi_uuid) do
-          %ItemSupplierInfo{item_uuid: ^item_uuid} = record ->
-            updated = flip_to_primary(record)
-            # Mirror the choice onto the item's warehouse-facing scalar so the
-            # junction's is_primary row is the single source of truth.
-            set_item_primary_supplier(item_uuid, updated.supplier_uuid)
-            updated
-
-          _ ->
-            repo().rollback(:not_found)
-        end
-      end)
-
-    with {:ok, record} <- result do
-      ActivityLog.log(%{
-        action: "item_supplier_info.primary_set",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item_supplier_info",
-        resource_uuid: record.uuid,
-        metadata: %{"item_uuid" => item_uuid}
-      })
-
-      broadcast(record.uuid, item_uuid)
-      {:ok, record}
-    end
-  end
-
-  defp clear_other_primaries(item_uuid, isi_uuid) do
-    from(isi in ItemSupplierInfo,
-      where: isi.item_uuid == ^item_uuid and isi.uuid != ^isi_uuid and isi.is_primary == true
-    )
-    |> repo().update_all(set: [is_primary: false])
-  end
-
-  defp flip_to_primary(record) do
-    # is_primary is not user-castable, so set it via a direct change; keep the
-    # unique_constraint so a concurrent primary still rolls back as a clean
-    # changeset error rather than a raw Postgrex exception.
-    changeset =
-      record
-      |> Ecto.Changeset.change(is_primary: true)
-      |> Ecto.Changeset.unique_constraint(:is_primary,
-        name: :phoenix_kit_cat_item_supplier_info_primary_uniq
-      )
-
-    case repo().update(changeset) do
-      {:ok, updated} -> updated
-      {:error, changeset} -> repo().rollback(changeset)
-    end
-  end
-
-  # Keeps the item's warehouse-facing scalar column in lockstep with the
-  # junction's is_primary row. `supplier_uuid` may be nil (primary cleared).
-  defp set_item_primary_supplier(item_uuid, supplier_uuid) do
-    from(i in Item, where: i.uuid == ^item_uuid)
-    |> repo().update_all(set: [primary_supplier_uuid: supplier_uuid, updated_at: now()])
-  end
-
-  defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   @doc "Returns a changeset for tracking supplier-info changes."
   @spec change(ItemSupplierInfo.t(), map()) :: Ecto.Changeset.t(ItemSupplierInfo.t())

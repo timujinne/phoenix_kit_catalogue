@@ -92,6 +92,11 @@ defmodule PhoenixKitCatalogue.MixProject do
       # leak fix (phoenix_kit #719). 2.3–2.7 compile this package with
       # warnings-as-errors failures.
       pk_dep(:phoenix_kit, "~> 2.8"),
+      # mdex_native (pulled in transitively through phoenix_kit's mdex dep)
+      # builds from source when MDEX_NATIVE_BUILD=1 is set in the
+      # environment; that path requires rustler itself, not just
+      # rustler_precompiled. Same declaration as phoenix_kit's own mix.exs.
+      {:rustler, ">= 0.0.0", optional: true},
       pk_dep(:phoenix_kit_ai, "~> 0.18"),
       # Attribute sets ride the entities engine as MANAGED blueprints
       # (2026-08-18 rework). The Managed contract + on_behalf_of write

@@ -127,8 +127,11 @@ defmodule PhoenixKitCatalogue.Catalogue.Manufacturers do
         end
       )
 
-    with {:ok, deleted} <- result do
+    with {:ok, {deleted, links_removed}} <- result do
       PubSub.broadcast(:manufacturer, manufacturer.uuid)
+      # The links went in the same transaction (muted); announce them now
+      # that it has committed.
+      if links_removed > 0, do: PubSub.broadcast(:links, manufacturer.uuid)
       {:ok, deleted}
     end
   end
@@ -138,10 +141,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Manufacturers do
   # a delete that fails must not leave the graph already pruned.
   defp delete_with_links(record) do
     repo().transaction(fn ->
-      Links.delete_links_for(record.uuid)
+      {links_removed, _} = Links.delete_links_for(record.uuid, broadcast: false)
 
       case repo().delete(record) do
-        {:ok, deleted} -> deleted
+        {:ok, deleted} -> {deleted, links_removed}
         {:error, changeset} -> repo().rollback(changeset)
       end
     end)

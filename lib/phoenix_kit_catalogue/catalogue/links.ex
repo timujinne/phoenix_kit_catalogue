@@ -7,6 +7,12 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
   transaction and emit one summary activity entry (added + removed
   counts).
 
+  Every write broadcasts `:links` (uuid of the party whose link set
+  changed, no catalogue parent). The single-link functions accept
+  `broadcast: false` so the syncs — and the party deletes in
+  `Manufacturers` / `Suppliers` — can run them inside a transaction and
+  fan out once after the commit.
+
   Public surface is re-exported from `PhoenixKitCatalogue.Catalogue`.
   """
 
@@ -16,6 +22,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
   alias PhoenixKitCatalogue.Schemas.{Manufacturer, ManufacturerSupplier, Supplier}
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
+
+  # Inside the sync transactions the per-link writes stay quiet; the
+  # sync emits the one post-commit `:links` event itself.
+  @muted [broadcast: false]
 
   @doc """
   Creates a many-to-many link between a manufacturer and a supplier.
@@ -36,6 +46,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
       supplier_source: Keyword.get(opts, :supplier_source, "local")
     })
     |> repo().insert()
+    |> tap_broadcast(manufacturer_uuid, opts)
   end
 
   @doc """
@@ -45,12 +56,18 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
   foreign keys: without this, deleting a local supplier or manufacturer leaves
   its links behind pointing at nothing.
   """
-  @spec delete_links_for(Ecto.UUID.t()) :: {integer(), nil}
-  def delete_links_for(uuid) when is_binary(uuid) do
-    from(ms in ManufacturerSupplier,
-      where: ms.manufacturer_uuid == ^uuid or ms.supplier_uuid == ^uuid
-    )
-    |> repo().delete_all()
+  @spec delete_links_for(Ecto.UUID.t(), keyword()) :: {integer(), nil}
+  def delete_links_for(uuid, opts \\ []) when is_binary(uuid) do
+    {count, _} =
+      result =
+      from(ms in ManufacturerSupplier,
+        where: ms.manufacturer_uuid == ^uuid or ms.supplier_uuid == ^uuid
+      )
+      |> repo().delete_all()
+
+    if count > 0, do: maybe_broadcast(uuid, opts)
+
+    result
   end
 
   @doc """
@@ -58,10 +75,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
 
   Returns `{:error, :not_found}` if the link doesn't exist.
   """
-  @spec unlink_manufacturer_supplier(Ecto.UUID.t(), Ecto.UUID.t()) ::
+  @spec unlink_manufacturer_supplier(Ecto.UUID.t(), Ecto.UUID.t(), keyword()) ::
           {:ok, ManufacturerSupplier.t()}
           | {:error, :not_found | Ecto.Changeset.t(ManufacturerSupplier.t())}
-  def unlink_manufacturer_supplier(manufacturer_uuid, supplier_uuid) do
+  def unlink_manufacturer_supplier(manufacturer_uuid, supplier_uuid, opts \\ []) do
     query =
       from(ms in ManufacturerSupplier,
         where: ms.manufacturer_uuid == ^manufacturer_uuid and ms.supplier_uuid == ^supplier_uuid
@@ -69,7 +86,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
 
     case repo().one(query) do
       nil -> {:error, :not_found}
-      record -> repo().delete(record)
+      record -> record |> repo().delete() |> tap_broadcast(manufacturer_uuid, opts)
     end
   end
 
@@ -134,8 +151,16 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
 
     result =
       repo().transaction(fn ->
-        Enum.each(added, &ok_or_rollback(link_manufacturer_supplier(manufacturer_uuid, &1)))
-        Enum.each(removed, &ok_or_rollback(unlink_manufacturer_supplier(manufacturer_uuid, &1)))
+        Enum.each(
+          added,
+          &ok_or_rollback(link_manufacturer_supplier(manufacturer_uuid, &1, @muted))
+        )
+
+        Enum.each(
+          removed,
+          &ok_or_rollback(unlink_manufacturer_supplier(manufacturer_uuid, &1, @muted))
+        )
+
         :synced
       end)
 
@@ -177,8 +202,13 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
 
     result =
       repo().transaction(fn ->
-        Enum.each(added, &ok_or_rollback(link_manufacturer_supplier(&1, supplier_uuid)))
-        Enum.each(removed, &ok_or_rollback(unlink_manufacturer_supplier(&1, supplier_uuid)))
+        Enum.each(added, &ok_or_rollback(link_manufacturer_supplier(&1, supplier_uuid, @muted)))
+
+        Enum.each(
+          removed,
+          &ok_or_rollback(unlink_manufacturer_supplier(&1, supplier_uuid, @muted))
+        )
+
         :synced
       end)
 
@@ -205,4 +235,16 @@ defmodule PhoenixKitCatalogue.Catalogue.Links do
 
   defp ok_or_rollback({:ok, _}), do: :ok
   defp ok_or_rollback({:error, reason}), do: repo().rollback(reason)
+
+  defp tap_broadcast({:ok, _} = ok, uuid, opts) do
+    maybe_broadcast(uuid, opts)
+    ok
+  end
+
+  defp tap_broadcast(other, _uuid, _opts), do: other
+
+  defp maybe_broadcast(uuid, opts) do
+    if Keyword.get(opts, :broadcast, true), do: PubSub.broadcast(:links, uuid)
+    :ok
+  end
 end

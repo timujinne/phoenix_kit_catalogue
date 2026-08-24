@@ -437,6 +437,30 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
         :ok
       end
 
+      defp drain_events do
+        receive do
+          {:catalogue_data_changed, _, _, _} -> drain_events()
+        after
+          0 -> :ok
+        end
+      end
+
+      test "an orphan prune broadcasts :attribute_set; nothing to prune stays silent" do
+        set = create_set!("Ikea hinges")
+        item = fixture_item(%{name: "Door"})
+        {:ok, _} = AttributeSets.attach_set(item.uuid, set.uuid)
+        drain_events()
+
+        # The blueprint still exists — no-op, no event.
+        assert AttributeSets.prune_orphan_attachments(set.uuid) == 0
+        refute_receive {:catalogue_data_changed, :attribute_set, _, _}
+
+        Repo.delete!(set)
+        assert AttributeSets.prune_orphan_attachments(set.uuid) == 1
+        assert_receive {:catalogue_data_changed, :attribute_set, uuid, nil}
+        assert uuid == set.uuid
+      end
+
       test "set CRUD broadcasts :attribute_set with the blueprint uuid" do
         {:ok, set} =
           AttributeSets.create_set(%{name: "Ikea colors"}, actor_uuid: Ecto.UUID.generate())

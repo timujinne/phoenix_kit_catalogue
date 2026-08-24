@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFieldsTest do
   use PhoenixKitCatalogue.DataCase, async: false
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitCatalogue.Catalogue.SupplierFields
+  alias PhoenixKitCatalogue.Catalogue.{PubSub, SupplierFields}
 
   if Code.ensure_loaded?(PhoenixKitEntities.Managed) do
     setup do
@@ -25,6 +25,35 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFieldsTest do
         )
 
       entity
+    end
+
+    describe "PubSub (F14 — the per-field columns must refresh when a definition changes)" do
+      setup do
+        PubSub.subscribe()
+        :ok
+      end
+
+      test "add / update / remove broadcast :supplier_field with the blueprint uuid" do
+        entity = add!("Incoterm")
+        assert_receive {:catalogue_data_changed, :supplier_field, uuid, nil}
+        assert uuid == entity.uuid
+
+        {:ok, _} = SupplierFields.update_field("incoterm", %{label: "Incoterms"})
+        assert_receive {:catalogue_data_changed, :supplier_field, uuid, nil}
+        assert uuid == entity.uuid
+
+        {:ok, _} = SupplierFields.remove_field("incoterm")
+        assert_receive {:catalogue_data_changed, :supplier_field, uuid, nil}
+        assert uuid == entity.uuid
+      end
+
+      test "a rejected write stays silent" do
+        add!("Incoterm")
+        assert_receive {:catalogue_data_changed, :supplier_field, _, nil}
+
+        assert {:error, _} = SupplierFields.add_field(%{label: "Incoterm"})
+        refute_receive {:catalogue_data_changed, :supplier_field, _, _}
+      end
     end
 
     describe "blueprint provisioning" do

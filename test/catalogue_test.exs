@@ -4369,6 +4369,20 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert moved.category_uuid == target.uuid
     end
 
+    test "{:move_to, child} refuses so items are not parked in a deleted category" do
+      cat = create_catalogue()
+      source = create_category(cat, %{name: "Source"})
+      child = create_category(cat, %{name: "Child", parent_uuid: source.uuid})
+      item = create_item(%{name: "Item", category_uuid: source.uuid})
+
+      assert {:error, :move_target_in_subtree} =
+               Catalogue.trash_category(source, items: {:move_to, child.uuid})
+
+      assert Catalogue.get_category(source.uuid).status == "active"
+      assert Catalogue.get_item(item.uuid).status == "active"
+      assert Catalogue.get_item(item.uuid).category_uuid == source.uuid
+    end
+
     test "skips already-deleted categories in the count" do
       cat = create_catalogue()
       a = create_category(cat, %{name: "A"})

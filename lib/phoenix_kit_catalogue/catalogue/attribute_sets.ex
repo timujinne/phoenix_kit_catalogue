@@ -874,11 +874,15 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
 
         if count > 0 do
           # Destructive machine-originated sweep — audit it like every
-          # other mutation in this module (no actor: PubSub-driven).
+          # other mutation in this module (no actor: PubSub-driven), and
+          # fan it out like one: the Attributes tab's per-set item counts
+          # and any open item form's staged sets just changed.
           log_activity("attribute_set.orphans_pruned", [mode: "auto"], set_uuid, %{
             "set_uuid" => set_uuid,
             "count" => count
           })
+
+          PubSub.broadcast(:attribute_set, set_uuid)
         end
 
         count

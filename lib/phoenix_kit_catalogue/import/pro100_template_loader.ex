@@ -21,17 +21,26 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   upstream.
 
   `dry_run: true` performs every lookup and decision and writes nothing.
+
+  Every write inside the transaction is muted (`broadcast: false`); once it
+  has committed the loader emits one `:folder` event if it created the
+  folder and one `:catalogue` roll-up per catalogue it touched — the same
+  discipline as `Import.Executor`, so open index/detail pages refresh once,
+  after the data is really there, instead of on every pre-commit row.
   """
 
   import Ecto.Query
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitCatalogue.Catalogue.Rules
+  alias PhoenixKitCatalogue.Catalogue.{PubSub, Rules}
   alias PhoenixKitCatalogue.Import.Matcher
   # The context and the schema are both called `Catalogue`; the schema is aliased
   # under a distinct name so it cannot shadow the context's functions.
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
   alias PhoenixKitCatalogue.Schemas.{Category, Folder, Item}
+
+  # Inside the transaction nothing fans out; see `broadcast_touched/1`.
+  @muted [broadcast: false]
 
   @type report :: %{
           folder: :created | :reused,
@@ -51,19 +60,42 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         {:error, {:plan_problems, plan.problems}}
 
       dry_run? ->
-        {:ok, run(plan, true)}
+        {report, _touched} = run(plan, true)
+        {:ok, report}
 
       true ->
-        repo().transaction(fn -> run_or_rollback(plan) end)
+        run_and_broadcast(plan)
+    end
+  end
+
+  defp run_and_broadcast(plan) do
+    case repo().transaction(fn -> run_or_rollback(plan) end) do
+      {:ok, {report, touched}} ->
+        broadcast_touched(touched)
+        {:ok, report}
+
+      error ->
+        error
     end
   end
 
   defp run_or_rollback(plan) do
-    report = run(plan, false)
+    {report, _touched} = result = run(plan, false)
     if report.stats.errors > 0, do: repo().rollback({:errors, report.reported})
-    report
+    result
   end
 
+  # Post-commit fan-out: the folder only if this run created it, then every
+  # catalogue the plan wrote into (created or reused — its categories,
+  # items and rules changed either way).
+  defp broadcast_touched(%{folder: folder, catalogues: catalogue_uuids}) do
+    if folder, do: PubSub.broadcast(:folder, folder)
+    Enum.each(catalogue_uuids, &PubSub.broadcast(:catalogue, &1, &1))
+    :ok
+  end
+
+  # Returns `{report, touched}`; `touched` is what `broadcast_touched/1`
+  # announces after the commit.
   defp run(plan, dry?) do
     folder = resolve_folder(plan.folder.name, dry?)
 
@@ -73,6 +105,11 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         {report, Map.put(acc, cat.name, uuid)}
       end)
 
+    touched = %{
+      folder: if(folder.status == :created, do: folder.uuid),
+      catalogues: name_to_uuid |> Map.values() |> Enum.reject(&is_nil/1)
+    }
+
     rule_reports =
       plan.catalogues
       |> Enum.filter(&(&1.rules != []))
@@ -81,7 +118,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
     absent = Enum.flat_map(catalogue_reports, & &1.absent)
     reported = Enum.flat_map(catalogue_reports, & &1.reported)
 
-    %{
+    report = %{
       folder: folder.status,
       catalogues: catalogue_reports,
       rules: rule_reports,
@@ -99,6 +136,8 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         errors: length(reported)
       }
     }
+
+    {report, touched}
   end
 
   # ── Folder ───────────────────────────────────────────────────────
@@ -112,7 +151,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         %{uuid: nil, status: :created}
 
       nil ->
-        {:ok, f} = Catalogue.create_folder(%{name: name})
+        {:ok, f} = Catalogue.create_folder(%{name: name}, @muted)
         %{uuid: f.uuid, status: :created}
     end
   end
@@ -171,13 +210,16 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
   defp ensure_catalogue(cat, folder, nil, false) do
     {:ok, created} =
-      Catalogue.create_catalogue(%{
-        name: cat.name,
-        kind: cat.kind,
-        folder_uuid: folder.uuid,
-        position: cat.position,
-        data: %{"pro100" => %{"template_guid" => cat.template_guid}}
-      })
+      Catalogue.create_catalogue(
+        %{
+          name: cat.name,
+          kind: cat.kind,
+          folder_uuid: folder.uuid,
+          position: cat.position,
+          data: %{"pro100" => %{"template_guid" => cat.template_guid}}
+        },
+        @muted
+      )
 
     {created.uuid, :created}
   end
@@ -222,12 +264,15 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
       nil ->
         {:ok, created} =
-          Catalogue.create_category(%{
-            name: c.name,
-            catalogue_uuid: catalogue_uuid,
-            parent_uuid: parent_uuid,
-            position: c.position
-          })
+          Catalogue.create_category(
+            %{
+              name: c.name,
+              catalogue_uuid: catalogue_uuid,
+              parent_uuid: parent_uuid,
+              position: c.position
+            },
+            @muted
+          )
 
         {created.uuid, :created}
     end
@@ -386,7 +431,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
         case Map.get(items, item_name) do
           %Item{} = item when not dry? ->
-            {:ok, _} = Rules.put_catalogue_rules(item, payload)
+            {:ok, _} = Rules.put_catalogue_rules(item, payload, @muted)
             length(payload)
 
           _ ->

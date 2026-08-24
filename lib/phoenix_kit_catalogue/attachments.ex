@@ -73,6 +73,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.{File, FolderLink}
   alias PhoenixKit.Users.Auth, as: UsersAuth
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
 
   @upload_name :attachment_files
@@ -213,8 +214,20 @@ defmodule PhoenixKitCatalogue.Attachments do
     end
   end
 
-  @doc "Clears the media-selector assigns; returns the plain socket."
+  @doc """
+  Clears the media-selector assigns and re-reads the files grid; returns
+  the plain socket. The core `MediaSelectorModal` stores its uploads into
+  this resource's folder as they land — closing without confirming still
+  leaves them there, so the grid (and, if the folder's contents changed,
+  every other surface counting them) must catch up on close.
+  """
   def close_media_selector(socket) do
+    socket
+    |> reset_media_selector()
+    |> refresh_files_and_notify()
+  end
+
+  defp reset_media_selector(socket) do
     assign(socket,
       show_media_selector: false,
       media_selector_target: nil,
@@ -253,8 +266,10 @@ defmodule PhoenixKitCatalogue.Attachments do
     folder_uuid = socket.assigns[:files_folder_uuid]
 
     case do_detach(uuid, folder_uuid) do
-      :ok ->
+      detached when detached in [:ok, :noop] ->
         new_files = Enum.reject(socket.assigns.files_state.files, &(&1.uuid == uuid))
+        # Only a real write is announced — a miss changed nothing.
+        if detached == :ok, do: broadcast_resource_changed(socket)
 
         {:noreply,
          socket
@@ -273,11 +288,13 @@ defmodule PhoenixKitCatalogue.Attachments do
     end
   end
 
-  defp do_detach(_uuid, nil), do: :ok
+  # `:noop` — nothing to detach (no folder yet / unknown file); `:ok` —
+  # a row was written.
+  defp do_detach(_uuid, nil), do: :noop
 
   defp do_detach(file_uuid, folder_uuid) do
     case Storage.get_file(file_uuid) do
-      nil -> :ok
+      nil -> :noop
       %File{folder_uuid: ^folder_uuid} = file -> detach_home(file)
       %File{} = file -> detach_link(file.uuid, folder_uuid)
     end
@@ -327,13 +344,17 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   # File's home is elsewhere — removing from this resource just means
   # deleting its folder_link for this folder. Other resources keep it.
+  # `:noop` when nothing was linked (a forged removal of a file this
+  # resource never held), so no change is announced for no write.
   defp detach_link(file_uuid, folder_uuid) do
     from(fl in FolderLink,
       where: fl.file_uuid == ^file_uuid and fl.folder_uuid == ^folder_uuid
     )
     |> PhoenixKit.RepoHelper.repo().delete_all()
-
-    :ok
+    |> case do
+      {0, _} -> :noop
+      _ -> :ok
+    end
   end
 
   defp list_links(file_uuid) do
@@ -355,10 +376,41 @@ defmodule PhoenixKitCatalogue.Attachments do
         :featured_image -> apply_featured_image_selection(socket, file_uuids)
         # Future: :files target for bulk picker. Today only featured_image
         # opens the modal, but routing stays open for extension.
-        _ -> refresh_files_from_folder(socket)
+        _ -> socket
       end
 
+    # `close_media_selector/1` does the folder re-read (+ fan-out) once.
     {:noreply, close_media_selector(socket)}
+  end
+
+  @doc """
+  Re-reads the resource's folder into the files grid. For hosts that hear
+  over PubSub that the resource changed in another session (an upload or
+  removal there) — the form's own pointers (featured image) are untouched.
+  """
+  def refresh_files(socket) do
+    socket
+    |> resolve_files_folder()
+    |> refresh_files_from_folder()
+  end
+
+  # When THIS tab never uploaded, `files_folder_uuid` is still nil even
+  # if another tab created the deterministic folder. Resolve it the same
+  # way Duplicate finds a source folder that predates the pointer.
+  defp resolve_files_folder(socket) do
+    case socket.assigns[:files_folder_uuid] do
+      uuid when is_binary(uuid) -> socket
+      _ -> assign_resolved_folder(socket)
+    end
+  end
+
+  defp assign_resolved_folder(socket) do
+    with {:ok, name} <- folder_name_for(socket.assigns[:attachments_resource]),
+         %{uuid: uuid} <- find_folder_by_name(name) do
+      assign(socket, :files_folder_uuid, uuid)
+    else
+      _ -> socket
+    end
   end
 
   # ── Upload progress (captured via &handle_progress/3) ────────────
@@ -375,10 +427,54 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   defp consume_and_store(socket, entry, folder_uuid) do
     case consume_uploaded_entry(socket, entry, &store_upload(&1, entry, socket, folder_uuid)) do
-      {:ok, _file} -> {:noreply, refresh_files_from_folder(socket)}
-      {:error, reason} -> {:noreply, put_upload_error(socket, entry, reason)}
+      {:ok, _file} ->
+        # auto_upload: the file row + folder link are committed right here,
+        # not at form save — so the paperclip counts elsewhere move now.
+        broadcast_resource_changed(socket)
+        {:noreply, refresh_files_from_folder(socket)}
+
+      {:error, reason} ->
+        {:noreply, put_upload_error(socket, entry, reason)}
     end
   end
+
+  # ── Fan-out ──────────────────────────────────────────────────────
+
+  # Attachment writes land outside the resource's own save path, so the
+  # catalogue PubSub never hears about them from the context. Announce
+  # the OWNING resource (its kind + catalogue parent) — that is what the
+  # index / detail / picker surfaces count paperclips by. A resource that
+  # has no uuid yet (`:new` form) has no surface to refresh.
+  defp broadcast_resource_changed(socket) do
+    case socket.assigns[:attachments_resource] do
+      %Item{uuid: uuid, catalogue_uuid: parent} when is_binary(uuid) ->
+        PubSub.broadcast(:item, uuid, parent)
+
+      %Category{uuid: uuid, catalogue_uuid: parent} when is_binary(uuid) ->
+        PubSub.broadcast(:category, uuid, parent)
+
+      %Catalogue{uuid: uuid} when is_binary(uuid) ->
+        PubSub.broadcast(:catalogue, uuid, uuid)
+
+      _ ->
+        :ok
+    end
+  end
+
+  # Re-reads the folder and, when its membership actually changed (a
+  # modal upload landed, a file was moved away), fans the change out.
+  # Cheap: the re-read is the query the grid needs anyway.
+  defp refresh_files_and_notify(socket) do
+    before = socket.assigns[:files_state][:files] || []
+    socket = refresh_files_from_folder(socket)
+
+    if file_uuids(socket.assigns.files_state.files) != file_uuids(before),
+      do: broadcast_resource_changed(socket)
+
+    socket
+  end
+
+  defp file_uuids(files), do: files |> Enum.map(& &1.uuid) |> Enum.sort()
 
   # ── Save-time helpers ────────────────────────────────────────────
 

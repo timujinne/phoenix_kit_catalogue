@@ -69,8 +69,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
      assign(socket,
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue"),
        catalogue_rows: [],
-       manufacturers: [],
-       suppliers: [],
        attribute_group_rows: [],
        attribute_set_rows: [],
        sets_enabled: false,
@@ -1858,69 +1856,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     end
   end
 
-  def handle_event("delete_manufacturer", _params, socket) do
-    case socket.assigns.confirm_delete do
-      {"manufacturer", uuid} ->
-        with %{} = manufacturer <- Catalogue.get_manufacturer(uuid),
-             {:ok, _} <- Catalogue.delete_manufacturer(manufacturer, actor_opts(socket)) do
-          {:noreply,
-           assign(socket, manufacturers: Catalogue.list_manufacturers(), confirm_delete: nil)}
-        else
-          nil ->
-            {:noreply, assign(socket, :confirm_delete, nil)}
-
-          {:error, reason} ->
-            log_operation_error(socket, "delete_manufacturer", %{
-              entity_type: "manufacturer",
-              entity_uuid: uuid,
-              reason: reason
-            })
-
-            {:noreply,
-             socket
-             |> put_flash(
-               :error,
-               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete manufacturer.")
-             )
-             |> assign(:confirm_delete, nil)}
-        end
-
-      _ ->
-        unexpected_confirm_event(socket, "delete_manufacturer")
-    end
-  end
-
-  def handle_event("delete_supplier", _params, socket) do
-    case socket.assigns.confirm_delete do
-      {"supplier", uuid} ->
-        with %{} = supplier <- Catalogue.get_supplier(uuid),
-             {:ok, _} <- Catalogue.delete_supplier(supplier, actor_opts(socket)) do
-          {:noreply, assign(socket, suppliers: Catalogue.list_suppliers(), confirm_delete: nil)}
-        else
-          nil ->
-            {:noreply, assign(socket, :confirm_delete, nil)}
-
-          {:error, reason} ->
-            log_operation_error(socket, "delete_supplier", %{
-              entity_type: "supplier",
-              entity_uuid: uuid,
-              reason: reason
-            })
-
-            {:noreply,
-             socket
-             |> put_flash(
-               :error,
-               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete supplier.")
-             )
-             |> assign(:confirm_delete, nil)}
-        end
-
-      _ ->
-        unexpected_confirm_event(socket, "delete_supplier")
-    end
-  end
-
   def handle_event("delete_attribute_group", _params, socket) do
     case socket.assigns.confirm_delete do
       {"attribute_group", uuid} ->
@@ -2870,28 +2805,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this folder. Subfolders are moved to root and catalogues filed here are unfiled — neither is deleted. This cannot be undone.")}]}
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
-        danger={true}
-      />
-
-      <.confirm_modal
-        show={match?({"manufacturer", _}, @confirm_delete)}
-        on_confirm="delete_manufacturer"
-        on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Manufacturer")}
-        title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this manufacturer. Items referencing it will lose the association.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
-        danger={true}
-      />
-
-      <.confirm_modal
-        show={match?({"supplier", _}, @confirm_delete)}
-        on_confirm="delete_supplier"
-        on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Supplier")}
-        title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this supplier. Manufacturer links will be removed.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
         danger={true}
       />
 

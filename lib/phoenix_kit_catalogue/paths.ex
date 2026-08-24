@@ -93,6 +93,20 @@ defmodule PhoenixKitCatalogue.Paths do
   def item_new(catalogue_uuid), do: Routes.path("#{@base}/#{catalogue_uuid}/items/new")
   def item_edit(uuid), do: Routes.path("#{@base}/items/#{uuid}/edit")
 
+  @doc """
+  Raw (unprefixed) item edit path for phoenix_kit_comments back-links. The
+  comments module applies the URL prefix/locale itself when rendering the
+  resource chip, so this must NOT be prefixed (else the link double-prefixes).
+  `tab:` lands on one of the form's tabs (`"sourcing"` for suppliers).
+  """
+  @spec item_edit_raw(String.t(), keyword()) :: String.t()
+  def item_edit_raw(uuid, opts \\ []) when is_binary(uuid) do
+    case Keyword.get(opts, :tab) do
+      nil -> "#{@base}/items/#{uuid}/edit"
+      tab -> "#{@base}/items/#{uuid}/edit?tab=#{tab}"
+    end
+  end
+
   # ── PDF library ──────────────────────────────────────────────────
 
   @spec pdfs() :: String.t()

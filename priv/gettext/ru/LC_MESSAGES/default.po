@@ -2728,8 +2728,8 @@ msgstr "напр. Incoterm"
 msgid "Comments"
 msgstr "Комментарии"
 
-msgid "Shared with this supplier's company page in CRM."
-msgstr "Общие со страницей компании этого поставщика в CRM."
+msgid "About this supplier for this item only. The company's own comments stay on its CRM page."
+msgstr "Только об этом поставщике для этого товара. Собственные комментарии компании остаются на её странице в CRM."
 
 msgid "Add a comment"
 msgstr "Добавить комментарий"
@@ -2745,6 +2745,21 @@ msgstr "Показать все комментарии (%{count})"
 
 msgid "This supplier is already on the item. Edit the existing row instead."
 msgstr "Этот поставщик уже добавлен к товару. Измените существующую строку."
+
+msgid "That selection is not in this catalogue."
+msgstr "Этот выбор не принадлежит данному каталогу."
+
+msgid "That id is not valid."
+msgstr "Некорректный идентификатор."
+
+msgid "Could not copy the files folder."
+msgstr "Не удалось скопировать папку файлов."
+
+msgid "This supplier row is no longer current."
+msgstr "Эта строка поставщика больше не актуальна."
+
+msgid "Cannot move items into a category that is being deleted."
+msgstr "Нельзя перенести товары в категорию, которая удаляется."
 
 msgid "contact"
 msgstr "контакт"
@@ -2781,3 +2796,81 @@ msgstr "Недоступно в этом выборе"
 
 msgid "Shown on category landing pages."
 msgstr "Отображается на страницах категорий."
+
+msgid "Import Failed"
+msgstr "Импорт не удался"
+
+msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
+msgstr "Импорт неожиданно прервался до завершения. Строки, записанные до сбоя, сохранены. Подробности — в журнале сервера."
+
+msgid "Move selected categories"
+msgstr "Переместить выбранные категории"
+
+msgid "Move categories"
+msgstr "Переместить категории"
+
+msgid "Pick where %{count} categories should go. Each one brings its subcategories and items along."
+msgstr "Выберите, куда переместить %{count} категорий. Каждая забирает с собой свои подкатегории и товары."
+
+msgid "Make them top-level categories"
+msgstr "Сделать их категориями верхнего уровня"
+
+msgid "They leave their parent and sit at the root of this catalogue."
+msgstr "Они выходят из родительской категории и располагаются в корне этого каталога."
+
+msgid "Nest them under another category"
+msgstr "Вложить их в другую категорию"
+
+msgid "No category can take them — only the top level is left."
+msgstr "Ни одна категория не может их принять — остаётся только верхний уровень."
+
+msgid "Moved %{count} categories."
+msgstr "Перемещено категорий: %{count}."
+
+msgid "%{count} categories could not be moved."
+msgstr "Не удалось переместить категорий: %{count}."
+
+msgid "Select all categories"
+msgstr "Выбрать все категории"
+
+msgid "Duplicate"
+msgstr "Дублировать"
+
+msgid "Duplicate selected items"
+msgstr "Дублировать выбранные товары"
+
+msgid "Duplicate selected categories"
+msgstr "Дублировать выбранные категории"
+
+msgid "Duplicate items"
+msgstr "Дублировать товары"
+
+msgid "Duplicate categories"
+msgstr "Дублировать категории"
+
+msgid "%{count} items will be copied with their files, attribute sets, supplier rows and catalogue rules. Comments are not copied."
+msgstr "%{count} товаров будут скопированы вместе с файлами, наборами атрибутов, строками поставщиков и правилами каталога. Комментарии не копируются."
+
+msgid "%{count} categories will be copied with their subcategories and items."
+msgstr "%{count} категорий будут скопированы вместе с подкатегориями и товарами."
+
+msgid "Each copy is named after its original with \"(copy)\" added and placed right after it."
+msgstr "Каждая копия получает имя оригинала с добавлением «(копия)» и размещается сразу после него."
+
+msgid "Duplicated %{count} items."
+msgstr "Продублировано товаров: %{count}."
+
+msgid "Duplicated %{count} categories."
+msgstr "Продублировано категорий: %{count}."
+
+msgid "%{count} items could not be duplicated."
+msgstr "Не удалось продублировать товаров: %{count}."
+
+msgid "%{count} categories could not be duplicated."
+msgstr "Не удалось продублировать категорий: %{count}."
+
+msgid "%{name} (copy)"
+msgstr "%{name} (копия)"
+
+msgid "Supplier price"
+msgstr "Цена поставщика"

@@ -94,10 +94,34 @@ defmodule PhoenixKitCatalogue do
   # ===========================================================================
 
   @impl PhoenixKit.Module
-  def version, do: "0.18.0"
+  def version, do: "0.19.0"
 
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitCatalogue.Web.Routes
+
+  @impl PhoenixKit.Module
+  # Makes supplier comment threads deep-linkable from the Comments admin and
+  # the Activity feed with NO host configuration: core discovers this
+  # callback on every loaded module and registers the resolver itself. A
+  # host's `config :phoenix_kit, :comment_resource_handlers` entry for the
+  # same type is an override, not a requirement.
+  def resource_links,
+    do: %{PhoenixKitCatalogue.Catalogue.supplier_comment_resource_type() => __MODULE__}
+
+  @doc """
+  Resolver for supplier comment threads (`"catalogue_item_supplier"`): turns
+  thread uuids into `%{uuid => %{title, path}}` chips, so a "he promised a
+  discount" note links back to the item's Suppliers tab from the central
+  Comments admin and the Activity feed.
+
+  Registered automatically through `resource_links/0`. Paths are RAW (no URL
+  prefix) — core applies the prefix/locale once at render.
+
+  See `PhoenixKitCatalogue.Catalogue.SupplierComments` for the thread model.
+  """
+  @spec resolve_comment_resources([binary()]) :: %{binary() => map()}
+  def resolve_comment_resources(uuids) when is_list(uuids),
+    do: PhoenixKitCatalogue.Catalogue.resolve_supplier_comment_resources(uuids)
 
   @impl PhoenixKit.Module
   def css_sources, do: [:phoenix_kit_catalogue]

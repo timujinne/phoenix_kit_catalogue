@@ -240,7 +240,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
       render_click(view, "toggle_select_item", %{"uuid" => item.uuid})
-      render_click(view, "toggle_select_category", %{"uuid" => category.uuid})
+      # Category selection is client-side; the server sees it with the action.
+      render_click(view, "request_bulk_delete_categories", %{"uuids" => [category.uuid]})
+      assert MapSet.size(:sys.get_state(view.pid).socket.assigns.selected_categories) == 1
 
       render_click(view, "clear_selection", %{})
 

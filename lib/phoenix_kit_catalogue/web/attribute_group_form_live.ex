@@ -49,6 +49,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitAI.Translations
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.AttributeGroup
 
@@ -69,6 +70,10 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
 
   @impl true
   def mount(params, _session, socket) do
+    # Subscribe before the group is read so a write landing in between
+    # (a "Translate all" job, a colleague's edit) isn't missed.
+    if connected?(socket), do: PubSub.subscribe()
+
     if Catalogue.attribute_sets_enabled?() do
       # Groups are retired once sets are live — legacy data auto-migrates
       # and this editor (multiple attributes per group) is the wrong
@@ -360,7 +365,15 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
     {:noreply, handle_ai_translation_event(socket, event, payload, &resync_changeset/2)}
   end
 
-  def handle_info(:reload_attribute_group, socket) do
+  # Another process changed THIS group: a colleague's edit, or one of the
+  # child-translation jobs queued by "Translate all" landing
+  # (`AITranslatable.put_translation/4` announces the owning group).
+  # Re-read the attributes/values; the name form is owned by the
+  # `:ai_translation` handler above and by the user's own typing.
+  def handle_info(
+        {:catalogue_data_changed, :attribute_group, uuid, _parent},
+        %{assigns: %{action: :edit, group: %{uuid: uuid}}} = socket
+      ) do
     {:noreply, reload_group(socket)}
   end
 
@@ -454,25 +467,19 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
         ]
       end)
 
-    queued =
-      Enum.reduce(children, 0, fn {type, record}, acc ->
-        targets =
-          case scope do
-            "*" -> all_targets -- translated_langs(record.data)
-            "**" -> all_targets
-            lang -> Enum.filter(all_targets, &(&1 == lang))
-          end
+    # The jobs land in the background; each write announces the group on
+    # the catalogue topic and the `:catalogue_data_changed` clause pulls
+    # the results in as they arrive.
+    Enum.each(children, fn {type, record} ->
+      targets =
+        case scope do
+          "*" -> all_targets -- translated_langs(record.data)
+          "**" -> all_targets
+          lang -> Enum.filter(all_targets, &(&1 == lang))
+        end
 
-        acc + enqueue_child(type, record, targets, endpoint, prompt, actor)
-      end)
-
-    # The jobs land in the background; pull their results in as they do.
-    if queued > 0 do
-      Enum.each(
-        [4_000, 9_000, 16_000],
-        &Process.send_after(self(), :reload_attribute_group, &1)
-      )
-    end
+      enqueue_child(type, record, targets, endpoint, prompt, actor)
+    end)
 
     socket
   end
@@ -535,9 +542,26 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
 
   defp draft_gen(draft_generation, key), do: Map.get(draft_generation, key, 0)
 
+  # Every re-read goes through here, so a group deleted in another session
+  # between two reads (the delete broadcast, then any event that reloads)
+  # bounces to the list instead of dereferencing nil.
   defp reload_group(socket, opts \\ []) do
-    group = Catalogue.get_attribute_group_full(socket.assigns.group.uuid)
+    case Catalogue.get_attribute_group_full(socket.assigns.group.uuid) do
+      nil -> group_gone(socket)
+      group -> assign_reloaded_group(socket, group, opts)
+    end
+  end
 
+  defp group_gone(socket) do
+    socket
+    |> put_flash(
+      :error,
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute group not found.")
+    )
+    |> push_navigate(to: safe_return_to(socket.assigns.return_to) || Paths.attribute_groups())
+  end
+
+  defp assign_reloaded_group(socket, group, opts) do
     socket =
       socket
       |> assign(:group, group)

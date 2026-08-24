@@ -552,8 +552,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
         render_click(view, "save_supplier_info", %{})
 
         # Nothing entity-shaped is stamped onto rows written while hidden.
+        # (The comment thread key is the catalogue's own, not a field.)
         [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
-        assert info.metadata == %{}
+        assert Map.delete(info.metadata, "comment_thread_uuid") == %{}
       end
 
       test "the manager cannot be opened by a crafted event", %{conn: conn} do

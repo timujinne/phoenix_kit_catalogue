@@ -2719,8 +2719,8 @@ msgstr "nt Incoterm"
 msgid "Comments"
 msgstr "Kommentaarid"
 
-msgid "Shared with this supplier's company page in CRM."
-msgstr "Jagatud selle tarnija ettevõtte lehega CRM-is."
+msgid "About this supplier for this item only. The company's own comments stay on its CRM page."
+msgstr "Ainult selle tarnija kohta selle toote juures. Ettevõtte enda kommentaarid jäävad tema CRM-i lehele."
 
 msgid "Add a comment"
 msgstr "Lisa kommentaar"
@@ -2736,6 +2736,21 @@ msgstr "Näita kõiki %{count} kommentaari"
 
 msgid "This supplier is already on the item. Edit the existing row instead."
 msgstr "See tarnija on juba tootel. Muuda olemasolevat rida."
+
+msgid "That selection is not in this catalogue."
+msgstr "See valik ei ole selles kataloogis."
+
+msgid "That id is not valid."
+msgstr "See identifikaator ei ole kehtiv."
+
+msgid "Could not copy the files folder."
+msgstr "Failikausta ei õnnestunud kopeerida."
+
+msgid "This supplier row is no longer current."
+msgstr "See tarnija rida ei ole enam kehtiv."
+
+msgid "Cannot move items into a category that is being deleted."
+msgstr "Kirjeid ei saa tõsta kategooriasse, mida kustutatakse."
 
 msgid "contact"
 msgstr "kontakt"
@@ -2772,3 +2787,81 @@ msgstr "Selles valikus pole saadaval"
 
 msgid "Shown on category landing pages."
 msgstr "Kuvatakse kategooria avalehtedel."
+
+msgid "Import Failed"
+msgstr "Import ebaõnnestus"
+
+msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
+msgstr "Import katkes ootamatult enne lõpetamist. Enne tõrget kirjutatud read jäid alles. Üksikasjad leiad serveri logist."
+
+msgid "Move selected categories"
+msgstr "Liiguta valitud kategooriad"
+
+msgid "Move categories"
+msgstr "Liiguta kategooriad"
+
+msgid "Pick where %{count} categories should go. Each one brings its subcategories and items along."
+msgstr "Vali, kuhu %{count} kategooriat peaksid minema. Iga kategooria võtab oma alamkategooriad ja tooted kaasa."
+
+msgid "Make them top-level categories"
+msgstr "Tee neist ülataseme kategooriad"
+
+msgid "They leave their parent and sit at the root of this catalogue."
+msgstr "Nad lahkuvad oma ülemkategooriast ja asuvad selle kataloogi juurtasemel."
+
+msgid "Nest them under another category"
+msgstr "Paiguta need teise kategooria alla"
+
+msgid "No category can take them — only the top level is left."
+msgstr "Ükski kategooria ei saa neid vastu võtta — jääb ainult ülatase."
+
+msgid "Moved %{count} categories."
+msgstr "Liigutatud %{count} kategooriat."
+
+msgid "%{count} categories could not be moved."
+msgstr "%{count} kategooriat ei õnnestunud liigutada."
+
+msgid "Select all categories"
+msgstr "Vali kõik kategooriad"
+
+msgid "Duplicate"
+msgstr "Dubleeri"
+
+msgid "Duplicate selected items"
+msgstr "Dubleeri valitud tooted"
+
+msgid "Duplicate selected categories"
+msgstr "Dubleeri valitud kategooriad"
+
+msgid "Duplicate items"
+msgstr "Dubleeri tooted"
+
+msgid "Duplicate categories"
+msgstr "Dubleeri kategooriad"
+
+msgid "%{count} items will be copied with their files, attribute sets, supplier rows and catalogue rules. Comments are not copied."
+msgstr "%{count} toodet kopeeritakse koos failide, atribuudikomplektide, tarnijaridade ja kataloogireeglitega. Kommentaare ei kopeerita."
+
+msgid "%{count} categories will be copied with their subcategories and items."
+msgstr "%{count} kategooriat kopeeritakse koos alamkategooriate ja toodetega."
+
+msgid "Each copy is named after its original with \"(copy)\" added and placed right after it."
+msgstr "Iga koopia saab originaali nime lisandiga „(koopia)“ ja paigutatakse kohe selle järele."
+
+msgid "Duplicated %{count} items."
+msgstr "Dubleeritud %{count} toodet."
+
+msgid "Duplicated %{count} categories."
+msgstr "Dubleeritud %{count} kategooriat."
+
+msgid "%{count} items could not be duplicated."
+msgstr "%{count} toodet ei õnnestunud dubleerida."
+
+msgid "%{count} categories could not be duplicated."
+msgstr "%{count} kategooriat ei õnnestunud dubleerida."
+
+msgid "%{name} (copy)"
+msgstr "%{name} (koopia)"
+
+msgid "Supplier price"
+msgstr "Tarnija hind"

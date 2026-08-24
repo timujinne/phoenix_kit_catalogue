@@ -1,3 +1,63 @@
+## 0.19.0 - 2026-08-24
+
+### Added
+
+- **Per item × supplier comment threads** (#78) — a comment on an attached
+  supplier is filed on its own `phoenix_kit_comments` thread
+  (`"catalogue_item_supplier"`), not the CRM company's. The thread uuid
+  lives in `item_supplier_info.metadata["comment_thread_uuid"]`, survives
+  price revisions, and is resumed when the same supplier is re-attached.
+  Removing a supplier **closes** the row (`valid_to`) instead of deleting
+  it. `resource_links/0` registers the Comments-admin / Activity back-link
+  resolver with core — no host config line. Requires
+  `phoenix_kit_comments` at runtime for the UI; it is a test-only Mix dep
+  so the library still compiles without the package.
+- **Bulk Move and Duplicate for categories and items** on the catalogue
+  page, plus a **Supplier price** column (min–max of current supplier
+  rows, currencies listed separately). `Catalogue.Duplication` copies an
+  item with its multilang data (names suffixed per language), current
+  supplier rows (fresh comment thread), attribute-set attachments,
+  catalogue rules, and a new Storage folder of `FolderLink`s to the
+  source's files. A category copy brings its subtree.
+- **Live refresh** of remaining stale surfaces: bulk ops on other tabs,
+  attachment uploads/removals, AI translations, the import wizard's crash
+  path, orphan-attachment prunes, the PRO100 loader (broadcasts after
+  commit), supplier-row writes, and the item form (supplier rows, files,
+  categories).
+
+### Fixed
+
+- **Bulk actions accepted a uuid from another catalogue** — every bulk
+  path on the catalogue page now takes the page's catalogue as a scope
+  (`:wrong_catalogue_scope` per entry).
+- **Modal disposition/target handlers crashed with `KeyError`** after the
+  modal closed (`%{modal | …}` on `%{}`).
+- **Duplication logged activity inside the transaction** (core's
+  `Activity.log/1` inserts and broadcasts at once) and stamped `"(copy)"`
+  in the acting admin's locale into every language. Logs are flushed
+  after commit; the suffix is rendered per language (`"(koopia)"`,
+  `"(копия)"`).
+- **`push_event("bulk_select:clear")` is a no-op in core's
+  `BulkSelectScope` hook** — the scope id carries a `bulk_epoch` that
+  remounts it after every bulk op. Core follow-up: add the handler.
+- **`<select phx-change>` pickers sat outside a `<form>`**, which
+  LiveView 1.2's JS rejects — the choice never reached the server.
+- **`set_primary/2` / `revise_unit_cost/3` raced a concurrent close** —
+  both now lock-reload under `FOR UPDATE`. Category Duplicate takes
+  `FOR SHARE` on the target parent, matching `create_item`.
+- **`trash_category(items: {:move_to, child})` left live items in a
+  deleted category** — refused as `:move_target_in_subtree`; pickers
+  accept only offered targets.
+- **A first file upload in another tab did not appear** on a form that
+  had no `files_folder_uuid` yet — `Attachments.refresh_files/1` now
+  resolves the deterministic folder name.
+- **Item-form delete / set-primary / history accepted a uuid from
+  another item's supplier row** — scoped to rows this form rendered,
+  same as the comments action.
+
+See [PR #78](dev_docs/pull_requests/2026/78-supplier-threads-live-refresh-bulk-actions/GROK_REVIEW.md)
+for the full findings.
+
 ## 0.18.0 - 2026-08-22
 
 ### Added

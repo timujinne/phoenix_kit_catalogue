@@ -214,6 +214,59 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         actor_uuid: @actor
       )
     end
+
+    test "duplicate_item logs item.duplicated with actor", %{catalogue: cat} do
+      {:ok, item} =
+        Catalogue.create_item(%{name: "Item A", catalogue_uuid: cat.uuid}, actor_opts())
+
+      {:ok, copy} = Catalogue.duplicate_item(item, actor_opts())
+
+      assert_activity_logged("item.duplicated",
+        resource_uuid: copy.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"source_uuid" => item.uuid, "name" => copy.name}
+      )
+    end
+
+    test "bulk_duplicate_items logs item.bulk_duplicated with actor", %{catalogue: cat} do
+      {:ok, item} =
+        Catalogue.create_item(%{name: "Item A", catalogue_uuid: cat.uuid}, actor_opts())
+
+      assert {:ok, %{created: 1}} = Catalogue.bulk_duplicate_items([item.uuid], actor_opts())
+
+      assert_activity_logged("item.bulk_duplicated",
+        actor_uuid: @actor,
+        metadata_has: %{"count" => 1}
+      )
+    end
+  end
+
+  describe "category.duplicated actions" do
+    test "duplicate_category logs category.duplicated with actor", %{catalogue: cat} do
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Cat A", catalogue_uuid: cat.uuid}, actor_opts())
+
+      {:ok, %{category: copy}} = Catalogue.duplicate_category(category, actor_opts())
+
+      assert_activity_logged("category.duplicated",
+        resource_uuid: copy.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"source_uuid" => category.uuid}
+      )
+    end
+
+    test "bulk_duplicate_categories logs category.bulk_duplicated with actor", %{catalogue: cat} do
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Cat A", catalogue_uuid: cat.uuid}, actor_opts())
+
+      assert {:ok, %{created: 1}} =
+               Catalogue.bulk_duplicate_categories([category.uuid], actor_opts())
+
+      assert_activity_logged("category.bulk_duplicated",
+        actor_uuid: @actor,
+        metadata_has: %{"count" => 1}
+      )
+    end
   end
 
   describe "manufacturer / supplier actions" do

@@ -142,6 +142,28 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
                "This supplier is already on the item. Edit the existing row instead."
     end
 
+    test "wrong_catalogue_scope" do
+      assert Errors.message(:wrong_catalogue_scope) ==
+               "That selection is not in this catalogue."
+    end
+
+    test "invalid_uuid" do
+      assert Errors.message(:invalid_uuid) == "That id is not valid."
+    end
+
+    test "files_folder" do
+      assert Errors.message(:files_folder) == "Could not copy the files folder."
+    end
+
+    test "not_current" do
+      assert Errors.message(:not_current) == "This supplier row is no longer current."
+    end
+
+    test "move_target_in_subtree" do
+      assert Errors.message(:move_target_in_subtree) ==
+               "Cannot move items into a category that is being deleted."
+    end
+
     # `:pdf_invalid_format` and `:pdf_extraction_failed` removed
     # 2026-05-06 (Phase 2 sweep) — neither had a caller. The PDF
     # library upload pipeline rejects non-PDF MIME at the LV's

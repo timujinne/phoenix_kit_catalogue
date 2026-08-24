@@ -119,7 +119,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Rules do
           }
         })
 
-        PubSub.broadcast(:smart_rule, item.uuid, item.catalogue_uuid)
+        # Batch callers (the PRO100 template loader) write inside their own
+        # transaction and roll the fan-out up after commit.
+        if Keyword.get(opts, :broadcast, true),
+          do: PubSub.broadcast(:smart_rule, item.uuid, item.catalogue_uuid)
 
         {:ok, list_catalogue_rules(item)}
 

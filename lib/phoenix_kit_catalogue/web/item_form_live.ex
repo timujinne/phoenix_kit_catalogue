@@ -55,6 +55,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.Helpers
   alias PhoenixKitCatalogue.Catalogue.ItemSupplierInfos
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Catalogue.Suppliers
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
@@ -87,12 +88,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # what it always read.
   @supplier_terms_fields false
 
-  # Comments on a supplier are comments on the CRM COMPANY — the very same
-  # rows the company page's Comments tab shows, addressed by the same
-  # `{resource_type, resource_uuid}` pair (`"crm_company"` + the company
-  # uuid). Nothing is copied or synced between the two views because there
-  # is only one store, which is the same rule the rest of this integration
-  # follows.
+  # Comments on a supplier row are about THAT supplier on THIS item — one
+  # thread per item × supplier, keyed on the row's thread uuid
+  # (`Catalogue.SupplierComments`), never the CRM company's own thread: the
+  # same company supplies other products, and "he promised a discount on
+  # this one" must not land in its general notes. The company page keeps
+  # its own comments; the modal only links to it.
   #
   # `phoenix_kit_comments` is a SOFT dependency here: the catalogue does
   # not declare it (CRM does), so every touchpoint is guarded and the
@@ -142,10 +143,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          |> push_navigate(to: Paths.index())}
 
       {item, changeset, catalogue_uuid} ->
+        # Supplier rows, the files grid and the category options are read
+        # from the DB, not owned by the form — follow other sessions' writes
+        # to them (see the `:catalogue_data_changed` clauses).
+        if connected?(socket), do: PubSub.subscribe()
+
         {:ok,
          socket
          |> assign(:return_to, safe_return_to(params["return_to"]))
-         |> mount_form(action, item, changeset, catalogue_uuid)}
+         |> mount_form(action, item, changeset, catalogue_uuid)
+         # `?tab=` deep-links land on a tab (the Comments admin's back-links
+         # open the Suppliers tab); parse_tab/1 is an allowlist, anything
+         # else is the default.
+         |> assign(:current_tab, parse_tab(params["tab"]))}
     end
   end
 
@@ -248,7 +258,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       manufacturers: Catalogue.list_all_manufacturers(status: "active"),
       all_suppliers: Suppliers.list_all(),
       supplier_infos: load_supplier_infos(action, item),
-      supplier_comment_targets: %{},
+      supplier_company_links: %{},
+      supplier_comment_threads: %{},
       # nil = closed. Open state carries its own mode/draft/error so the
       # modal reports failures inside itself rather than as a page flash
       # that lands behind it.
@@ -266,6 +277,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       supplier_history_open: false,
       supplier_history_rows: [],
       supplier_history_name: nil,
+      # `{item_uuid, supplier_uuid}` of the open history modal, so a price
+      # revision landing from another session can re-read its rows.
+      supplier_history_pair: nil,
       all_categories: all_categories,
       smart_move_targets: smart_move_targets,
       move_target: nil,
@@ -273,7 +287,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       meta_state: Metadata.build_state(:item, item),
       show_pdf_search: false
     )
-    |> mount_supplier_comment_targets(action, item)
+    |> mount_supplier_rows(action, item)
     |> Attachments.mount_attachments(item)
     |> Attachments.allow_attachment_upload()
     |> assign_changeset(changeset)
@@ -694,7 +708,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   def handle_event("set_primary_supplier", %{"uuid" => uuid}, socket) do
     item = socket.assigns.item
 
-    case ItemSupplierInfos.get(uuid) do
+    case owned_supplier_info(socket, uuid) do
       nil ->
         {:noreply, socket}
 
@@ -715,7 +729,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   end
 
   def handle_event("open_supplier_history", %{"uuid" => uuid}, socket) do
-    case ItemSupplierInfos.get(uuid) do
+    case owned_supplier_info(socket, uuid) do
       nil ->
         {:noreply, socket}
 
@@ -727,22 +741,25 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          assign(socket,
            supplier_history_open: true,
            supplier_history_rows: rows,
-           supplier_history_name: name
+           supplier_history_name: name,
+           supplier_history_pair: {info.item_uuid, info.supplier_uuid}
          )}
     end
   end
 
-  # Opens the CRM company's comment thread for this supplier. The uuid is
-  # resolved server-side from the row, never taken from the payload — a
-  # crafted uuid must not be able to address an arbitrary company's
-  # comments.
+  # Opens this supplier's comment thread for THIS item. The thread and the
+  # company behind the row are both resolved server-side from a row the
+  # LiveView itself rendered, never taken from the payload — a crafted uuid
+  # must not be able to address another item's thread or an arbitrary
+  # company.
   def handle_event("open_supplier_comments", %{"uuid" => uuid}, socket) do
     with true <- socket.assigns.supplier_comments_available,
          %{} = info <- owned_supplier_info(socket, uuid),
-         company_uuid when is_binary(company_uuid) <- Catalogue.supplier_crm_company_uuid(info) do
+         thread when is_binary(thread) <- socket.assigns.supplier_comment_threads[info.uuid] do
       {:noreply,
        assign(socket, :supplier_comments, %{
-         company_uuid: company_uuid,
+         thread_uuid: thread,
+         company_uuid: socket.assigns.supplier_company_links[info.uuid],
          name: supplier_display_name(info, socket.assigns.all_suppliers)
        })}
     else
@@ -759,14 +776,15 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
      assign(socket,
        supplier_history_open: false,
        supplier_history_rows: [],
-       supplier_history_name: nil
+       supplier_history_name: nil,
+       supplier_history_pair: nil
      )}
   end
 
   def handle_event("delete_supplier_info", %{"uuid" => uuid}, socket) do
     item = socket.assigns.item
 
-    case ItemSupplierInfos.get(uuid) do
+    case owned_supplier_info(socket, uuid) do
       nil ->
         {:noreply, socket}
 
@@ -1041,80 +1059,136 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     :exit, _ -> false
   end
 
-  # Rows plus their comment targets, together. Only a row that resolves to
-  # a CRM company can carry comments — a purely local supplier has no
-  # company to file them against — and resolving a local row costs a
-  # query, so the map is built once per reload rather than per render.
-  # Runs after the main assign block: comment targets need both the rows
-  # and the availability flag, and neither exists before it.
-  defp mount_supplier_comment_targets(socket, :edit, %Item{uuid: uuid}) when not is_nil(uuid),
+  # Rows plus what hangs off them, built once per reload rather than per
+  # render: the CRM company behind each row (the name link and the "open
+  # the company" link — resolving a local row costs a query) and the
+  # comment thread each row carries. EVERY row carries one: a local or
+  # imported supplier has no company page, but "he promised a discount on
+  # this product" is about the row, not the company. Runs after the main
+  # assign block: the availability flag has to exist first.
+  defp mount_supplier_rows(socket, :edit, %Item{uuid: uuid}) when not is_nil(uuid),
     do: assign_supplier_infos(socket, uuid)
 
-  defp mount_supplier_comment_targets(socket, _action, _item), do: socket
+  defp mount_supplier_rows(socket, _action, _item), do: socket
 
   defp assign_supplier_infos(socket, item_uuid) do
     infos = ItemSupplierInfos.list_for_item(item_uuid)
 
-    targets =
-      if socket.assigns[:supplier_comments_available] do
-        infos
-        |> Map.new(&{&1.uuid, Catalogue.supplier_crm_company_uuid(&1)})
-        |> Map.filter(fn {_uuid, company} -> is_binary(company) end)
-      else
-        %{}
-      end
+    links =
+      infos
+      |> Map.new(&{&1.uuid, Catalogue.supplier_crm_company_uuid(&1)})
+      |> Map.filter(fn {_uuid, company} -> is_binary(company) end)
+
+    threads =
+      if socket.assigns[:supplier_comments_available],
+        do: Map.new(infos, &{&1.uuid, Catalogue.supplier_comment_thread_uuid(&1)}),
+        else: %{}
 
     socket
-    |> assign(supplier_infos: infos, supplier_comment_targets: targets)
-    |> assign(:supplier_comment_previews, comment_previews(targets))
-    |> subscribe_to_comment_targets(targets)
+    |> assign(
+      supplier_infos: infos,
+      supplier_company_links: links,
+      supplier_comment_threads: threads
+    )
+    |> assign(:supplier_comment_previews, comment_previews(threads))
+    |> sync_comment_subscriptions(threads)
   end
 
-  # Re-reads the previews against the targets already resolved — a comment
+  # Everything the Suppliers tab derives from the DB: the rows (+ CRM
+  # links, threads, previews, subscriptions), the supplier names, and the
+  # price-history modal if it is open.
+  defp refresh_supplier_state(socket) do
+    socket
+    |> assign(:all_suppliers, Suppliers.list_all())
+    |> assign_supplier_infos(socket.assigns.item.uuid)
+    |> refresh_supplier_history()
+  end
+
+  defp refresh_supplier_history(
+         %{assigns: %{supplier_history_open: true, supplier_history_pair: {item_uuid, sup_uuid}}} =
+           socket
+       ) do
+    assign(
+      socket,
+      :supplier_history_rows,
+      ItemSupplierInfos.history_for_pair(item_uuid, sup_uuid)
+    )
+  end
+
+  defp refresh_supplier_history(socket), do: socket
+
+  # Same source as mount_form/5: the catalogue's categories for an item
+  # that has one, every category otherwise (a `:new` form without scope).
+  defp refresh_category_options(socket) do
+    catalogue_uuid = socket.assigns.catalogue_uuid
+
+    categories =
+      if catalogue_uuid,
+        do: Catalogue.list_categories_for_catalogue(catalogue_uuid),
+        else: Catalogue.list_all_categories()
+
+    all_categories =
+      if socket.assigns.action == :edit, do: Catalogue.list_all_categories(), else: []
+
+    assign(socket, categories: categories, all_categories: all_categories)
+  end
+
+  # Re-reads the previews against the threads already resolved — a comment
   # changes no supplier row, so there is nothing else to reload.
   defp refresh_comment_previews(socket) do
     assign(
       socket,
       :supplier_comment_previews,
-      comment_previews(socket.assigns.supplier_comment_targets)
+      comment_previews(socket.assigns.supplier_comment_threads)
     )
   end
 
-  # One subscription per company, and only for companies not already
-  # subscribed: PubSub delivers once PER subscription, so re-subscribing on
-  # every row reload would multiply the refreshes.
-  defp subscribe_to_comment_targets(socket, targets) do
+  # One subscription per thread. PubSub delivers once PER subscription, so
+  # only threads not yet subscribed are added — and threads no longer on
+  # the item are dropped, or a removed supplier's broadcasts would keep
+  # refreshing previews for the life of the socket. Subscribing is
+  # decoration like the previews: a failure is logged and the tab stands.
+  defp sync_comment_subscriptions(socket, threads) do
     if connected?(socket) and socket.assigns.supplier_comments_available do
       already = socket.assigns[:supplier_comment_subscriptions] || MapSet.new()
-      wanted = MapSet.new(Map.values(targets))
+      wanted = MapSet.new(Map.values(threads))
+      type = Catalogue.supplier_comment_resource_type()
 
       wanted
       |> MapSet.difference(already)
-      |> Enum.each(&PhoenixKitComments.subscribe("crm_company", &1))
+      |> Enum.each(&PhoenixKitComments.subscribe(type, &1))
 
-      assign(socket, :supplier_comment_subscriptions, MapSet.union(already, wanted))
+      already
+      |> MapSet.difference(wanted)
+      |> Enum.each(&PhoenixKitComments.unsubscribe(type, &1))
+
+      assign(socket, :supplier_comment_subscriptions, wanted)
     else
       socket
     end
+  rescue
+    error ->
+      Logger.warning("supplier comment subscriptions unavailable: #{inspect(error)}")
+      socket
   end
 
   # The CRM company page for a supplier row, or nil when there is no company
-  # behind it (an unlinked local row, or a contact). Reuses the map already
-  # built for comments — both answer "which company is this?", and resolving a
-  # local row costs a query.
+  # behind it (an unlinked local row, or a contact).
   #
   # `PhoenixKitCRM.Paths` is reached through a guard: CRM is an optional
-  # runtime dependency here.
-  defp supplier_page_path(targets, %{uuid: uuid}),
-    do: targets |> Map.get(uuid) |> crm_company_path()
+  # runtime dependency here. The RAW helper on purpose: these paths go into
+  # `<.pk_link navigate>`, which applies `Routes.path/1` itself — the
+  # prefixed `company/1` rendered `/phoenix_kit/en/phoenix_kit/en/…`.
+  defp supplier_page_path(links, %{uuid: uuid}),
+    do: links |> Map.get(uuid) |> crm_company_path()
 
   defp supplier_page_path(_targets, _info), do: nil
 
   defp crm_company_path(company_uuid) when is_binary(company_uuid) do
     if Code.ensure_loaded?(PhoenixKitCRM.Paths) and
-         function_exported?(PhoenixKitCRM.Paths, :company, 1) do
+         function_exported?(PhoenixKitCRM.Paths, :company_raw, 1) do
       # credo:disable-for-next-line Credo.Check.Refactor.Apply
-      apply(PhoenixKitCRM.Paths, :company, [company_uuid])
+      apply(PhoenixKitCRM.Paths, :company_raw, [company_uuid])
     end
   end
 
@@ -1179,16 +1253,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # One grouped count query for every supplier on the item, then a list
   # only for the ones that actually have comments — so an item whose
   # suppliers have none costs a single query.
-  defp comment_previews(targets) when map_size(targets) == 0, do: %{}
+  defp comment_previews(threads) when map_size(threads) == 0, do: %{}
 
-  defp comment_previews(targets) do
-    counts =
-      PhoenixKitComments.count_comments("crm_company", Map.values(targets) |> Enum.uniq())
+  defp comment_previews(threads) do
+    type = Catalogue.supplier_comment_resource_type()
+    counts = PhoenixKitComments.count_comments(type, threads |> Map.values() |> Enum.uniq())
 
-    Map.new(targets, fn {info_uuid, company_uuid} ->
-      count = Map.get(counts, company_uuid, 0)
+    Map.new(threads, fn {info_uuid, thread} ->
+      count = Map.get(counts, thread, 0)
 
-      {info_uuid, %{count: count, latest: latest_comments(company_uuid, count)}}
+      {info_uuid, %{count: count, latest: latest_comments(type, thread, count)}}
     end)
   rescue
     # A preview is decoration; it must never take the sourcing tab down.
@@ -1197,11 +1271,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       %{}
   end
 
-  defp latest_comments(_company_uuid, 0), do: []
+  defp latest_comments(_type, _thread, 0), do: []
 
-  defp latest_comments(company_uuid, _count) do
-    "crm_company"
-    |> PhoenixKitComments.list_comments(company_uuid, preload: [:user])
+  defp latest_comments(type, thread, _count) do
+    type
+    |> PhoenixKitComments.list_comments(thread, preload: [:user])
     |> Enum.take(-@comment_preview_count)
     |> Enum.reverse()
   end
@@ -1586,8 +1660,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # would need a compile-time dependency the catalogue does not declare.
   # Posting a comment must show up under the supplier without a page
   # reload. CommentsComponent sends this to its HOST on create/delete, and
-  # the same shape arrives over PubSub when someone else comments on the
-  # company — one contract covers both.
+  # the same shape arrives over PubSub when someone else comments on one
+  # of this item's supplier threads — one contract covers both. Total on
+  # purpose: a late broadcast for a thread that just left the item must
+  # not crash the form.
   def handle_info({:comments_updated, _payload}, socket) do
     {:noreply, refresh_comment_previews(socket)}
   end
@@ -1609,6 +1685,57 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   def handle_info({:pdf_search_modal_closed}, socket),
     do: {:noreply, assign(socket, :show_pdf_search, false)}
+
+  # ── Catalogue PubSub: writes from other sessions ──────────────────
+  # Only state the form does NOT own is refreshed — the changeset, the
+  # staged attribute sets, the rules picker and the featured-image
+  # pointer are the user's unsaved input and are never touched here.
+
+  # A supplier row of THIS item changed elsewhere (add / edit / remove /
+  # primary flip / price revision — ItemSupplierInfos broadcasts all
+  # five). The payload carries the ROW uuid: resolve it through the
+  # context and match on item_uuid, so other items' rows are ignored.
+  def handle_info(
+        {:catalogue_data_changed, :item_supplier_info, uuid, _parent},
+        %{assigns: %{item: %{uuid: item_uuid}}} = socket
+      )
+      when is_binary(uuid) and is_binary(item_uuid) do
+    case Catalogue.get_supplier_info(uuid) do
+      %{item_uuid: ^item_uuid} -> {:noreply, refresh_supplier_state(socket)}
+      _ -> {:noreply, socket}
+    end
+  end
+
+  # A supplier was renamed / removed: the rows show names from
+  # `all_suppliers`, loaded once at mount.
+  def handle_info({:catalogue_data_changed, :supplier, _uuid, _parent}, socket) do
+    {:noreply, assign(socket, :all_suppliers, Suppliers.list_all())}
+  end
+
+  # This item changed elsewhere. What the form does not own and reads
+  # from the DB is the files grid (an upload / removal in another tab —
+  # Attachments announces the item); the item's own fields stay as the
+  # user typed them.
+  def handle_info(
+        {:catalogue_data_changed, :item, uuid, _parent},
+        %{assigns: %{item: %{uuid: item_uuid}}} = socket
+      )
+      when is_binary(uuid) and uuid == item_uuid do
+    {:noreply, Attachments.refresh_files(socket)}
+  end
+
+  # A category came or went in this catalogue: refresh the select options
+  # (the chosen value lives in the changeset and is left alone).
+  def handle_info(
+        {:catalogue_data_changed, :category, _uuid, parent},
+        %{assigns: %{catalogue_uuid: catalogue_uuid}} = socket
+      )
+      when is_nil(catalogue_uuid) or parent == catalogue_uuid or is_nil(parent) do
+    {:noreply, refresh_category_options(socket)}
+  end
+
+  def handle_info({:catalogue_data_changed, _kind, _uuid, _parent}, socket),
+    do: {:noreply, socket}
 
   # Catch-all so stray monitor signals or unrelated PubSub traffic
   # can't crash the form mid-edit.
@@ -2982,6 +3109,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 </thead>
                 <tbody>
                   <%= for info <- @supplier_infos do %>
+                    <% page_path = supplier_page_path(@supplier_company_links, info) %>
                     <tr class={if info.is_primary, do: "bg-primary/5", else: ""}>
                       <td class="font-medium">
                         <%!-- The name links to the party's own page when there
@@ -2990,13 +3118,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                              assembled here — a module does not build another
                              module's URLs. --%>
                         <.pk_link
-                          :if={supplier_page_path(@supplier_comment_targets, info)}
-                          navigate={supplier_page_path(@supplier_comment_targets, info)}
+                          :if={page_path}
+                          navigate={page_path}
                           class="link link-hover"
                         >
                           {supplier_display_name(info, @all_suppliers)}
                         </.pk_link>
-                        <span :if={is_nil(supplier_page_path(@supplier_comment_targets, info))}>
+                        <span :if={is_nil(page_path)}>
                           {supplier_display_name(info, @all_suppliers)}
                         </span>
                       </td>
@@ -3038,7 +3166,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                       <td class="whitespace-nowrap text-right">
                         <.table_row_menu id={"supplier-actions-#{info.uuid}"}>
                           <.table_row_menu_button
-                            :if={Map.has_key?(@supplier_comment_targets, info.uuid)}
+                            :if={Map.has_key?(@supplier_comment_threads, info.uuid)}
                             phx-click="open_supplier_comments"
                             phx-value-uuid={info.uuid}
                             icon="hero-chat-bubble-left-ellipsis"
@@ -3081,9 +3209,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                       </td>
                     </tr>
 
-                    <%!-- The supplier's latest comments, inline. These are
-                         the CRM company's own — the same rows its Comments
-                         tab shows. --%>
+                    <%!-- The supplier's latest comments on THIS item, inline
+                         — the row's own thread, not the CRM company's. --%>
                     <tr :if={Map.has_key?(@supplier_comment_previews, info.uuid)} class="border-0">
                       <td colspan={supplier_table_colspan(assigns)} class="pt-0 pb-3">
                         <.supplier_comment_preview
@@ -3400,10 +3527,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         </:actions>
       </.modal>
 
-      <%!-- Supplier comments — the CRM company's thread, not a
-           catalogue-local one. Same `{resource_type, resource_uuid}` the
-           company page uses, so anything written here appears on its
-           Comments tab and vice versa; there is one store, not two. --%>
+      <%!-- Supplier comments — one thread per attached supplier, keyed on
+           the row's thread uuid (see Catalogue.SupplierComments). "He
+           promised a discount on this product" belongs to the item ×
+           supplier row: the same company supplies other products, and its
+           own thread stays on its CRM page. --%>
       <.modal
         :if={@supplier_comments != nil}
         id="supplier-comments-modal"
@@ -3418,12 +3546,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           </span>
         </:title>
 
-        <%!-- The note says these live on the company page, so the company page
-             is one click away rather than something to go and find. --%>
+        <%!-- Say what this thread is NOT, and put the company's own page one
+             click away when the row has one (a local row has none). --%>
         <p class="text-xs text-base-content/50 mb-3">
           {Gettext.gettext(
             PhoenixKitCatalogue.Gettext,
-            "Shared with this supplier's company page in CRM."
+            "About this supplier for this item only. The company's own comments stay on its CRM page."
           )}
           <.pk_link
             :if={crm_company_path(@supplier_comments.company_uuid)}
@@ -3436,9 +3564,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
         <.live_component
           module={PhoenixKitComments.Web.CommentsComponent}
-          id={"supplier-comments-#{@supplier_comments.company_uuid}"}
-          resource_type="crm_company"
-          resource_uuid={@supplier_comments.company_uuid}
+          id={"supplier-comments-#{@supplier_comments.thread_uuid}"}
+          resource_type={Catalogue.supplier_comment_resource_type()}
+          resource_uuid={@supplier_comments.thread_uuid}
           current_user={assigns[:phoenix_kit_current_user]}
         />
 

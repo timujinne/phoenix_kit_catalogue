@@ -22,8 +22,18 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   the result.
 
   Registered via the host module's `ai_translatables` callback (see
-  `PhoenixKitCatalogue`). The enqueue, the AI call, broadcasts, retry policy,
-  and the audit log all live in core.
+  `PhoenixKitCatalogue`). The enqueue, the AI call, the translation-status
+  broadcasts, retry policy, and the audit log all live in core.
+
+  ## Catalogue fan-out
+
+  A finished translation changes what the catalogue's own list/detail
+  pages render (localized names, attribute labels), so `put_translation/4`
+  emits the matching `Catalogue.PubSub` event — `:catalogue` / `:category`
+  / `:item` for the three resources, `:attribute_group` (the owning group)
+  for group / attribute / value rows — once its `FOR UPDATE` transaction
+  has committed. Core's `:ai_translation` status events only reach the
+  form that asked; this is what keeps every other open tab current.
   """
 
   @behaviour PhoenixKitAI.Translatable
@@ -33,6 +43,7 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   alias PhoenixKit.RepoHelper
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Schemas.{Attribute, AttributeGroup, AttributeValue, Category, Item}
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
 
@@ -95,8 +106,7 @@ defmodule PhoenixKitCatalogue.AITranslatable do
     uuid = resource.uuid
     # `broadcast: false` — the write happens inside this FOR UPDATE
     # transaction, so suppress the updater's own resource broadcast (it would
-    # fire pre-commit / look like a user edit). Translation completion is
-    # signalled by core's `:translation_completed` after this returns.
+    # fire pre-commit). The catalogue event goes out below, after commit.
     opts = Keyword.put(opts, :broadcast, false)
 
     # Re-read the row FOR UPDATE inside the transaction so concurrent
@@ -111,6 +121,37 @@ defmodule PhoenixKitCatalogue.AITranslatable do
         fresh -> merge_translation!(repo, fresh, target_lang, fields, update_fn, opts)
       end
     end)
+    |> tap_broadcast()
+  end
+
+  defp tap_broadcast({:ok, updated} = ok) do
+    broadcast_translated(updated)
+    ok
+  end
+
+  defp tap_broadcast(other), do: other
+
+  defp broadcast_translated(%CatalogueSchema{uuid: uuid}),
+    do: PubSub.broadcast(:catalogue, uuid, uuid)
+
+  defp broadcast_translated(%Category{uuid: uuid, catalogue_uuid: parent}),
+    do: PubSub.broadcast(:category, uuid, parent)
+
+  defp broadcast_translated(%Item{uuid: uuid, catalogue_uuid: parent}),
+    do: PubSub.broadcast(:item, uuid, parent)
+
+  defp broadcast_translated(%AttributeGroup{uuid: uuid}),
+    do: PubSub.broadcast(:attribute_group, uuid)
+
+  defp broadcast_translated(%Attribute{group_uuid: group_uuid}),
+    do: PubSub.broadcast(:attribute_group, group_uuid)
+
+  # A value knows only its attribute; the group is one indexed read away.
+  defp broadcast_translated(%AttributeValue{attribute_uuid: attribute_uuid}) do
+    case Catalogue.get_attribute(attribute_uuid) do
+      %Attribute{group_uuid: group_uuid} -> PubSub.broadcast(:attribute_group, group_uuid)
+      _ -> :ok
+    end
   end
 
   # Merge `fields` into the freshly-locked row's `data` and persist, rolling
@@ -168,9 +209,9 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   defp persist_target(%Item{}), do: {Item, &Catalogue.update_item/3}
 
   # Attribute resources persist through a bare changeset update — no
-  # activity-log entry and no PubSub from inside the FOR UPDATE
-  # transaction (the same intent `broadcast: false` carries for the
-  # three resources above).
+  # activity-log entry (core logs `ai.translation_added` for every
+  # translation) and no PubSub from inside the FOR UPDATE transaction;
+  # `tap_broadcast/1` announces the owning group after commit.
   defp persist_target(%AttributeGroup{}) do
     {AttributeGroup,
      fn fresh, attrs, _opts ->

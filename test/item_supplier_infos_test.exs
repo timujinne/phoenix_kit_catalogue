@@ -281,14 +281,24 @@ defmodule PhoenixKitCatalogue.ItemSupplierInfosTest do
       assert updated.supplier_sku == "NEW-SKU"
     end
 
-    test "delete/1 removes the row" do
+    # Removal CLOSES the row (like a price revision closes the one it
+    # supersedes) rather than deleting it: the row carries the pair's
+    # comment thread, and every "current" reader filters on valid_to.
+    test "delete/1 closes the row: gone from the item, kept in the pair's history" do
       cat = create_catalogue()
       item = create_item(cat)
       supplier = create_supplier()
       info = create_info(item, supplier)
 
-      assert {:ok, _} = ItemSupplierInfos.delete(info)
-      assert is_nil(ItemSupplierInfos.get(info.uuid))
+      assert {:ok, closed} = ItemSupplierInfos.delete(info)
+      assert closed.valid_to == Date.utc_today()
+      assert ItemSupplierInfos.list_for_item(item.uuid) == []
+      assert %ItemSupplierInfo{valid_to: %Date{}} = ItemSupplierInfos.get(info.uuid)
+
+      assert [%ItemSupplierInfo{uuid: uuid}] =
+               ItemSupplierInfos.history_for_pair(item.uuid, supplier.uuid)
+
+      assert uuid == info.uuid
     end
   end
 
@@ -366,6 +376,30 @@ defmodule PhoenixKitCatalogue.ItemSupplierInfosTest do
       info = create_info(item, supplier)
       {:ok, _} = ItemSupplierInfos.update(info, %{"is_primary" => false})
 
+      assert is_nil(ItemSupplierInfos.primary_for_item(item.uuid))
+    end
+
+    test "returns {:error, :not_current} for a closed revision" do
+      cat = create_catalogue()
+      item = create_item(cat)
+      supplier = create_supplier()
+      info = create_info(item, supplier)
+      {:ok, closed} = ItemSupplierInfos.delete(info)
+
+      assert {:error, :not_current} = ItemSupplierInfos.set_primary(closed)
+      assert is_nil(ItemSupplierInfos.primary_for_item(item.uuid))
+    end
+
+    test "refuses a stale in-memory current row that has been closed since" do
+      cat = create_catalogue()
+      item = create_item(cat)
+      supplier = create_supplier()
+      info = create_info(item, supplier)
+      assert is_nil(info.valid_to)
+
+      {:ok, _} = ItemSupplierInfos.delete(ItemSupplierInfos.get(info.uuid))
+
+      assert {:error, :not_current} = ItemSupplierInfos.set_primary(info)
       assert is_nil(ItemSupplierInfos.primary_for_item(item.uuid))
     end
   end

@@ -76,6 +76,11 @@ defmodule PhoenixKitCatalogue.Errors do
           | :unknown_field
           | :invalid_value
           | :already_linked
+          | :wrong_catalogue_scope
+          | :invalid_uuid
+          | :files_folder
+          | :not_current
+          | :move_target_in_subtree
 
   @doc """
   Translates an error reason into a user-facing string via gettext.
@@ -226,6 +231,33 @@ defmodule PhoenixKitCatalogue.Errors do
       Gettext.gettext(
         PhoenixKitCatalogue.Gettext,
         "This supplier is already on the item. Edit the existing row instead."
+      )
+
+  def message(:wrong_catalogue_scope),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "That selection is not in this catalogue."
+      )
+
+  def message(:invalid_uuid),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "That id is not valid.")
+
+  def message(:files_folder),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not copy the files folder.")
+
+  def message(:not_current),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "This supplier row is no longer current."
+      )
+
+  def message(:move_target_in_subtree),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "Cannot move items into a category that is being deleted."
       )
 
   def message(:label_required),

@@ -109,6 +109,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        # Import
        import_plan: nil,
        import_result: nil,
+       # `{pid, monitor_ref}` of the running import task (nil when idle);
+       # `import_error` carries the crash detail shown on the failed step.
+       import_task: nil,
+       import_error: nil,
        report: nil,
        # PRO100 sync: create rows that matched nothing (set per plan)
        create_unmatched: false,
@@ -390,6 +394,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     {:noreply, assign(socket, step: :map, import_plan: nil)}
   end
 
+  # One import at a time: a double-click or a re-sent event while the task
+  # runs would start a second task, overwrite the tracked monitor, and
+  # have both results accepted.
+  def handle_event("execute_import", _params, %{assigns: %{import_task: {_, _}}} = socket),
+    do: {:noreply, socket}
+
   def handle_event("execute_import", _params, socket) do
     catalogue_uuid = socket.assigns.selected_catalogue.uuid
     import_lang = if socket.assigns.multilang_enabled, do: socket.assigns.current_lang, else: nil
@@ -435,6 +445,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
     {:noreply,
      socket
+     # A monitor still held here (the button pressed while a task was
+     # running) would deliver a stray :DOWN into the fresh wizard.
+     |> stop_import_monitor()
      |> assign(
        step: :upload,
        headers: [],
@@ -450,6 +463,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        selected_format: nil,
        import_plan: nil,
        import_result: nil,
+       # `{pid, monitor_ref}` of the running import task (nil when idle);
+       # `import_error` carries the crash detail shown on the failed step.
+       import_task: nil,
+       import_error: nil,
        report: nil,
        import_progress: 0,
        import_total: 0,
@@ -576,9 +593,40 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     {:noreply, assign(socket, import_progress: current, import_total: total)}
   end
 
+  # A result from a task the wizard already abandoned ("Import another"
+  # while it ran) must not yank the fresh wizard to :done.
+  def handle_info({:import_result, _result}, %{assigns: %{import_task: nil}} = socket),
+    do: {:noreply, socket}
+
   def handle_info({:import_result, result}, socket) do
     log_import_activity(socket, result)
-    {:noreply, assign(socket, step: :done, import_result: result)}
+
+    {:noreply,
+     socket
+     |> stop_import_monitor()
+     |> assign(step: :done, import_result: result)}
+  end
+
+  # The import task died without reporting. Its rescue is deliberately
+  # narrow (see `start_import/6`): anything else — a KeyError from a
+  # refactor, a DB connection dropping mid-batch — crashes the task so
+  # the supervisor logs the full stacktrace. Without this clause the
+  # wizard sat on "Importing…" forever; now it lands on a failed step.
+  # A `:normal` exit while still importing means the task finished
+  # without a result, which is the same thing from the user's side.
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{assigns: %{import_task: {_task_pid, ref}}} = socket
+      ) do
+    socket = assign(socket, :import_task, nil)
+
+    if socket.assigns.step == :importing do
+      Logger.error("[Catalogue.Import] import task exited before reporting: #{inspect(reason)}")
+
+      {:noreply, assign(socket, step: :failed, import_error: import_failure_detail(reason))}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info(msg, socket) do
@@ -1246,7 +1294,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     # process; we still want the import to finish and surface its result
     # in the activity feed via the executor's own logging) and so a task
     # crash here can't leave an orphan process running indefinitely.
-    {:ok, _pid} =
+    {:ok, pid} =
       Task.Supervisor.start_child(PhoenixKit.TaskSupervisor, fn ->
         try do
           Executor.execute(import_plan, catalogue_uuid, lv_pid,
@@ -1290,13 +1338,33 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         end
       end)
 
+    # Monitored (not linked): a task crash must not take the LV down, but
+    # the LV has to hear about it — see the `:DOWN` clause.
+    ref = Process.monitor(pid)
+
     {:noreply,
      assign(socket,
        step: :importing,
        import_progress: 0,
-       import_total: length(import_plan.items)
+       import_total: length(import_plan.items),
+       import_task: {pid, ref},
+       import_error: nil
      )}
   end
+
+  defp stop_import_monitor(%{assigns: %{import_task: {_pid, ref}}} = socket) do
+    Process.demonitor(ref, [:flush])
+    assign(socket, :import_task, nil)
+  end
+
+  defp stop_import_monitor(socket), do: socket
+
+  # The one line of detail an admin needs to find the stacktrace in the
+  # log; the friendly explanation is in `failed_step/1`.
+  defp import_failure_detail({%{__exception__: true} = exception, _stack}),
+    do: Exception.message(exception)
+
+  defp import_failure_detail(reason), do: inspect(reason)
 
   # Whenever a picker leaves `:column` mode, clear any column that was
   # previously assigned to that picker's target so it doesn't keep
@@ -1357,6 +1425,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <.confirm_step :if={@step == :confirm} {assigns} />
       <.importing_step :if={@step == :importing} {assigns} />
       <.done_step :if={@step == :done} {assigns} />
+      <.failed_step :if={@step == :failed} {assigns} />
       <.sync_preview_step :if={@step == :preview} {assigns} />
       <.sync_report_step :if={@step == :report} {assigns} />
     </div>
@@ -2282,6 +2351,38 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <p class="text-sm text-base-content/60">
           {@import_progress} / {@import_total} {Gettext.gettext(PhoenixKitCatalogue.Gettext, "items")}
         </p>
+      </div>
+    </div>
+    """
+  end
+
+  # ── Failed Step ─────────────────────────────────────────────────
+
+  defp failed_step(assigns) do
+    ~H"""
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body items-center gap-4 py-12">
+        <div class="text-error">
+          <.icon name="hero-exclamation-triangle" class="w-16 h-16" />
+        </div>
+        <h2 class="text-xl font-bold">
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Failed")}
+        </h2>
+        <p class="text-sm text-base-content/70 max-w-md text-center">
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details.")}
+        </p>
+        <pre :if={@import_error} class="text-xs bg-base-200 rounded p-2 max-w-md overflow-x-auto">{@import_error}</pre>
+
+        <div class="flex gap-2 mt-4">
+          <.link :if={@selected_catalogue} navigate={Paths.catalogue_detail(@selected_catalogue.uuid)} class="btn btn-ghost btn-sm">
+            <.icon name="hero-eye" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View Catalogue")}
+          </.link>
+          <button class="btn btn-primary btn-sm" phx-click="import_another">
+            <.icon name="hero-arrow-path" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Another")}
+          </button>
+        </div>
       </div>
     </div>
     """

@@ -52,6 +52,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
     AttributeSets,
     Counts,
     CrmLink,
+    Duplication,
     Helpers,
     ItemSupplierInfos,
     Links,
@@ -61,6 +62,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
     Rules,
     Search,
     SmartPricing,
+    SupplierComments,
     SupplierFields,
     Suppliers,
     Translations,
@@ -118,6 +120,18 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # on any :folder event regardless of the parent slot.
   defp broadcast_for(%{resource_type: "folder", resource_uuid: uuid}, _parent),
     do: PubSub.broadcast(:folder, uuid)
+
+  # Batch writes (bulk trash / restore / move, category reorder) log ONE
+  # activity row for the whole batch and carry no single `resource_uuid`.
+  # They still have to fan out — the index "Items" column and every open
+  # detail page count them — so the batch rides the same kind with a
+  # `nil` uuid and the catalogue as parent. Consumers already treat the
+  # uuid as informational and refresh the whole slice.
+  defp broadcast_for(%{resource_type: "item"}, parent) when is_binary(parent),
+    do: PubSub.broadcast(:item, nil, parent)
+
+  defp broadcast_for(%{resource_type: "category"}, parent) when is_binary(parent),
+    do: PubSub.broadcast(:category, nil, parent)
 
   # Manufacturer/supplier/smart_rule activity rows never reach this
   # helper today — `Manufacturers`, `Suppliers`, and `Rules` call
@@ -350,7 +364,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # Item ↔ Supplier info — see PhoenixKitCatalogue.Catalogue.ItemSupplierInfos
   # ═══════════════════════════════════════════════════════════════════
 
+  # ── Duplication (see `Catalogue.Duplication`) ────────────────────
+  defdelegate duplicate_item(item, opts \\ []), to: Duplication
+  defdelegate duplicate_category(category, opts \\ []), to: Duplication
+  defdelegate bulk_duplicate_items(uuids, opts \\ []), to: Duplication
+  defdelegate bulk_duplicate_categories(uuids, opts \\ []), to: Duplication
+
   defdelegate list_supplier_infos_for_item(item_uuid), to: ItemSupplierInfos, as: :list_for_item
+  defdelegate supplier_cost_ranges(item_uuids), to: ItemSupplierInfos, as: :cost_ranges
   defdelegate get_supplier_info(uuid), to: ItemSupplierInfos, as: :get
   defdelegate create_supplier_info(attrs, opts \\ []), to: ItemSupplierInfos, as: :create
   defdelegate update_supplier_info(info, attrs, opts \\ []), to: ItemSupplierInfos, as: :update
@@ -387,8 +408,13 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate link_manufacturer_supplier(manufacturer_uuid, supplier_uuid, opts \\ []),
     to: Links
 
-  defdelegate delete_manufacturer_supplier_links_for(uuid), to: Links, as: :delete_links_for
-  defdelegate unlink_manufacturer_supplier(manufacturer_uuid, supplier_uuid), to: Links
+  defdelegate delete_manufacturer_supplier_links_for(uuid, opts \\ []),
+    to: Links,
+    as: :delete_links_for
+
+  defdelegate unlink_manufacturer_supplier(manufacturer_uuid, supplier_uuid, opts \\ []),
+    to: Links
+
   defdelegate list_suppliers_for_manufacturer(manufacturer_uuid), to: Links
   defdelegate list_manufacturers_for_supplier(supplier_uuid), to: Links
   defdelegate linked_supplier_uuids(manufacturer_uuid), to: Links
@@ -607,14 +633,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case result do
       {:ok, catalogue} = ok ->
-        log_activity(%{
-          action: "catalogue.created",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "catalogue",
-          resource_uuid: catalogue.uuid,
-          metadata: %{"name" => catalogue.name}
-        })
+        log_activity(
+          %{
+            action: "catalogue.created",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "catalogue",
+            resource_uuid: catalogue.uuid,
+            metadata: %{"name" => catalogue.name}
+          },
+          Keyword.take(opts, [:broadcast])
+        )
 
         ok
 
@@ -1328,15 +1357,18 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case repo().insert(changeset) do
       {:ok, category} = ok ->
-        log_activity(%{
-          action: "category.created",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          resource_uuid: category.uuid,
-          parent_catalogue_uuid: category.catalogue_uuid,
-          metadata: %{"name" => category.name, "catalogue_uuid" => category.catalogue_uuid}
-        })
+        log_activity(
+          %{
+            action: "category.created",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "category",
+            resource_uuid: category.uuid,
+            parent_catalogue_uuid: category.catalogue_uuid,
+            metadata: %{"name" => category.name, "catalogue_uuid" => category.catalogue_uuid}
+          },
+          Keyword.take(opts, [:broadcast])
+        )
 
         ok
 
@@ -1498,7 +1530,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
   @spec trash_category(Category.t(), keyword()) ::
           {:ok, Category.t()}
-          | {:error, :move_target_not_found | :cross_catalogue_move | term()}
+          | {:error,
+             :move_target_not_found
+             | :cross_catalogue_move
+             | :move_target_in_subtree
+             | term()}
   def trash_category(%Category{} = category, opts \\ []) do
     disposition = Keyword.get(opts, :items, :cascade)
 
@@ -1524,21 +1560,26 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case result do
       {:ok, {updated, subtree_size, items_handled}} ->
-        log_activity(%{
-          action: "category.trashed",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          resource_uuid: category.uuid,
-          parent_catalogue_uuid: category.catalogue_uuid,
-          metadata: %{
-            "name" => category.name,
-            "catalogue_uuid" => category.catalogue_uuid,
-            "subtree_size" => subtree_size,
-            "items_handled" => items_handled,
-            "items_disposition" => disposition_to_metadata(disposition)
-          }
-        })
+        # `broadcast: false` lets `bulk_trash_categories/3` run this inside
+        # its own transaction and fan out once after that commits.
+        log_activity(
+          %{
+            action: "category.trashed",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "category",
+            resource_uuid: category.uuid,
+            parent_catalogue_uuid: category.catalogue_uuid,
+            metadata: %{
+              "name" => category.name,
+              "catalogue_uuid" => category.catalogue_uuid,
+              "subtree_size" => subtree_size,
+              "items_handled" => items_handled,
+              "items_disposition" => disposition_to_metadata(disposition)
+            }
+          },
+          Keyword.take(opts, [:broadcast])
+        )
 
         {:ok, updated}
 
@@ -1579,19 +1620,35 @@ defmodule PhoenixKitCatalogue.Catalogue do
         {:error, :cross_catalogue_move}
 
       %Category{uuid: ^target_uuid} = target ->
-        {count, _} =
-          from(i in Item,
-            where: i.category_uuid in ^subtree and i.status != "deleted"
-          )
-          |> repo().update_all(
-            set: [
-              category_uuid: target.uuid,
-              catalogue_uuid: target.catalogue_uuid,
-              updated_at: now
-            ]
-          )
+        # The picker hides the subtree, but a crafted target inside it
+        # would reparent items onto a category this same transaction then
+        # deletes — leaving live items in a deleted category.
+        if in_subtree?(target.uuid, subtree) do
+          {:error, :move_target_in_subtree}
+        else
+          {count, _} =
+            from(i in Item,
+              where: i.category_uuid in ^subtree and i.status != "deleted"
+            )
+            |> repo().update_all(
+              set: [
+                category_uuid: target.uuid,
+                catalogue_uuid: target.catalogue_uuid,
+                updated_at: now
+              ]
+            )
 
-        {:ok, count}
+          {:ok, count}
+        end
+    end
+  end
+
+  # `Tree.subtree_uuids/1` returns raw 16-byte binaries; loaded rows
+  # carry the textual form.
+  defp in_subtree?(textual_uuid, subtree) do
+    case Ecto.UUID.dump(textual_uuid) do
+      {:ok, dumped} -> dumped in subtree
+      :error -> false
     end
   end
 
@@ -1871,20 +1928,23 @@ defmodule PhoenixKitCatalogue.Catalogue do
            category
            |> Category.changeset(%{parent_uuid: nil, position: next_pos})
            |> repo().update() do
-      log_activity(%{
-        action: "category.moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "category",
-        resource_uuid: moved.uuid,
-        parent_catalogue_uuid: moved.catalogue_uuid,
-        metadata: %{
-          "name" => moved.name,
-          "from_parent_uuid" => from_parent_uuid,
-          "to_parent_uuid" => nil,
-          "catalogue_uuid" => moved.catalogue_uuid
-        }
-      })
+      log_activity(
+        %{
+          action: "category.moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "category",
+          resource_uuid: moved.uuid,
+          parent_catalogue_uuid: moved.catalogue_uuid,
+          metadata: %{
+            "name" => moved.name,
+            "from_parent_uuid" => from_parent_uuid,
+            "to_parent_uuid" => nil,
+            "catalogue_uuid" => moved.catalogue_uuid
+          }
+        },
+        Keyword.take(opts, [:broadcast])
+      )
 
       {:ok, moved}
     end
@@ -1918,23 +1978,76 @@ defmodule PhoenixKitCatalogue.Catalogue do
       end)
 
     with {:ok, {moved, from_parent_uuid}} <- result do
-      log_activity(%{
-        action: "category.moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "category",
-        resource_uuid: moved.uuid,
-        parent_catalogue_uuid: moved.catalogue_uuid,
-        metadata: %{
-          "name" => moved.name,
-          "from_parent_uuid" => from_parent_uuid,
-          "to_parent_uuid" => new_parent_uuid,
-          "catalogue_uuid" => moved.catalogue_uuid
-        }
-      })
+      log_activity(
+        %{
+          action: "category.moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "category",
+          resource_uuid: moved.uuid,
+          parent_catalogue_uuid: moved.catalogue_uuid,
+          metadata: %{
+            "name" => moved.name,
+            "from_parent_uuid" => from_parent_uuid,
+            "to_parent_uuid" => new_parent_uuid,
+            "catalogue_uuid" => moved.catalogue_uuid
+          }
+        },
+        Keyword.take(opts, [:broadcast])
+      )
 
       {:ok, moved}
     end
+  end
+
+  # `opts[:catalogue_uuid]`, when given, is a scope: a category outside it
+  # is refused (`:wrong_catalogue_scope`) — the uuids come from the client.
+  defp move_one_category(uuid, new_parent_uuid, opts) do
+    scope = opts[:catalogue_uuid]
+
+    case get_category(uuid) do
+      nil ->
+        {:error, :not_found}
+
+      %Category{catalogue_uuid: c} when is_binary(scope) and c != scope ->
+        {:error, :wrong_catalogue_scope}
+
+      category ->
+        move_category_under(category, new_parent_uuid, opts)
+    end
+  end
+
+  @doc """
+  Re-parents several categories at once — under `new_parent_uuid`, or to
+  the root of their catalogue when it is `nil`. Each move is
+  `move_category_under/3` with its own guards (cycles, cross-catalogue,
+  missing parent); one refusal does not stop the others. Per-move
+  broadcasts are muted and ONE `:category` batch event per touched
+  catalogue is emitted after the loop, so every open page reloads once.
+
+  Pass `catalogue_uuid:` to refuse categories outside that catalogue
+  (`:wrong_catalogue_scope`) — the uuids are client-captured.
+
+  Returns `{:ok, %{moved: n, errors: [{uuid, reason}]}}`.
+  """
+  @spec bulk_move_categories_under([Ecto.UUID.t()], Ecto.UUID.t() | nil, keyword()) ::
+          {:ok, %{moved: non_neg_integer(), errors: [{Ecto.UUID.t(), term()}]}}
+  def bulk_move_categories_under(uuids, new_parent_uuid, opts \\ []) when is_list(uuids) do
+    muted = Keyword.put(opts, :broadcast, false)
+
+    {moved, errors, catalogues} =
+      Enum.reduce(uuids, {0, [], MapSet.new()}, fn uuid, {moved, errors, cats} ->
+        case move_one_category(uuid, new_parent_uuid, muted) do
+          {:ok, m} -> {moved + 1, errors, MapSet.put(cats, m.catalogue_uuid)}
+          {:error, reason} -> {moved, [{uuid, reason} | errors], cats}
+        end
+      end)
+
+    if moved > 0 and Keyword.get(opts, :broadcast, true) do
+      Enum.each(catalogues, &PubSub.broadcast(:category, nil, &1))
+    end
+
+    {:ok, %{moved: moved, errors: Enum.reverse(errors)}}
   end
 
   # Loads a raw 16-byte binary UUID from a Tree CTE result back into the
@@ -2426,14 +2539,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case result do
       {:ok, folder} = ok ->
-        log_activity(%{
-          action: "folder.created",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "folder",
-          resource_uuid: folder.uuid,
-          metadata: %{"name" => folder.name, "parent_uuid" => folder.parent_uuid}
-        })
+        log_activity(
+          %{
+            action: "folder.created",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "folder",
+            resource_uuid: folder.uuid,
+            metadata: %{"name" => folder.name, "parent_uuid" => folder.parent_uuid}
+          },
+          Keyword.take(opts, [:broadcast])
+        )
 
         ok
 
@@ -3213,17 +3329,20 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     case txn_result do
       {:ok, :ok} ->
-        log_activity(%{
-          action: "category.reordered",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          parent_catalogue_uuid: catalogue_uuid,
-          metadata: %{
-            "groups" => length(deduped_groups),
-            "count" => total_count
-          }
-        })
+        log_activity(
+          %{
+            action: "category.reordered",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "category",
+            parent_catalogue_uuid: catalogue_uuid,
+            metadata: %{
+              "groups" => length(deduped_groups),
+              "count" => total_count
+            }
+          },
+          opts
+        )
 
         :ok
 
@@ -4432,16 +4551,41 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> repo().update_all(set: [status: "deleted", updated_at: DateTime.utc_now()])
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_trashed",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        metadata: %{"category_uuid" => category_uuid, "count" => count}
-      })
+      log_activity(
+        %{
+          action: "item.bulk_trashed",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          parent_catalogue_uuid: lookup_parent(:category, category_uuid),
+          metadata: %{"category_uuid" => category_uuid, "count" => count}
+        },
+        opts
+      )
     end
 
     {count, nil}
+  end
+
+  # ── Batch fan-out for uuid-list bulk ops ──────────────────────
+
+  # A uuid list from the admin toolbar normally comes from one catalogue,
+  # but nothing in the API forbids a mixed list — so the batch event goes
+  # out once per touched catalogue (the `nil` uuid marks it as a batch;
+  # see `broadcast_for/2`). Read BEFORE the write for trash / delete: the
+  # rows may no longer exist afterwards.
+  defp catalogue_uuids_for_items(uuids) do
+    from(i in Item, where: i.uuid in ^uuids, distinct: true, select: i.catalogue_uuid)
+    |> repo().all()
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp broadcast_item_batch(catalogue_uuids, opts) do
+    if Keyword.get(opts, :broadcast, true) do
+      Enum.each(catalogue_uuids, &PubSub.broadcast(:item, nil, &1))
+    end
+
+    :ok
   end
 
   # ── Bulk actions on UUID lists (admin selection toolbar) ──────
@@ -4454,18 +4598,26 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def bulk_trash_items([], _opts), do: {0, nil}
 
   def bulk_trash_items(uuids, opts) when is_list(uuids) do
+    uuids = scope_item_uuids(uuids, opts[:catalogue_uuid])
+    catalogue_uuids = catalogue_uuids_for_items(uuids)
+
     {count, _} =
       from(i in Item, where: i.uuid in ^uuids and i.status != "deleted")
       |> repo().update_all(set: [status: "deleted", updated_at: DateTime.utc_now()])
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_trashed",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        metadata: %{"count" => count, "uuids" => uuids}
-      })
+      log_activity(
+        %{
+          action: "item.bulk_trashed",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          metadata: %{"count" => count, "uuids" => uuids}
+        },
+        broadcast: false
+      )
+
+      broadcast_item_batch(catalogue_uuids, opts)
     end
 
     {count, nil}
@@ -4487,21 +4639,28 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def bulk_restore_items([], _opts), do: {0, nil}
 
   def bulk_restore_items(uuids, opts) when is_list(uuids) do
-    {:ok, {count, count_detached, restored_uuids}} =
+    uuids = scope_item_uuids(uuids, opts[:catalogue_uuid])
+
+    {:ok, {count, count_detached, restored_uuids, catalogue_uuids}} =
       repo().transaction(fn -> do_bulk_restore_items(uuids) end)
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_restored",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        metadata: %{
-          "count" => count,
-          "detached_count" => count_detached,
-          "uuids" => restored_uuids
-        }
-      })
+      log_activity(
+        %{
+          action: "item.bulk_restored",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          metadata: %{
+            "count" => count,
+            "detached_count" => count_detached,
+            "uuids" => restored_uuids
+          }
+        },
+        broadcast: false
+      )
+
+      broadcast_item_batch(catalogue_uuids, opts)
     end
 
     {count, nil}
@@ -4536,7 +4695,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
       from(i in Item, where: i.uuid in ^detached_uuids and i.status == "deleted")
       |> repo().update_all(set: [status: "active", category_uuid: nil, updated_at: now])
 
-    {count_attached + count_detached, count_detached, attached_uuids ++ detached_uuids}
+    catalogue_uuids = items |> Enum.map(& &1.catalogue_uuid) |> Enum.uniq()
+
+    {count_attached + count_detached, count_detached, attached_uuids ++ detached_uuids,
+     catalogue_uuids}
   end
 
   @doc """
@@ -4549,16 +4711,23 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def bulk_permanently_delete_items([], _opts), do: {0, nil}
 
   def bulk_permanently_delete_items(uuids, opts) when is_list(uuids) do
+    uuids = scope_item_uuids(uuids, opts[:catalogue_uuid])
+    catalogue_uuids = catalogue_uuids_for_items(uuids)
     {count, _} = from(i in Item, where: i.uuid in ^uuids) |> repo().delete_all()
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_permanently_deleted",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        metadata: %{"count" => count, "uuids" => uuids}
-      })
+      log_activity(
+        %{
+          action: "item.bulk_permanently_deleted",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          metadata: %{"count" => count, "uuids" => uuids}
+        },
+        broadcast: false
+      )
+
+      broadcast_item_batch(catalogue_uuids, opts)
     end
 
     {count, nil}
@@ -4604,6 +4773,21 @@ defmodule PhoenixKitCatalogue.Catalogue do
     end
   end
 
+  # `opts[:catalogue_uuid]` on the bulk item ops is a scope: uuids that
+  # are not this catalogue's items are dropped before anything is
+  # touched (the lists are client-captured; the page only re-broadcasts
+  # for its own catalogue).
+  defp scope_item_uuids(uuids, nil), do: uuids
+
+  defp scope_item_uuids(uuids, catalogue_uuid) do
+    repo().all(
+      from(i in Item,
+        where: i.uuid in ^uuids and i.catalogue_uuid == ^catalogue_uuid,
+        select: i.uuid
+      )
+    )
+  end
+
   defp ensure_items_in_catalogue(uuids, catalogue_uuid) do
     foreign? =
       from(i in Item,
@@ -4641,14 +4825,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> repo().update_all(set: [category_uuid: nil, updated_at: DateTime.utc_now()])
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        parent_catalogue_uuid: catalogue_uuid,
-        metadata: %{"count" => count, "to_category_uuid" => nil}
-      })
+      log_activity(
+        %{
+          action: "item.bulk_moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          parent_catalogue_uuid: catalogue_uuid,
+          metadata: %{"count" => count, "to_category_uuid" => nil}
+        },
+        opts
+      )
     end
 
     {:ok, count}
@@ -4660,18 +4847,21 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> repo().update_all(set: [category_uuid: target.uuid, updated_at: DateTime.utc_now()])
 
     if count > 0 do
-      log_activity(%{
-        action: "item.bulk_moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        parent_catalogue_uuid: target.catalogue_uuid,
-        metadata: %{
-          "count" => count,
-          "to_category_uuid" => target.uuid,
-          "to_catalogue_uuid" => target.catalogue_uuid
-        }
-      })
+      log_activity(
+        %{
+          action: "item.bulk_moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          parent_catalogue_uuid: target.catalogue_uuid,
+          metadata: %{
+            "count" => count,
+            "to_category_uuid" => target.uuid,
+            "to_catalogue_uuid" => target.catalogue_uuid
+          }
+        },
+        opts
+      )
     end
 
     {:ok, count}
@@ -4694,15 +4884,55 @@ defmodule PhoenixKitCatalogue.Catalogue do
     do: {:ok, %{categories: 0, items_handled: 0}}
 
   def bulk_trash_categories(uuids, disposition, opts) when is_list(uuids) do
+    uuids = scope_category_uuids(uuids, opts[:catalogue_uuid])
+
+    # Each step runs `trash_category/2` muted: a broadcast from inside the
+    # outer transaction would reach subscribers before the rows commit
+    # (and before a later step could roll them back). The trashed
+    # `{uuid, catalogue_uuid}` pairs are collected and fanned out once the
+    # transaction has committed.
+    step_opts = Keyword.put(opts, :broadcast, false)
+
     repo().transaction(fn ->
-      Enum.reduce_while(uuids, %{categories: 0, items_handled: 0}, fn uuid, acc ->
-        bulk_trash_category_step(uuid, disposition, opts, acc)
+      Enum.reduce_while(uuids, %{categories: 0, items_handled: 0, trashed: []}, fn uuid, acc ->
+        bulk_trash_category_step(uuid, disposition, step_opts, acc)
       end)
     end)
     |> case do
-      {:ok, summary} -> {:ok, summary}
-      error -> error
+      {:ok, %{trashed: trashed} = summary} ->
+        broadcast_trashed_categories(trashed, opts)
+        {:ok, Map.delete(summary, :trashed)}
+
+      error ->
+        error
     end
+  end
+
+  defp scope_category_uuids(uuids, nil), do: uuids
+
+  defp scope_category_uuids(uuids, catalogue_uuid) do
+    repo().all(
+      from(c in Category,
+        where: c.uuid in ^uuids and c.catalogue_uuid == ^catalogue_uuid,
+        select: c.uuid
+      )
+    )
+  end
+
+  # One batch event per touched catalogue (like the other bulk ops), not
+  # one per category — N per-row events made every open page reload N
+  # times (review finding, 2026-08-24).
+  defp broadcast_trashed_categories(trashed, opts) do
+    if Keyword.get(opts, :broadcast, true) do
+      trashed
+      |> Enum.map(fn {_uuid, catalogue_uuid} -> catalogue_uuid end)
+      |> Enum.uniq()
+      |> Enum.each(fn catalogue_uuid ->
+        PubSub.broadcast(:category, nil, catalogue_uuid)
+      end)
+    end
+
+    :ok
   end
 
   defp bulk_trash_category_step(uuid, disposition, opts, acc) do
@@ -4715,8 +4945,16 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   defp trash_one_in_bulk(category, disposition, opts, acc) do
     case trash_category(category, Keyword.put(opts, :items, disposition)) do
-      {:ok, _} -> {:cont, %{acc | categories: acc.categories + 1}}
-      {:error, reason} -> {:halt, repo().rollback(reason)}
+      {:ok, _} ->
+        {:cont,
+         %{
+           acc
+           | categories: acc.categories + 1,
+             trashed: [{category.uuid, category.catalogue_uuid} | acc.trashed]
+         }}
+
+      {:error, reason} ->
+        {:halt, repo().rollback(reason)}
     end
   end
 
@@ -5214,6 +5452,16 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # ── Supplier custom fields (entities-defined, values on the row) ────
 
   defdelegate supplier_crm_company_uuid(reference), to: Suppliers, as: :crm_company_uuid
+
+  # ── Supplier comments (one thread per item × supplier) ──────────────
+  # See PhoenixKitCatalogue.Catalogue.SupplierComments.
+  defdelegate supplier_comment_resource_type(), to: SupplierComments, as: :resource_type
+  defdelegate supplier_comment_thread_uuid(info), to: SupplierComments, as: :thread_uuid
+
+  defdelegate resolve_supplier_comment_resources(uuids),
+    to: SupplierComments,
+    as: :resolve_resources
+
   defdelegate supplier_builtin_fields(), to: SupplierFields, as: :builtin_fields
   defdelegate supplier_builtin_field(key), to: SupplierFields, as: :builtin_field
   defdelegate cast_supplier_builtin(key, raw), to: SupplierFields, as: :cast_builtin

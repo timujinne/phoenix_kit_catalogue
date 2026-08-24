@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.MixProject do
   use Mix.Project
 
-  @version "0.18.0"
+  @version "0.19.0"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_catalogue"
 
   def project do
@@ -105,6 +105,14 @@ defmodule PhoenixKitCatalogue.MixProject do
       # the Managed module, not just enabled?). Local dev/tests:
       # PHOENIX_KIT_ENTITIES_PATH=../phoenix_kit_entities.
       pk_dep(:phoenix_kit_entities, "~> 0.4"),
+      # Comments stay a SOFT runtime dependency (every call in lib/ is
+      # guarded with Code.ensure_loaded?, and lib/ must keep compiling
+      # without the package). Test-only, so the suite can render the real
+      # CommentsComponent inside the item form's supplier-comments modal
+      # and prove the {:leaf_changed, …} hop and the per-row threads —
+      # neither is coverable otherwise. Local dev:
+      # PHOENIX_KIT_COMMENTS_PATH=../phoenix_kit_comments.
+      pk_dep(:phoenix_kit_comments, "~> 0.4", only: :test),
       {:phoenix_live_view, "~> 1.1"},
       {:xlsx_reader, "~> 0.8"},
       # Used directly by the CSV import parser (NimbleCSV.define/2). Declared

@@ -2718,7 +2718,7 @@ msgstr ""
 msgid "Comments"
 msgstr ""
 
-msgid "Shared with this supplier's company page in CRM."
+msgid "About this supplier for this item only. The company's own comments stay on its CRM page."
 msgstr ""
 
 msgid "Add a comment"
@@ -2734,6 +2734,21 @@ msgid "Show all %{count} comments"
 msgstr ""
 
 msgid "This supplier is already on the item. Edit the existing row instead."
+msgstr ""
+
+msgid "That selection is not in this catalogue."
+msgstr ""
+
+msgid "That id is not valid."
+msgstr ""
+
+msgid "Could not copy the files folder."
+msgstr ""
+
+msgid "This supplier row is no longer current."
+msgstr ""
+
+msgid "Cannot move items into a category that is being deleted."
 msgstr ""
 
 msgid "contact"
@@ -2770,4 +2785,82 @@ msgid "Not available in this selection"
 msgstr ""
 
 msgid "Shown on category landing pages."
+msgstr ""
+
+msgid "Import Failed"
+msgstr ""
+
+msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
+msgstr ""
+
+msgid "Move selected categories"
+msgstr ""
+
+msgid "Move categories"
+msgstr ""
+
+msgid "Pick where %{count} categories should go. Each one brings its subcategories and items along."
+msgstr ""
+
+msgid "Make them top-level categories"
+msgstr ""
+
+msgid "They leave their parent and sit at the root of this catalogue."
+msgstr ""
+
+msgid "Nest them under another category"
+msgstr ""
+
+msgid "No category can take them — only the top level is left."
+msgstr ""
+
+msgid "Moved %{count} categories."
+msgstr ""
+
+msgid "%{count} categories could not be moved."
+msgstr ""
+
+msgid "Select all categories"
+msgstr ""
+
+msgid "Duplicate"
+msgstr ""
+
+msgid "Duplicate selected items"
+msgstr ""
+
+msgid "Duplicate selected categories"
+msgstr ""
+
+msgid "Duplicate items"
+msgstr ""
+
+msgid "Duplicate categories"
+msgstr ""
+
+msgid "%{count} items will be copied with their files, attribute sets, supplier rows and catalogue rules. Comments are not copied."
+msgstr ""
+
+msgid "%{count} categories will be copied with their subcategories and items."
+msgstr ""
+
+msgid "Each copy is named after its original with \"(copy)\" added and placed right after it."
+msgstr ""
+
+msgid "Duplicated %{count} items."
+msgstr ""
+
+msgid "Duplicated %{count} categories."
+msgstr ""
+
+msgid "%{count} items could not be duplicated."
+msgstr ""
+
+msgid "%{count} categories could not be duplicated."
+msgstr ""
+
+msgid "%{name} (copy)"
+msgstr ""
+
+msgid "Supplier price"
 msgstr ""

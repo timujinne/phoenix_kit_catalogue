@@ -1666,6 +1666,37 @@ defmodule PhoenixKitCatalogue.Web.Components do
     """
   end
 
+  @doc """
+  The "Supplier price" cell text for one item's cost ranges (see
+  `Catalogue.supplier_cost_ranges/1`): one supplier → `5.69`, several →
+  `5.69–9.99` (min–max of the current rows). Rows priced in different
+  currencies are shown as separate ranges with their code — `5.69–9.99
+  EUR, 4.00 USD` — so two currencies are never collapsed into one span.
+  Nothing priced → `—`.
+  """
+  @spec format_supplier_costs(list() | nil) :: String.t()
+  def format_supplier_costs(nil), do: "—"
+  def format_supplier_costs([]), do: "—"
+
+  def format_supplier_costs(ranges) when is_list(ranges) do
+    show_currency? = length(ranges) > 1
+
+    # `unit_cost` is stored at scale 4; the column shows money, 2 places.
+    money = &Decimal.to_string(Decimal.round(&1, 2), :normal)
+
+    Enum.map_join(ranges, ", ", fn %{min: min, max: max} = range ->
+      span =
+        if Decimal.equal?(min, max),
+          do: money.(min),
+          else: money.(min) <> "–" <> money.(max)
+
+      case range[:currency] do
+        code when show_currency? and is_binary(code) -> span <> " " <> code
+        _ -> span
+      end
+    end)
+  end
+
   # ── Shared item cells (reused by item_table AND the core-toolkit
   #    table in CatalogueDetailLive's active list, so the two surfaces
   #    don't drift on pricing / action markup) ───────────────────────
@@ -1687,6 +1718,12 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:has_attributes, :boolean, default: false)
   attr(:file_count, :integer, default: 0)
   attr(:columns, :list, default: ["sku", "price", "unit", "status"])
+
+  attr(:supplier_costs, :list,
+    default: [],
+    doc:
+      "This item's entry from `Catalogue.supplier_cost_ranges/1` (drives `\"supplier_price\"`)."
+  )
 
   def item_pricing_cell(assigns) do
     pricing = Catalogue.item_pricing(assigns.item)
@@ -1719,6 +1756,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <% "price" -> %>
           <.table_default_cell class="text-sm font-semibold">
             {format_price(@sale_price)}
+          </.table_default_cell>
+        <% "supplier_price" -> %>
+          <.table_default_cell class="text-sm text-base-content/80">
+            {format_supplier_costs(@supplier_costs)}
           </.table_default_cell>
         <% "unit" -> %>
           <.table_default_cell class="text-sm">{format_unit(@item.unit)}</.table_default_cell>

@@ -156,6 +156,7 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("base_price", fn -> g("Price") end, managed?: false, sortable?: true),
       col("sku", fn -> g("SKU") end, default?: true, sortable?: true),
       col("price", fn -> g("Price") end, default?: true),
+      col("supplier_price", fn -> g("Supplier price") end, default?: true),
       col("unit", fn -> g("Unit") end, default?: true),
       col("status", fn -> g("Status") end, default?: true, sortable?: true),
       col("attributes", fn -> g("Attributes") end, []),

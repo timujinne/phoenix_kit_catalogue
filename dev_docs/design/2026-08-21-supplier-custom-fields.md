@@ -43,20 +43,51 @@ accepts a comma decimal separator (the norm in et/ru, rejected by
 `FieldInput` also gained a `class` attr so a host can place a field inside a
 daisyUI join.
 
-### Supplier comments live on the CRM company
+### Supplier comments live on the attached-supplier row (changed 2026-08-24)
 
-A supplier IS a CRM company, so a comment about one is a comment on that
-company. The supplier row opens the **same thread** the company page's Comments
-tab shows — same `{resource_type, resource_uuid}` pair (`"crm_company"` + the
-company uuid). Nothing is copied or synced; there is one store, which is the
-same rule the rest of this integration follows.
+**Originally** a supplier row opened the CRM company's own thread — same
+`{"crm_company", company_uuid}` pair as the company page's Comments tab, one
+store for both views. **The owner reversed that**: the same supplier supplies
+several products, and "he promised a discount on this one" is logged as a
+comment — that note is about the item × supplier relation and must not sit in
+the company's general thread. Comments written through the old modal stay on
+the companies (indistinguishable from real company comments; nothing was
+migrated), and comments written now never appear on the company page. The
+per-item threads and the company thread are separate stores by design; a
+read-only aggregate on the CRM company page is a possible follow-up, not a
+prerequisite (four reviewers agreed CRM should stay untouched).
 
-`Suppliers.crm_company_uuid/1` is the join. A party reference is already the
-company uuid; a linked local row resolves through its xref; an unlinked local
-row returns `nil`. **A CONTACT returns `nil` deliberately** — a contact is not a
-company, and filing company-scoped records against one would attach them to the
-wrong party. The affordance only renders for rows that resolve, and the uuid is
-resolved server-side from the row rather than taken from the event payload.
+The thread is filed under `"catalogue_item_supplier"` with a **thread uuid**
+that outlives the row: a price revision closes the row and inserts a successor
+with a new uuid, so the uuid lives in `metadata["comment_thread_uuid"]`,
+minted once per pair, copied on revision, kept on removal, inherited on
+re-attach (`Catalogue.SupplierComments`). Two rules follow from it:
+
+* **Removing a supplier closes the row (like a revision) instead of deleting
+  it.** Every "current" reader already filters on `valid_to`, so nothing else
+  sees the closed row — but it is the carrier of the thread, and hard-deleting
+  a never-revised row would have thrown away exactly the owner's scenario
+  (attach → note the promised discount → seasonal clean-up → re-attach).
+* **The key is server-owned.** `create/2`, `update/2`, `delete/2` and
+  `revise_unit_cost/3` stamp it themselves; attrs (imports, the custom-field
+  save that replaces `metadata`) can neither drop it nor point a row at another
+  thread. Rows written before the key existed are their own thread until their
+  first write pins it.
+
+The Comments action now renders for **every** row — a local or imported
+supplier has no company page, but its promises are about the row all the
+same. The company link in the modal renders only for rows that resolve to a
+CRM company (`Suppliers.crm_company_uuid/1`, which still returns `nil` for a
+contact on purpose). The uuid the modal opens is resolved server-side from a
+row the LiveView rendered, never from the payload.
+
+The central Comments admin (and the Activity feed) link a thread back to the
+item's Suppliers tab through `PhoenixKitCatalogue.resolve_comment_resources/1`
+(raw path, `?tab=sourcing`, which the item form now honours at mount). The
+resolver is registered by the module itself via the `resource_links/0`
+`PhoenixKit.Module` callback, which core discovers on every loaded module —
+**no host configuration** (a first cut hand-edited the host config on max-dev;
+that was the wrong tool and was removed).
 
 Each supplier row shows its **two latest comments inline**, with a "Show all N"
 button opening the full thread. One grouped count query covers every supplier on
@@ -74,14 +105,17 @@ panel escapes the table's `overflow-clip`, which a plain daisyUI dropdown does
 not. **Primary stays a badge in its own column** — it is a status, not an action
 — and promoting it is a menu item.
 
-`phoenix_kit_comments` is a **soft** dependency of the catalogue (CRM declares
-it; the catalogue does not). That is why the composer's `{:leaf_changed, …}` hop
-is wired at runtime in `handle_info` instead of through
-`use PhoenixKitComments.Embed`, which needs a compile-time dep. Without that hop
-"Post comment" silently no-ops — it is the documented failure mode of embedding
-this component. ⚠️ The catalogue's own suite cannot cover it (comments is not a
-dep, so `comments_available?/0` is false in tests); only
-`Suppliers.crm_company_uuid/1` is pinned there.
+`phoenix_kit_comments` is a **soft** runtime dependency of the catalogue (CRM
+declares it; the catalogue's `lib/` must keep compiling without it). That is
+why the composer's `{:leaf_changed, …}` hop is wired at runtime in
+`handle_info` instead of through `use PhoenixKitComments.Embed`, which needs a
+compile-time dep. Without that hop "Post comment" silently no-ops — it is the
+documented failure mode of embedding this component. Since 2026-08-24 comments
+is a **test-only** dep (`pk_dep(:phoenix_kit_comments, "~> 0.4", only: :test)`),
+so `test/web/item_form_supplier_comments_test.exs` renders the real component
+inside the modal, feeds it through the Leaf hop and asserts the comment lands
+on the row's thread. The precommit `compile --warnings-as-errors` runs in dev,
+without the package — that is the check that `lib/` stayed soft.
 
 ## Where this is going (owner direction, 2026-08-21)
 

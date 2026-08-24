@@ -28,6 +28,84 @@ defmodule PhoenixKitCatalogue.GettextTest do
              "Otsi failinime järgi…"
   end
 
+  test "the supplier-comments note is translated (pin for the per-row threads, 2026-08-24)" do
+    msgid =
+      "About this supplier for this item only. The company's own comments stay on its CRM page."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) ==
+             "Только об этом поставщике для этого товара. Собственные комментарии компании остаются на её странице в CRM."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) ==
+             "Ainult selle tarnija kohta selle toote juures. Ettevõtte enda kommentaarid jäävad tema CRM-i lehele."
+  end
+
+  test "the supplier price column label is translated (pin, 2026-08-24)" do
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier price") == "Tarnija hind"
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier price") == "Цена поставщика"
+  end
+
+  test "the duplicate strings are translated (pin for the 2026-08-24 Duplicate action)" do
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Duplicate") == "Дублировать"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{name} (copy)", name: "Труба") ==
+             "Труба (копия)"
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Duplicate categories") ==
+             "Dubleeri kategooriad"
+  end
+
+  test "the category bulk-move strings are translated (pin for the 2026-08-24 toolkit change)" do
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move categories") ==
+             "Переместить категории"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make them top-level categories") ==
+             "Сделать их категориями верхнего уровня"
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move categories") ==
+             "Liiguta kategooriad"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select all categories") ==
+             "Vali kõik kategooriad"
+  end
+
+  test "new #78 error atoms are translated (pin, 2026-08-24)" do
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "Cannot move items into a category that is being deleted."
+           ) == "Нельзя перенести товары в категорию, которая удаляется."
+
+    assert Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "That selection is not in this catalogue."
+           ) ==
+             "Этот выбор не принадлежит данному каталогу."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "Cannot move items into a category that is being deleted."
+           ) == "Kirjeid ei saa tõsta kategooriasse, mida kustutatakse."
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "This supplier row is no longer current.") ==
+             "See tarnija rida ei ole enam kehtiv."
+  end
+
   test "attribute-sets strings are translated (pin for the 2026-08-18 rework, PR #74)" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
 
@@ -488,6 +566,28 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert po_msgstr("en", msgid) != nil
       assert gettext_in("et", msgid) == "Otsingule vastavaid tooteid pole."
       assert gettext_in("ru", msgid) == "Нет позиций, соответствующих запросу."
+    end
+  end
+
+  describe "import failed-step strings are present in every locale" do
+    test "Import Failed" do
+      msgid = "Import Failed"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Import ebaõnnestus"
+      assert gettext_in("ru", msgid) == "Импорт не удался"
+    end
+
+    test "failure explanation" do
+      msgid =
+        "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
+
+      assert po_msgstr("en", msgid) != nil
+
+      assert gettext_in("et", msgid) ==
+               "Import katkes ootamatult enne lõpetamist. Enne tõrget kirjutatud read jäid alles. Üksikasjad leiad serveri logist."
+
+      assert gettext_in("ru", msgid) ==
+               "Импорт неожиданно прервался до завершения. Строки, записанные до сбоя, сохранены. Подробности — в журнале сервера."
     end
   end
 end

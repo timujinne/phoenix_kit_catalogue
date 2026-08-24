@@ -54,7 +54,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
 
   require Logger
 
-  alias PhoenixKitCatalogue.Catalogue.ActivityLog
+  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub}
 
   @owner "catalogue_supplier"
   @blueprint_name "catalogue_supplier_fields"
@@ -533,8 +533,14 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
     end
   end
 
+  # Field definitions are a singleton shared by every supplier row in the
+  # install, so a change fans out as its own kind (`:supplier_field`, the
+  # blueprint uuid, no catalogue parent) rather than as an
+  # `:item_supplier_info` event for every row — consumers that render the
+  # per-field columns reload the definitions on it.
   defp tap_log({:ok, entity} = result, action, opts, metadata) do
     log(action, opts, entity.uuid, metadata)
+    PubSub.broadcast(:supplier_field, entity.uuid)
     result
   end
 

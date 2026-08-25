@@ -12,7 +12,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
 
   import Phoenix.LiveViewTest
 
-  alias PhoenixKitCatalogue.Schemas.{Catalogue, Item}
+  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
   alias PhoenixKitCatalogue.Web.Components.ItemPicker
 
   defp fake_catalogue do
@@ -234,6 +234,38 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
         )
 
       assert html =~ "Kitchen"
+    end
+
+    test "inserts the ancestor chain from category_paths between catalogue and direct category" do
+      category = %Category{uuid: "cat-furniture", name: "Furniture", data: %{}}
+      item = %{fake_item("item-1", "Oak Chair") | category: category}
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            options: [item],
+            has_more: false,
+            category_paths: %{"cat-furniture" => ["Home", "Living Room"]}
+          })
+        )
+
+      assert html =~ "Kitchen / Home / Living Room / Furniture"
+    end
+
+    test "omits ancestor names when category_paths has no entry for the category" do
+      category = %Category{uuid: "cat-furniture", name: "Furniture", data: %{}}
+      item = %{fake_item("item-1", "Oak Chair") | category: category}
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{open: true, options: [item], has_more: false})
+        )
+
+      assert html =~ "Kitchen / Furniture"
+      refute html =~ "Home"
     end
   end
 

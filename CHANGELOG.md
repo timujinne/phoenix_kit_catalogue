@@ -1,3 +1,24 @@
+## 0.19.1 - 2026-08-25
+
+### Added
+
+- **ItemPicker breadcrumb shows the full ancestor chain** (#79) — dropdown
+  rows now read `catalogue / ancestor… / direct category` instead of just
+  `catalogue / direct category`. Ancestor names are memoized per unique
+  category uuid across a component instance's lifetime, so a page of
+  results only looks up each distinct category's chain once.
+
+### Fixed
+
+- Post-merge PR #79 review: added the missing test coverage for the
+  ancestor-chain breadcrumb (splice-in case and the no-cache-entry
+  fallback) — the feature had shipped without any.
+
+### Changed
+
+- Bumped `phoenix_kit` (2.13.7 → 2.13.8) and `phoenix_kit_comments`
+  (0.4.2 → 0.4.3) lockfile pins.
+
 ## 0.19.0 - 2026-08-24
 
 ### Added

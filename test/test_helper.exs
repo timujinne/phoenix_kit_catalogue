@@ -13,7 +13,8 @@ support_dir = Path.expand("support", __DIR__)
   "test_endpoint.ex",
   "activity_log_assertions.ex",
   "data_case.ex",
-  "live_case.ex"
+  "live_case.ex",
+  "live_database_guard.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -21,6 +22,11 @@ support_dir = Path.expand("support", __DIR__)
 db_name =
   Application.get_env(:phoenix_kit_catalogue, PhoenixKitCatalogue.Test.Repo)[:database] ||
     "phoenix_kit_catalogue_test"
+
+# S014: refuse before anything else touches the database — see
+# PhoenixKitCatalogue.Test.LiveDatabaseGuard's moduledoc for why this
+# exists alongside (not instead of) the external `pk-test` wrapper.
+PhoenixKitCatalogue.Test.LiveDatabaseGuard.check!(db_name)
 
 # `System.cmd/3` raises `:enoent` when the binary isn't on PATH, so probe for
 # the client first — a machine without libpq installed must fall through to

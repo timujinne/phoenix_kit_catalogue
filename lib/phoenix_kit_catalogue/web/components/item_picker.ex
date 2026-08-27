@@ -84,6 +84,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       abbreviations (`piece`→`pc`, `set`→`set`, `pair`→`pair`,
       `sheet`→`sheet`, `m2`→`m²`, `running_meter`→`rm`; unknown strings
       pass through). Supply your own to use a different unit vocabulary.
+    * `:show_sku` — when `true`, renders the item's `:sku` between the
+      category breadcrumb and the unit label on each dropdown row's
+      second line (as an em dash when the item has no SKU on file, so a
+      blank catalogue field doesn't read as a rendering bug). Defaults to
+      `false` so existing consumers are unaffected.
     * `:highlight_selected` — when `true` (default), the input gets the
       `input-primary` border while an item is selected. Pass `false` to
       suppress that highlight. Default preserves existing behaviour.
@@ -151,6 +156,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
        format_price: nil,
        format_unit: nil,
        show_unit: false,
+       show_sku: false,
        highlight_selected: true,
        initial_query: nil,
        seeded_initial_query: false,
@@ -664,6 +670,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
             >
               <% price = format_price_display(item, @price_fun) %>
               <% unit = if @show_unit, do: @unit_fun.(item.unit), else: "" %>
+              <% sku = if @show_sku, do: item.sku || "—", else: nil %>
               <div class="min-w-0 flex-1">
                 <div class="font-medium text-sm truncate">
                   {item_display_name(item, @locale)}
@@ -674,6 +681,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
                 >
                   {item_breadcrumb(item, @locale, @category_paths)}
                 </div>
+              </div>
+              <div :if={sku} class="text-xs text-base-content/40 shrink-0 self-end px-2 truncate max-w-24">
+                {sku}
               </div>
               <div :if={(price != nil and price != "") or unit != ""} class="text-right ml-4 shrink-0">
                 <div :if={price != nil and price != ""} class="text-sm font-medium">

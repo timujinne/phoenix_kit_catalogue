@@ -2270,6 +2270,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:format_price, :any, default: nil)
   attr(:format_unit, :any, default: nil)
   attr(:show_unit, :boolean, default: false)
+  attr(:show_sku, :boolean, default: false)
   attr(:highlight_selected, :boolean, default: true)
   attr(:initial_query, :string, default: nil)
   attr(:photo_clickable, :boolean, default: false)
@@ -2293,6 +2294,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       format_price={@format_price}
       format_unit={@format_unit}
       show_unit={@show_unit}
+      show_sku={@show_sku}
       highlight_selected={@highlight_selected}
       initial_query={@initial_query}
       photo_clickable={@photo_clickable}

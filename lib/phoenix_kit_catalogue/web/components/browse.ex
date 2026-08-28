@@ -431,6 +431,12 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   views — while the `:qty` cell (the `:qty` slot, typically a
   `qty_stepper`) is deliberately not click-bound so stepping a quantity
   can never toggle the row underneath it.
+
+  The `:thumb` cell honors a `pk-comfy` class on an ANCESTOR element (the
+  same density-toggle idiom `components.ex`'s admin tables use): wrap the
+  table in a container with that class to switch its thumbnail — and only
+  its thumbnail — to a larger size. No prop on this component itself; it's
+  a pure CSS hook, off by default.
   """
   attr(:id, :string, required: true)
   attr(:item, :map, required: true, doc: "a presented item (see present_items/2)")
@@ -465,12 +471,12 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               :if={@item.photo_url}
               src={@item.photo_url}
               alt=""
-              class="w-8 h-8 rounded object-cover bg-base-200"
+              class="w-8 h-8 [.pk-comfy_&]:w-16 [.pk-comfy_&]:h-16 rounded object-cover bg-base-200"
               loading="lazy"
             />
             <div
               :if={!@item.photo_url}
-              class="w-8 h-8 rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
+              class="w-8 h-8 [.pk-comfy_&]:w-16 [.pk-comfy_&]:h-16 rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
             >
               {String.first(@item.sku || @item.name || "?")}
             </div>
@@ -518,7 +524,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
     """
   end
 
-  defp row_cell_class(:thumb), do: "w-10"
+  defp row_cell_class(:thumb), do: "w-10 [.pk-comfy_&]:w-20"
   defp row_cell_class(:name), do: "w-full"
   defp row_cell_class(:breadcrumb), do: "text-right whitespace-nowrap pr-0"
   defp row_cell_class(:price), do: "text-right whitespace-nowrap"

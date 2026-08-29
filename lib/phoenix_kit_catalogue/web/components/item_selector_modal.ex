@@ -226,11 +226,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     limits
   end
 
-  defp resolve_view!(nil), do: "table"
-  defp resolve_view!(view) when view in ["table", "comfy", "card"], do: view
-  defp resolve_view!(view) when view in [:table, :comfy, :card], do: to_string(view)
+  # Public (unlike the other resolve_*! validators here): initialize/2
+  # always reaches Catalogue for its first fetch, so nothing that goes
+  # through the mount path is unit-testable without Postgres. This one
+  # is pure and worth a direct test on its own.
+  @doc false
+  def resolve_view!(nil), do: "table"
+  def resolve_view!(view) when view in ["table", "comfy", "card"], do: view
+  def resolve_view!(view) when view in [:table, :comfy, :card], do: to_string(view)
 
-  defp resolve_view!(other),
+  def resolve_view!(other),
     do:
       raise(
         ArgumentError,

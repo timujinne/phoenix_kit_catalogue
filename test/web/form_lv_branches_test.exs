@@ -16,6 +16,24 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
+  describe "inline validation errors actually render" do
+    test "clearing the name on the catalogue form shows the error, not silence",
+         %{conn: conn} do
+      # `to_form/1` drops a changeset's errors entirely when its `action` is
+      # nil, so a validate handler that forwards the previous action — which
+      # starts nil from mount — renders a form that is invalid and says
+      # nothing. The user only learns anything on their first failed save.
+      {:ok, view, _html} = live(conn, "/en/admin/catalogue/new")
+
+      html =
+        view
+        |> form("#catalogue-form", catalogue: %{name: ""})
+        |> render_change()
+
+      assert html =~ "can&#39;t be blank" or html =~ "can't be blank"
+    end
+  end
+
   setup do
     cat = fixture_catalogue(%{name: "Branches Cat"})
     other = fixture_catalogue(%{name: "Other Cat"})

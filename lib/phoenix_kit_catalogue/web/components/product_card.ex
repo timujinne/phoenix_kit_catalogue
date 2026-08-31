@@ -82,6 +82,13 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   attr(:files, :list, default: [])
   attr(:on_close, :string, default: "card_close")
 
+  slot(:extra_actions,
+    doc:
+      "rendered in the modal's action row before Close — the item " <>
+        "selector puts its mode-aware Add/quantity control here " <>
+        "(2026-08-31, details as their own popup)."
+  )
+
   def product_card(assigns) do
     ~H"""
     <.modal show={@show} id={"#{@id}-card"} on_close={@on_close} max_width="3xl">
@@ -96,6 +103,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
       />
 
       <:actions>
+        {render_slot(@extra_actions)}
         <button type="button" class="btn btn-ghost" phx-click={@on_close} phx-target={@target}>
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Close")}
         </button>
@@ -380,22 +388,32 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   Builds the ordered `{label, value}` list of the item's filled,
   user-facing scalar fields — SKU, price, unit, description, then
   metadata. Empty values are dropped, so the card only shows what is set.
+
+  `opts` (2026-08-30, for embeddings under a display contract — the item
+  selector's detail page honours its `show_prices`/`show_sku` grants):
+
+    * `:include_price` — default `true`; `false` drops the price row.
+    * `:include_sku` — default `true`; `false` drops the SKU row.
   """
-  @spec build_fields(Item.t() | term(), String.t()) :: [{String.t(), String.t()}]
-  def build_fields(%Item{} = item, locale) do
+  @spec build_fields(Item.t() | term(), String.t(), keyword()) :: [{String.t(), String.t()}]
+  def build_fields(item, locale, opts \\ [])
+
+  def build_fields(%Item{} = item, locale, opts) do
     [
-      {gettext("SKU"), item.sku},
-      {gettext("Price"), format_price(item)},
-      {gettext("Unit"), unit_value(item)},
-      {gettext("Description"), resolve_description(item, locale)}
+      {Keyword.get(opts, :include_sku, true), {gettext("SKU"), item.sku}},
+      {Keyword.get(opts, :include_price, true), {gettext("Price"), format_price(item)}},
+      {true, {gettext("Unit"), unit_value(item)}},
+      {true, {gettext("Description"), resolve_description(item, locale)}}
     ]
+    |> Enum.filter(fn {include, _field} -> include end)
+    |> Enum.map(fn {_include, field} -> field end)
     |> Enum.concat(metadata_fields(item))
     |> Enum.concat(attribute_fields(item, locale))
     |> Enum.map(fn {label, value} -> {label, to_display(value)} end)
     |> Enum.reject(fn {_label, value} -> blank?(value) end)
   end
 
-  def build_fields(_, _), do: []
+  def build_fields(_, _, _), do: []
 
   # The item's attributes resolved for the card's locale — one row per
   # set/attribute, values comma-joined in display order. Runs on card
@@ -504,6 +522,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
       _ -> nil
     end
   rescue
+    # Chrome-not-data degradation, same doctrine as the other rescues in
+    # this file: a broken markup/discount rule must not crash the
+    # client-facing card — the price row is simply omitted. The listing
+    # behind the card prices items on an unrescued path, so the two
+    # surfaces disagreeing IS the visible symptom pointing at the rule.
     _ -> nil
   end
 

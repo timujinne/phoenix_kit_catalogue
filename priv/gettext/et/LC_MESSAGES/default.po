@@ -112,6 +112,8 @@ msgstr "Tootmine lõpetatud"
 msgid "Toggle folder"
 msgstr "Ava/sule kaust"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2982
+#, elixir-autogen
 msgid "Clear search and filters to see the folder tree."
 msgstr "Puhasta otsing ja filtrid, et näha kaustapuud."
 
@@ -396,6 +398,9 @@ msgstr "Kategooria taastamine ebaõnnestus."
 msgid "Failed to restore item."
 msgstr "Toote taastamine ebaõnnestus."
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2124
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2562
+#, elixir-autogen
 msgid "Failed to save the new order."
 msgstr "Uue järjestuse salvestamine ebaõnnestus."
 
@@ -424,6 +429,8 @@ msgstr "PDF-i taastamine ebaõnnestus."
 msgid "Back"
 msgstr "Tagasi"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1173
+#, elixir-autogen
 msgid "Cancel"
 msgstr "Tühista"
 
@@ -442,6 +449,8 @@ msgstr "Kustuta jäädavalt"
 msgid "Edit"
 msgstr "Muuda"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:302
+#, elixir-autogen
 msgid "View"
 msgstr "Vaata"
 
@@ -466,6 +475,8 @@ msgstr "Lisa kategooria"
 msgid "Add Item"
 msgstr "Lisa toode"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:432
+#, elixir-autogen
 msgid "Name"
 msgstr "Nimi"
 
@@ -529,6 +540,8 @@ msgstr "Põhipilt pole määratud."
 msgid "Change"
 msgstr "Muuda"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1238
+#, elixir-autogen
 msgid "Remove"
 msgstr "Eemalda"
 
@@ -571,12 +584,18 @@ msgstr "Failitüüp pole toetatud."
 msgid "Only PDF files are accepted."
 msgstr "Aktsepteeritakse ainult PDF-faile."
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:435
+#, elixir-autogen
 msgid "Category"
 msgstr "Kategooria"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:143
+#, elixir-autogen
 msgid "Categories"
 msgstr "Kategooriad"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:434
+#, elixir-autogen
 msgid "Manufacturer"
 msgstr "Tootja"
 
@@ -589,9 +608,13 @@ msgstr "Toode"
 msgid "Items"
 msgstr "Tooted"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:433
+#, elixir-autogen
 msgid "SKU"
 msgstr "Artikkel"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:437
+#, elixir-autogen
 msgid "Price"
 msgstr "Hind"
 
@@ -601,6 +624,8 @@ msgstr "Algne hind"
 msgid "Final Price"
 msgstr "Lõpphind"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:436
+#, elixir-autogen
 msgid "Unit"
 msgstr "Ühik"
 
@@ -628,6 +653,8 @@ msgstr "Allahindlus"
 msgid "Table view"
 msgstr "Tabelivaade"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1038
+#, elixir-autogen
 msgid "Card view"
 msgstr "Kaartide vaade"
 
@@ -736,6 +763,8 @@ msgstr "Loodud"
 msgid "Updated"
 msgstr "Uuendatud"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:177
+#, elixir-autogen
 msgid "Uncategorized"
 msgstr "Kategoriseerimata"
 
@@ -764,6 +793,8 @@ msgid "Search PDFs"
 msgstr "Otsi PDF-idest"
 
 ## Plural forms (Estonian: 2 forms)
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1159
+#, elixir-autogen
 msgid "%{count} item"
 msgid_plural "%{count} items"
 msgstr[0] "%{count} toode"
@@ -828,6 +859,8 @@ msgid "Permanently deleted %{count} items."
 msgstr "Jäädavalt kustutati %{count} toodet."
 
 ## Catalogue table toolbar
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:336
+#, elixir-autogen
 msgid "Columns"
 msgstr "Veerud"
 
@@ -859,6 +892,10 @@ msgstr "Kontaktandmed"
 msgid "Website"
 msgstr "Veebisait"
 
+#: lib/phoenix_kit_catalogue/web/table_config.ex:66
+#: lib/phoenix_kit_catalogue/web/table_config.ex:162
+#: lib/phoenix_kit_catalogue/web/table_config.ex:183
+#, elixir-autogen
 msgid "Manual order"
 msgstr "Käsitsi järjestus"
 
@@ -872,6 +909,8 @@ msgstr "Kõik kaustad"
 msgid "All statuses"
 msgstr "Kõik staatused"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2131
+#, elixir-autogen
 msgid "Clear search and filters to drag-and-drop reorder."
 msgstr "Tühjenda otsing ja filtrid, et lohistades ümber järjestada."
 
@@ -1055,17 +1094,14 @@ msgid "Current"
 msgstr "Praegune"
 
 ## Import — PRO100 sync skip reasons
-
 msgid "Row %{row}: belongs to %{group}, not to this catalogue"
 msgstr "Rida %{row}: kuulub kataloogi „%{group}“, mitte sellesse kataloogi"
 
 ## Media picker
-
 msgid "Select Featured Image"
 msgstr "Vali põhipilt"
 
 ## Product card
-
 msgid "View item details"
 msgstr "Vaata toote kaarti"
 
@@ -1090,12 +1126,18 @@ msgstr "Järgmine"
 msgid "Show image %{number}"
 msgstr "Näita pilti %{number}"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3824
+#, elixir-autogen
 msgid "Reorder all"
 msgstr "Järjesta kõik ümber"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3637
+#, elixir-autogen
 msgid "catalogue"
 msgstr "kataloog"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3638
+#, elixir-autogen
 msgid "catalogues"
 msgstr "kataloogid"
 
@@ -1105,21 +1147,31 @@ msgstr "kategooria"
 msgid "categories"
 msgstr "kategooriad"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2095
+#, elixir-autogen
 msgid "Catalogues reordered."
 msgstr "Kataloogid järjestati ümber."
 
 msgid "Categories reordered."
 msgstr "Kategooriad järjestati ümber."
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2100
+#, elixir-autogen
 msgid "Failed to reorder."
 msgstr "Ümberjärjestamine ebaõnnestus."
 
 msgid "Photos and Files"
 msgstr "Fotod ja failid"
 
+#: lib/phoenix_kit_catalogue/web/components.ex:1198
+#: lib/phoenix_kit_catalogue/web/components.ex:1260
+#, elixir-autogen
 msgid "Comfortable view"
 msgstr "Avar vaade"
 
+#: lib/phoenix_kit_catalogue/web/components.ex:1207
+#: lib/phoenix_kit_catalogue/web/components.ex:1268
+#, elixir-autogen
 msgid "Compact view"
 msgstr "Kompaktne vaade"
 
@@ -1185,12 +1237,6 @@ msgstr "Halda selle rühma atribuute, väärtusi ja tõlkeid."
 
 msgid "No attributes yet. Add one below — e.g. Color, Trim, Surface."
 msgstr "Atribuute pole veel. Lisa mõni allpool — nt Värv, Kant, Pind."
-
-msgid "Multiple values"
-msgstr "Mitu väärtust"
-
-msgid "Fixed value"
-msgstr "Fikseeritud väärtus"
 
 msgid "Failed to add attribute."
 msgstr "Atribuudi lisamine ebaõnnestus."
@@ -1270,10 +1316,6 @@ msgstr "Vali kõigepealt tõlkedialoogis AI lõpp-punkt ja viip."
 msgid "Add value"
 msgstr "Lisa väärtus"
 
-
-
-
-
 msgid "Search PDF contents"
 msgstr "Otsi PDF-ide sisust"
 
@@ -1291,9 +1333,6 @@ msgstr "Otsi failinime järgi…"
 
 msgid "Attribute sets need the Entities module enabled."
 msgstr "Atribuudikomplektid eeldavad, et Entities moodul on sisse lülitatud."
-
-msgid "Attribute set not found."
-msgstr "Atribuudikomplekti ei leitud."
 
 msgid "New Attribute Set"
 msgstr "Uus atribuudikomplekt"
@@ -1616,6 +1655,8 @@ msgstr "-- Vali kategooria --"
 msgid "0.00"
 msgstr "0.00"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2778
+#, elixir-autogen
 msgid "A → Z by name"
 msgstr "A → Ü nime järgi"
 
@@ -1988,6 +2029,8 @@ msgstr "Nimi *"
 msgid "New Categories"
 msgstr "Uued kategooriad"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2780
+#, elixir-autogen
 msgid "Newest first"
 msgstr "Uusimad enne"
 
@@ -2018,6 +2061,9 @@ msgstr "Mitteaktiivseid tooteid pole."
 msgid "No items in this category."
 msgstr "Selles kategoorias pole tooteid."
 
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:204
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1130
+#, elixir-autogen
 msgid "No items match your search."
 msgstr "Otsingule vastavaid tooteid pole."
 
@@ -2045,6 +2091,8 @@ msgstr "Kategoriseerimata tooteid pole."
 msgid "Nothing deleted here."
 msgstr "Siin pole midagi kustutatut."
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2781
+#, elixir-autogen
 msgid "Oldest first"
 msgstr "Vanimad enne"
 
@@ -2180,6 +2228,8 @@ msgstr "Korda kinnijäänuid"
 msgid "Retrying…"
 msgstr "Proovin uuesti…"
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2782
+#, elixir-autogen
 msgid "Reverse current order"
 msgstr "Pööra praegune järjestus"
 
@@ -2207,6 +2257,9 @@ msgstr "Rida %{row}: nimi puudub, ei saa luua"
 msgid "Rows with errors (will be skipped):"
 msgstr "Vigadega read (jäetakse vahele):"
 
+msgid "Set (kmpl)"
+msgstr "Komplekt (kmpl)"
+
 msgid "Running meter"
 msgstr "Jooksev meeter"
 
@@ -2222,6 +2275,9 @@ msgstr "Otsing pole ajutiselt saadaval. Proovi hetke pärast uuesti."
 msgid "Search items by name, description, or SKU..."
 msgstr "Otsi tooteid nime, kirjelduse või SKU järgi..."
 
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:170
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1020
+#, elixir-autogen
 msgid "Search items…"
 msgstr "Otsi tooteid…"
 
@@ -2453,6 +2509,8 @@ msgstr "Milline veerg sisaldab tarnijate nimesid?"
 msgid "You must map at least one column to 'Item Name'. Scroll down to the column mapping section and pick the column that holds item names."
 msgstr "Vähemalt üks veerg peab olema seotud valikuga 'Toote nimi'. Keri alla veergude sidumise osani ja vali veerg, mis sisaldab toodete nimesid."
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2779
+#, elixir-autogen
 msgid "Z → A by name"
 msgstr "Ü → A nime järgi"
 
@@ -2606,8 +2664,6 @@ msgstr "Seotud ettevõttega"
 msgid "The linked CRM company could not be found. Unlink to edit locally again."
 msgstr "Seotud CRM ettevõtet ei leitud. Eemalda seos, et jälle kohapeal muuta."
 
-
-
 msgid "Unlink"
 msgstr "Eemalda seos"
 
@@ -2638,13 +2694,11 @@ msgstr "CRM-iga seotud."
 msgid "Unlinked from CRM."
 msgstr "CRM seos eemaldatud."
 
-
 msgid "The CRM module is not available."
 msgstr "CRM moodul ei ole saadaval."
 
 msgid "That CRM company no longer exists."
 msgstr "Seda CRM ettevõtet enam ei ole."
-
 
 msgid "That CRM company is already linked to another record."
 msgstr "See CRM ettevõte on juba teise kirjega seotud."
@@ -2657,7 +2711,6 @@ msgstr "Keegi teine muutis seda seost enne. Laadi leht uuesti ja proovi uuesti."
 
 msgid "Suppliers and Manufacturer"
 msgstr "Tarnijad ja tootja"
-
 
 msgid "A field was removed while this was open. Close and reopen the form."
 msgstr "Väli eemaldati, kui see vorm oli avatud. Sulge ja ava vorm uuesti."
@@ -2706,6 +2759,9 @@ msgstr "Kas eemaldada see väli? Tarnija ridadele juba salvestatud väärtused j
 
 msgid "Supplier extra fields"
 msgstr "Tarnija lisaväljad"
+
+msgid "Unit cost"
+msgstr "Ühikuhind"
 
 msgid "Unit cost must be a number."
 msgstr "Ühiku hind peab olema arv."
@@ -2761,27 +2817,41 @@ msgstr "imporditud"
 msgid "Open the company"
 msgstr "Ava ettevõte"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:151
+#, elixir-autogen
 msgid "All"
 msgstr "Kõik"
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:595
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:616
+#, elixir-autogen
 msgid "Quantity"
 msgstr "Kogus"
 
-msgid "Decrease quantity"
-msgstr "Vähenda kogust"
-
-msgid "Increase quantity"
-msgstr "Suurenda kogust"
-
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:216
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1142
+#, elixir-autogen
 msgid "Load more"
 msgstr "Laadi veel"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:975
+#, elixir-autogen
 msgid "Select items"
 msgstr "Vali tooted"
 
+msgid "Add to selection"
+msgstr "Lisa valikusse"
+
+msgid "Remove from selection"
+msgstr "Eemalda valikust"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1182
+#, elixir-autogen
 msgid "Confirm selection"
 msgstr "Kinnita valik"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1216
+#, elixir-autogen
 msgid "Not available in this selection"
 msgstr "Selles valikus pole saadaval"
 
@@ -2865,3 +2935,174 @@ msgstr "%{name} (koopia)"
 
 msgid "Supplier price"
 msgstr "Tarnija hind"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1037
+#, elixir-autogen, elixir-format
+msgid "List view"
+msgstr "Loend"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:439
+#, elixir-autogen, elixir-format
+msgid "Qty"
+msgstr "Kogus"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:438
+#, elixir-autogen, elixir-format
+msgid "Base price"
+msgstr "Baashind"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:368
+#, elixir-autogen, elixir-format
+msgid "Category prefix"
+msgstr "Kategooria eesliide"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:367
+#, elixir-autogen, elixir-format
+msgid "Photo"
+msgstr "Foto"
+
+## Attribute sets viewer (2026-08-27 — editing moved to Entities)
+msgid "Edit values"
+msgstr "Muuda väärtusi"
+
+msgid "Set settings"
+msgstr "Komplekti seaded"
+
+msgid "None yet — add them in Entities."
+msgstr "Pole veel — lisa need Entities moodulis."
+
+msgid "No items attached."
+msgstr "Ühtegi toodet pole lisatud."
+
+msgid "New attribute set"
+msgstr "Uus atribuutide komplekt"
+
+msgid "Create and edit in Entities"
+msgstr "Loo ja muuda Entities moodulis"
+
+msgid "You'll be taken straight to adding the set's values in Entities."
+msgstr "Sind suunatakse kohe komplekti väärtuste lisamise juurde Entities moodulis."
+
+msgid "Could not create the set — check the name."
+msgstr "Komplekti loomine ebaõnnestus — kontrolli nime."
+
+msgid "Could not create the set."
+msgstr "Komplekti loomine ebaõnnestus."
+
+msgid "One dimension from one vendor — a color range, a trim series. Items attach any number of sets. Sets are edited in the Entities module."
+msgstr "Üks dimensioon ühelt tarnijalt — värvivalik, liistuseeria. Tooted võivad kasutada mis tahes arvu komplekte. Komplekte muudetakse Entities moodulis."
+
+## Attribute sets viewer listing (2026-08-27 scale pass)
+msgid "Search sets and values…"
+msgstr "Otsi komplekte ja väärtusi…"
+
+msgid "No sets match your search."
+msgstr "Otsingule ei vasta ükski komplekt."
+
+msgid "Page %{page} of %{max} — %{total} sets"
+msgstr "Leht %{page} / %{max} — %{total} komplekti"
+
+msgid "No values yet"
+msgstr "Väärtusi pole veel"
+
+msgid "Creating…"
+msgstr "Loomine…"
+
+# Set items popup (2026-08-28)
+msgid "View items"
+msgstr "Vaata tooteid"
+
+# Catalogue search covers categories too (2026-08-28)
+msgid "Nothing matches your search."
+msgstr "Otsingule ei vasta miski."
+
+# Attribute filter (2026-08-28)
+msgid "Clear filters"
+msgstr "Tühjenda filtrid"
+
+# Attribute filter: dead values (2026-08-28)
+msgid "Nothing matches this together with the filters already on"
+msgstr "Koos juba valitud filtritega ei vasta sellele miski"
+
+msgid "Attribute set not found."
+msgstr "Atribuutide komplekti ei leitud."
+
+msgid "Multiple values"
+msgstr "Mitu väärtust"
+
+msgid "Fixed value"
+msgstr "Kindel väärtus"
+
+msgid "Previous page"
+msgstr "Eelmine leht"
+
+msgid "Next page"
+msgstr "Järgmine leht"
+
+msgid "Create %{count} unmatched position"
+msgid_plural "Create %{count} unmatched positions"
+msgstr[0] "Loo %{count} sobitamata positsioon"
+msgstr[1] "Loo %{count} sobitamata positsiooni"
+
+msgid "%{count} row skipped"
+msgid_plural "%{count} rows skipped"
+msgstr[0] "%{count} rida vahele jäetud"
+msgstr[1] "%{count} rida vahele jäetud"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2909
+#, elixir-autogen, elixir-format
+msgid "Search for"
+msgstr "Mida otsida"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3685
+#, elixir-autogen, elixir-format
+msgid "No items match."
+msgstr "Sobivaid tooteid pole."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3728
+#, elixir-autogen, elixir-format
+msgid "View in catalogue"
+msgstr "Vaata kataloogis"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4974
+#, elixir-autogen, elixir-format
+msgid "A category cannot move into its own subtree."
+msgstr "Kategooriat ei saa viia tema enda alampuusse."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4980
+#, elixir-autogen, elixir-format
+msgid "Categories can only move within their own catalogue."
+msgstr "Kategooriaid saab liigutada ainult oma kataloogi piires."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4758
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5101
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5215
+#, elixir-autogen, elixir-format
+msgid "Drag to reorder or nest"
+msgstr "Lohista järjestamiseks või pesastamiseks"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4722
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5035
+#, elixir-autogen, elixir-format
+msgid "Drop here to move to this level"
+msgstr "Lohista siia, et tuua sellele tasemele"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4703
+#, elixir-autogen, elixir-format
+msgid "No categories here yet."
+msgstr "Siin pole veel kategooriaid."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3940
+#, elixir-autogen, elixir-format
+msgid "No subcategories here. Switch to Items to browse this level's items."
+msgstr "Siin pole alamkategooriaid. Vali Tooted, et sirvida selle taseme tooteid."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4780
+#, elixir-autogen, elixir-format
+msgid "Toggle category"
+msgstr "Ava/sule kategooria"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3438
+#, elixir-autogen, elixir-format
+msgid "Include subcategory items"
+msgstr "Kaasa alamkategooriate tooted"

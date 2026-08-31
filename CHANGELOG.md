@@ -1,3 +1,357 @@
+## 0.24.0 - 2026-08-30
+
+### Added
+
+- **Admin-style browsing levels in the item selector** (#89) — the flat
+  category chip strip is replaced by one level of the admin pages'
+  category surface: `Components.category_card/1` tiles in card view, the
+  shared `category_header_cells/1` columns as a compact table in table
+  view, an `Up` button, and section headings. A root that has categories
+  carries the admin's `Categories | Items` either-or switcher; drilling
+  into a category shows its subcategories and its OWN items.
+  `BrowseState` gained `drill: :direct` (fixed at init, like the scope)
+  for those file-explorer semantics — a non-empty search still covers
+  the subtree of wherever you stand, because finding beats filing.
+- **Two-list search in the selector** (#89) — categories whose name
+  matches, in any language, render above the item results as
+  navigation; a hit opens that category with the search cleared. Hits
+  are intersected with the popup's own category tree, so a scoped embed
+  can never offer a category outside its allow-list, and they cover only
+  the drilled subtree when drilled.
+- **Per-user selector memory** (#89) — pass `current_user` and the
+  selector remembers the view and column visibility each user last
+  chose, stored beside the admin tables' preferences in `custom_fields`
+  (`ViewConfig.load_selector/1` / `save_selector/2`). The saved choice
+  beats the host's starting attrs, never the grant. No user, no
+  persistence.
+- **The `Uncategorized` bucket is back in the category browsers** (#89)
+  — the catalogue's loose items present like any subcategory, in the
+  detail page's tables and cards and in the selector's level, whenever
+  the bucket holds anything.
+- **`Set (kmpl)` as an item unit** (#89) — the Estonian set/komplekt,
+  stored as `"set"`, which `Item.unit_label/1` already knew.
+
+### Changed
+
+- **The selector's item details are their own popup** (#89) — a stacked
+  `ProductCard` modal over the selector instead of a panel covering the
+  browse region, so ESC and the backdrop close only the details and the
+  list underneath keeps its scroll, search and selection for free.
+  `ProductCard.product_card/1` gained an `:extra_actions` slot for the
+  mode-aware Add/quantity control.
+- **Clicking an item's title means the same as clicking its image**
+  (#89) — the "look closer" affordance now covers the name cell and the
+  card title, not just the thumbnail.
+- **New selector defaults** (#89) — `show_tray` is now `false` (the
+  quantity-first default already shows a number on every picked row, so
+  the cart is opt-in chrome) and `hidden_columns` defaults to
+  `[:breadcrumb]`, making the SKU/article column visible out of the box.
+  Hosts that want the previous behaviour pass `show_tray: true` /
+  `hidden_columns: [:sku, :breadcrumb]`.
+- **The catalogues index searches items by default** (#89) — the auto
+  mode (`?mode=` absent) keeps the normal catalogues listing until there
+  is a question, then answers it with item results. `?mode=catalogues`
+  is the explicit catalogue-name search; `?mode=items` the full item
+  browser, as before.
+- **Category card and table cells are shared definitions** (#89) —
+  `category_card/1`, `uncategorized_card/1`, `category_header_cells/1`
+  and `category_body_cells/1` moved from `CatalogueDetailLive` into
+  `Web.Components`, so the detail page's flat table, tree table and
+  tiles and the selector's level all render from one place. Admin-only
+  chrome rides the `:overlay` / `:menu` slots and `:rest`.
+- **The supplier `unit_cost` step is `"any"`** (#89) — `step` is a
+  browser validation constraint enforced before submit, so the previous
+  `"0.01"` made a typed 4-place value unsaveable. The scale stays 4.
+
+### Fixed
+
+- **The quantity stepper's form is `novalidate`** (#89) — `step`/`min`/
+  `max` are validation constraints, and a `phx-submit` form never
+  reaches LiveView while an input fails one, so Enter was silently dead
+  on a value the arrows could not reach. The server owns rounding and
+  clamping, as it always did.
+- **A selector card can no longer lose its only select target** (#89,
+  post-merge review) — with the details split on, the select toggle is
+  what is left of the card body, which is empty when neither SKU nor
+  price is shown. It now keeps a minimum hit area while clickable, so a
+  price-less, SKU-less item is still pickable in card view.
+- **`Up` never points outside the browse scope** (#89, post-merge
+  review) — a search hit can open the scoped root category itself, and
+  `Up` there named a parent `BrowseState` refuses, leaving the only way
+  back dead. An unreachable parent now climbs to the popup root.
+- **The selector's category search no longer re-runs while paging**
+  (#89, post-merge review) — `:load_more` changes neither the search nor
+  the level, so the hits are recomputed only on a fresh fetch instead of
+  once per scrolled page.
+
+## 0.23.0 - 2026-08-30
+
+### Added
+
+- **An item details page inside the selector popup** (#88) —
+  `ItemSelectorModal`'s `show_item_details` (default `true`) turns the
+  card photo and the table thumbnail into a "look closer" affordance that
+  covers the browse region with the full `ProductCard` body (photo/file
+  carousel, description, metadata, attributes) and a Back button. The
+  list stays mounted underneath, so search, chips, scroll and selection
+  survive the trip. A mode-aware control in the detail footer adds or
+  removes the item without going back first. Pass `false` for embeds that
+  must not expose the detail body — it honours `show_prices`/`show_sku`
+  and the granted `columns` either way.
+- **A context header on the selector** (#88) — `context_header` (default
+  `true`) shows the scoped category's (or, failing that, catalogue's)
+  featured image, translated name and description in the title area, so
+  the popup says what it is showing. Chrome only: an unresolvable or
+  multi-entry scope falls back to the plain title, and nothing here
+  widens what can be browsed.
+- **`show_tray`** (#88) — `false` drops the cart-count button and the
+  expandable review list for embeds where the selection is already
+  visible in place, such as a quantity-first order sheet. Cancel and
+  Confirm always stay.
+- **`hidden_columns`** (#88) — which GRANTED selector columns start
+  hidden (default `[:sku, :breadcrumb]`); the viewer re-shows them from
+  the Columns dropdown. Unknown or ungranted entries are ignored, so
+  hiding less than asked never widens anything.
+- **The list view reached `CatalogueBrowse`** (#88) — the embeddable
+  widget gained the modal's admin-look table and a view toggle beside the
+  search box, over the same fetch. The card grid stays its default.
+- **Shared browse helpers** (#88) — `Browse.expand_scope/1`,
+  `chip_categories/2`, `normalize_uuid/1`, `resolve_view!/2` and
+  `resolve_columns!/2`. `CatalogueBrowse` had been missing the
+  subtree-expansion fix the modal got: a parent-category scope hid its
+  descendant chips and rejected narrowing to one as out of scope.
+
+### Changed
+
+- **Quantities are a native `<input type="number">`** (#88) — browser
+  spinner arrows, the same control the rest of the kit uses for numbers,
+  replacing the custom −/+ join stepper. Arrow clicks and settled typing
+  apply live through a debounced `qty_change` that never resets
+  in-progress text; blur/Enter stays the authoritative `qty_commit` that
+  discards garbage. Decimal commas and server-side re-clamping are
+  unchanged.
+- **The selection flavour derives from the columns** (#88) — a visible
+  `:qty` column makes the popup quantity-first (every row shows its input
+  at 0, a positive number *is* the selection); without one it is the
+  checkbox flavour, with a leading checkbox column that shows the
+  "you can pick these" affordance before the first pick. A checked box
+  and a quantity input never share a row. `selection_mode: "click" |
+  "quantity"` still forces either explicitly.
+- **Supplier unit-cost arrows step in cents** (#88) — the built-in
+  `unit_cost` field declares `"step" => "0.01"` while keeping scale 4 for
+  typed entry. The arrows previously walked 0.0001 at a time. Requires an
+  entities release that reads the definition's `step` key; on an older
+  `~> 0.4` the arrows fall back to deriving the step from the scale.
+- **The built-in supplier field labels translate at call time** (#88) —
+  a compile-time map could only carry the msgid, so et/ru admins saw an
+  English "Unit cost".
+- **The Unit select's label matches its `<.input>` neighbours** (#88) —
+  hand-rolled locally because core's `<.select>` labels through
+  `FormFieldLabel`'s smaller `fieldset-legend` span, which visibly broke
+  the row in the item form's grid.
+
+### Fixed
+
+- **`CatalogueBrowse`'s default card view stopped rendering the SKU**
+  (#88 review) — the widget's default column list subtracted the modal's
+  default-hidden `:sku`/`:breadcrumb` pair from the *grant*, and the
+  cards read the grant. Card view is this component's default, so every
+  existing embed lost its SKU line, with no way back short of an explicit
+  `columns` list that also re-added the table column. Grant and
+  visibility are now separate, as they already were in the modal: the
+  cards read `columns`, the table reads the visibility-filtered list.
+- **A double-clicked Confirm delivered `{:items_selected, …}` twice**
+  (#88) — the second queued event ran before the host unmounted the
+  modal. A `confirmed` latch makes confirm, and immediate-mode notify,
+  once-only.
+- **`mode: :single` + `immediate` confirmed off the debounced live
+  value** (#88) — a slow typist's "15" closed the modal at quantity 1.
+  The live path no longer notifies; the authoritative commit does.
+- **The detail page honoured the display flags but not the columns
+  grant** (#88) — a client-safe `columns: [:thumb, :name, :qty]` embed
+  leaked price and SKU one thumbnail-click away. The table view likewise
+  ignored a mid-open `show_prices`/`show_sku` revocation the cards and
+  detail page honoured, and a stale detail could survive a failed
+  grant-change rebuild.
+- **`featured_image_uuid` reached a URL path shape-unchecked** (#88) —
+  it is free JSONB, so `../../etc/passwd` became a same-origin GET path
+  for every viewer. Both signed-URL builders now require the canonical
+  uuid form (`Ecto.UUID.cast/1` alone accepts any 16-byte binary, which
+  is exactly what the traversal string is).
+- **Garbage preselect keys crashed the host LiveView at mount** (#88) —
+  a non-UUID key raised `Ecto.Query.CastError` from the fetch, and raw
+  16-byte keys silently vanished from the tray. Keys now normalize
+  through `Ecto.UUID.cast/1`; garbage drops like any unresolvable uuid.
+  Relatedly, `resolve_columns!/2` now raises on duplicate entries as well
+  as unknown ones, and a non-numeric quantity raises a described
+  `ArgumentError` instead of a bare `FunctionClauseError`.
+- **`CatalogueBrowse` rendered the category twice per row** (#88) — the
+  `:breadcrumb` prefix beside the `:category` column, in the new table
+  view.
+
+### Removed
+
+- **The `qty_inc` / `qty_dec` events and the −/+ stepper buttons** (#88),
+  replaced by the native number input's arrows. Their `"Increase
+  quantity"` / `"Decrease quantity"` msgids are gone from the catalogues
+  (#88 review).
+
+## 0.22.0 - 2026-08-29
+
+### Added
+
+- **Search where the user stands, on both levels** (#86) — the catalogues
+  index and the catalogue detail page gained a Catalogues/Categories ×
+  Items search axis. The drilled folder (index) or drilled category
+  (detail) *is* the scope, so the folder `<select>` is gone; searching a
+  drilled folder reaches its whole subtree, so a catalogue filed two
+  levels down is still findable by name. Categories mode became a
+  category browser with the folder tree brought over.
+- **The index's items mode is async** (#86) — count, page and facet-count
+  queries run off the LiveView process, so a debounced keystroke against
+  a million-item catalogue no longer blocks the socket. Replies are
+  stamped and superseded ones dropped; both in-flight tasks are cancelled
+  on a new question.
+- **Catalogue-wide item listing in document order** (#86) —
+  `Catalogue.list_catalogue_items_paged/2`,
+  `count_items_for_catalogue/2` and `item_status_counts_for_catalogue/1`.
+  The default sort is the document walk (category position, then item
+  position) — the same order the export uses.
+- **A `Description` column on the catalogues index** (#86), hidden by
+  default: search matches descriptions through the `data` JSONB, so this
+  is how a surprising match explains itself.
+- **"Include subcategory items" toggle** (#87) on a drilled category —
+  a *search* refinement. The browse list underneath always shows the
+  level you are standing on; the toggle widens what the search asks for.
+  Offered whenever the category has subcategories, so it can pre-arm the
+  next search.
+- **One Columns modal per page** (#87) — a drilled page shows its
+  subcategories and its items at once, and two side-by-side "Columns"
+  buttons read as a mistake. `TableToolbar.column_sections_modal/1`
+  renders one section per visible table.
+
+### Changed
+
+- **Card images are card-grade** (#87) — `card_media` gained `variant`
+  (defaulting to the 800px `medium` for card-width slots) and
+  `comfy_scale`, and the media band grew to `h-40`. A 150px thumbnail
+  stretched across a card was the blur being reported. Card pictures are
+  now clickable, going the same place the card's title does.
+- **Small row cells stopped downloading card-sized images** (#87) — the
+  32–48px thumbs in the item selector, the attribute-set items modal and
+  the browse row now use a new `Browse.featured_thumb_url/1` (150px
+  `thumbnail`) instead of the 800px `medium`.
+- **Attribute-set attachment reorder is transactional** (#85) — read,
+  compare and write now happen inside one transaction under a per-item
+  advisory lock. It was a check-then-act on a non-primary-key column:
+  two concurrent saves of the same item interleaved their per-row
+  updates, and a mid-loop failure left half the attachments renumbered
+  with nothing to roll back.
+- **An item save broadcasts once, not once per staged set** (#85) —
+  attach/detach/reorder/selection writes accept `broadcast: false`, with
+  one roll-up event at the end, gated so a name-only save doesn't hand
+  every open detail LiveView a second `:item` event.
+
+### Fixed
+
+- **Three N+1 queries and two broadcasts that reported the wrong thing**
+  (#85). Notably the attributes tab, which issued one values query per
+  listed set — 25 queries per page, repeated on every broadcast — now
+  batches through `AttributeSets.list_values_for/2`.
+- **Silent form-validation failures** on the item and category forms
+  (#85), and a reorder that could run unlocked.
+- **Upload filenames are basename-stripped** (#85) before reaching
+  storage. `client_name` is browser-supplied and only checked against
+  `:accept`.
+- **The release gate is green again** — `mix precommit` was exiting 2 on a
+  `credo --strict` alias violation left by #87
+  (`test/web/catalogue_detail_live_test.exs`). Because Mix aborts an alias
+  at the first failing task, dialyzer had not run on the tree since #87
+  merged; it does again.
+- Post-merge review of #85–#87: PR #87 settled mid-flight on the subtree
+  toggle refining the *search* only, never the browse list, but left the
+  superseded browse-path machinery behind —
+  `Catalogue.item_status_counts_for_categories/1` (no caller anywhere)
+  and an `:include_descendants` option on
+  `list_items_for_category_paged/2` / `item_count_for_category/2` that no
+  caller ever passed as `true`. Removed before it could ship as public
+  API, with a test pinning the level listing as direct-only. See
+  `dev_docs/pull_requests/2026/87-drilled-mixed-view-and-images/CLAUDE_REVIEW.md`.
+
+### Removed
+
+- `Catalogue.catalogue_uuids_with_attribute_values/1` (#86) — the
+  catalogues index's attribute filter now scopes through
+  `attribute_value_match_counts/1` with `catalogue_uuids:` instead. It
+  was public in 0.21.0; no callers remain in this repo.
+
+## 0.21.0 - 2026-08-28
+
+### Added
+
+- **Attributes viewer, honest search, and a filter that only offers what it
+  can deliver** (#84) — the old 1273-line attribute-set editor LiveView is
+  replaced by a read-focused viewer (`AttributeSetItemsModal`); listing
+  search and facet-count search now share one match fragment so the two
+  can no longer disagree; the attribute-value filter greys out/hides
+  values that would return zero results given the current selection
+  instead of offering dead-end options.
+- **ItemPicker `:show_sku`** (#82) — opt-in SKU column on dropdown rows
+  (em dash when the item has no SKU on file). Defaults to `false`.
+- **ItemPicker `:photo_placeholder` and `:photo_size`** (#83) — opt-in
+  clickable placeholder for photo-less items when `:photo_clickable` is
+  also set, and a configurable thumbnail size. Both default to the
+  existing behaviour.
+
+### Fixed
+
+- Post-merge review of #82–#84: an `<.icon class={[...]}>` list value in
+  `item_picker.ex` (from #83) failed `mix compile --warnings-as-errors`,
+  blocking the release gate — fixed to a plain interpolated string. See
+  `dev_docs/pull_requests/2026/84-attributes-viewer-honest-search-filter/CLAUDE_REVIEW.md`.
+
+## 0.20.0 - 2026-08-26
+
+### Added
+
+- **ItemSelectorModal table view** (#80) — a new admin-look list view,
+  composed from core's `table_default` family, is now the picker's default
+  presentation; the photo card grid stays one toggle away.
+- **Columns are a host contract** — `columns` (a subset of
+  `Browse.table_columns/0`, in display order) renders only what the embed
+  granted, in both the table and card views. `:price` is the selling price
+  (markup/discounts applied, e.g. `6.40 / piece`); `:base_price` is opt-in
+  raw; `:breadcrumb` is a headerless muted "Category /" prefix beside Name.
+  A viewer-facing Columns dropdown toggles visibility within the granted
+  set (server-enforced; the last identity column and, in quantity mode,
+  `:qty` are pinned). SKU is granted but hidden by default.
+- **`selection_mode: "quantity"`** — order-sheet flavour: every row shows a
+  stepper starting at 0, entering a positive quantity IS the selection,
+  zero removes the line, rows are not click targets.
+- **Uncategorized chip** so the category chips add up when loose items
+  exist (emitted as `only: :uncategorized_only`, accepted only where the
+  scope can take it).
+- Responsive: the modal widens past 4xl on xl/2xl viewports; granted
+  columns stage by breakpoint (identity + price + qty hold to phone width)
+  so the list never scrolls sideways.
+
+### Fixed
+
+- **Deleting the last active item in a category no longer strands the
+  admin on the Deleted view** (#80) — the populated-tab auto-pick no
+  longer overrides an explicit tab choice on every reload. Entering an
+  all-deleted category still opens on Deleted, as before.
+- Pre-merge hardening pass on the popup components (ItemPicker /
+  ItemSelectorModal / BrowseState), recorded in
+  `dev_docs/design/2026-08-25-popup-components-quorum-review.md`: native
+  page navigation on Enter in browse search forms, server-side enforcement
+  of excluded/disabled picker rows, non-UUID scope crashes, contradictory
+  `:only` narrowings, confirm-with-nothing-selected, unclamped preselect
+  quantities, `:single`-mode multi-preselect, soft-deleted-parent
+  re-checks, and more (20 defects total, each with a test).
+- Repaired the unparseable `Select Featured Image` entry in `default.pot`
+  (missing `msgstr`) that blocked `gettext.extract`.
+
 ## 0.19.1 - 2026-08-25
 
 ### Added

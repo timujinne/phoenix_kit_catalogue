@@ -175,7 +175,12 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   def handle_event("validate", %{"category" => params}, socket) do
     params =
       params
-      |> Map.put_new("catalogue_uuid", socket.assigns.catalogue_uuid)
+      # `put/3`, not `put_new/3`: the catalogue is the SERVER's scope, taken
+      # from the URL, and a client-supplied `catalogue_uuid` in the form
+      # payload must not win it. `:catalogue_uuid` is in the cast allowlist,
+      # so with `put_new` a forged submit could file the record under a
+      # different catalogue than the one being edited.
+      |> Map.put("catalogue_uuid", socket.assigns.catalogue_uuid)
       |> normalize_parent_uuid()
       |> merge_translatable_params(socket, @translatable_fields,
         changeset: socket.assigns.changeset,
@@ -194,7 +199,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     category_params =
       params
       |> Map.get("category", %{})
-      |> Map.put_new("catalogue_uuid", socket.assigns.catalogue_uuid)
+      |> Map.put("catalogue_uuid", socket.assigns.catalogue_uuid)
       |> normalize_parent_uuid()
       |> merge_translatable_params(socket, @translatable_fields,
         changeset: socket.assigns.changeset,
@@ -517,7 +522,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         </button>
       </div>
 
-      <.form for={@form} action="#" phx-change="validate" phx-submit="save">
+      <.form for={@form} id="category-form" action="#" phx-change="validate" phx-submit="save">
         <div class={"card bg-base-100 shadow-lg #{if @current_tab != :details, do: "hidden"}"}>
           <%!-- Bundled tabs + AI row (phoenix_kit_ai's canonical placement). --%>
           <.ai_multilang_tabs

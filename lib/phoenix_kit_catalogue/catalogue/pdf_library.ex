@@ -175,6 +175,12 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   end
 
   defp do_create_pdf_from_upload(tmp_path, original_filename, opts, actor_uuid) do
+    # LiveView validates `client_name` against the `:accept` extension list
+    # and nothing else — it does not strip `/` or `..`. This name is handed
+    # to core Storage as the file's name and into the audit row, so take the
+    # basename before either sees it rather than delegating that trust.
+    original_filename = Path.basename(original_filename || "")
+
     case File.stat(tmp_path) do
       {:ok, %File.Stat{size: byte_size}} ->
         with {:ok, file, dedup_kind} <-

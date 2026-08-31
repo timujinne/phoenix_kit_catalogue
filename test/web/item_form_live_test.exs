@@ -120,6 +120,51 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       assert item.catalogue_uuid == catalogue.uuid
     end
 
+    test "a forged catalogue_uuid cannot file the item under another catalogue",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      other = fixture_catalogue()
+
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      # Driven as a raw event, not through `form/3`: the point of the fix is
+      # that a LiveView event is not bound by the markup that produced it,
+      # and `form/3` refuses to send anything the rendered form does not
+      # offer. A forged submit does not come from the form.
+      {:error, {:live_redirect, _}} =
+        render_submit(view, "save", %{
+          "item" => base_item_params(%{"name" => "Forged", "catalogue_uuid" => other.uuid})
+        })
+
+      [item] = TestRepo.all(Item)
+      assert item.catalogue_uuid == catalogue.uuid
+      refute item.catalogue_uuid == other.uuid
+    end
+
+    test "a category from another catalogue is refused, not silently followed",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      other = fixture_catalogue()
+      foreign_category = fixture_category(other, %{name: "Elsewhere"})
+
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      # The longer route to the same field: `derive_catalogue_uuid/2` copies
+      # the CATEGORY's catalogue over whatever the server set, deliberately,
+      # so a forged category_uuid beats the server-side scope pin.
+      html =
+        render_submit(view, "save", %{
+          "item" =>
+            base_item_params(%{
+              "name" => "Smuggled",
+              "category_uuid" => foreign_category.uuid
+            })
+        })
+
+      assert html =~ "another catalogue"
+      assert TestRepo.all(Item) == []
+    end
+
     test "saves an uncategorized item (empty category_uuid)", %{conn: conn} do
       catalogue = fixture_catalogue()
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
@@ -179,6 +224,34 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       assert html =~ "Oak Panel"
       assert html =~ "OAK-18"
+    end
+
+    test "a forged catalogue_uuid cannot move an uncategorized item on edit",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      other = fixture_catalogue()
+
+      # UNCATEGORIZED on purpose: `derive_catalogue_uuid/2` overrides the
+      # field from the item's category, but with no category
+      # `put_catalogue_from_effective_category(attrs, nil)` returns attrs
+      # untouched — so nothing on the edit path contradicted a forged value.
+      # That is every smart item and every loose standard one.
+      item = fixture_item(%{name: "Loose", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_submit(view, "save", %{
+        "item" =>
+          base_item_params(%{
+            "name" => "Loose",
+            "category_uuid" => "",
+            "catalogue_uuid" => other.uuid
+          })
+      })
+
+      reloaded = Catalogue.get_item(item.uuid)
+      assert reloaded.catalogue_uuid == catalogue.uuid
+      refute reloaded.catalogue_uuid == other.uuid
     end
 
     test "save updates the item and redirects back to its catalogue", %{conn: conn} do
@@ -294,6 +367,23 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       end
     end
 
+    # 2026-08-31 delta pin: the Unit label is hand-rolled to Input's
+    # markup (label mb-2 + plain font-semibold span) because core's
+    # <.select> labelled through FormFieldLabel's fieldset-legend span,
+    # which rendered smaller than the Input labels beside it. Local
+    # until the core harmonisation releases; a revert re-breaks the row.
+    test "the Unit label matches its Input neighbours' markup", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, _view, html} = live(conn, edit_item_url(item.uuid))
+
+      assert html =~ ~r/<label class="label mb-2"[^>]*>\s*<span class="font-semibold">\s*Unit/
+    end
+
     # The price control comes from entities' `decimal` renderer, not a
     # hand-rolled number input — that is what keeps it exact.
     test "the price control is the entities decimal field", %{conn: conn} do
@@ -306,10 +396,22 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _page} = live(conn, edit_item_url(item.uuid))
       html = render_click(view, "open_add_supplier", %{})
 
-      # scale 4 on the built-in definition, or the browser rejects the
-      # fourth decimal place the column stores.
-      assert html =~ ~s(step="0.0001")
-      assert Catalogue.supplier_builtin_field("unit_cost")["type"] == "decimal"
+      # The control's step is whatever entities derives from the built-in
+      # definition — asserted as delegation, not a literal, so this holds
+      # at every entities version: pre-"step" releases derive 0.0001 from
+      # the scale, 0.4.9+ honours the declared "any" (arrows walk by 1;
+      # every 4-place typed value stays saveable — `step` IS a browser
+      # validation constraint that gates the submit event, which is why
+      # the original cent step was wrong; entities 0.4.9 review).
+      builtin = Catalogue.supplier_builtin_field("unit_cost")
+      assert html =~ ~s(step="#{PhoenixKitEntities.FieldTypes.decimal_step(builtin)}")
+
+      # Catalogue's side of the contract: sane arrows, 4-place storage,
+      # nothing typed ever blocked — the boss's "too precise" report,
+      # 2026-08-30, corrected 2026-08-31.
+      assert builtin["scale"] == 4
+      assert builtin["step"] == "any"
+      assert builtin["type"] == "decimal"
     end
 
     # The whole reason entities grew a `decimal` type: a price must reach

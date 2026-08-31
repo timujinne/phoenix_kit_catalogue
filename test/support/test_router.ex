@@ -38,10 +38,6 @@ defmodule PhoenixKitCatalogue.Test.Router do
       live("/attributes/new", AttributeGroupFormLive, :new)
       live("/attributes/:uuid/edit", AttributeGroupFormLive, :edit)
 
-      # Attribute SET CRUD (2026-08-18 rework)
-      live("/attributes/sets/new", AttributeSetFormLive, :new)
-      live("/attributes/sets/:uuid/edit", AttributeSetFormLive, :edit)
-
       # Catalogue CRUD
       live("/new", CatalogueFormLive, :new)
       live("/:uuid/edit", CatalogueFormLive, :edit)

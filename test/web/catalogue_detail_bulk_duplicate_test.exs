@@ -27,13 +27,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkDuplicateTest do
              "[id^=categories-bulk-root] [data-bulk-action=request_bulk_duplicate_categories]"
            )
 
-    {:ok, view, _} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}")
+    {:ok, view, _} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}&mode=items")
     assert has_element?(view, "[data-bulk-action=request_bulk_duplicate_items]")
   end
 
   test "items: request → confirm copies the selection next to the originals",
        %{conn: conn, catalogue: cat, alpha: alpha, item: item} do
-    {:ok, view, _} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}")
+    {:ok, view, _} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}&mode=items")
 
     html = render_click(view, "request_bulk_duplicate_items", %{"uuids" => [item.uuid]})
     assert html =~ "Duplicate selected items"

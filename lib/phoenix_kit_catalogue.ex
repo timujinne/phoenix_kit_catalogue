@@ -94,7 +94,7 @@ defmodule PhoenixKitCatalogue do
   # ===========================================================================
 
   @impl PhoenixKit.Module
-  def version, do: "0.19.1"
+  def version, do: "0.24.0"
 
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitCatalogue.Web.Routes
@@ -270,37 +270,6 @@ defmodule PhoenixKitCatalogue do
         parent: :admin_catalogue,
         visible: false,
         live_view: {PhoenixKitCatalogue.Web.AttributeGroupFormLive, :edit}
-      },
-      # Attribute SETS (2026-08-18 rework) — the "sets" literal segment
-      # cannot collide with the group routes above: new/edit differ in
-      # their tail segment and the set-edit path is one segment longer.
-      %Tab{
-        id: :admin_catalogue_attribute_set_new,
-        label: "New Attribute Set",
-        gettext_backend: PhoenixKitCatalogue.Gettext,
-        gettext_domain: "default",
-        icon: "hero-plus",
-        path: "catalogue/attributes/sets/new",
-        priority: 670,
-        level: :admin,
-        permission: module_key(),
-        parent: :admin_catalogue,
-        visible: false,
-        live_view: {PhoenixKitCatalogue.Web.AttributeSetFormLive, :new}
-      },
-      %Tab{
-        id: :admin_catalogue_attribute_set_edit,
-        label: "Edit Attribute Set",
-        gettext_backend: PhoenixKitCatalogue.Gettext,
-        gettext_domain: "default",
-        icon: "hero-pencil-square",
-        path: "catalogue/attributes/sets/:uuid/edit",
-        priority: 671,
-        level: :admin,
-        permission: module_key(),
-        parent: :admin_catalogue,
-        visible: false,
-        live_view: {PhoenixKitCatalogue.Web.AttributeSetFormLive, :edit}
       },
       # Import tab
       %Tab{

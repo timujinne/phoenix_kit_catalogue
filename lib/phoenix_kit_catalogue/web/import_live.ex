@@ -500,6 +500,26 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     {:noreply, update(socket, :create_unmatched, &(!&1))}
   end
 
+  # One apply per plan. A double-click on Apply sends two events; LiveView
+  # runs them one after the other, and this handler is synchronous
+  # start-to-finish, so the second one arrives to find the first already
+  # returned — and would re-apply every update and re-run every create,
+  # duplicating rows.
+  #
+  # An "am I running?" flag cannot see that: the flag is set and cleared
+  # inside the same call, so the second event always reads it as false. (The
+  # guard `execute_import` uses works because THAT path is asynchronous —
+  # `import_task` stays set across the await.) What distinguishes the second
+  # click is that the plan has been consumed: applying moves to `:report` and
+  # drops `import_plan`, so this refuses anything that is not a fresh preview.
+  # `phx-disable-with` is a client-side courtesy, not a guard.
+  def handle_event("apply_pro100", _params, %{assigns: %{import_plan: nil}} = socket),
+    do: {:noreply, socket}
+
+  def handle_event("apply_pro100", _params, %{assigns: %{step: step}} = socket)
+      when step != :preview,
+      do: {:noreply, socket}
+
   def handle_event("apply_pro100", _params, socket) do
     plan = socket.assigns.import_plan
     actor = extract_actor_uuid(socket)
@@ -515,7 +535,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       skipped: plan.skipped ++ Enum.reverse(failures) ++ create_failures
     }
 
-    {:noreply, assign(socket, report: report, step: :report)}
+    # `import_plan: nil` is the guard above doing its job — the plan is spent,
+    # and a queued second Apply now has nothing to apply.
+    {:noreply, assign(socket, report: report, step: :report, import_plan: nil)}
   end
 
   # Creates run through the universal Executor so category get-or-create,
@@ -957,7 +979,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
     params =
       params
-      |> Map.put_new("catalogue_uuid", catalogue_uuid)
+      # `put/3`, not `put_new/3`: the catalogue is the SERVER's scope, taken
+      # from the URL, and a client-supplied `catalogue_uuid` in the form
+      # payload must not win it. `:catalogue_uuid` is in the cast allowlist,
+      # so with `put_new` a forged submit could file the record under a
+      # different catalogue than the one being edited.
+      |> Map.put("catalogue_uuid", catalogue_uuid)
       |> merge_translatable_params(socket, @category_translatable_fields,
         changeset: socket.assigns.new_category_changeset
       )
@@ -1321,14 +1348,20 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             Ecto.QueryError,
             Postgrex.Error
           ] ->
-            Logger.error("Import failed: #{Exception.message(e)}")
+            # Field names, never values. `Exception.message/1` on an
+            # Ecto.InvalidChangesetError renders the whole changeset —
+            # `changes` and `params` included — which here is raw rows from
+            # the operator's uploaded spreadsheet: item names, SKUs, prices,
+            # supplier details. The module's own convention says so
+            # (`web/helpers.ex:112`) and `import/executor.ex:583` follows it.
+            Logger.error("Import failed: #{safe_exception_message(e)}")
 
             send(
               lv_pid,
               {:import_result,
                %{
                  created: 0,
-                 errors: [{0, Exception.message(e)}],
+                 errors: [{0, safe_exception_message(e)}],
                  categories_created: 0,
                  manufacturers_created: 0,
                  suppliers_created: 0,
@@ -2712,6 +2745,51 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp translate_target(label), do: label
 
   defp translate_error(reason), do: PhoenixKitCatalogue.Errors.message(reason)
+
+  # An exception message safe to log and to show.
+  #
+  # The rule is that nothing from the operator's uploaded spreadsheet reaches
+  # the log file or the screen, so every family the `rescue` above lists has
+  # to be handled — a single scrubbed clause with `Exception.message/1`
+  # underneath it narrows the guarantee to one exception type and leaves the
+  # rest exactly as they were.
+  #
+  # `Ecto.InvalidChangesetError` renders the whole changeset, `params`
+  # included — the uploaded rows themselves. Field names and validation
+  # messages keep the diagnostic value without the values.
+  defp safe_exception_message(%Ecto.InvalidChangesetError{changeset: changeset}) do
+    "invalid changeset: " <> inspect(changeset.errors)
+  end
+
+  # Postgres puts the offending value in `detail` — "Key (sku)=(ACME-1)
+  # already exists" is a row from the spreadsheet. The code and the
+  # constraint name say which rule was broken, which is what a reader needs.
+  defp safe_exception_message(%Postgrex.Error{postgres: %{} = pg}) do
+    parts =
+      [Map.get(pg, :code), Map.get(pg, :constraint)]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map_join(", ", &to_string/1)
+
+    case parts do
+      "" -> "database error"
+      described -> "database error: " <> described
+    end
+  end
+
+  defp safe_exception_message(%Postgrex.Error{}), do: "database error"
+
+  # A query error renders the query, which carries whatever literals were
+  # built into it.
+  defp safe_exception_message(%Ecto.QueryError{}), do: "invalid query"
+
+  # ArgumentError and RuntimeError come from row parsing and the mapper,
+  # where the message very often IS the offending cell ("invalid number:
+  # 12,50"). The type is all that can be said safely; the row and column are
+  # already reported separately by the executor's per-row failures.
+  #
+  # No catch-all below this: every value that reaches here is an exception
+  # struct, so one would be unreachable — and dialyzer says so.
+  defp safe_exception_message(%{__struct__: module}), do: inspect(module)
 
   defp unique_column_values_from_ets(nil, _col_idx), do: []
 

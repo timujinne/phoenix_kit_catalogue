@@ -23,7 +23,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   import PhoenixKitWeb.Components.Core.FileUpload, only: [file_upload: 1]
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
-  import PhoenixKitCatalogue.Web.Components, only: [view_mode_toggle: 1]
+  import PhoenixKitCatalogue.Web.Components, only: [view_toggle_instant: 1, view_storage_key: 0]
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
@@ -31,6 +31,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Web.Helpers
   alias PhoenixKitCatalogue.Web.TableQuery
+  alias PhoenixKitCatalogue.Web.ViewConfig
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
   # views via socket.private[:live_layout]. Opt out here so this view can
@@ -61,6 +62,8 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
      socket
      |> assign(
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDFs"),
+       # Module-wide view preference, shared with every catalogue page.
+       view_mode: ViewConfig.load_view(socket.assigns[:phoenix_kit_current_user]),
        pdfs: [],
        upload_error: nil,
        show_content_search: false
@@ -100,13 +103,21 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
   # (`connected?` false) we skip it — the connected render fills the list in.
   defp assign_pdfs(socket) do
     if connected?(socket) do
-      assign(socket, :pdfs, Catalogue.list_pdfs(status: socket.assigns.filter))
+      assign(socket, pdfs: Catalogue.list_pdfs(status: socket.assigns.filter), pdfs_loaded: true)
     else
-      assign(socket, :pdfs, [])
+      # Not loaded yet, not empty — the dead render must show a skeleton,
+      # not "No PDFs uploaded yet."
+      assign(socket, pdfs: [], pdfs_loaded: false)
     end
   end
 
   @impl true
+  def handle_event("set_view", %{"mode" => v}, socket) when v in ["table", "card", "comfy"] do
+    {:noreply, socket |> ViewConfig.save_view_on(v) |> assign(:view_mode, v)}
+  end
+
+  def handle_event("set_view", _params, socket), do: {:noreply, socket}
+
   def handle_event("validate", _params, socket), do: {:noreply, socket}
 
   @impl true
@@ -472,7 +483,12 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
              Content search lives in the modal behind the header button. --%>
         <% visible_pdfs = filter_by_search(@pdfs, @search) %>
         <div class="flex flex-wrap items-center gap-3">
-          <form phx-change="search" phx-submit="search" class="grow basis-64 sm:max-w-72">
+          <form
+            id="pdf-library-search"
+            phx-change="search"
+            phx-submit="search"
+            class="grow basis-64 sm:max-w-72"
+          >
             <label class="input input-sm w-full">
               <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-50" />
               <input
@@ -485,7 +501,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
               />
             </label>
           </form>
-          <.view_mode_toggle :if={visible_pdfs != []} storage_key="catalogue-pdf-library" class="ml-auto" />
+          <.view_toggle_instant :if={visible_pdfs != []} view={@view_mode} id="pdf-view-pref" class="ml-auto" />
         </div>
 
         <.live_component
@@ -497,6 +513,11 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
 
         <%!-- PDF list --%>
         <%= cond do %>
+          <% !@pdfs_loaded -> %>
+            <div class="flex flex-col gap-3" aria-busy="true">
+              <div class="skeleton h-16 w-full"></div>
+              <div class="skeleton h-16 w-full"></div>
+            </div>
           <% @pdfs == [] -> %>
             <div class="text-center py-12 text-base-content/60">
               <.icon name="hero-document-text" class="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -519,7 +540,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
             size="sm"
             toggleable={true}
             show_toggle={false}
-            storage_key="catalogue-pdf-library"
+            storage_key={view_storage_key()}
             items={visible_pdfs}
             card_title={fn pdf -> pdf.original_filename end}
             card_fields={fn pdf ->

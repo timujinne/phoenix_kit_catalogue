@@ -37,6 +37,7 @@ defmodule PhoenixKitCatalogue.LiveCase do
 
   alias Ecto.Adapters.SQL
   alias Ecto.Adapters.SQL.Sandbox
+  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Users.Auth.Scope
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
@@ -116,11 +117,22 @@ defmodule PhoenixKitCatalogue.LiveCase do
 
     case session do
       %{"pk_current_user_uuid" => uuid} when is_binary(uuid) ->
-        {:cont, Phoenix.Component.assign(socket, :phoenix_kit_current_user, %{uuid: uuid})}
+        # The REAL user row when it resolves, not a bare `%{uuid: uuid}`:
+        # production assigns a `%PhoenixKit.Users.Auth.User{}`, and
+        # per-user preferences (ViewConfig's columns, sort, view) only
+        # persist for one — so with a stub the harness could not see a
+        # preference fail to save (2026-08-28).
+        {:cont, Phoenix.Component.assign(socket, :phoenix_kit_current_user, load_user(uuid))}
 
       _ ->
         {:cont, socket}
     end
+  end
+
+  defp load_user(uuid) do
+    Auth.get_user!(uuid)
+  rescue
+    _ -> %{uuid: uuid}
   end
 
   @doc """

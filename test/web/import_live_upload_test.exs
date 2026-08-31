@@ -125,9 +125,13 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveUploadTest do
 
       html = render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
 
-      assert is_binary(html)
-      assert Process.alive?(view.pid)
-      # The LV stays on :upload step (didn't transition to :map).
+      # The test is named for the flash, so assert the flash. `is_binary/1`
+      # over `render_submit`'s return is true for any outcome, including one
+      # where the error is swallowed and nothing is shown — which is the
+      # failure this is supposed to catch.
+      assert html =~ PhoenixKitCatalogue.Errors.message({:xlsx_open_failed, :invalid})
+
+      # And it stays on :upload rather than transitioning to :map.
       assert :sys.get_state(view.pid).socket.assigns.step == :upload
     end
   end

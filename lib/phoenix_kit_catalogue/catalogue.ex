@@ -70,7 +70,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   }
 
   alias PhoenixKit.Utils.Values
-  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Folder, Item}
+  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Folder, Item, ItemAttributeSet}
 
   require Logger
 
@@ -954,6 +954,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   items starting at `:offset`. Preloads `:catalogue` and `:manufacturer`
   so the table cell renderers can access them without extra queries.
 
+  DIRECT items only — never the subtree. The detail page's "include
+  subcategory items" toggle is a SEARCH refinement (Max, 2026-08-30:
+  it "should only do something when searching"); the browse list always
+  shows the level you are standing on. Widening a subtree search is
+  `Catalogue.search_items_in_category/3`'s `:include_descendants`.
+
   ## Options
 
     * `:mode` — `:active` (default, excludes deleted items) or `:deleted`
@@ -972,6 +978,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query =
       from(i in Item,
+        as: :item,
         where: i.category_uuid == ^category_uuid,
         offset: ^offset,
         limit: ^limit,
@@ -979,10 +986,89 @@ defmodule PhoenixKitCatalogue.Catalogue do
       )
 
     query
+    |> filter_by_attribute_values(opts)
     |> apply_item_status_filter(opts, mode)
     |> apply_item_order(opts)
     |> repo().all()
     |> Manufacturers.hydrate()
+  end
+
+  @doc """
+  Lists a page of a catalogue's items ACROSS all its categories — the
+  detail page's Items mode since category drilling was removed (Max,
+  2026-08-29): with no level to stand in, the mode lists the whole
+  catalogue. Same options as `list_items_for_category_paged/2`. The
+  default (position) order is the DOCUMENT order — category position,
+  then item position — the same walk the export uses.
+  """
+  @spec list_catalogue_items_paged(Ecto.UUID.t(), keyword()) :: [Item.t()]
+  def list_catalogue_items_paged(catalogue_uuid, opts \\ []) do
+    mode = Keyword.get(opts, :mode, :active)
+    offset = Keyword.get(opts, :offset, 0)
+    limit = Keyword.get(opts, :limit, 50)
+    preloads = Helpers.merge_preloads([:catalogue, category: :catalogue], opts)
+
+    query =
+      from(i in Item,
+        as: :item,
+        left_join: c in Category,
+        on: i.category_uuid == c.uuid,
+        where: i.catalogue_uuid == ^catalogue_uuid,
+        offset: ^offset,
+        limit: ^limit,
+        preload: ^preloads
+      )
+
+    query
+    |> filter_by_attribute_values(opts)
+    |> apply_item_status_filter(opts, mode)
+    |> apply_catalogue_item_order(opts)
+    |> repo().all()
+    |> Manufacturers.hydrate()
+  end
+
+  @doc "Total item count for `list_catalogue_items_paged/2`'s filters."
+  @spec count_items_for_catalogue(Ecto.UUID.t(), keyword()) :: non_neg_integer()
+  def count_items_for_catalogue(catalogue_uuid, opts \\ []) do
+    mode = Keyword.get(opts, :mode, :active)
+
+    from(i in Item, as: :item, where: i.catalogue_uuid == ^catalogue_uuid)
+    |> filter_by_attribute_values(opts)
+    |> apply_item_status_filter(opts, mode)
+    |> repo().aggregate(:count)
+  end
+
+  @doc "Per-status item counts for a whole catalogue: `%{\"active\" => n, …}`."
+  @spec item_status_counts_for_catalogue(Ecto.UUID.t()) :: %{
+          optional(String.t()) => non_neg_integer()
+        }
+  def item_status_counts_for_catalogue(catalogue_uuid) do
+    from(i in Item,
+      where: i.catalogue_uuid == ^catalogue_uuid,
+      group_by: i.status,
+      select: {i.status, count(i.uuid)}
+    )
+    |> repo().all()
+    |> Map.new()
+  end
+
+  # Position on a catalogue-wide list means the DOCUMENT order (category
+  # position, then item position) — bare `i.position` interleaves
+  # per-category sequences into noise. Every other sort defers to the
+  # shared whitelist.
+  defp apply_catalogue_item_order(query, opts) do
+    case Keyword.get(opts, :sort_by, :position) do
+      :position ->
+        order_by(query, [i, c],
+          asc_nulls_last: c.position,
+          asc: i.position,
+          asc: i.name,
+          asc: i.uuid
+        )
+
+      _ ->
+        apply_item_order(query, opts)
+    end
   end
 
   # Status filter shared by the item list/count queries. `:status` (an
@@ -1027,6 +1113,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query =
       from(i in Item,
+        as: :item,
         where: i.catalogue_uuid == ^catalogue_uuid and is_nil(i.category_uuid),
         offset: ^offset,
         limit: ^limit,
@@ -1034,6 +1121,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
       )
 
     query
+    |> filter_by_attribute_values(opts)
     |> apply_item_status_filter(opts, mode)
     |> apply_item_order(opts)
     |> repo().all()
@@ -1075,10 +1163,52 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query =
       from(i in Item,
+        as: :item,
         where: i.catalogue_uuid == ^catalogue_uuid and is_nil(i.category_uuid)
       )
 
-    query |> apply_item_status_filter(opts, mode) |> repo().aggregate(:count)
+    query
+    |> filter_by_attribute_values(opts)
+    |> apply_item_status_filter(opts, mode)
+    |> repo().aggregate(:count)
+  end
+
+  @doc """
+  Narrows an item query to the items carrying ALL of the given attribute
+  VALUE slugs — "the blue doors", and with two slugs "the blue oak doors"
+  (Max, 2026-08-28).
+
+  The slugs are what an item's attachment row stores in
+  `data["selected_value_slugs"]`, so this reads the selection the item
+  form writes. AND semantics: each slug adds its own EXISTS, because
+  narrowing is what a filter is for — an OR would widen the list as you
+  pick more.
+
+  Pass `value_slugs: [...]` to the paged listings and the counts; an
+  empty list is no filter.
+  """
+  @spec filter_by_attribute_values(Ecto.Query.t(), keyword()) :: Ecto.Query.t()
+  def filter_by_attribute_values(query, opts) do
+    opts
+    |> Keyword.get(:value_slugs, [])
+    |> List.wrap()
+    |> Enum.filter(&(is_binary(&1) and &1 != ""))
+    |> Enum.uniq()
+    |> Enum.reduce(query, fn slug, acc ->
+      # `?` is the JSONB "key/element exists" operator; doubled here
+      # because Ecto reads a single one as a parameter placeholder.
+      from(i in acc,
+        where:
+          exists(
+            from(a in ItemAttributeSet,
+              where: a.item_uuid == parent_as(:item).uuid,
+              where: fragment("jsonb_typeof(? -> 'selected_value_slugs') = 'array'", a.data),
+              where: fragment("? -> 'selected_value_slugs' \\? ?", a.data, ^slug),
+              select: 1
+            )
+          )
+      )
+    end)
   end
 
   @doc """
@@ -1088,6 +1218,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
   category header (the number in `"Category Name (N items)"`) without
   loading the items themselves.
 
+  Counts the DIRECT items only, matching `list_items_for_category_paged/2`
+  — the number under a header has to be the number of rows the header
+  opens onto.
+
   ## Options
 
     * `:mode` — `:active` (default) or `:deleted`
@@ -1096,9 +1230,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def item_count_for_category(category_uuid, opts \\ []) do
     mode = Keyword.get(opts, :mode, :active)
 
-    query = from(i in Item, where: i.category_uuid == ^category_uuid)
+    query = from(i in Item, as: :item, where: i.category_uuid == ^category_uuid)
 
-    query |> apply_item_status_filter(opts, mode) |> repo().aggregate(:count)
+    query
+    |> filter_by_attribute_values(opts)
+    |> apply_item_status_filter(opts, mode)
+    |> repo().aggregate(:count)
   end
 
   @doc """
@@ -5330,6 +5467,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate search_items(query, opts \\ []), to: Search
   defdelegate count_search_items(query, opts \\ []), to: Search
   defdelegate search_items_in_catalogue(catalogue_uuid, query, opts \\ []), to: Search
+
+  defdelegate search_categories(catalogue_uuid, query, opts \\ []), to: Search
+  defdelegate match_search_text(query, term), to: Search, as: :match_text
+  defdelegate category_subtree_uuids(roots), to: Tree, as: :subtree_uuids_for
   defdelegate count_search_items_in_catalogue(catalogue_uuid, query), to: Search
   defdelegate search_items_in_category(category_uuid, query, opts \\ []), to: Search
   defdelegate count_search_items_in_category(category_uuid, query), to: Search
@@ -5416,11 +5557,40 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate update_attribute_set(set, attrs, opts \\ []), to: AttributeSets, as: :update_set
   defdelegate delete_attribute_set(set, opts \\ []), to: AttributeSets, as: :delete_set
 
+  defdelegate attribute_value_match_counts(opts \\ []),
+    to: AttributeSets,
+    as: :value_match_counts
+
+  defdelegate attribute_filter_options(catalogue_uuid, opts \\ []),
+    to: AttributeSets,
+    as: :filter_options
+
+  defdelegate attribute_set_uuids_matching_value(set_uuids, term),
+    to: AttributeSets,
+    as: :set_uuids_matching_value
+
+  defdelegate list_attribute_set_attached_items(set_uuid, opts \\ []),
+    to: AttributeSets,
+    as: :list_attached_items
+
+  defdelegate count_attribute_set_attached_items(set_uuid, opts \\ []),
+    to: AttributeSets,
+    as: :count_attached_items
+
+  defdelegate attribute_set_valid_selection(slugs, resolved_set),
+    to: AttributeSets,
+    as: :valid_selection
+
   defdelegate create_attribute_set_value(set, attrs, opts \\ []),
     to: AttributeSets,
     as: :create_value
 
   defdelegate list_attribute_set_values(set, opts \\ []), to: AttributeSets, as: :list_values
+
+  defdelegate list_attribute_set_values_for(set_uuids, opts \\ []),
+    to: AttributeSets,
+    as: :list_values_for
+
   defdelegate get_attribute_set_value(set, value_uuid), to: AttributeSets, as: :get_value
 
   defdelegate update_attribute_set_value(set, value, attrs, opts \\ []),
@@ -5516,6 +5686,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate prune_orphan_attribute_set_attachments(set_uuid),
     to: AttributeSets,
     as: :prune_orphan_attachments
+
+  defdelegate attribute_set_value_counts(set_uuids), to: AttributeSets, as: :value_counts
 
   defdelegate attribute_set_attachment_counts(set_uuids),
     to: AttributeSets,

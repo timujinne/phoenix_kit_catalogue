@@ -18,6 +18,17 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
       assert Errors.message(:parent_not_found) == "Parent category not found."
     end
 
+    test "the two import-size atoms are pinned too (they were the only unpinned ones)" do
+      # `parser.ex` returns both, and the parser tests assert the ATOM — but
+      # nothing asserted the string a user actually reads, so these two were
+      # the only members of @type error_atom with no pin.
+      assert Errors.message(:file_too_large) ==
+               "File is too large to import. Please split it into smaller files."
+
+      assert Errors.message(:too_many_rows) ==
+               "File has too many rows to import. Please split it into smaller files."
+    end
+
     test "not_siblings" do
       assert Errors.message(:not_siblings) ==
                "Categories must share the same parent to be reordered."

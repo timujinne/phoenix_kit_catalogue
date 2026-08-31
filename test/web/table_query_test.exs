@@ -28,6 +28,10 @@ defmodule PhoenixKitCatalogue.Web.TableQueryTest do
   test "search is case-insensitive substring on name" do
     assert Enum.map(Q.search(rows(), "al"), & &1.name) == ["alpha"]
     assert Q.search(rows(), "") == rows()
+    # Trimmed: a trailing space is not part of the needle, and an
+    # all-space query means "no filter" (Max, 2026-08-28).
+    assert Enum.map(Q.search(rows(), "alpha "), & &1.name) == ["alpha"]
+    assert Q.search(rows(), "   ") == rows()
   end
 
   test "filter by status; 'all'/nil are no-ops" do
@@ -65,10 +69,16 @@ defmodule PhoenixKitCatalogue.Web.TableQueryTest do
            ]
   end
 
-  test "enum_options for folder skips unfiled and dedups" do
-    # {label, value} — the order options_for_select expects; the uuid is
-    # the submitted value, matched against row[:folder_uuid] by filter/2.
-    assert Q.enum_options(rows(), :catalogues, "folder") == [{"Kitchen", "f1"}]
+  # The shape CataloguesLive passes while a search is on: the drilled
+  # folder expanded to its subtree, so subfolder contents match too.
+  test "a MapSet folder value matches any folder in the set, never unfiled" do
+    assert Enum.map(
+             Q.filter(rows(), :catalogues, %{"folder" => MapSet.new(["f1", "f2"])}),
+             & &1.name
+           ) == ["Beta"]
+
+    # An unfiled row (nil folder_uuid) is in nobody's subtree.
+    assert Q.filter(rows(), :catalogues, %{"folder" => MapSet.new(["f9"])}) == []
   end
 
   # Regression: `to_string(nil) == ""`, which `filter/2` already reserves to

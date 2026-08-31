@@ -40,6 +40,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Catalogue.Helpers
   alias PhoenixKitCatalogue.Catalogue.PubSub
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Schemas.ItemAttributeSet
 
   @owner "catalogue"
@@ -350,10 +351,150 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
 
   def list_values(set_uuid, opts) when is_binary(set_uuid) do
     if entities_enabled?() do
-      PhoenixKitEntities.EntityData.list_by_entity(set_uuid, lang: opts[:lang])
-      |> Enum.reject(&(&1.status == "archived"))
+      [set_uuid] |> list_values_for(opts) |> Map.get(set_uuid, [])
     else
       []
+    end
+  end
+
+  @doc """
+  Values for MANY sets at once: `%{set_uuid => [value]}`, archived excluded.
+
+  The batched twin of `list_values/2`. A listing that shows a preview of each
+  set's values must not call the singular form per row — the sets listing did,
+  and paged 25 at a time, so opening the Attributes tab cost 25 queries and
+  repeated them on every attribute or item broadcast.
+
+  `:limit` is PER SET. The batched entities API filters status in SQL, which is
+  what makes that limit mean what it says; the fallback for an older entities
+  pin cannot, so it over-fetches and trims — asking for 5 and getting 3 reads
+  as "there are only 3".
+  """
+  @spec list_values_for([Ecto.UUID.t()], keyword()) :: %{optional(Ecto.UUID.t()) => [struct()]}
+  def list_values_for(set_uuids, opts \\ [])
+  def list_values_for([], _opts), do: %{}
+
+  def list_values_for(set_uuids, opts) when is_list(set_uuids) do
+    # Gated like its singular twin. This was private when it had one caller
+    # that had already asked; making it public — and delegating to it from
+    # `Catalogue.list_attribute_set_values_for/2` — put a read on the public
+    # surface that answers with live data while every sibling read degrades
+    # to empty with the feature off. The module's contract (see the moduledoc)
+    # is that reads degrade quietly: `[]`, `nil`, `%{}`, `0`.
+    #
+    # It also guards the fallback below: without entities loaded at all,
+    # `batch.list_by_entity/2` is a call into a module that is not there.
+    if entities_enabled?() do
+      do_list_values_for(set_uuids, opts)
+    else
+      %{}
+    end
+  end
+
+  defp do_list_values_for(set_uuids, opts) do
+    batch = PhoenixKitEntities.EntityData
+    limit = opts[:limit]
+
+    if Code.ensure_loaded?(batch) and function_exported?(batch, :list_by_entities, 2) do
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      apply(batch, :list_by_entities, [
+        set_uuids,
+        [
+          lang: opts[:lang],
+          limit: limit,
+          exclude_statuses: ["archived"],
+          preload: []
+        ]
+      ])
+    else
+      fetch = if limit, do: [lang: opts[:lang], limit: limit + 5], else: [lang: opts[:lang]]
+
+      Map.new(set_uuids, fn uuid ->
+        values =
+          uuid
+          |> batch.list_by_entity(fetch)
+          |> Enum.reject(&(&1.status == "archived"))
+
+        {uuid, if(limit, do: Enum.take(values, limit), else: values)}
+      end)
+    end
+  end
+
+  @doc """
+  Of the given sets, which have at least one VALUE whose label matches
+  `term`? Returns a list of set uuids — the listing search uses it
+  to find a set by what is IN it ("oak" finds the color set), not only
+  by its own name.
+
+  One batched query where the entities pin carries the API; the
+  fallback is the older global title search, intersected here. Archived
+  values are excluded, matching `list_values/2`.
+  """
+  @spec set_uuids_matching_value([Ecto.UUID.t()], String.t()) :: [Ecto.UUID.t()]
+  def set_uuids_matching_value([], _term), do: []
+
+  def set_uuids_matching_value(set_uuids, term) when is_list(set_uuids) and is_binary(term) do
+    batch = PhoenixKitEntities.EntityData
+
+    cond do
+      not entities_enabled?() or String.trim(term) == "" ->
+        []
+
+      Code.ensure_loaded?(batch) and function_exported?(batch, :entity_uuids_matching_title, 3) ->
+        # apply/3 on purpose: a direct call compiles as an undefined-
+        # function warning against the released entities pin, which
+        # doesn't carry the batch matcher yet.
+        # credo:disable-for-next-line Credo.Check.Refactor.Apply
+        apply(batch, :entity_uuids_matching_title, [
+          set_uuids,
+          term,
+          [exclude_statuses: ["archived"]]
+        ])
+
+      true ->
+        # Released entities without the batch matcher: the global title
+        # search, narrowed here. Heavier (it loads matching rows across
+        # every entity, preloads and all) but it still finds the set —
+        # degrading to name-only search would be a silent wrong answer.
+        wanted = MapSet.new(set_uuids)
+
+        term
+        |> String.trim()
+        |> batch.search_by_title()
+        |> Enum.reject(&(&1.status == "archived"))
+        |> Enum.map(& &1.entity_uuid)
+        |> Enum.filter(&MapSet.member?(wanted, &1))
+        |> Enum.uniq()
+    end
+  end
+
+  @doc """
+  Value counts for many sets at once: `%{set_uuid => count}`, matching
+  `list_values/2`'s semantics (archived and trashed excluded). One
+  grouped query — the viewer must not COUNT per row.
+  """
+  @spec value_counts([Ecto.UUID.t()]) :: %{optional(Ecto.UUID.t()) => non_neg_integer()}
+  def value_counts([]), do: %{}
+
+  def value_counts(set_uuids) when is_list(set_uuids) do
+    batch = PhoenixKitEntities.EntityData
+
+    cond do
+      not entities_enabled?() ->
+        %{}
+
+      Code.ensure_loaded?(batch) and function_exported?(batch, :counts_by_entities, 2) ->
+        # apply/3 on purpose: a direct call compiles as an undefined-
+        # function warning against the released entities pin, which
+        # doesn't carry the batch API yet.
+        # credo:disable-for-next-line Credo.Check.Refactor.Apply
+        apply(batch, :counts_by_entities, [set_uuids, [exclude_statuses: ["archived"]]])
+
+      true ->
+        # Released entities without the batch API yet: one COUNT per set —
+        # still counts, just not batched, and it tallies archived values
+        # the batch would exclude (a small drift the pin release closes).
+        Map.new(set_uuids, &{&1, PhoenixKitEntities.EntityData.count_by_entity(&1)})
     end
   end
 
@@ -696,7 +837,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
       "set_uuid" => set_uuid
     })
 
-    PubSub.broadcast(:item, item_uuid, Helpers.item_catalogue_uuid(item_uuid))
+    maybe_broadcast_item(item_uuid, opts)
     {:ok, row}
   end
 
@@ -773,7 +914,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
         "set_uuid" => set_uuid
       })
 
-      PubSub.broadcast(:item, item_uuid, Helpers.item_catalogue_uuid(item_uuid))
+      maybe_broadcast_item(item_uuid, opts)
     end
 
     :ok
@@ -784,33 +925,77 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
   (no writes, no activity row) when the order already matches — this
   runs on every item save.
   """
-  @spec reorder_attachments(Ecto.UUID.t(), [Ecto.UUID.t()], keyword()) :: :ok
+  @spec reorder_attachments(Ecto.UUID.t(), [Ecto.UUID.t()], keyword()) :: :ok | {:error, term()}
   def reorder_attachments(item_uuid, set_uuids, opts \\ []) when is_list(set_uuids) do
     ordered = Enum.uniq(set_uuids)
-    current = item_uuid |> list_attachments() |> Enum.map(& &1.set_uuid)
 
-    if ordered == current do
-      :ok
-    else
-      ordered
-      |> Enum.with_index(1)
-      |> Enum.each(fn {set_uuid, idx} ->
-        from(a in ItemAttributeSet,
-          where: a.item_uuid == ^item_uuid and a.set_uuid == ^set_uuid
-        )
-        |> repo().update_all(set: [position: idx])
+    # Read, compare and write inside ONE transaction, under a per-item
+    # advisory lock. This was a check-then-act on a non-primary-key column
+    # with neither: two saves of the same item interleaved their per-row
+    # `update_all`s into a mixed order, and a mid-loop failure left half the
+    # attachments renumbered with no rollback. Every sibling reorder in this
+    # codebase wraps the loop; `lock_set/1` above is the same mechanism,
+    # keyed by set rather than by item.
+    result =
+      repo().transaction(fn ->
+        lock_item_attachments(item_uuid)
+        current = item_uuid |> list_attachments() |> Enum.map(& &1.set_uuid)
+
+        if ordered == current do
+          :unchanged
+        else
+          write_attachment_positions(item_uuid, ordered)
+          :reordered
+        end
       end)
 
-      # No single set is "the" resource for a whole-item reorder — the
-      # row links through metadata.item_uuid instead.
-      log_activity("attribute_set.attachments_reordered", opts, nil, %{
-        "item_uuid" => item_uuid,
-        "order" => ordered
-      })
+    case result do
+      {:ok, :unchanged} ->
+        :ok
 
-      PubSub.broadcast(:item, item_uuid, Helpers.item_catalogue_uuid(item_uuid))
-      :ok
+      {:ok, :reordered} ->
+        # No single set is "the" resource for a whole-item reorder — the
+        # row links through metadata.item_uuid instead.
+        log_activity("attribute_set.attachments_reordered", opts, nil, %{
+          "item_uuid" => item_uuid,
+          "order" => ordered
+        })
+
+        maybe_broadcast_item(item_uuid, opts)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
+  end
+
+  # `broadcast: false` for callers that make several of these changes in a
+  # row — an item save can attach, detach, reorder and set selections in one
+  # pass, and each of those broadcast separately AND ran its own
+  # `item_catalogue_uuid/1` SELECT to do it. Every open detail LiveView then
+  # re-ran `refresh_in_place/1` once per change. The importer already uses
+  # this convention (`import/executor.ex`), with one roll-up event at the end.
+  defp maybe_broadcast_item(item_uuid, opts) do
+    if Keyword.get(opts, :broadcast, true) do
+      PubSub.broadcast(:item, item_uuid, Helpers.item_catalogue_uuid(item_uuid))
+    end
+
+    :ok
+  end
+
+  defp write_attachment_positions(item_uuid, ordered) do
+    ordered
+    |> Enum.with_index(1)
+    |> Enum.each(fn {set_uuid, idx} ->
+      from(a in ItemAttributeSet,
+        where: a.item_uuid == ^item_uuid and a.set_uuid == ^set_uuid
+      )
+      |> repo().update_all(set: [position: idx])
+    end)
+  end
+
+  defp lock_item_attachments(item_uuid) do
+    repo().query!("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 43))", [item_uuid])
   end
 
   @doc "The item's attachments in order."
@@ -843,6 +1028,240 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
       )
     )
     |> Map.new()
+  end
+
+  @doc """
+  How many rows each attribute VALUE would still match, given the filter
+  already applied — the numbers beside the filter's checkboxes, and what
+  lets a value that leads nowhere be disabled instead of offered (Max,
+  2026-08-28).
+
+  Conditioned on the CURRENT selection, so once Blue is on, Oak shows how
+  many blue oak items there are. A dead combination is therefore visible
+  as a 0 before it is picked, rather than as an empty list afterwards.
+
+  Options: `:catalogue_uuid`, `:catalogue_uuids`, `:category_uuids`,
+  `:statuses`, `:search`, `:value_slugs` (the selection to condition on)
+  and `:count` — `:items` (default) or `:catalogues`, which counts
+  distinct catalogues for the index's version of the filter.
+
+  Every scope the LISTING is under has to be passed, or the promise
+  breaks the other way: a value offered as live because something
+  matches it SOMEWHERE, while the page the user is on has none of it,
+  is exactly the empty list this exists to prevent. `:search` narrows by
+  the same text predicate the item search uses.
+
+  One grouped query: the selection slugs are unnested from the
+  attachment's JSONB, so a page with fifteen values still asks once.
+  """
+  @spec value_match_counts(keyword()) :: %{optional(String.t()) => non_neg_integer()}
+  def value_match_counts(opts \\ []) do
+    if entities_enabled?() do
+      base =
+        from(a in ItemAttributeSet,
+          join: i in Item,
+          as: :item,
+          on: i.uuid == a.item_uuid,
+          inner_lateral_join:
+            slug in fragment(
+              "jsonb_array_elements_text(CASE WHEN jsonb_typeof(? -> 'selected_value_slugs') = 'array' THEN ? -> 'selected_value_slugs' ELSE '[]'::jsonb END)",
+              a.data,
+              a.data
+            ),
+          on: true,
+          group_by: fragment("?", slug)
+        )
+        |> exclude_deleted_unless_asked(opts)
+        |> PhoenixKitCatalogue.Catalogue.match_search_text(opts[:search])
+        |> scope_counts(opts)
+        |> PhoenixKitCatalogue.Catalogue.filter_by_attribute_values(opts)
+
+      # Two selects rather than a dynamic: a dynamic cannot be spliced
+      # into a select tuple.
+      case Keyword.get(opts, :count, :items) do
+        :catalogues ->
+          select(base, [_a, i, slug], {fragment("?", slug), count(i.catalogue_uuid, :distinct)})
+
+        _ ->
+          select(base, [_a, i, slug], {fragment("?", slug), count(i.uuid, :distinct)})
+      end
+      |> repo().all()
+      |> Map.new()
+    else
+      %{}
+    end
+  end
+
+  # Deleted items are out unless the caller asked for a status set that
+  # names them — otherwise the Deleted tab's own counts contradict
+  # themselves (`status in ["deleted"]` AND `status != "deleted"`) and
+  # every value reads 0.
+  defp exclude_deleted_unless_asked(query, opts) do
+    if "deleted" in List.wrap(opts[:statuses]) do
+      query
+    else
+      where(query, [_a, i], i.status != "deleted")
+    end
+  end
+
+  defp scope_counts(query, opts) do
+    query
+    |> scope_one_catalogue(opts[:catalogue_uuid])
+    |> scope_many_catalogues(opts[:catalogue_uuids])
+    |> scope_categories(opts[:category_uuids])
+    |> scope_statuses(opts[:statuses])
+    |> scope_uncategorized(opts[:only])
+  end
+
+  defp scope_one_catalogue(query, uuid) when is_binary(uuid),
+    do: where(query, [_a, i], i.catalogue_uuid == ^uuid)
+
+  defp scope_one_catalogue(query, _), do: query
+
+  # The INDEX's version: count only within the catalogues the list is
+  # currently showing, so a value cannot look available because of a
+  # catalogue hidden by the folder, search or status the user is in. An
+  # EMPTY list is a real answer — "the list is showing nothing, so nothing
+  # matches" — and must not read as "no constraint".
+  defp scope_many_catalogues(query, uuids) when is_list(uuids),
+    do: where(query, [_a, i], i.catalogue_uuid in ^uuids)
+
+  defp scope_many_catalogues(query, _), do: query
+
+  defp scope_categories(query, [_ | _] = uuids),
+    do: where(query, [_a, i], i.category_uuid in ^uuids)
+
+  defp scope_categories(query, _), do: query
+
+  defp scope_statuses(query, [_ | _] = statuses),
+    do: where(query, [_a, i], i.status in ^statuses)
+
+  defp scope_statuses(query, _), do: query
+
+  # The uncategorized bucket is a scope like any other level.
+  defp scope_uncategorized(query, :uncategorized_only),
+    do: where(query, [_a, i], is_nil(i.category_uuid))
+
+  defp scope_uncategorized(query, _), do: query
+
+  @doc """
+  The attribute filter's options for one catalogue: every set attached to
+  an item in it, with that set's values.
+
+  Only sets actually in use appear — a filter offering "Colour" for a
+  catalogue of screws is noise. Values come from the set itself rather
+  than from what is currently selected, so picking one that matches
+  nothing yet returns an honest empty list instead of hiding the option.
+
+  Shape: `[%{uuid:, name:, values: [%{slug:, title:}]}]`, named for what
+  the UI renders.
+  """
+  @spec filter_options(Ecto.UUID.t() | :all, keyword()) :: [map()]
+  def filter_options(catalogue_uuid, opts \\ []) do
+    if entities_enabled?() do
+      base =
+        from(a in ItemAttributeSet,
+          join: i in Item,
+          on: i.uuid == a.item_uuid,
+          where: i.status != "deleted",
+          distinct: true,
+          select: a.set_uuid
+        )
+
+      # `:all` is the catalogues INDEX, which filters catalogues by what
+      # their items carry, so its options come from every catalogue.
+      set_uuids =
+        case catalogue_uuid do
+          :all -> base
+          uuid -> where(base, [_a, i], i.catalogue_uuid == ^uuid)
+        end
+        |> repo().all()
+
+      # Values for every set in ONE query. Per-set loading here is two
+      # queries each and this runs on every URL change — on the index,
+      # where `:all` gathers the sets used anywhere, that is the whole
+      # roster loaded a row at a time.
+      values_by_set = list_values_for(set_uuids, lang: opts[:lang])
+
+      set_uuids
+      |> Enum.map(&get_set(&1, lang: opts[:lang]))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(fn set ->
+        %{
+          uuid: set.uuid,
+          name: set.display_name || set.name,
+          values:
+            values_by_set
+            |> Map.get(set.uuid, [])
+            |> Enum.map(&%{slug: &1.slug, title: &1.title})
+        }
+      end)
+      |> Enum.reject(&(&1.values == []))
+      |> Enum.sort_by(& &1.name)
+    else
+      []
+    end
+  end
+
+  @doc """
+  One page of the items attached to a set, name-ordered — the set
+  detail page's listing. Each row is `%{item: %Item{}, selected_slugs:
+  [...]}`; the slugs are the RAW attachment selection — callers
+  ghost-filter them against the set's current values with
+  `valid_selection/2`. Deleted items are excluded.
+
+  Options: `:search` (trimmed, matched on item name), `:limit`
+  (default 25), `:offset` (default 0).
+  """
+  @spec list_attached_items(Ecto.UUID.t(), keyword()) :: [map()]
+  def list_attached_items(set_uuid, opts \\ []) when is_binary(set_uuid) do
+    limit = Keyword.get(opts, :limit, 25)
+    offset = Keyword.get(opts, :offset, 0)
+
+    rows =
+      set_uuid
+      |> attached_items_base(opts)
+      |> order_by([a, i], asc: i.name)
+      |> limit(^limit)
+      |> offset(^offset)
+      |> select([a, i], %{item: i, data: a.data})
+      |> repo().all()
+
+    items =
+      rows
+      |> Enum.map(& &1.item)
+      |> repo().preload([:catalogue, category: []])
+
+    Enum.zip_with(items, rows, fn item, row ->
+      %{item: item, selected_slugs: List.wrap(row.data["selected_value_slugs"])}
+    end)
+  end
+
+  @doc "Total match count for `list_attached_items/2` (same filters)."
+  @spec count_attached_items(Ecto.UUID.t(), keyword()) :: non_neg_integer()
+  def count_attached_items(set_uuid, opts \\ []) when is_binary(set_uuid) do
+    set_uuid
+    |> attached_items_base(opts)
+    |> select([a, i], count(i.uuid))
+    |> repo().one()
+  end
+
+  defp attached_items_base(set_uuid, opts) do
+    query =
+      from(a in ItemAttributeSet,
+        join: i in Item,
+        on: i.uuid == a.item_uuid,
+        where: a.set_uuid == ^set_uuid and i.status != "deleted"
+      )
+
+    case opts |> Keyword.get(:search, "") |> to_string() |> String.trim() do
+      "" ->
+        query
+
+      term ->
+        pattern = "%#{Helpers.sanitize_like(term)}%"
+        where(query, [a, i], ilike(i.name, ^pattern))
+    end
   end
 
   @doc """
@@ -1091,7 +1510,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
         "selected" => selection
       })
 
-      PubSub.broadcast(:item, item_uuid, Helpers.item_catalogue_uuid(item_uuid))
+      maybe_broadcast_item(item_uuid, opts)
       :ok
     else
       {:error, :not_attached}

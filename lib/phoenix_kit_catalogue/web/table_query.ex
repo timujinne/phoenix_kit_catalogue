@@ -24,12 +24,48 @@ defmodule PhoenixKitCatalogue.Web.TableQuery do
   @spec search([map()], String.t() | nil, (map() -> String.t() | nil)) :: [map()]
   def search(rows, q, field_fn \\ & &1.name)
 
-  def search(rows, q, field_fn) when is_binary(q) and q != "" do
-    needle = String.downcase(q)
-    Enum.filter(rows, fn r -> String.contains?(String.downcase(field_fn.(r) || ""), needle) end)
+  def search(rows, q, field_fn) when is_binary(q) do
+    # Trimmed: a trailing space must not turn a match into a miss
+    # (Max, 2026-08-28), and an all-space query means "no filter".
+    case q |> String.trim() |> String.downcase() do
+      "" ->
+        rows
+
+      needle ->
+        Enum.filter(rows, fn r ->
+          String.contains?(String.downcase(field_fn.(r) || ""), needle) or
+            translation_matches?(r, needle)
+        end)
+    end
   end
 
   def search(rows, _, _), do: rows
+
+  # Rows carry the row's own `:data` JSONB, which is where translations
+  # live (`%{"et" => %{"_name" => "Köögisari"}}`). Only the VALUES count:
+  # JSON-encoding the map and searching that matched KEY names too, so
+  # "Plumbing" came back for the query "a" — its data holds the key
+  # `_name` (Max, 2026-08-28). On real data, "a" matched 7 of 26 items
+  # that way against 3 by value.
+  defp translation_matches?(row, needle) do
+    case Map.get(row, :data) do
+      data when is_map(data) and map_size(data) > 0 ->
+        data |> string_values() |> Enum.any?(&String.contains?(String.downcase(&1), needle))
+
+      _ ->
+        false
+    end
+  end
+
+  # Every string leaf, whatever the shape nests into.
+  defp string_values(value) when is_binary(value), do: [value]
+
+  defp string_values(value) when is_map(value),
+    do: value |> Map.values() |> Enum.flat_map(&string_values/1)
+
+  defp string_values(value) when is_list(value), do: Enum.flat_map(value, &string_values/1)
+
+  defp string_values(_other), do: []
 
   @spec filter([map()], TableConfig.scope(), map()) :: [map()]
   def filter(rows, scope, filters) when is_map(filters) do
@@ -42,6 +78,13 @@ defmodule PhoenixKitCatalogue.Web.TableQuery do
   def filter(rows, _scope, _), do: rows
 
   defp filter_match?(_scope, "folder", row, @unfiled_folder), do: is_nil(row[:folder_uuid])
+
+  # A set of uuids means "anywhere in this subtree" — the shape the
+  # LiveView passes while a search is on, so searching a drilled folder
+  # also finds catalogues filed in its subfolders.
+  defp filter_match?(_scope, "folder", row, %MapSet{} = uuids),
+    do: MapSet.member?(uuids, to_string(row[:folder_uuid]))
+
   defp filter_match?(_scope, "folder", row, val), do: to_string(row[:folder_uuid]) == val
 
   defp filter_match?(_scope, id, row, val) do
@@ -62,19 +105,9 @@ defmodule PhoenixKitCatalogue.Web.TableQuery do
   def sort(rows, _scope, _sort_by, _dir), do: rows
 
   # Tuples are `{label, value}` — the order Phoenix's `options_for_select`
-  # expects. The submitted value must be the uuid: `filter_match?/4` above
-  # compares it to `row[:folder_uuid]`.
+  # expects. Status options get the same translated label as the rest of
+  # the UI (Helpers.status_label/1) instead of the raw DB value.
   @spec enum_options([map()], TableConfig.scope(), String.t()) :: [{String.t(), String.t()}]
-  def enum_options(rows, _scope, "folder") do
-    rows
-    |> Enum.map(&{&1[:folder_name], to_string(&1[:folder_uuid])})
-    |> Enum.reject(fn {_, uuid} -> uuid in ["", "nil"] end)
-    |> Enum.uniq()
-    |> Enum.sort_by(fn {name, _u} -> String.downcase(name || "") end)
-  end
-
-  # Status options get the same translated label as the rest of the UI
-  # (Helpers.status_label/1) instead of the raw DB value.
   def enum_options(rows, scope, "status") do
     rows
     |> raw_enum_values(scope, "status")

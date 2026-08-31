@@ -135,6 +135,15 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   def mount(params, _session, socket) do
     action = socket.assigns.live_action
 
+    # Subscribe BEFORE the read below, not after it. Supplier rows, the files
+    # grid and the category options come from the DB and are not owned by this
+    # form, so a write landing between the read and the subscribe was dropped
+    # and the form rendered stale until the next unrelated event. Every other
+    # LiveView in this module subscribes first and says so; this one read
+    # first and subscribed inside the success branch. Subscribing on the
+    # not-found path too is harmless — that branch navigates away immediately.
+    if connected?(socket), do: PubSub.subscribe()
+
     case load_item(action, params) do
       {nil, _, _} ->
         {:ok,
@@ -143,11 +152,6 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          |> push_navigate(to: Paths.index())}
 
       {item, changeset, catalogue_uuid} ->
-        # Supplier rows, the files grid and the category options are read
-        # from the DB, not owned by the form — follow other sessions' writes
-        # to them (see the `:catalogue_data_changed` clauses).
-        if connected?(socket), do: PubSub.subscribe()
-
         {:ok,
          socket
          |> assign(:return_to, safe_return_to(params["return_to"]))
@@ -1776,13 +1780,57 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   # actor_opts/1 imported from PhoenixKitCatalogue.Web.Helpers
 
+  # `put/3`, not `put_new/3`: the catalogue is the SERVER's scope, taken from
+  # the URL, and a client-supplied `catalogue_uuid` in the form payload must
+  # not win it. `:catalogue_uuid` is in the cast allowlist, so with `put_new`
+  # a forged submit filed the record under a different catalogue than the one
+  # being edited.
+  #
+  # On BOTH paths. The first version of this pinned only `:new`, and edit is
+  # where it matters more: `derive_catalogue_uuid/2` overrides the field from
+  # the item's category, but `put_catalogue_from_effective_category(attrs,
+  # nil)` returns attrs untouched — so for an item with no category (every
+  # smart item, and any uncategorized standard one) nothing overrode a forged
+  # value, and the move was recorded as a plain `item.updated` rather than
+  # going through `move_item_to_catalogue/3`.
+  defp scope_to_catalogue(params, socket) do
+    case socket.assigns[:catalogue_uuid] do
+      nil -> params
+      catalogue_uuid -> Map.put(params, "catalogue_uuid", catalogue_uuid)
+    end
+  end
+
+  # The pin above is not sufficient on its own: `category_uuid` reaches the
+  # same field by a longer route. `derive_catalogue_uuid/2` looks the
+  # submitted category up and copies ITS catalogue over whatever the server
+  # just set — deliberately, because a category move should carry its items.
+  # So a forged `category_uuid` naming a category in another catalogue beats
+  # the scope. A category outside this form's catalogue is not a category
+  # this form can offer, so it is refused rather than silently dropped.
+  defp validate_category_scope(params, socket) do
+    scope = socket.assigns[:catalogue_uuid]
+    category_uuid = params["category_uuid"] |> to_string() |> String.trim()
+
+    cond do
+      scope == nil or category_uuid == "" ->
+        :ok
+
+      match?(%{catalogue_uuid: ^scope}, Catalogue.get_category(category_uuid)) ->
+        :ok
+
+      true ->
+        {:error, :category_outside_catalogue}
+    end
+  end
+
   defp save_item(socket, :new, params, mode) do
     params =
       params
-      |> Map.put_new("catalogue_uuid", socket.assigns.catalogue_uuid)
+      |> scope_to_catalogue(socket)
       |> put_manufacturer_source(socket.assigns.manufacturers)
 
-    with {:ok, item} <- Catalogue.create_item(params, actor_opts(socket)),
+    with :ok <- validate_category_scope(params, socket),
+         {:ok, item} <- Catalogue.create_item(params, actor_opts(socket)),
          {:ok, _rules} <- maybe_put_rules(socket, item),
          :ok <- Attachments.maybe_rename_pending_folder(socket, item) do
       apply_attribute_assignment(socket, item)
@@ -1814,6 +1862,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
              "Each catalogue can only appear once in the rules list."
            )
          )}
+
+      {:error, :category_outside_catalogue} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "That category belongs to another catalogue."
+           )
+         )}
     end
   end
 
@@ -1828,9 +1887,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         params
       end
 
-    params = put_manufacturer_source(params, socket.assigns.manufacturers)
+    params =
+      params
+      |> scope_to_catalogue(socket)
+      |> put_manufacturer_source(socket.assigns.manufacturers)
 
-    with {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, actor_opts(socket)),
+    with :ok <- validate_category_scope(params, socket),
+         {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, actor_opts(socket)),
          {:ok, _rules} <- maybe_put_rules(socket, item) do
       apply_attribute_assignment(socket, item)
 
@@ -1853,6 +1916,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
            Gettext.gettext(
              PhoenixKitCatalogue.Gettext,
              "Each catalogue can only appear once in the rules list."
+           )
+         )}
+
+      {:error, :category_outside_catalogue} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "That category belongs to another catalogue."
            )
          )}
     end
@@ -2247,15 +2321,24 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp apply_attribute_sets(socket, item) do
     if socket.assigns[:sets_enabled] do
       staged = socket.assigns.staged_set_uuids
-      current = Enum.map(Catalogue.list_attribute_set_attachments(item.uuid), & &1.set_uuid)
+      attachments = Catalogue.list_attribute_set_attachments(item.uuid)
+      current = Enum.map(attachments, & &1.set_uuid)
+
+      # One roll-up broadcast at the end instead of one per change. A save
+      # can detach, attach, reorder and write a selection per set — each of
+      # which broadcast `:item` separately and ran its own
+      # `item_catalogue_uuid/1` SELECT to build the payload, so every open
+      # detail LiveView re-ran `refresh_in_place/1` once per staged set.
+      # Same convention the importer uses for its per-row writes.
+      opts = [broadcast: false] ++ actor_opts(socket)
 
       Enum.each(current -- staged, fn uuid ->
-        Catalogue.detach_attribute_set(item.uuid, uuid, actor_opts(socket))
+        Catalogue.detach_attribute_set(item.uuid, uuid, opts)
       end)
 
-      Enum.each(staged -- current, &attach_staged_set(socket, item.uuid, &1))
+      Enum.each(staged -- current, &attach_staged_set(item.uuid, &1, opts))
 
-      Catalogue.reorder_attribute_sets(item.uuid, staged, actor_opts(socket))
+      Catalogue.reorder_attribute_sets(item.uuid, staged, opts)
 
       # Selections write AFTER attach so new attachments exist; the
       # context validates keys against the set's current values.
@@ -2265,15 +2348,45 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           |> Map.get(set_uuid, MapSet.new())
           |> MapSet.to_list()
 
-        Catalogue.set_attribute_set_selection(item.uuid, set_uuid, slugs, actor_opts(socket))
+        Catalogue.set_attribute_set_selection(item.uuid, set_uuid, slugs, opts)
       end)
+
+      # Only when something actually moved. Each individual write already
+      # declined to broadcast when it changed nothing; rolling them up into
+      # one unconditional broadcast handed every open detail LiveView a
+      # second `:item` event on a name-only save — on top of the one
+      # `update_item/3` had just sent — and made it re-run `refresh_in_place/1`
+      # twice. That is the load this roll-up exists to remove.
+      if sets_changed?(current, staged, attachments, socket) do
+        PubSub.broadcast(:item, item.uuid, item.catalogue_uuid)
+      end
     end
 
     :ok
   end
 
-  defp attach_staged_set(socket, item_uuid, set_uuid) do
-    case Catalogue.attach_attribute_set(item_uuid, set_uuid, actor_opts(socket)) do
+  # Attachment membership AND order (`current` comes back in position order,
+  # so an unequal list covers attach, detach and reorder alike), plus the
+  # per-set value selections, which change without the attachment list moving.
+  defp sets_changed?(current, staged, attachments, socket) do
+    current != staged or selections_changed?(staged, attachments, socket)
+  end
+
+  defp selections_changed?(staged, attachments, socket) do
+    stored =
+      Map.new(attachments, fn attachment ->
+        slugs = (attachment.data || %{})["selected_value_slugs"]
+        {attachment.set_uuid, MapSet.new(List.wrap(slugs))}
+      end)
+
+    Enum.any?(staged, fn set_uuid ->
+      staged_slugs = Map.get(socket.assigns.staged_selections, set_uuid, MapSet.new())
+      staged_slugs != Map.get(stored, set_uuid, MapSet.new())
+    end)
+  end
+
+  defp attach_staged_set(item_uuid, set_uuid, opts) do
+    case Catalogue.attach_attribute_set(item_uuid, set_uuid, opts) do
       {:ok, _} ->
         :ok
 
@@ -2470,7 +2583,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         phoenix_kit_current_user={assigns[:phoenix_kit_current_user]}
       />
 
-      <.form for={@form} action="#" phx-change="validate" phx-submit="save">
+      <.form for={@form} id="item-form" action="#" phx-change="validate" phx-submit="save">
         <div class={"card bg-base-100 shadow-lg #{if @current_tab != :details, do: "hidden"}"}>
           <%!-- Bundled tabs + AI row (phoenix_kit_ai's canonical placement). --%>
           <.ai_multilang_tabs
@@ -2588,16 +2701,31 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                     )}
                   </span>
                 </div>
-                <.select
-                  field={@form[:unit]}
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
-                  class="transition-colors focus-within:select-primary"
-                  options={[
-                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Piece"), "piece"},
-                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "m² (square meter)"), "m2"},
-                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Running meter"), "running_meter"}
-                  ]}
-                />
+                <div>
+                  <%!-- Label hand-rolled to match `<.input>`'s (label mb-2 +
+                       plain font-semibold span): core's `<.select>` labels
+                       through FormFieldLabel, whose `fieldset-legend` span
+                       renders smaller — and in this grid of inputs the Unit
+                       field visibly broke the row. Candidate core fix noted
+                       in the 2026-08-30 report; local until that lands. --%>
+                  <label class="label mb-2" for={@form[:unit].id}>
+                    <span class="font-semibold">
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
+                    </span>
+                  </label>
+                  <.select
+                    field={@form[:unit]}
+                    class="transition-colors focus-within:select-primary"
+                    options={[
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Piece"), "piece"},
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "m² (square meter)"), "m2"},
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Running meter"), "running_meter"},
+                      # kmpl = the Estonian set/komplekt (boss, 2026-08-31);
+                      # stored as "set", the vocabulary unit_label/1 knows.
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set (kmpl)"), "set"}
+                    ]}
+                  />
+                </div>
                 <div class="fieldset">
                   <.input
                     field={@form[:markup_percentage]}

@@ -52,8 +52,37 @@ defmodule PhoenixKitCatalogue.Web.ViewConfigTest do
   end
 
   test "load reads from a user struct's custom_fields" do
-    user = %{custom_fields: %{"catalogue_view_configs" => %{"suppliers" => %{"view" => "card"}}}}
-    assert VC.load(user, :suppliers).view == "card"
+    user = %{
+      custom_fields: %{
+        "catalogue_view_configs" => %{"suppliers" => %{"columns" => ["status"]}}
+      }
+    }
+
+    # "name" is implicit and never stored, so it is not echoed back here.
+    assert VC.load(user, :suppliers).columns == ["status"]
     assert VC.load(%{custom_fields: nil}, :suppliers) == VC.defaults(:suppliers)
+  end
+
+  test "the view is module-wide, not per scope (2026-08-28)" do
+    # Every surface used to keep its own view, so a choice made on the
+    # catalogues index never reached the page you opened next. It now
+    # lives beside the per-scope maps and overlays all of them.
+    user = %{custom_fields: %{"catalogue_view_configs" => %{"__view__" => "card"}}}
+
+    assert VC.load_view(user) == "card"
+    assert VC.load(user, :suppliers).view == "card"
+    assert VC.load(user, :catalogues).view == "card"
+
+    # A stale per-scope value from before the change is ignored, and an
+    # unknown mode falls back rather than rendering nothing.
+    stale = %{
+      custom_fields: %{
+        "catalogue_view_configs" => %{"suppliers" => %{"view" => "table"}, "__view__" => "bogus"}
+      }
+    }
+
+    assert VC.load(stale, :suppliers).view == "comfy"
+    assert VC.load_view(%{custom_fields: nil}) == "comfy"
+    assert VC.load_view(nil) == "comfy"
   end
 end

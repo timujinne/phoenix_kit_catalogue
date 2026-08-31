@@ -69,6 +69,33 @@ defmodule PhoenixKitCatalogue.Catalogue.Helpers do
   end
 
   @doc """
+  How to search a JSONB column's translations without matching its
+  structure.
+
+  `data::text ILIKE '%a%'` reads the whole encoded document — braces,
+  quotes and KEY names included — so a row whose data merely holds the
+  key `_name` came back for the query "a" (Max, 2026-08-28: a catalogue
+  called "Plumbing" answering a search for "a"). On the box that matched
+  7 of 26 items where only 3 genuinely contain an "a".
+
+  Match the string VALUES instead:
+
+      fragment(
+        "EXISTS (SELECT 1 FROM jsonb_path_query(?, '$.**') AS v WHERE jsonb_typeof(v) = 'string' AND v #>> '{}' ILIKE ?)",
+        x.data,
+        ^pattern
+      )
+
+  Two details keep that working: the path stays a SQL literal (a bound
+  `jsonpath` parameter is a type Postgrex cannot encode) and it is
+  `'$.**'` rather than a type-filtered path, because a `?` inside the
+  literal would be read as another Ecto placeholder — hence the
+  `jsonb_typeof` test in the WHERE instead.
+  """
+  @spec json_string_values_doc() :: :see_moduledoc
+  def json_string_values_doc, do: :see_moduledoc
+
+  @doc """
   Returns the catalogue UUID an item belongs to, or `nil` if the item
   is missing. Single source of truth for the parent-catalogue lookup
   used by PubSub broadcast scoping in `Catalogue.lookup_parent/2` and

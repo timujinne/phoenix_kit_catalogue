@@ -117,6 +117,8 @@ msgstr ""
 msgid "Toggle folder"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2982
+#, elixir-autogen
 msgid "Clear search and filters to see the folder tree."
 msgstr ""
 
@@ -401,6 +403,9 @@ msgstr ""
 msgid "Failed to restore item."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2124
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2562
+#, elixir-autogen
 msgid "Failed to save the new order."
 msgstr ""
 
@@ -429,6 +434,8 @@ msgstr ""
 msgid "Back"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1173
+#, elixir-autogen
 msgid "Cancel"
 msgstr ""
 
@@ -447,6 +454,8 @@ msgstr ""
 msgid "Edit"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:302
+#, elixir-autogen
 msgid "View"
 msgstr ""
 
@@ -471,6 +480,8 @@ msgstr ""
 msgid "Add Item"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:432
+#, elixir-autogen
 msgid "Name"
 msgstr ""
 
@@ -534,6 +545,8 @@ msgstr ""
 msgid "Change"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1238
+#, elixir-autogen
 msgid "Remove"
 msgstr ""
 
@@ -576,12 +589,18 @@ msgstr ""
 msgid "Only PDF files are accepted."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:435
+#, elixir-autogen
 msgid "Category"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:143
+#, elixir-autogen
 msgid "Categories"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:434
+#, elixir-autogen
 msgid "Manufacturer"
 msgstr ""
 
@@ -594,9 +613,13 @@ msgstr ""
 msgid "Items"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:433
+#, elixir-autogen
 msgid "SKU"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:437
+#, elixir-autogen
 msgid "Price"
 msgstr ""
 
@@ -606,6 +629,8 @@ msgstr ""
 msgid "Final Price"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:436
+#, elixir-autogen
 msgid "Unit"
 msgstr ""
 
@@ -633,6 +658,8 @@ msgstr ""
 msgid "Table view"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1038
+#, elixir-autogen
 msgid "Card view"
 msgstr ""
 
@@ -741,6 +768,8 @@ msgstr ""
 msgid "Updated"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:177
+#, elixir-autogen
 msgid "Uncategorized"
 msgstr ""
 
@@ -769,6 +798,8 @@ msgid "Search PDFs"
 msgstr ""
 
 ## Plural forms
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1159
+#, elixir-autogen
 msgid "%{count} item"
 msgid_plural "%{count} items"
 msgstr[0] ""
@@ -833,6 +864,8 @@ msgid "Permanently deleted %{count} items."
 msgstr ""
 
 ## Catalogue table toolbar
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:336
+#, elixir-autogen
 msgid "Columns"
 msgstr ""
 
@@ -864,6 +897,10 @@ msgstr ""
 msgid "Website"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/table_config.ex:66
+#: lib/phoenix_kit_catalogue/web/table_config.ex:162
+#: lib/phoenix_kit_catalogue/web/table_config.ex:183
+#, elixir-autogen
 msgid "Manual order"
 msgstr ""
 
@@ -877,6 +914,8 @@ msgstr ""
 msgid "All statuses"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2131
+#, elixir-autogen
 msgid "Clear search and filters to drag-and-drop reorder."
 msgstr ""
 
@@ -1061,16 +1100,14 @@ msgid "Current"
 msgstr ""
 
 ## Import — PRO100 sync skip reasons
-
 msgid "Row %{row}: belongs to %{group}, not to this catalogue"
 msgstr ""
 
 ## Media picker
-
 msgid "Select Featured Image"
+msgstr ""
 
 ## Product card
-
 msgid "View item details"
 msgstr ""
 
@@ -1095,12 +1132,18 @@ msgstr ""
 msgid "Show image %{number}"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3824
+#, elixir-autogen
 msgid "Reorder all"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3637
+#, elixir-autogen
 msgid "catalogue"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3638
+#, elixir-autogen
 msgid "catalogues"
 msgstr ""
 
@@ -1110,21 +1153,31 @@ msgstr ""
 msgid "categories"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2095
+#, elixir-autogen
 msgid "Catalogues reordered."
 msgstr ""
 
 msgid "Categories reordered."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2100
+#, elixir-autogen
 msgid "Failed to reorder."
 msgstr ""
 
 msgid "Photos and Files"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components.ex:1198
+#: lib/phoenix_kit_catalogue/web/components.ex:1260
+#, elixir-autogen
 msgid "Comfortable view"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components.ex:1207
+#: lib/phoenix_kit_catalogue/web/components.ex:1268
+#, elixir-autogen
 msgid "Compact view"
 msgstr ""
 
@@ -1189,12 +1242,6 @@ msgid "Manage this group's attributes, values, and translations."
 msgstr ""
 
 msgid "No attributes yet. Add one below — e.g. Color, Trim, Surface."
-msgstr ""
-
-msgid "Multiple values"
-msgstr ""
-
-msgid "Fixed value"
 msgstr ""
 
 msgid "Failed to add attribute."
@@ -1275,10 +1322,6 @@ msgstr ""
 msgid "Add value"
 msgstr ""
 
-
-
-
-
 msgid "Search PDF contents"
 msgstr ""
 
@@ -1295,9 +1338,6 @@ msgid "Search by filename…"
 msgstr ""
 
 msgid "Attribute sets need the Entities module enabled."
-msgstr ""
-
-msgid "Attribute set not found."
 msgstr ""
 
 msgid "New Attribute Set"
@@ -1621,6 +1661,8 @@ msgstr ""
 msgid "0.00"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2778
+#, elixir-autogen
 msgid "A → Z by name"
 msgstr ""
 
@@ -1993,6 +2035,8 @@ msgstr ""
 msgid "New Categories"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2780
+#, elixir-autogen
 msgid "Newest first"
 msgstr ""
 
@@ -2023,6 +2067,9 @@ msgstr ""
 msgid "No items in this category."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:204
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1130
+#, elixir-autogen
 msgid "No items match your search."
 msgstr ""
 
@@ -2050,6 +2097,8 @@ msgstr ""
 msgid "Nothing deleted here."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2781
+#, elixir-autogen
 msgid "Oldest first"
 msgstr ""
 
@@ -2185,6 +2234,8 @@ msgstr ""
 msgid "Retrying…"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2782
+#, elixir-autogen
 msgid "Reverse current order"
 msgstr ""
 
@@ -2212,6 +2263,9 @@ msgstr ""
 msgid "Rows with errors (will be skipped):"
 msgstr ""
 
+msgid "Set (kmpl)"
+msgstr ""
+
 msgid "Running meter"
 msgstr ""
 
@@ -2227,6 +2281,9 @@ msgstr ""
 msgid "Search items by name, description, or SKU..."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:170
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1020
+#, elixir-autogen
 msgid "Search items…"
 msgstr ""
 
@@ -2458,6 +2515,8 @@ msgstr ""
 msgid "You must map at least one column to 'Item Name'. Scroll down to the column mapping section and pick the column that holds item names."
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2779
+#, elixir-autogen
 msgid "Z → A by name"
 msgstr ""
 
@@ -2611,8 +2670,6 @@ msgstr ""
 msgid "The linked CRM company could not be found. Unlink to edit locally again."
 msgstr ""
 
-
-
 msgid "Unlink"
 msgstr ""
 
@@ -2643,13 +2700,11 @@ msgstr ""
 msgid "Unlinked from CRM."
 msgstr ""
 
-
 msgid "The CRM module is not available."
 msgstr ""
 
 msgid "That CRM company no longer exists."
 msgstr ""
-
 
 msgid "That CRM company is already linked to another record."
 msgstr ""
@@ -2662,7 +2717,6 @@ msgstr ""
 
 msgid "Suppliers and Manufacturer"
 msgstr ""
-
 
 msgid "A field was removed while this was open. Close and reopen the form."
 msgstr ""
@@ -2710,6 +2764,9 @@ msgid "Remove this field? Values already saved on supplier rows stay in the data
 msgstr ""
 
 msgid "Supplier extra fields"
+msgstr ""
+
+msgid "Unit cost"
 msgstr ""
 
 msgid "Unit cost must be a number."
@@ -2766,27 +2823,41 @@ msgstr ""
 msgid "Open the company"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:151
+#, elixir-autogen
 msgid "All"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:595
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:616
+#, elixir-autogen
 msgid "Quantity"
 msgstr ""
 
-msgid "Decrease quantity"
-msgstr ""
-
-msgid "Increase quantity"
-msgstr ""
-
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:216
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1142
+#, elixir-autogen
 msgid "Load more"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:975
+#, elixir-autogen
 msgid "Select items"
 msgstr ""
 
+msgid "Add to selection"
+msgstr ""
+
+msgid "Remove from selection"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1182
+#, elixir-autogen
 msgid "Confirm selection"
 msgstr ""
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1216
+#, elixir-autogen
 msgid "Not available in this selection"
 msgstr ""
 
@@ -2869,4 +2940,175 @@ msgid "%{name} (copy)"
 msgstr ""
 
 msgid "Supplier price"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1037
+#, elixir-autogen, elixir-format
+msgid "List view"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:439
+#, elixir-autogen, elixir-format
+msgid "Qty"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:438
+#, elixir-autogen, elixir-format
+msgid "Base price"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:368
+#, elixir-autogen, elixir-format
+msgid "Category prefix"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:367
+#, elixir-autogen, elixir-format
+msgid "Photo"
+msgstr ""
+
+## Attribute sets viewer (2026-08-27 — editing moved to Entities)
+msgid "Edit values"
+msgstr ""
+
+msgid "Set settings"
+msgstr ""
+
+msgid "None yet — add them in Entities."
+msgstr ""
+
+msgid "No items attached."
+msgstr ""
+
+msgid "New attribute set"
+msgstr ""
+
+msgid "Create and edit in Entities"
+msgstr ""
+
+msgid "You'll be taken straight to adding the set's values in Entities."
+msgstr ""
+
+msgid "Could not create the set — check the name."
+msgstr ""
+
+msgid "Could not create the set."
+msgstr ""
+
+msgid "One dimension from one vendor — a color range, a trim series. Items attach any number of sets. Sets are edited in the Entities module."
+msgstr ""
+
+## Attribute sets viewer listing (2026-08-27 scale pass)
+msgid "Search sets and values…"
+msgstr ""
+
+msgid "No sets match your search."
+msgstr ""
+
+msgid "Page %{page} of %{max} — %{total} sets"
+msgstr ""
+
+msgid "No values yet"
+msgstr ""
+
+msgid "Creating…"
+msgstr ""
+
+# Set items popup (2026-08-28)
+msgid "View items"
+msgstr ""
+
+# Catalogue search covers categories too (2026-08-28)
+msgid "Nothing matches your search."
+msgstr ""
+
+# Attribute filter (2026-08-28)
+msgid "Clear filters"
+msgstr ""
+
+# Attribute filter: dead values (2026-08-28)
+msgid "Nothing matches this together with the filters already on"
+msgstr ""
+
+msgid "Attribute set not found."
+msgstr ""
+
+msgid "Multiple values"
+msgstr ""
+
+msgid "Fixed value"
+msgstr ""
+
+msgid "Previous page"
+msgstr ""
+
+msgid "Next page"
+msgstr ""
+
+msgid "Create %{count} unmatched position"
+msgid_plural "Create %{count} unmatched positions"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{count} row skipped"
+msgid_plural "%{count} rows skipped"
+msgstr[0] ""
+msgstr[1] ""
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2909
+#, elixir-autogen, elixir-format
+msgid "Search for"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3685
+#, elixir-autogen, elixir-format
+msgid "No items match."
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3728
+#, elixir-autogen, elixir-format
+msgid "View in catalogue"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4974
+#, elixir-autogen, elixir-format
+msgid "A category cannot move into its own subtree."
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4980
+#, elixir-autogen, elixir-format
+msgid "Categories can only move within their own catalogue."
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4758
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5101
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5215
+#, elixir-autogen, elixir-format
+msgid "Drag to reorder or nest"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4722
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5035
+#, elixir-autogen, elixir-format
+msgid "Drop here to move to this level"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4703
+#, elixir-autogen, elixir-format
+msgid "No categories here yet."
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3940
+#, elixir-autogen, elixir-format
+msgid "No subcategories here. Switch to Items to browse this level's items."
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4780
+#, elixir-autogen, elixir-format
+msgid "Toggle category"
+msgstr ""
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3438
+#, elixir-autogen, elixir-format
+msgid "Include subcategory items"
 msgstr ""

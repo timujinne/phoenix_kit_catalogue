@@ -133,33 +133,143 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     count_search_items(query, category_uuids: [category_uuid])
   end
 
+  @doc """
+  Categories whose NAME or description matches, within one catalogue.
+
+  Item search never covered these: searching a catalogue for a category
+  it contains returned nothing, and the page looked like it had matched
+  only because that category's own card happened to be on screen (Max,
+  2026-08-28).
+
+  `:parent_uuid` narrows to that category's SUBTREE (itself excluded),
+  mirroring how `search_items_in_category/3` scopes items when the user
+  has drilled in. Deleted categories and categories of deleted
+  catalogues are excluded, as everywhere else.
+  """
+  @spec search_categories(Ecto.UUID.t(), String.t(), keyword()) :: [Category.t()]
+  def search_categories(catalogue_uuid, query_str, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 25)
+
+    case String.trim(query_str || "") do
+      "" ->
+        []
+
+      trimmed ->
+        pattern = "%#{Helpers.sanitize_like(trimmed)}%"
+
+        from(c in Category,
+          join: cat in Catalogue,
+          on: c.catalogue_uuid == cat.uuid,
+          where: c.catalogue_uuid == ^catalogue_uuid,
+          where: c.status != "deleted" and cat.status != "deleted",
+          # The data JSONB is what makes this work in EVERY language:
+          # translations live there under language keys, so a category
+          # named "Doors" in en and "Uksed" in et is found by either.
+          # Only its string VALUES are searched — see
+          # `Helpers.json_string_values_path/0`.
+          where:
+            ilike(c.name, ^pattern) or ilike(c.description, ^pattern) or
+              fragment(
+                "EXISTS (SELECT 1 FROM jsonb_path_query(?, '$.**') AS v WHERE jsonb_typeof(v) = 'string' AND v #>> '{}' ILIKE ?)",
+                c.data,
+                ^pattern
+              ),
+          order_by: [asc: c.name],
+          limit: ^limit
+        )
+        |> maybe_scope_subtree(opts[:parent_uuid])
+        |> repo().all()
+    end
+  end
+
+  defp maybe_scope_subtree(query, nil), do: query
+
+  defp maybe_scope_subtree(query, parent_uuid) when is_binary(parent_uuid) do
+    # Tree.subtree_uuids_for/1 includes the node itself and returns raw
+    # 16-byte binaries; drop the node (a search inside a category should
+    # not offer to navigate to the category you are standing in).
+    subtree =
+      [parent_uuid]
+      |> Tree.subtree_uuids_for()
+      |> Enum.map(&normalize_uuid/1)
+      |> Enum.reject(&(&1 in [nil, parent_uuid]))
+
+    where(query, [c], c.uuid in ^subtree)
+  end
+
+  defp normalize_uuid(uuid) when is_binary(uuid) do
+    case Ecto.UUID.load(uuid) do
+      {:ok, text} -> text
+      :error -> uuid
+    end
+  end
+
+  @doc """
+  Narrows any query with an `:item` named binding to the items a search
+  term matches — name, description, SKU, and every translated string in
+  the record's `data`.
+
+  Public because the attribute filter's FACET COUNTS have to agree with
+  the list beside them: a value offered as live while a search is on has
+  to still be live under that search, and it can only promise that by
+  asking the same question the listing asks. `nil` or a blank term is
+  "no text constraint" and leaves the query alone.
+
+  Callers pass a raw user string; trimming and LIKE-escaping happen here.
+  """
+  @spec match_text(Ecto.Query.t(), String.t() | nil) :: Ecto.Query.t()
+  def match_text(query, term) do
+    case String.trim(term || "") do
+      "" -> query
+      trimmed -> match_item_text(query, "%#{Helpers.sanitize_like(trimmed)}%")
+    end
+  end
+
+  defp match_item_text(query, pattern) do
+    where(
+      query,
+      [item: i],
+      ilike(i.name, ^pattern) or
+        ilike(i.description, ^pattern) or
+        ilike(i.sku, ^pattern) or
+        fragment(
+          "EXISTS (SELECT 1 FROM jsonb_path_query(?, '$.**') AS v WHERE jsonb_typeof(v) = 'string' AND v #>> '{}' ILIKE ?)",
+          i.data,
+          ^pattern
+        )
+    )
+  end
+
   # Builds the shared base query (joins + status + text-match + scope filters).
   defp search_items_base(query_str, opts) do
     validate_scope_opts!(opts)
 
-    pattern = "%#{Helpers.sanitize_like(query_str)}%"
+    # Trimmed here, at the shared choke point: several input layers
+    # (BrowseState among them) pass the raw string through, and a
+    # trailing space must not turn a match into a miss.
+    pattern = "%#{Helpers.sanitize_like(String.trim(query_str || ""))}%"
     catalogue_uuids = opts[:catalogue_uuids]
     category_uuids = expand_category_scope(opts)
     only = Keyword.get(opts, :only)
     statuses = opts[:statuses]
 
     from(i in Item,
+      as: :item,
       join: cat in Catalogue,
       on: i.catalogue_uuid == cat.uuid,
       left_join: c in Category,
       on: i.category_uuid == c.uuid,
       where: i.status != "deleted" and cat.status != "deleted",
-      where: is_nil(c.uuid) or c.status != "deleted",
-      where:
-        ilike(i.name, ^pattern) or
-          ilike(i.description, ^pattern) or
-          ilike(i.sku, ^pattern) or
-          fragment("?::text ILIKE ?", i.data, ^pattern)
+      where: is_nil(c.uuid) or c.status != "deleted"
     )
+    |> match_item_text(pattern)
     |> maybe_scope_catalogues(catalogue_uuids)
     |> maybe_scope_categories(category_uuids)
     |> maybe_scope_only(only)
     |> maybe_scope_statuses(statuses)
+    # Same `value_slugs:` the level listings take, so a search inside an
+    # attribute filter stays inside it.
+    |> PhoenixKitCatalogue.Catalogue.filter_by_attribute_values(opts)
   end
 
   # Catches two foot-guns up front so callers see a loud error instead

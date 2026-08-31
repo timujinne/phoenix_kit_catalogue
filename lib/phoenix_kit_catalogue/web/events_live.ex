@@ -38,7 +38,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
        total: 0,
        page: 1,
        has_more: false,
-       loading: false,
+       # Starts true: nothing loads until the connected mount, and the
+       # dead render must not claim "No events recorded yet".
+       loading: true,
        filter_action: nil,
        filter_resource_type: nil,
        action_types: [],
@@ -279,7 +281,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     <div class="flex flex-col w-full px-4 py-6 gap-4">
       <%!-- Filters --%>
       <div class="bg-base-200 rounded-lg p-3">
-        <.form for={%{}} phx-change="filter" class="flex flex-wrap gap-3 items-end">
+        <.form for={%{}} id="events-filter" phx-change="filter" class="flex flex-wrap gap-3 items-end">
           <div class="fieldset">
             <.select
               name="filter[action]"
@@ -377,6 +379,14 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
         </div>
       </div>
 
+      <%!-- Initial-load skeleton (dead render / first connected pass) --%>
+      <%= if @total == 0 and @loading do %>
+        <div class="flex flex-col gap-3 py-4" aria-busy="true">
+          <div class="skeleton h-12 w-full"></div>
+          <div class="skeleton h-12 w-full"></div>
+        </div>
+      <% end %>
+
       <%!-- Empty state --%>
       <%= if @total == 0 and not @loading do %>
         <div class="text-center py-12 text-base-content/60">
@@ -387,7 +397,28 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
 
       <%!-- Infinite scroll sentinel --%>
       <%= if @has_more do %>
-        <div id="load-more-sentinel" phx-hook="InfiniteScroll" data-page={@page} class="py-4">
+        <%!-- Core's InfiniteScroll hook, not a local one. This template used
+             to carry an inline <script> defining a simpler fallback guarded
+             by `|| {…}` — which never took effect, because core's bundle is
+             already in the LiveSocket at construction, and could not have
+             taken effect on a LiveView navigation anyway: morphdom does not
+             execute an inserted <script>.
+
+             `data-cursor` is the attribute name core reads, and it is
+             load-bearing: the hook re-fires only when the cursor CHANGES
+             (that is also what clears its in-flight guard). This sentinel
+             passed `data-page`, so `dataset.cursor` was permanently
+             undefined — one page loaded on mount and nothing after it,
+             because an IntersectionObserver only fires on a transition and
+             the sentinel stays continuously in view. Core's own
+             `load_more` component passes `data-cursor` for the same
+             reason. --%>
+        <div
+          id="load-more-sentinel"
+          phx-hook="InfiniteScroll"
+          data-cursor={@page}
+          class="py-4"
+        >
           <div class="flex justify-center">
             <span class="loading loading-spinner loading-sm text-base-content/30"></span>
           </div>
@@ -401,35 +432,6 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       <% end %>
     </div>
 
-    <script>
-      window.PhoenixKitHooks = window.PhoenixKitHooks || {};
-      window.PhoenixKitHooks.InfiniteScroll = window.PhoenixKitHooks.InfiniteScroll || {
-        mounted() {
-          this.intersecting = false;
-          this.observer = new IntersectionObserver((entries) => {
-            this.intersecting = entries[0].isIntersecting;
-            if (this.intersecting) {
-              this.pushEvent("load_more", {});
-            }
-          }, { rootMargin: "200px" });
-          this.observer.observe(this.el);
-        },
-        updated() {
-          // IntersectionObserver only fires on state transitions. When the
-          // viewport is tall or the user jumped via Page Down / resize, the
-          // sentinel stays continuously in view across batches — so the
-          // observer goes silent after the first fire. Re-trigger explicitly
-          // whenever the server patches us while we're still on-screen.
-          // The server's `loading` guard dedupes duplicate events.
-          if (this.intersecting) {
-            this.pushEvent("load_more", {});
-          }
-        },
-        destroyed() {
-          this.observer.disconnect();
-        }
-      };
-    </script>
     </PhoenixKitWeb.Components.LayoutWrapper.app_layout>
     """
   end

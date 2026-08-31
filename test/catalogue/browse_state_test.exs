@@ -72,15 +72,67 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
       assert opts[:category_uuids] == ["a", "b"]
     end
 
-    test "an unscoped state allows any category and nil clears to all" do
+    test "an unscoped state allows any UUID category and nil clears to all" do
       state = BrowseState.init(scope: %{})
+      uuid = Ecto.UUID.generate()
 
-      assert {_, {:fetch, opts, _}} = BrowseState.command(state, {:set_category, "any"})
-      assert Map.new(opts)[:category_uuids] == ["any"]
+      assert {_, {:fetch, opts, _}} = BrowseState.command(state, {:set_category, uuid})
+      assert Map.new(opts)[:category_uuids] == [uuid]
 
       # No restriction and no chip -> the key is absent entirely.
       opts = opts_map(BrowseState.command(BrowseState.init(scope: %{}), :reset))
       refute Map.has_key?(opts, :category_uuids)
+    end
+
+    test "an unscoped state still rejects a non-UUID category string" do
+      # With no allow-list, membership can't guard the value — and a
+      # crafted "garbage" would raise Ecto.Query.CastError inside the
+      # subtree expansion, crashing the host LiveView. :noop instead.
+      state = BrowseState.init(scope: %{})
+      assert {^state, :noop} = BrowseState.command(state, {:set_category, "garbage"})
+    end
+
+    test "an :uncategorized_only scope rejects every category command" do
+      # search_items/2 raises on :uncategorized_only + category_uuids by
+      # contract, so allowing the narrowing would emit contradictory opts.
+      state = BrowseState.init(scope: %{only: :uncategorized_only})
+      assert {^state, :noop} = BrowseState.command(state, {:set_category, Ecto.UUID.generate()})
+
+      # The scope itself still fetches fine — only the narrowing is barred.
+      assert {_, {:fetch, opts, _}} = BrowseState.command(state, :reset)
+      assert Map.new(opts)[:only] == :uncategorized_only
+      refute Map.has_key?(Map.new(opts), :category_uuids)
+    end
+
+    test "the :uncategorized narrowing becomes :uncategorized_only, never category_uuids" do
+      state = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]})
+
+      assert {state, {:fetch, opts, _}} =
+               BrowseState.command(state, {:set_category, :uncategorized})
+
+      opts = Map.new(opts)
+      assert opts[:only] == :uncategorized_only
+      refute Map.has_key?(opts, :category_uuids)
+      assert opts[:catalogue_uuids] == ["cat-1"]
+
+      # Clearing the chip restores the plain scope.
+      assert {_, {:fetch, opts, _}} = BrowseState.command(state, {:set_category, nil})
+      refute Map.has_key?(Map.new(opts), :only)
+    end
+
+    test ":uncategorized is refused where the scope restricts categories or sets :only" do
+      restricted = BrowseState.init(scope: %{category_uuids: ["a"]})
+
+      assert {^restricted, :noop} =
+               BrowseState.command(restricted, {:set_category, :uncategorized})
+
+      only = BrowseState.init(scope: %{only: :categorized_only})
+      assert {^only, :noop} = BrowseState.command(only, {:set_category, :uncategorized})
+    end
+
+    test "per_page is floored at 1 — a 0 page size could never exhaust" do
+      assert BrowseState.init(per_page: 0).per_page == 1
+      assert BrowseState.init(per_page: 24).per_page == 24
     end
   end
 

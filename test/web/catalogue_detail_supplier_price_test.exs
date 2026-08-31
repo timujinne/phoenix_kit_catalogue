@@ -36,7 +36,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailSupplierPriceTest do
     price!(item, s1, "5.69")
     price!(item, s2, "9.99")
 
-    {:ok, view, html} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}")
+    {:ok, view, html} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}&mode=items")
 
     assert html =~ "Supplier price"
     assert html =~ "5.69–9.99"
@@ -51,7 +51,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailSupplierPriceTest do
   end
 
   test "an item with no priced supplier shows a dash", %{conn: conn, catalogue: cat, alpha: alpha} do
-    {:ok, _view, html} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}")
+    {:ok, _view, html} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}&mode=items")
     assert html =~ "Supplier price"
     refute html =~ "–"
   end

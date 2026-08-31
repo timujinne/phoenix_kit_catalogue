@@ -332,6 +332,59 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
     end
   end
 
+  describe "show_sku (opt-in SKU column)" do
+    test "show_sku=true renders the item's SKU in the row" do
+      item = %{fake_item("item-1", "Oak Plank") | sku: "74.W1000.ST76.1.5.43"}
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_sku: true,
+            options: [item],
+            has_more: false
+          })
+        )
+
+      assert html =~ "74.W1000.ST76.1.5.43"
+    end
+
+    test "show_sku=true with a missing SKU renders an em dash" do
+      item = %{fake_item("item-1", "Oak Plank") | sku: nil}
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            show_sku: true,
+            options: [item],
+            has_more: false
+          })
+        )
+
+      assert html =~ "Oak Plank"
+      assert html =~ "—"
+    end
+
+    test "show_sku defaults to false and hides the SKU (backward compatible)" do
+      item = %{fake_item("item-1", "Oak Plank") | sku: "74.W1000.ST76.1.5.43"}
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            open: true,
+            options: [item],
+            has_more: false
+          })
+        )
+
+      refute html =~ "74.W1000.ST76.1.5.43"
+    end
+  end
+
   describe "selected_item styling" do
     test "selected_item non-nil adds input-primary class" do
       item = fake_item("item-1", "Oak Plank")
@@ -450,6 +503,138 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
       assert html =~ ~s(phx-click="photo_click")
       assert html =~ "photo-uuid-abc"
     end
+
+    test "photo_clickable=true renders cursor-pointer on the thumbnail button" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      assert html =~ "cursor-pointer"
+    end
+  end
+
+  describe "photo_placeholder (opt-in no-photo placeholder)" do
+    test "defaults to false: a photo-less selected item renders no placeholder (backward compatible)" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      refute html =~ "hero-photo"
+      refute html =~ ~s(phx-click="photo_click")
+    end
+
+    test "photo_placeholder=true + photo_clickable=true renders a clickable placeholder for a photo-less selected item" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, photo_placeholder: true})
+        )
+
+      assert html =~ "hero-photo"
+      assert html =~ ~s(phx-click="photo_click")
+      assert html =~ "cursor-pointer"
+    end
+
+    test "photo_placeholder=true without photo_clickable renders nothing (no click target to offer)" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: false, photo_placeholder: true})
+        )
+
+      refute html =~ "hero-photo"
+    end
+
+    test "photo_placeholder=true with nothing selected renders nothing" do
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{photo_clickable: true, photo_placeholder: true})
+        )
+
+      refute html =~ "hero-photo"
+    end
+
+    test "photo_placeholder=true does not change rendering for a selected item WITH a photo" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      with_placeholder =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, photo_placeholder: true})
+        )
+
+      without_placeholder =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, photo_placeholder: false})
+        )
+
+      refute with_placeholder =~ "hero-photo"
+      assert with_placeholder == without_placeholder
+    end
+  end
+
+  describe "photo_size (thumbnail/placeholder size override)" do
+    test "defaults to w-8 h-8, rendering byte-for-byte as before the attribute existed" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html = render_component(ItemPicker, base_assigns(%{selected_item: item}))
+
+      assert html =~
+               ~s(class="w-8 h-8 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+    end
+
+    test "a custom photo_size overrides the thumbnail size" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_size: "w-16 h-16"})
+        )
+
+      assert html =~
+               ~s(class="w-16 h-16 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+
+      refute html =~
+               ~s(class="w-8 h-8 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+    end
+
+    test "a custom photo_size also sizes the placeholder" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            selected_item: item,
+            photo_clickable: true,
+            photo_placeholder: true,
+            photo_size: "w-16 h-16"
+          })
+        )
+
+      assert html =~ "w-16 h-16"
+    end
   end
 
   # initial_query SEEDING here only covers the DB-free guard branches (the
@@ -476,6 +661,36 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
 
       assert html =~ ~s(value="")
       assert html =~ ~s(aria-expanded="false")
+    end
+  end
+
+  # The wrapper in `components.ex` and the LiveComponent are two layers: an
+  # attribute declared on the wrapper but not passed down is accepted from the
+  # caller and silently dropped. Every render test above goes straight to the
+  # LiveComponent, so none of them can see that gap — it shipped unnoticed
+  # twice. This checks the two layers agree at the source level.
+  describe "wrapper forwards every declared attribute" do
+    test "each attr/2 on item_picker/1 is passed to the live_component" do
+      source = File.read!("lib/phoenix_kit_catalogue/web/components.ex")
+
+      [_, block] = String.split(source, "  def item_picker(assigns) do", parts: 2)
+      [call, _] = String.split(block, "\n  end", parts: 2)
+
+      [_, attr_block] =
+        String.split(source, "  attr(:id, :string, required: true)", parts: 2)
+
+      declared =
+        attr_block
+        |> String.split("  def item_picker(assigns) do", parts: 2)
+        |> hd()
+        |> then(&Regex.scan(~r/attr\(:(\w+),/, &1))
+        |> Enum.map(fn [_, name] -> name end)
+
+      missing = Enum.reject(declared, &String.contains?(call, "#{&1}={@#{&1}}"))
+
+      assert missing == [],
+             "declared on the wrapper but never forwarded to the LiveComponent: " <>
+               Enum.join(missing, ", ")
     end
   end
 end

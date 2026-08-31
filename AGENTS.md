@@ -83,6 +83,7 @@ Key invariants to preserve:
 - **Export** — `PhoenixKitCatalogue.Export.build/1` with destination/format registry (Universal JSON, Pro100); UI in `ExportLive`, download via the admin-gated `ExportController`. Inbound mirror of the import sources.
 - **PDF library** — `Catalogue.PdfLibrary` + `Workers.PdfExtractor`. Content-hash dedup on core `phoenix_kit_files`; search = literal ILIKE then trigram fallback. `enqueue_extraction/1` fails visible when the host Oban queue is missing; `requeue_stuck_extractions/1` is the operator-driven heal for stuck rows.
 - **Item picker** — `<.item_picker>` LiveComponent; the parent LV needs `handle_info/2` clauses for `{:item_picker_select, id, item}` / `{:item_picker_clear, id}`.
+- **Item selector + browse stack** — `Components.{ItemSelectorModal, CatalogueBrowse, Browse}` over `Catalogue.BrowseState` (pure reducer). Scope is a security boundary fixed at init; selection only for rendered uuids; host messages `{:items_selected, …}` / `{:item_selector_closed, …}` / `{:catalogue_browse, …}`. The moduledocs are the contract — read them before touching selection, quantities (native number input, `qty_change`/`qty_commit`), the checkbox column, the context header, `show_tray`, or the `show_item_details` page (ON by default since 2026-08-31; `false` is the opt-out for exposure-sensitive embeds).
 - **Supplier comments** — one `phoenix_kit_comments` thread per item × supplier row (`"catalogue_item_supplier"`), keyed on the thread uuid in `item_supplier_info.metadata["comment_thread_uuid"]` — server-owned, survives price revisions and removal (removal CLOSES the row, never deletes it). Never the CRM company's thread. The admin/activity back-link resolver is self-registered via `resource_links/0` — no host config. See `Catalogue.SupplierComments`.
 - **Catalogue folders** — `Catalogue.list_folder_tree/1`, `move_folder/3`, `move_catalogue_to_folder/3` etc. drive the Finder-style tree on the index page; soft-delete, plus `delete_empty_folder/2` hard-deletes a folder with no live children.
 - **AI translation** — `ai_translatables/0` + `PhoenixKitCatalogue.AITranslatable` integrate with the optional `phoenix_kit_ai` sibling (override with `PHOENIX_KIT_AI_PATH` for local dev).
@@ -110,25 +111,54 @@ SemVer. The version lives in **two places** — bump both: `mix.exs` `@version` 
 ## Misc
 
 - **Tailwind:** `css_sources/0` returns `[:phoenix_kit_catalogue]` so the host's `app.css` scans this module's templates.
-- **JS hooks:** shared hooks (RowMenu, SortableGrid, InfiniteScroll, …) come from phoenix_kit core's `window.PhoenixKitHooks`; this module ships no external hooks.
+- **JS hooks:** shared hooks (RowMenu, SortableGrid, InfiniteScroll, …) come
+  from phoenix_kit core's `window.PhoenixKitHooks`. **This module also ships
+  two of its own** — `CatalogueTreeDnD` and `ViewPref`, in
+  `priv/static/assets/phoenix_kit_catalogue.js`, declared by `js_sources/0`
+  under the global `PhoenixKitCatalogueHooks`. (This line used to say the
+  module ships none, which would lead a host to skip the
+  `:phoenix_kit_js_sources` compiler entry — at which point tree
+  drag-and-drop and view-preference persistence die with
+  `unknown hook found for "…"` and nothing else.) A hook must reach the
+  LiveSocket at construction, so never register one from an inline
+  `<script>`: morphdom does not execute an inserted script tag, so it works
+  on a hard load and silently does nothing on a LiveView navigation. The
+  item picker uses a colocated hook (`Phoenix.LiveView.ColocatedHook`)
+  instead, which the host reaches via `phoenix-colocated/phoenix_kit_catalogue`.
 - **Gettext:** the module has its own backend, `PhoenixKitCatalogue.Gettext` — use it (not `PhoenixKitWeb.Gettext`) for new strings.
 
-  ⚠️ **Do not run `mix gettext.extract` / `mix gettext.merge` in this repo — they
-  would delete almost every translation.** Nearly all strings here are written
-  as the *runtime function* call `Gettext.gettext(PhoenixKitCatalogue.Gettext,
-  "…")` (~891 call sites) rather than the `gettext("…")` macro (~7 sites),
-  because most LiveViews here don't `use Gettext, backend:
-  PhoenixKitCatalogue.Gettext`. `mix gettext.extract` only sees macro calls, so
-  a fresh `.pot` would contain those ~7 strings instead of the 336 currently
-  in `priv/gettext/default.pot`, and `mix gettext.merge` (`on_obsolete:
-  :delete` by default) would then strip the remaining ~329 entries from all
-  three `.po` files. The catalogues are **hand-maintained**: add new msgids to
-  `default.pot` and to each of `en`/`et`/`ru` by hand, and pin them with a test
-  in `test/gettext_test.exs`.
+  ⚠️ **Do not regenerate `priv/gettext/default.pot` from scratch — it is
+  hand-maintained, and a from-scratch extraction produces 47 of its 961
+  msgids.** Almost every string here is the *runtime function* call
+  `Gettext.gettext(PhoenixKitCatalogue.Gettext, "…")` (~1100 sites) rather
+  than the `gettext("…")` macro, and the extractor only sees macros. Add new
+  msgids **by hand** to `default.pot` and to each of `en`/`et`/`ru`, and pin
+  them in `test/gettext_test.exs`.
 
-  The real fix is to add `use Gettext, backend: PhoenixKitCatalogue.Gettext` to
-  each LiveView and convert the call sites to the macro form, which would make
-  extraction work normally. `web/table_config.ex` and `web/catalogues_live.ex`
-  already do this. Until that conversion happens, treat the catalogues as
+  **The trap that makes this worth spelling out** (measured 2026-08-29, and I
+  got it wrong the first time): `mix gettext.extract` **merges into** an
+  existing `.pot` rather than replacing it. Run it with the committed file in
+  place and it reports a near-identical catalogue — 959 of 960 msgids
+  "extracted" — because it *kept* them. That looks like proof the warning is
+  stale. It isn't: delete the `.pot` first and the same command yields 47.
+  Only 46 of the committed entries carry `#, elixir-autogen`, which is the
+  honest count of what extraction actually contributes.
+
+  So `mix gettext.merge priv/gettext` is safe **only** while the `.pot` still
+  holds the hand-added entries. Against a freshly regenerated one it would
+  strip ~914 msgids from all three `.po` files, since `on_obsolete: :delete`
+  is the default.
+
+  One narrower gap worth knowing: the runtime form is **not** extracted from
+  inside a HEEx attribute interpolation (`title={Gettext.gettext(…)}`) even
+  when the module carries `use Gettext`. `web/components.ex` now uses the
+  macro there for that reason.
+
+  The real fix remains converting the call sites to the macro form and adding
+  `use Gettext, backend: PhoenixKitCatalogue.Gettext` per module, at which
+  point extraction works normally. Six files already do
+  (`web/table_config.ex`, `web/catalogues_live.ex`, `web/components.ex`, and
+  the three browse/selector components). Until then, treat the catalogues as
   hand-edited files.
+
 - **Settings keys:** `catalogue_enabled`.

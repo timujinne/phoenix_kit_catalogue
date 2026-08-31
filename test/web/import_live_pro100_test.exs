@@ -167,6 +167,43 @@ defmodule PhoenixKitCatalogue.Web.ImportLivePro100Test do
       assert Decimal.equal?(updated_item.base_price, Decimal.new("250.00"))
     end
 
+    test "a second Apply does not re-run the plan", %{conn: conn, catalogue: cat} do
+      {:ok, view, _html} = live(conn, @import_url)
+
+      render_change(view, "validate_upload", %{
+        "catalogue" => cat.uuid,
+        "source" => "pro100",
+        "format" => "furniture"
+      })
+
+      # An unmatched row, so applying CREATES — the duplication a double
+      # Apply produces is visible as a second row rather than an idempotent
+      # re-write.
+      txt = furniture_file([{"Brand New Chair", "4242", "99.00"}])
+      file = build_file_input(view, "export.txt", "text/plain", txt)
+      render_upload(file, "export.txt")
+
+      render_submit(view, "parse_file", %{
+        "catalogue" => cat.uuid,
+        "source" => "pro100",
+        "format" => "furniture"
+      })
+
+      before = length(Catalogue.list_items_for_catalogue(cat.uuid))
+
+      render_click(view, "apply_pro100", %{})
+      created = length(Catalogue.list_items_for_catalogue(cat.uuid)) - before
+
+      # The second click. LiveView runs events one at a time and this handler
+      # is synchronous start to finish, so an "am I running?" flag is always
+      # false by the time the second event is dispatched — it could never
+      # refuse anything. What distinguishes a second Apply is that the plan
+      # has been consumed.
+      render_click(view, "apply_pro100", %{})
+
+      assert length(Catalogue.list_items_for_catalogue(cat.uuid)) - before == created
+    end
+
     test "apply_pro100 preserves a photo attached between plan build and Apply",
          %{conn: conn, catalogue: cat, item: item} do
       {:ok, view, _html} = live(conn, @import_url)

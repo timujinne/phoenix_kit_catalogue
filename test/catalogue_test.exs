@@ -813,6 +813,18 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     end
   end
 
+  describe "search_items/2 query trimming" do
+    test "a trailing space still matches (query is trimmed at the base)" do
+      # Several input layers (BrowseState among them) pass the raw
+      # string through — the shared base trims it (Max, 2026-08-28).
+      item = create_item(%{name: "Teak Bench"})
+
+      results = Catalogue.search_items("Teak Bench ")
+      assert Enum.any?(results, &(&1.uuid == item.uuid))
+      assert Catalogue.count_search_items(" Teak ") >= 1
+    end
+  end
+
   describe "search_items/2 with include_descendants" do
     test "expands a category scope through its subtree by default" do
       cat = create_catalogue()
@@ -2521,6 +2533,27 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert Catalogue.item_count_for_category(cat_a.uuid) == 2
       assert Catalogue.item_count_for_category(cat_a.uuid, mode: :deleted) == 1
       assert Catalogue.item_count_for_category(cat_b.uuid) == 1
+    end
+
+    # The "include subcategory items" toggle is a SEARCH refinement (Max,
+    # 2026-08-30); the BROWSE list and the count under a category header
+    # stay on the level the user is standing on. Pinned so a future
+    # subtree option cannot silently widen the browse path again.
+    test "the level listing and count stay direct-only, never the subtree" do
+      cat = create_catalogue()
+      parent = create_category(cat, %{name: "Parent"})
+      child = create_category(cat, %{name: "Child", parent_uuid: parent.uuid})
+
+      create_item(%{name: "Direct", category_uuid: parent.uuid})
+      create_item(%{name: "Nested", category_uuid: child.uuid})
+
+      assert Catalogue.item_count_for_category(parent.uuid) == 1
+
+      assert [%{name: "Direct"}] =
+               Catalogue.list_items_for_category_paged(parent.uuid)
+
+      # The subtree question belongs to search, and there it still works.
+      assert Catalogue.count_search_items("", category_uuids: [parent.uuid]) == 2
     end
 
     test "item_counts_by_category_for_catalogue/2 returns a grouped map" do

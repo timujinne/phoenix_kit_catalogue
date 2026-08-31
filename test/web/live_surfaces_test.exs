@@ -208,7 +208,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
       {:ok, group} = Catalogue.create_attribute_group(%{name: "Doors"})
       {:ok, :assigned} = Catalogue.set_item_attribute_group(item, group.uuid)
 
-      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
       assert Map.has_key?(assigns(view).attribute_map, item.uuid)
       assert render(view) =~ "Has attribute group"
 
@@ -230,7 +230,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
         })
 
       file_uuid = insert_document!(folder.uuid, scope)
-      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
       assert assigns(view).file_counts[item.uuid] == 1
 
       # The other tab trashed the file (what Attachments.trash_file does)
@@ -669,7 +669,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
 
     test "detail page of the same catalogue drops bulk-trashed items",
          %{conn: conn, catalogue: cat, a: a, b: b} do
-      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
       assert Enum.sort(detail_item_uuids(view)) == Enum.sort([a.uuid, b.uuid])
 
       {1, nil} = Catalogue.bulk_trash_items([a.uuid], [])
@@ -711,7 +711,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
 
     test "a pending cross-tab bulk flash holds the reload until the apply step",
          %{conn: conn, catalogue: cat, a: a, b: b} do
-      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
 
       # The other tab: mutate muted, announce the flash, then the batch
       # event — the order the detail LV's bulk handlers use.

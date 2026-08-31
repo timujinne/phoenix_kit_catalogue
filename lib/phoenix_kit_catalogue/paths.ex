@@ -80,9 +80,6 @@ defmodule PhoenixKitCatalogue.Paths do
 
   # ── Attribute sets (2026-08-18 rework) ───────────────────────────
 
-  def attribute_set_new, do: Routes.path("#{@base}/attributes/sets/new")
-  def attribute_set_edit(uuid), do: Routes.path("#{@base}/attributes/sets/#{uuid}/edit")
-
   # ── Categories ───────────────────────────────────────────────────
 
   def category_new(catalogue_uuid), do: Routes.path("#{@base}/#{catalogue_uuid}/categories/new")

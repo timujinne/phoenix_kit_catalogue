@@ -30,6 +30,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
     only: [
       actor_opts: 1,
       actor_uuid: 1,
+      log_operation_error: 3,
       assign_ai_translation: 3,
       ai_translate_config: 1,
       toggle_ai_modal: 1,
@@ -251,8 +252,25 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   end
 
   def handle_event("reorder_attributes", %{"ordered_ids" => ids}, socket) when is_list(ids) do
-    :ok = Catalogue.reorder_attributes(socket.assigns.group, Enum.filter(ids, &is_binary/1))
-    {:noreply, reload_group(socket)}
+    # A rolled-back reorder is a real outcome, not a MatchError. It used to be
+    # unreachable only because the context answered `:ok` unconditionally.
+    case Catalogue.reorder_attributes(socket.assigns.group, Enum.filter(ids, &is_binary/1)) do
+      :ok ->
+        {:noreply, reload_group(socket)}
+
+      {:error, reason} ->
+        # Statement, not a pipe step: the helper logs and returns `:ok`.
+        log_operation_error(socket, "reorder_attributes", %{
+          entity_type: "attribute_group",
+          entity_uuid: socket.assigns.group.uuid,
+          reason: reason
+        })
+
+        {:noreply,
+         socket
+         |> put_flash(:error, PhoenixKitCatalogue.Errors.message(reason))
+         |> reload_group()}
+    end
   end
 
   def handle_event("reorder_attributes", _params, socket), do: {:noreply, socket}
@@ -319,8 +337,22 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
       when is_list(ids) do
     case owned_attribute(socket, uuid) do
       %{} = attribute ->
-        :ok = Catalogue.reorder_attribute_values(attribute, Enum.filter(ids, &is_binary/1))
-        {:noreply, reload_group(socket)}
+        case Catalogue.reorder_attribute_values(attribute, Enum.filter(ids, &is_binary/1)) do
+          :ok ->
+            {:noreply, reload_group(socket)}
+
+          {:error, reason} ->
+            log_operation_error(socket, "reorder_attribute_values", %{
+              entity_type: "attribute",
+              entity_uuid: attribute.uuid,
+              reason: reason
+            })
+
+            {:noreply,
+             socket
+             |> put_flash(:error, PhoenixKitCatalogue.Errors.message(reason))
+             |> reload_group()}
+        end
 
       _ ->
         {:noreply, socket}

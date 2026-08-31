@@ -13,6 +13,64 @@ defmodule PhoenixKitCatalogue.GettextTest do
     assert Code.ensure_loaded?(PhoenixKitCatalogue.Gettext)
   end
 
+  test "every string the UI shows is actually in the catalogues (ru + et)" do
+    # The failure this guards is silent by construction: `gettext/1` returns
+    # the msgid when a string is missing, so a page renders correct-looking
+    # English and no test fails. It is how "Showing catalogues that contain
+    # matching items." shipped on 2026-08-28 present in no catalogue at all.
+    #
+    # A po-vs-po parity check cannot see it either — a string absent from all
+    # three files is symmetric. The only thing that catches it is asking the
+    # backend, in a non-English locale, for a string the code actually uses.
+    for {msgid, ru, et} <- [
+          # ("Showing catalogues that contain matching items." was the
+          # first entry here; it left with the index's catalogues-
+          # containing filter when items search mode replaced it,
+          # 2026-08-29.)
+          #
+          # The items search mode's strings (Max, 2026-08-29):
+          {"Search for", "Что искать", "Mida otsida"},
+          {"No items match.", "Нет подходящих позиций.", "Sobivaid tooteid pole."},
+          {"View in catalogue", "Открыть в каталоге", "Vaata kataloogis"},
+          # The category browser's strings (Max, 2026-08-29):
+          {"Toggle category", "Развернуть/свернуть категорию", "Ava/sule kategooria"},
+          {"Drag to reorder or nest", "Перетащите, чтобы изменить порядок или вложить",
+           "Lohista järjestamiseks või pesastamiseks"},
+          {"Drop here to move to this level",
+           "Перетащите сюда, чтобы переместить на этот уровень",
+           "Lohista siia, et tuua sellele tasemele"},
+          {"A category cannot move into its own subtree.",
+           "Категорию нельзя переместить в её собственное поддерево.",
+           "Kategooriat ei saa viia tema enda alampuusse."},
+          {"No subcategories here. Switch to Items to browse this level's items.",
+           "Здесь нет подкатегорий. Переключитесь на Позиции, чтобы просмотреть позиции этого уровня.",
+           "Siin pole alamkategooriaid. Vali Tooted, et sirvida selle taseme tooteid."},
+          # Written as the macro inside a HEEx attribute on purpose: the
+          # runtime form is NOT extracted from attribute interpolation, which
+          # is how these two were in the catalogues but absent from a
+          # regenerated .pot. See the Gettext note in AGENTS.md.
+          {"Comfortable view", "Просторный вид", "Avar vaade"},
+          {"Compact view", "Компактный вид", "Kompaktne vaade"},
+          # Found by the 2026-08-29 sweep: all of these were rendered by the
+          # UI and present in NO catalogue. `:set_not_found` is the sharpest —
+          # `errors_test.exs` pinned `Errors.message(:set_not_found) ==
+          # "Attribute set not found."` and passed *because* the string was
+          # untranslated, so a green test guarded the bug.
+          {"Attribute set not found.", "Набор атрибутов не найден.",
+           "Atribuutide komplekti ei leitud."},
+          {"Multiple values", "Несколько значений", "Mitu väärtust"},
+          {"Fixed value", "Фиксированное значение", "Kindel väärtus"},
+          {"Previous page", "Предыдущая страница", "Eelmine leht"},
+          {"Next page", "Следующая страница", "Järgmine leht"}
+        ] do
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru
+
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == et
+    end
+  end
+
   test "PDF content-search strings are translated (pin for the 2026-08-16 additions)" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
 
@@ -109,9 +167,6 @@ defmodule PhoenixKitCatalogue.GettextTest do
   test "attribute-sets strings are translated (pin for the 2026-08-18 rework, PR #74)" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
 
-    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute set not found.") ==
-             "Набор атрибутов не найден."
-
     assert Gettext.gettext(
              PhoenixKitCatalogue.Gettext,
              "This set is attached to items — detach it everywhere first."
@@ -124,9 +179,6 @@ defmodule PhoenixKitCatalogue.GettextTest do
              "Модуль наборов атрибутов не включён."
 
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
-
-    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute set not found.") ==
-             "Atribuudikomplekti ei leitud."
 
     assert Gettext.gettext(
              PhoenixKitCatalogue.Gettext,
@@ -436,8 +488,6 @@ defmodule PhoenixKitCatalogue.GettextTest do
             {"Add", "Lisa", "Добавить"},
             {"New Attribute Group", "Uus atribuudirühm", "Новая группа атрибутов"},
             {"Attribute group created.", "Atribuudirühm loodud.", "Группа атрибутов создана."},
-            {"Multiple values", "Mitu väärtust", "Несколько значений"},
-            {"Fixed value", "Fikseeritud väärtus", "Фиксированное значение"},
             {"Make default", "Määra vaikeväärtuseks", "Сделать по умолчанию"},
             {"This group is used by items — archive it instead.",
              "See rühm on toodetel kasutusel — arhiveeri see kustutamise asemel.",
@@ -566,6 +616,55 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert po_msgstr("en", msgid) != nil
       assert gettext_in("et", msgid) == "Otsingule vastavaid tooteid pole."
       assert gettext_in("ru", msgid) == "Нет позиций, соответствующих запросу."
+    end
+
+    # The item-details page's mode-aware footer control (2026-08-30).
+    test "Add to selection" do
+      msgid = "Add to selection"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Lisa valikusse"
+      assert gettext_in("ru", msgid) == "Добавить в выбор"
+    end
+
+    test "Remove from selection" do
+      msgid = "Remove from selection"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Eemalda valikust"
+      assert gettext_in("ru", msgid) == "Убрать из выбора"
+    end
+
+    # The details page's Back button (2026-08-31 sweep caught the
+    # missing pin — its two sibling msgids from the same feature were
+    # pinned, this one wasn't).
+    test "Back" do
+      msgid = "Back"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Tagasi"
+      assert gettext_in("ru", msgid) == "Назад"
+    end
+
+    # The kmpl (Estonian set/komplekt) unit option (boss, 2026-08-31).
+    test "Set (kmpl)" do
+      msgid = "Set (kmpl)"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Komplekt (kmpl)"
+      assert gettext_in("ru", msgid) == "Комплект (компл.)"
+    end
+
+    # The built-in supplier field's label, translated at call time in
+    # SupplierFields.builtin_fields/0 (a compile-time map can only carry
+    # the msgid).
+    test "Unit cost" do
+      msgid = "Unit cost"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Ühikuhind"
+      assert gettext_in("ru", msgid) == "Цена за единицу"
+
+      # The label is resolved at CALL time for the process locale.
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+      assert PhoenixKitCatalogue.Catalogue.supplier_builtin_field("unit_cost")["label"] ==
+               "Ühikuhind"
     end
   end
 

@@ -716,7 +716,11 @@ defmodule PhoenixKitCatalogue.Attachments do
       {:ok, {:error, :no_user}}
     else
       file_checksum = UsersAuth.calculate_file_hash(path)
-      ext = entry.client_name |> Path.extname() |> String.trim_leading(".") |> String.downcase()
+      # `client_name` is browser-supplied and only checked against `:accept`,
+      # so strip any path before it reaches Storage as a filename. (`ext` was
+      # already safe — `Path.extname/1` cannot return a separator.)
+      client_name = Path.basename(entry.client_name || "")
+      ext = client_name |> Path.extname() |> String.trim_leading(".") |> String.downcase()
       file_type = file_type_from_mime(entry.client_type)
 
       case Storage.store_file_in_buckets(
@@ -725,7 +729,7 @@ defmodule PhoenixKitCatalogue.Attachments do
              user_uuid,
              file_checksum,
              ext,
-             entry.client_name
+             client_name
            ) do
         {:ok, file} ->
           _ = assign_file_to_folder(file, folder_uuid)

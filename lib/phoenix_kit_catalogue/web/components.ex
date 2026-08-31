@@ -3039,6 +3039,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:photo_clickable, :boolean, default: false)
   attr(:photo_placeholder, :boolean, default: false)
   attr(:photo_size, :string, default: "w-8 h-8")
+  attr(:photo_asset_type, :string, default: "thumbnail")
+  attr(:show_photo, :boolean, default: true)
 
   def item_picker(assigns) do
     ~H"""
@@ -3066,6 +3068,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
       photo_clickable={@photo_clickable}
       photo_placeholder={@photo_placeholder}
       photo_size={@photo_size}
+      photo_asset_type={@photo_asset_type}
+      show_photo={@show_photo}
     />
     """
   end

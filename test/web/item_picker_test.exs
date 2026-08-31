@@ -455,6 +455,31 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
       assert html =~ "photo-uuid-abc"
     end
 
+    test "alt carries the item's display name, not an empty string (inert thumbnail)" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html = render_component(ItemPicker, base_assigns(%{selected_item: item}))
+
+      assert html =~ ~s(alt="Oak Plank")
+      refute html =~ ~s(alt="")
+    end
+
+    test "alt carries the item's display name on the clickable thumbnail too" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      assert html =~ ~s(alt="Oak Plank")
+      refute html =~ ~s(alt="")
+    end
+
     test "renders no thumbnail when the selected item has no photo" do
       # fake_item/2 sets data: %{} — no featured_image_uuid.
       item = fake_item("item-1", "Oak Plank")
@@ -634,6 +659,188 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
         )
 
       assert html =~ "w-16 h-16"
+    end
+
+    # A088: the placeholder's own box (excluding padding) must match the
+    # image's box byte-for-byte at every photo_size — NOT merely "changes
+    # when photo_size changes", which is also true on the buggy code (the
+    # placeholder carried an extra `p-1.5` that shrinks its visible box by
+    # 12px relative to the image, at every size). Asserting the full class
+    # string — img minus `object-cover`, placeholder minus `p-1.5
+    # opacity-40` — is the only check that distinguishes "same box" from
+    # "some box that also happens to scale".
+    test "the placeholder box matches the image box exactly at the default photo_size" do
+      item_with_photo = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      item_without_photo = fake_item("item-2", "Pine Plank")
+
+      img_html = render_component(ItemPicker, base_assigns(%{selected_item: item_with_photo}))
+
+      placeholder_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            selected_item: item_without_photo,
+            photo_clickable: true,
+            photo_placeholder: true
+          })
+        )
+
+      assert img_html =~
+               ~s(class="w-8 h-8 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+
+      assert placeholder_html =~
+               ~s(class="hero-photo w-8 h-8 shrink-0 rounded bg-base-200 border border-base-300 opacity-40")
+    end
+
+    test "the placeholder box matches the image box exactly at a non-default photo_size" do
+      item_with_photo = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      item_without_photo = fake_item("item-2", "Pine Plank")
+
+      img_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item_with_photo, photo_size: "w-20 h-20"})
+        )
+
+      placeholder_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            selected_item: item_without_photo,
+            photo_clickable: true,
+            photo_placeholder: true,
+            photo_size: "w-20 h-20"
+          })
+        )
+
+      assert img_html =~
+               ~s(class="w-20 h-20 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+
+      assert placeholder_html =~
+               ~s(class="hero-photo w-20 h-20 shrink-0 rounded bg-base-200 border border-base-300 opacity-40")
+    end
+  end
+
+  describe "photo_asset_type (storage variant override)" do
+    test "defaults to \"thumbnail\", rendering byte-for-byte as before the attribute existed" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html = render_component(ItemPicker, base_assigns(%{selected_item: item}))
+
+      assert html =~ "/photo-uuid-abc/thumbnail/"
+    end
+
+    test "a custom photo_asset_type changes the signed URL's variant segment" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_asset_type: "medium"})
+        )
+
+      assert html =~ "/photo-uuid-abc/medium/"
+      refute html =~ "/photo-uuid-abc/thumbnail/"
+    end
+  end
+
+  describe "show_photo (programmatically force the placeholder for every selected item)" do
+    test "show_photo: false + item WITH a photo + photo_clickable: true renders the clickable placeholder, not the real image" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      assert html =~ "hero-photo"
+      assert html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: false + item WITHOUT a photo + photo_clickable: true also renders the clickable placeholder" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      assert html =~ "hero-photo"
+      assert html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: false with photo_clickable: false renders nothing clickable (no click target to offer)" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: false, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      refute html =~ "hero-photo"
+      refute html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: true (explicit) renders identically to the default for an item with a photo" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      default_html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      explicit_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: true})
+        )
+
+      assert default_html == explicit_html
+    end
+
+    # A caller can pass an explicit `nil` (not merely omit the attr) — e.g.
+    # `show_photo={@maybe_nil}` — and `update/2` assigns it as-is. The
+    # placeholder condition must treat that the same as the documented
+    # `true` default (nothing forced), not as `false` (hide) — `!nil` and
+    # `nil == false` disagree, which is exactly the gap this pins down.
+    test "show_photo: nil (explicit) behaves like the true default — a photo-less item without photo_placeholder renders nothing" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: nil})
+        )
+
+      refute html =~ "hero-photo"
+      refute html =~ "<img"
     end
   end
 

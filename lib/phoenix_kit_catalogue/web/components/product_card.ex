@@ -37,10 +37,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Modal, only: [modal: 1]
 
+  alias PhoenixKitCatalogue.Web.Components.Browse
+
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Format
-  alias PhoenixKitCatalogue.{Catalogue, Metadata}
+  alias PhoenixKitCatalogue.{Attachments, Catalogue, Metadata}
   alias PhoenixKitCatalogue.Schemas.Item
 
   # ── Render ───────────────────────────────────────────────────────
@@ -166,7 +168,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
             <iframe
               :if={file.pdf?}
               src={URLSigner.signed_url(file.uuid, "original")}
-              loading="lazy"
               title={file.name}
               class="w-full h-[50vh] hidden sm:block"
             >
@@ -215,7 +216,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
           :for={{img, idx} <- Enum.with_index(@images)}
           type="button"
           class={[
-            "shrink-0 rounded border-2 overflow-hidden transition-colors hover:border-primary",
+            "shrink-0 cursor-pointer rounded border-2 overflow-hidden transition-colors hover:border-primary",
             (idx == 0 && "border-primary") || "border-base-300"
           ]}
           aria-label={
@@ -229,14 +230,13 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
           <img
             src={URLSigner.signed_url(img.uuid, "thumbnail")}
             alt=""
-            loading="lazy"
             class="w-16 h-16 object-cover"
           />
         </button>
         <button
           :for={{file, idx} <- Enum.with_index(@files, length(@images))}
           type="button"
-          class="shrink-0 w-[68px] h-[68px] rounded border-2 border-base-300 hover:border-primary transition-colors flex flex-col items-center justify-center gap-0.5 bg-base-200"
+          class="shrink-0 cursor-pointer w-[68px] h-[68px] rounded border-2 border-base-300 hover:border-primary transition-colors flex flex-col items-center justify-center gap-0.5 bg-base-200"
           aria-label={file.name}
           title={file.name}
           onclick={jump_js(idx)}
@@ -342,7 +342,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   """
   @spec resolve_images(Item.t() | term()) :: [%{uuid: String.t(), name: String.t() | nil}]
   def resolve_images(%Item{data: data}) when is_map(data) do
-    folder_images = list_folder_images(read_uuid(data, "files_folder_uuid"))
+    folder_images =
+      data
+      |> read_uuid("files_folder_uuid")
+      |> list_folder_images()
+      # The editor's saved drag order (data["media_order"]) drives the
+      # carousel too — the client reordered these on purpose (boss,
+      # 2026-08-31). Unknown files keep their inserted_at tail order.
+      |> Attachments.apply_media_order(Map.get(data, "media_order") || [])
 
     # The featured pointer can dangle (file trashed/deleted after it was set),
     # which would render a broken <img>. Only keep it when it still resolves to
@@ -365,8 +372,13 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
           [%{uuid: String.t(), name: String.t() | nil, size: integer() | nil, pdf?: boolean()}]
   def resolve_files(%Item{data: data}) when is_map(data) do
     case read_uuid(data, "files_folder_uuid") do
-      nil -> []
-      folder_uuid -> list_folder_files(folder_uuid)
+      nil ->
+        []
+
+      folder_uuid ->
+        folder_uuid
+        |> list_folder_files()
+        |> Attachments.apply_media_order(Map.get(data, "media_order") || [])
     end
   end
 
@@ -374,13 +386,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
 
   @doc "Resolves the item's display name for the given locale (translation, then bare name)."
   @spec resolve_name(Item.t() | term(), String.t()) :: String.t() | nil
-  def resolve_name(%Item{} = item, locale) do
-    translation = safe_translation(item, locale)
-
-    Map.get(translation, "_name") ||
-      Map.get(translation, "name") ||
-      item.name
-  end
+  def resolve_name(%Item{} = item, locale), do: Catalogue.translated_name(item, locale)
 
   def resolve_name(_, _), do: nil
 
@@ -401,7 +407,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   def build_fields(%Item{} = item, locale, opts) do
     [
       {Keyword.get(opts, :include_sku, true), {gettext("SKU"), item.sku}},
-      {Keyword.get(opts, :include_price, true), {gettext("Price"), format_price(item)}},
+      {Keyword.get(opts, :include_price, true),
+       {gettext("Price"), format_price(item) || fee_value(item)}},
       {true, {gettext("Unit"), unit_value(item)}},
       {true, {gettext("Description"), resolve_description(item, locale)}}
     ]
@@ -516,6 +523,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
   defp to_display(value) when is_number(value) or is_boolean(value), do: to_string(value)
   defp to_display(value), do: inspect(value)
 
+  # Smart-fee fallback for the Price row: "49.00" (flat), "12%", or a
+  # localized Computed — the same resolution the listing shows
+  # (Browse.smart_fee/1), so the card never disagrees with the row the
+  # click came from.
+  defp fee_value(item) do
+    case Browse.smart_fee(item) do
+      # Browse.format_price/1, not raw to_string — a DB numeric arrives
+      # as 49.0000 and the card must not disagree with the listing's
+      # "49.00" (external review, 2026-08-31).
+      {:price, fee} -> Browse.format_price(fee)
+      {:note, note} -> note
+      nil -> nil
+    end
+  end
+
   defp format_price(%Item{} = item) do
     case Catalogue.item_pricing(item).final_price do
       %Decimal{} = price -> Decimal.to_string(price, :normal)
@@ -537,13 +559,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
     end
   end
 
-  defp resolve_description(%Item{} = item, locale) do
-    translation = safe_translation(item, locale)
-
-    Map.get(translation, "_description") ||
-      Map.get(translation, "description") ||
-      item.description
-  end
+  defp resolve_description(%Item{} = item, locale),
+    do: Catalogue.translated_description(item, locale)
 
   defp metadata_fields(%Item{} = item) do
     state = Metadata.build_state(:item, item)
@@ -563,12 +580,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
     # data). Dropping the metadata block is far better than crashing the card;
     # the scalar fields still render.
     _ -> []
-  end
-
-  defp safe_translation(record, locale) do
-    Catalogue.get_translation(record, locale)
-  rescue
-    _ -> %{}
   end
 
   # Both call sites sit inside `resolve_images(%Item{data: data}) when

@@ -2728,6 +2728,15 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     # second-precision and UUIDv7 is random within a millisecond, so
     # same-instant fixtures have no deterministic creation order — back-
     # date them so `:created_*` reorders are pinnable.
+    defp stamp_item(item, %DateTime{} = ts) do
+      Repo.update_all(
+        from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^item.uuid),
+        set: [inserted_at: DateTime.truncate(ts, :second)]
+      )
+
+      item
+    end
+
     defp backdate_item(item, seconds_ago) do
       ts = DateTime.utc_now() |> DateTime.add(-seconds_ago, :second) |> DateTime.truncate(:second)
 
@@ -2789,6 +2798,39 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
 
       assert item_positions(ctx.category.uuid) == [{"Third", 1}, {"Second", 2}, {"First", 3}]
       assert first.uuid
+    end
+
+    test ":created_* order chronologically, not structurally", ctx do
+      # `Enum.sort_by/2`'s default term order compares DateTime structs
+      # field-alphabetically — day before month — so a bare
+      # `& &1.inserted_at` key put Jan 2nd AFTER Feb 1st. Seconds-apart
+      # fixtures cannot see it; the distinguishing shape is two dates
+      # straddling a month boundary with inverted days.
+      newer = create_item(%{name: "Newer", category_uuid: ctx.category.uuid})
+      older = create_item(%{name: "Older", category_uuid: ctx.category.uuid})
+
+      stamp_item(newer, ~U[2026-02-01 00:00:00Z])
+      stamp_item(older, ~U[2026-01-02 00:00:00Z])
+
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :created_asc,
+                 :all
+               )
+
+      assert item_positions(ctx.category.uuid) == [{"Older", 1}, {"Newer", 2}]
+
+      assert :ok =
+               Catalogue.reorder_items_by(
+                 ctx.catalogue.uuid,
+                 ctx.category.uuid,
+                 :created_desc,
+                 :all
+               )
+
+      assert item_positions(ctx.category.uuid) == [{"Newer", 1}, {"Older", 2}]
     end
 
     test ":all + :reverse flips the current position order", ctx do

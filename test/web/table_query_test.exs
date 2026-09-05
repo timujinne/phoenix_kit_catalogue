@@ -91,4 +91,28 @@ defmodule PhoenixKitCatalogue.Web.TableQueryTest do
            ) ==
              ["alpha"]
   end
+
+  test "date sorts are chronological, not structural" do
+    # `Enum.sort_by/3`'s default term order compares DateTime structs
+    # field-alphabetically — day before month — so a bare `& &1.updated_at`
+    # sort key put Jan 2nd AFTER Feb 1st. The distinguishing shape is two
+    # dates straddling a month boundary with inverted days.
+    rows = [
+      %{
+        name: "Newer",
+        updated_at: ~U[2026-02-01 00:00:00Z],
+        inserted_at: ~U[2026-02-01 00:00:00Z]
+      },
+      %{
+        name: "Older",
+        updated_at: ~U[2026-01-02 00:00:00Z],
+        inserted_at: ~U[2026-01-02 00:00:00Z]
+      }
+    ]
+
+    assert Enum.map(Q.sort(rows, :catalogues, "updated", :asc), & &1.name) == ["Older", "Newer"]
+    assert Enum.map(Q.sort(rows, :catalogues, "updated", :desc), & &1.name) == ["Newer", "Older"]
+    assert Enum.map(Q.sort(rows, :catalogues, "created", :asc), & &1.name) == ["Older", "Newer"]
+    assert Enum.map(Q.sort(rows, :suppliers, "updated", :asc), & &1.name) == ["Older", "Newer"]
+  end
 end

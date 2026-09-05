@@ -52,21 +52,52 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     offset = Keyword.get(opts, :offset, 0)
     preloads = Helpers.merge_preloads([:catalogue, category: :catalogue], opts)
 
-    # Ordering note: `i.position` is intentionally NOT in the global
-    # `search_items/2` order_by. `position` is per-`(catalogue_uuid,
+    # Ordering: name by DEFAULT — `position` is per-`(catalogue_uuid,
     # category_uuid)` scope, so interleaving across catalogues by raw
-    # position is meaningless. Single-catalogue search (see
-    # `search_items_in_catalogue/3` below) keeps `i.position` because
-    # the scope is narrow enough for it to be coherent.
+    # position is meaningless. A caller whose scope is coherent for it
+    # (one catalogue — the popup's browse listings since 2026-08-31,
+    # matching the admin's document order; Max: "the default look would
+    # be the same") passes `order: :position` and gets the chain
+    # `search_items_in_catalogue/3` uses: category position first, then
+    # the item's own. Leading with `i.position` alone is NOT the admin's
+    # order once a listing spans several categories — the per-category
+    # ordinals interleave (all the 1s, then all the 2s), which is the
+    # same incoherence this note warns about one level down.
     query
     |> search_items_base(opts)
-    |> order_by([i, _cat, _c], asc: i.name, asc: i.uuid)
+    |> apply_search_order(Keyword.get(opts, :order, :name))
     |> limit(^limit)
     |> offset(^offset)
     |> preload(^preloads)
     |> repo().all()
     |> Manufacturers.hydrate()
   end
+
+  # Category position first (uncategorized last), then the item's own —
+  # byte-for-byte `search_items_in_catalogue/3`'s chain, so a
+  # catalogue-wide browse listing reads exactly like the admin's. For a
+  # single-category or category-less scope the leading key is constant
+  # and this is identical to ordering by `i.position` alone.
+  defp apply_search_order(query, :position),
+    do:
+      order_by(query, [i, _cat, c],
+        asc_nulls_last: c.position,
+        asc: i.position,
+        asc: i.name,
+        asc: i.uuid
+      )
+
+  defp apply_search_order(query, {:position, _dir}), do: apply_search_order(query, :position)
+
+  # Directional field sorts — the admin's `item_order_by/3` vocabulary
+  # (the module's shared sort names one of these when it isn't Manual),
+  # same uuid tie-break so paging stays deterministic.
+  defp apply_search_order(query, {field, dir})
+       when field in ~w(name sku base_price status)a and dir in [:asc, :desc],
+       do: order_by(query, [i, _cat, _c], [{^dir, field(i, ^field)}, {:asc, i.uuid}])
+
+  defp apply_search_order(query, _name),
+    do: order_by(query, [i, _cat, _c], asc: i.name, asc: i.uuid)
 
   @doc """
   Returns the total number of items matching `search_items/2`'s filters.

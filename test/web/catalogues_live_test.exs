@@ -802,36 +802,45 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       {:ok, _view, html} = live(conn, @base)
       assert html =~ ~s(phx-click="set_view")
 
-      # Items mode hides it with the rest of the table tools.
-      {:ok, _view, html} = live(conn, "#{@base}?mode=items")
-      refute html =~ ~s(phx-click="set_view")
+      # The catalogues listing (and its tools) stays through a query —
+      # item results render BELOW it since 2026-08-31, they don't
+      # replace it.
+      {:ok, _view, html} = live(conn, "#{@base}?q=toggle")
+      assert html =~ ~s(phx-click="set_view")
     end
   end
 
-  describe "items search mode" do
-    # The 2026-08-31 default flip (boss): a fresh landing types a query
-    # and gets ITEM results; catalogue-name search is the explicit mode.
-    test "the auto default searches items; explicit catalogues searches catalogues", %{
+  describe "item results section" do
+    # One surface since 2026-08-31 (Max): a query filters the catalogue
+    # listing AND renders matching items below it — the popup search's
+    # two-list idiom. No modes, no switcher, no `?mode=` state.
+    test "a query shows matching catalogues above matching items", %{
       conn: conn
     } do
       cat = fixture_catalogue(%{name: "Zephyr Catalogue"})
       fixture_item(%{name: "Zephyr widget", catalogue_uuid: cat.uuid})
+      fixture_catalogue(%{name: "Unrelated Catalogue"})
 
-      # No mode in the URL + a query = item results (and the Items chip
-      # reads active even before typing).
-      {:ok, view, html} = live(conn, @base)
-      assert html =~ ~r/phx-value-mode="items"\n?[^>]*btn-active/
+      # No switcher anywhere on the toolbar.
+      {:ok, _view, html} = live(conn, @base)
+      refute html =~ "set_search_mode"
 
-      {:ok, view2, _html} = live(conn, "#{@base}?q=zephyr")
-      html = render_async(view2)
-      assert html =~ "Zephyr widget"
-      refute html =~ "catalogues-tree-table"
-      _ = view
-
-      # Explicit catalogues mode: the same query searches this page's rows.
-      {:ok, _view3, html} = live(conn, "#{@base}?q=zephyr&mode=catalogues")
+      {:ok, view, _html} = live(conn, "#{@base}?q=zephyr")
+      html = render_async(view)
+      # Both halves, one page: the matching catalogue row stays as
+      # navigation, the matching item renders in the results below.
       assert html =~ "Zephyr Catalogue"
-      refute html =~ "Zephyr widget"
+      assert html =~ "Zephyr widget"
+      refute html =~ "Unrelated Catalogue"
+    end
+
+    test "a whitespace-only query engages nothing", %{conn: conn} do
+      fixture_catalogue(%{name: "Quiet Catalogue"})
+
+      {:ok, view, _html} = live(conn, "#{@base}?q=%20%20")
+      html = render_async(view)
+      assert html =~ "Quiet Catalogue"
+      refute html =~ "item-result-"
     end
 
     test "lists items across catalogues with their catalogue and category", %{conn: conn} do
@@ -841,31 +850,34 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       fixture_item(%{name: "Oak door", catalogue_uuid: cat_a.uuid, category_uuid: doors.uuid})
       fixture_item(%{name: "Pine shelf", catalogue_uuid: cat_b.uuid})
 
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items")
+      fixture_item(%{name: "Oak shelf", catalogue_uuid: cat_b.uuid})
+
+      {:ok, view, _html} = live(conn, "#{@base}?q=oak")
       html = render_async(view)
 
       assert html =~ "Oak door"
-      assert html =~ "Pine shelf"
+      assert html =~ "Oak shelf"
       # Context columns — a hit can come from anywhere, so each row says
       # which catalogue and category it lives in.
       assert html =~ "Alpha Catalogue"
       assert html =~ "Doors"
-      # The catalogues list and its table tools are gone with the mode.
-      refute html =~ "catalogues-tree-table"
-      refute html =~ "filter-form-status"
     end
 
-    test "the switcher patches ?mode= in and out", %{conn: conn} do
-      fixture_catalogue(%{name: "Anything"})
-      {:ok, view, _html} = live(conn, @base)
+    test "a legacy ?mode= URL is ignored, not an error", %{conn: conn} do
+      cat = fixture_catalogue(%{name: "Anything"})
+      fixture_item(%{name: "Anything widget", catalogue_uuid: cat.uuid})
 
-      render_click(view, "set_search_mode", %{"mode" => "items"})
-      assert_patch(view, "#{@base}?mode=items")
+      # Old bookmarks carry the retired mode key; the page simply reads
+      # its real state (query/attr) and lists as always.
+      {:ok, view, _html} = live(conn, "#{@base}?mode=items")
+      html = render_async(view)
+      assert html =~ "Anything"
+      refute html =~ "item-result-"
 
-      # Both directions are explicit now — "" is the auto default a
-      # fresh landing gets (2026-08-31).
-      render_click(view, "set_search_mode", %{"mode" => "catalogues"})
-      assert_patch(view, "#{@base}?mode=catalogues")
+      {:ok, view, _html} = live(conn, "#{@base}?mode=catalogues&q=anything")
+      html = render_async(view)
+      assert html =~ "Anything widget"
+      _ = view
     end
 
     test "?q= searches the items, not the catalogues", %{conn: conn} do
@@ -873,7 +885,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       fixture_item(%{name: "Findable widget", catalogue_uuid: cat.uuid})
       fixture_item(%{name: "Other thing", catalogue_uuid: cat.uuid})
 
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items&q=findable")
+      {:ok, view, _html} = live(conn, "#{@base}?q=findable")
       html = render_async(view)
 
       assert html =~ "Findable widget"
@@ -889,30 +901,32 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       fixture_item(%{name: "Inner widget", catalogue_uuid: inside.uuid})
       fixture_item(%{name: "Outer widget", catalogue_uuid: outside.uuid})
 
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items&folder=#{parent.uuid}")
+      {:ok, view, _html} = live(conn, "#{@base}?q=widget&folder=#{parent.uuid}")
       html = render_async(view)
 
       assert html =~ "Inner widget"
       refute html =~ "Outer widget"
     end
 
-    test "a result links into its catalogue, drilled and still searched", %{conn: conn} do
+    test "a result links straight to the item's EDIT page", %{conn: conn} do
       cat = fixture_catalogue(%{name: "Container"})
       {:ok, category} = Catalogue.create_category(%{name: "Doors", catalogue_uuid: cat.uuid})
 
-      fixture_item(%{
-        name: "Oak door",
-        catalogue_uuid: cat.uuid,
-        category_uuid: category.uuid
-      })
+      item =
+        fixture_item(%{
+          name: "Oak door",
+          catalogue_uuid: cat.uuid,
+          category_uuid: category.uuid
+        })
 
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items&q=oak")
+      {:ok, view, _html} = live(conn, "#{@base}?q=oak")
       html = render_async(view)
 
-      # Landing drilled into the category with the query applied puts the
-      # item in sight on arrival instead of buried in its level.
-      assert html =~ "category=#{category.uuid}"
-      assert html =~ "q=oak"
+      # Whoever searched an item by name wants THAT item (boss,
+      # 2026-08-31) — not its category's page with the query re-applied
+      # and every sibling around it.
+      assert html =~ "/items/#{item.uuid}/edit"
+      refute html =~ "category=#{category.uuid}"
     end
 
     test "the unfiled sentinel scopes items mode to unfiled catalogues", %{conn: conn} do
@@ -926,7 +940,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       # The sentinel is legacy-URL-only, but it must still MEAN unfiled:
       # drop_stale_folder_filter used to clear it as "not a real folder",
       # silently widening the search to everywhere.
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items&folder=__unfiled__")
+      {:ok, view, _html} = live(conn, "#{@base}?q=widget&folder=__unfiled__")
       html = render_async(view)
 
       assert html =~ "Unfiled widget"
@@ -943,7 +957,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
         })
       end
 
-      {:ok, view, _html} = live(conn, "#{@base}?mode=items")
+      {:ok, view, _html} = live(conn, "#{@base}?q=widget")
       html = render_async(view)
 
       # Name-ordered, one page of 50: 01 is on it, 55 is not yet.

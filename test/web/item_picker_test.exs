@@ -60,6 +60,79 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
     )
   end
 
+  describe "locale fallback (tim-dev error report, 2026-08-31)" do
+    test "without a :locale attr the process gettext locale applies" do
+      item = %{
+        fake_item("i-loc-1", "Steel screw")
+        | data: %{
+            "_primary_language" => "en",
+            "en" => %{"_name" => "Steel screw"},
+            "et" => %{"_name" => "Teraskruvi"}
+          }
+      }
+
+      # The Andi shape: the host process is in et, no attr passed. The
+      # picker used to default to a hardcoded "en" here — its dropdown,
+      # breadcrumbs and product-card popup all stayed English.
+      Gettext.put_locale("et")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns() |> Map.delete(:locale) |> Map.put(:selected_item, item)
+        )
+
+      assert html =~ "Teraskruvi"
+      refute html =~ "Steel screw"
+    end
+
+    test "an explicit locale={nil} falls back too — the common host shape" do
+      # `locale={@locale}` with a nil assign passes the key PRESENT and
+      # nil; a put_new-style fallback skipped it and the page silently
+      # dropped to untranslated names (external review, 2026-08-31).
+      item = %{
+        fake_item("i-loc-3", "Steel screw")
+        | data: %{
+            "_primary_language" => "en",
+            "en" => %{"_name" => "Steel screw"},
+            "et" => %{"_name" => "Teraskruvi"}
+          }
+      }
+
+      Gettext.put_locale("et")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns() |> Map.put(:locale, nil) |> Map.put(:selected_item, item)
+        )
+
+      assert html =~ "Teraskruvi"
+      refute html =~ "Steel screw"
+    end
+
+    test "an explicit :locale attr still wins" do
+      item = %{
+        fake_item("i-loc-2", "Steel screw")
+        | data: %{
+            "_primary_language" => "en",
+            "en" => %{"_name" => "Steel screw"},
+            "et" => %{"_name" => "Teraskruvi"}
+          }
+      }
+
+      Gettext.put_locale("et")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns() |> Map.put(:locale, "en") |> Map.put(:selected_item, item)
+        )
+
+      assert html =~ "Steel screw"
+    end
+  end
+
   describe "render shape (closed state)" do
     test "renders combobox input with required ARIA attrs" do
       html = render_component(ItemPicker, base_assigns())
@@ -455,6 +528,31 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
       assert html =~ "photo-uuid-abc"
     end
 
+    test "alt carries the item's display name, not an empty string (inert thumbnail)" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html = render_component(ItemPicker, base_assigns(%{selected_item: item}))
+
+      assert html =~ ~s(alt="Oak Plank")
+      refute html =~ ~s(alt="")
+    end
+
+    test "alt carries the item's display name on the clickable thumbnail too" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      assert html =~ ~s(alt="Oak Plank")
+      refute html =~ ~s(alt="")
+    end
+
     test "renders no thumbnail when the selected item has no photo" do
       # fake_item/2 sets data: %{} — no featured_image_uuid.
       item = fake_item("item-1", "Oak Plank")
@@ -634,6 +732,188 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
         )
 
       assert html =~ "w-16 h-16"
+    end
+
+    # A088: the placeholder's own box (excluding padding) must match the
+    # image's box byte-for-byte at every photo_size — NOT merely "changes
+    # when photo_size changes", which is also true on the buggy code (the
+    # placeholder carried an extra `p-1.5` that shrinks its visible box by
+    # 12px relative to the image, at every size). Asserting the full class
+    # string — img minus `object-cover`, placeholder minus `p-1.5
+    # opacity-40` — is the only check that distinguishes "same box" from
+    # "some box that also happens to scale".
+    test "the placeholder box matches the image box exactly at the default photo_size" do
+      item_with_photo = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      item_without_photo = fake_item("item-2", "Pine Plank")
+
+      img_html = render_component(ItemPicker, base_assigns(%{selected_item: item_with_photo}))
+
+      placeholder_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            selected_item: item_without_photo,
+            photo_clickable: true,
+            photo_placeholder: true
+          })
+        )
+
+      assert img_html =~
+               ~s(class="w-8 h-8 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+
+      assert placeholder_html =~
+               ~s(class="hero-photo w-8 h-8 shrink-0 rounded bg-base-200 border border-base-300 opacity-40")
+    end
+
+    test "the placeholder box matches the image box exactly at a non-default photo_size" do
+      item_with_photo = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      item_without_photo = fake_item("item-2", "Pine Plank")
+
+      img_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item_with_photo, photo_size: "w-20 h-20"})
+        )
+
+      placeholder_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{
+            selected_item: item_without_photo,
+            photo_clickable: true,
+            photo_placeholder: true,
+            photo_size: "w-20 h-20"
+          })
+        )
+
+      assert img_html =~
+               ~s(class="w-20 h-20 shrink-0 rounded object-cover bg-base-200 border border-base-300")
+
+      assert placeholder_html =~
+               ~s(class="hero-photo w-20 h-20 shrink-0 rounded bg-base-200 border border-base-300 opacity-40")
+    end
+  end
+
+  describe "photo_asset_type (storage variant override)" do
+    test "defaults to \"thumbnail\", rendering byte-for-byte as before the attribute existed" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html = render_component(ItemPicker, base_assigns(%{selected_item: item}))
+
+      assert html =~ "/photo-uuid-abc/thumbnail/"
+    end
+
+    test "a custom photo_asset_type changes the signed URL's variant segment" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_asset_type: "medium"})
+        )
+
+      assert html =~ "/photo-uuid-abc/medium/"
+      refute html =~ "/photo-uuid-abc/thumbnail/"
+    end
+  end
+
+  describe "show_photo (programmatically force the placeholder for every selected item)" do
+    test "show_photo: false + item WITH a photo + photo_clickable: true renders the clickable placeholder, not the real image" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      assert html =~ "hero-photo"
+      assert html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: false + item WITHOUT a photo + photo_clickable: true also renders the clickable placeholder" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      assert html =~ "hero-photo"
+      assert html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: false with photo_clickable: false renders nothing clickable (no click target to offer)" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: false, show_photo: false})
+        )
+
+      refute html =~ "<img"
+      refute html =~ "hero-photo"
+      refute html =~ ~s(phx-click="photo_click")
+    end
+
+    test "show_photo: true (explicit) renders identically to the default for an item with a photo" do
+      item = %{
+        fake_item("item-1", "Oak Plank")
+        | data: %{"featured_image_uuid" => "photo-uuid-abc"}
+      }
+
+      default_html =
+        render_component(ItemPicker, base_assigns(%{selected_item: item, photo_clickable: true}))
+
+      explicit_html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: true})
+        )
+
+      assert default_html == explicit_html
+    end
+
+    # A caller can pass an explicit `nil` (not merely omit the attr) — e.g.
+    # `show_photo={@maybe_nil}` — and `update/2` assigns it as-is. The
+    # placeholder condition must treat that the same as the documented
+    # `true` default (nothing forced), not as `false` (hide) — `!nil` and
+    # `nil == false` disagree, which is exactly the gap this pins down.
+    test "show_photo: nil (explicit) behaves like the true default — a photo-less item without photo_placeholder renders nothing" do
+      item = fake_item("item-1", "Oak Plank")
+
+      html =
+        render_component(
+          ItemPicker,
+          base_assigns(%{selected_item: item, photo_clickable: true, show_photo: nil})
+        )
+
+      refute html =~ "hero-photo"
+      refute html =~ "<img"
     end
   end
 

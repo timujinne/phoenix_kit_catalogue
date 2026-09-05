@@ -195,7 +195,6 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
                 src={row.thumb_url}
                 alt=""
                 class="w-12 h-12 rounded object-cover bg-base-200 shrink-0"
-                loading="lazy"
               />
               <div
                 :if={!row.thumb_url}

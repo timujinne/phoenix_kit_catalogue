@@ -221,6 +221,9 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   def handle_event("cancel_upload", %{"ref" => ref}, socket),
     do: Attachments.cancel_attachment_upload(socket, ref)
 
+  def handle_event("reorder_files", %{"ordered_ids" => ids}, socket),
+    do: {:noreply, Attachments.handle_reorder_files(socket, ids)}
+
   def handle_event("remove_file", %{"uuid" => uuid}, socket),
     do: Attachments.trash_file(socket, uuid)
 

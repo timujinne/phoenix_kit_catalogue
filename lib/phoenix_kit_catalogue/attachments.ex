@@ -103,9 +103,11 @@ defmodule PhoenixKitCatalogue.Attachments do
       socket
       |> assign(:attachments_resource, resource)
       |> assign_files_folder(resource)
-      # Featured image must be set before files_state so the merge can
-      # surface it even if it's in a different folder (e.g. the file was
-      # moved to another resource's folder after being featured here).
+      # Featured image and the stored media order must be set before
+      # files_state so the list can merge the featured file in AND come
+      # out in the user's saved order (boss, 2026-08-31: the client
+      # reorders images after adding them).
+      |> assign(:media_order, read_list(resource_data(resource), "media_order"))
       |> assign_featured_image_state(resource)
 
     socket =
@@ -138,8 +140,55 @@ defmodule PhoenixKitCatalogue.Attachments do
   end
 
   defp assign_files_state(socket) do
-    assign(socket, :files_state, %{files: compute_files_list(socket)})
+    files =
+      socket
+      |> compute_files_list()
+      |> apply_media_order(socket.assigns[:media_order])
+
+    assign(socket, :files_state, %{files: files})
   end
+
+  @doc """
+  Sorts a file list by an ordered-uuid list (the record's
+  `data["media_order"]`, written by the editor's drag reorder — boss,
+  2026-08-31). Files the order doesn't know keep their relative
+  position at the tail (new uploads land after the ordered ones), and a
+  nil/empty order is the identity — legacy records sort as before
+  (folder `inserted_at`).
+  """
+  def apply_media_order(files, order) when is_list(order) and order != [] do
+    index = order |> Enum.with_index() |> Map.new()
+    tail_base = length(order)
+
+    files
+    |> Enum.with_index()
+    |> Enum.sort_by(fn {file, position} ->
+      {Map.get(index, to_string(file.uuid), tail_base), position}
+    end)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  def apply_media_order(files, _order), do: files
+
+  @doc """
+  The `"reorder_files"` event handler body, shared by the three form
+  LiveViews: reorders the files grid to the client's `ordered_ids` and
+  remembers the order for `inject_attachment_data/2` to persist at
+  save. Crafted ids are harmless — unknown ids are dropped, known files
+  the payload missed keep their place at the tail, so the list can
+  never lose or invent a file.
+  """
+  def handle_reorder_files(socket, ordered_ids) when is_list(ordered_ids) do
+    files = socket.assigns.files_state.files
+    order = Enum.map(ordered_ids, &to_string/1)
+    reordered = apply_media_order(files, order)
+
+    socket
+    |> assign(:media_order, Enum.map(reordered, &to_string(&1.uuid)))
+    |> assign(:files_state, %{files: reordered})
+  end
+
+  def handle_reorder_files(socket, _payload), do: socket
 
   # Files list = everything in the resource's folder + the featured
   # image if it lives elsewhere. Cross-resource duplicate-moves can
@@ -268,12 +317,14 @@ defmodule PhoenixKitCatalogue.Attachments do
     case do_detach(uuid, folder_uuid) do
       detached when detached in [:ok, :noop] ->
         new_files = Enum.reject(socket.assigns.files_state.files, &(&1.uuid == uuid))
+        new_order = Enum.map(new_files, &to_string(&1.uuid))
         # Only a real write is announced — a miss changed nothing.
         if detached == :ok, do: broadcast_resource_changed(socket)
 
         {:noreply,
          socket
          |> assign(:files_state, %{files: new_files})
+         |> assign(:media_order, new_order)
          |> maybe_clear_featured_if_matches(uuid)}
 
       {:error, reason} ->
@@ -486,6 +537,7 @@ defmodule PhoenixKitCatalogue.Attachments do
     params
     |> inject_files_folder(socket.assigns[:files_folder_uuid])
     |> inject_featured_image(socket.assigns[:featured_image_uuid])
+    |> inject_media_order(socket.assigns[:files_state])
   end
 
   @doc """
@@ -833,6 +885,20 @@ defmodule PhoenixKitCatalogue.Attachments do
     Map.put(params, "data", Map.put(data, "featured_image_uuid", uuid))
   end
 
+  # The full current grid order, not just the dragged subset — new
+  # uploads get persisted positions too, and the save is what makes the
+  # order real (same lifecycle as the featured pointer). Only written
+  # once the user HAS files: a legacy record without any stays untouched.
+  defp inject_media_order(params, %{files: [_ | _] = files}) do
+    data = ensure_data_map(params)
+    Map.put(params, "data", Map.put(data, "media_order", Enum.map(files, &to_string(&1.uuid))))
+  end
+
+  defp inject_media_order(params, _files_state) do
+    data = ensure_data_map(params)
+    Map.put(params, "data", Map.delete(data, "media_order"))
+  end
+
   defp ensure_data_map(params) do
     case Map.get(params, "data") do
       %{} = d -> d
@@ -842,6 +908,15 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   defp resource_data(%{data: data}) when is_map(data), do: data
   defp resource_data(_), do: %{}
+
+  # No non-map fallback: resource_data/1 always yields a map (dialyzer
+  # flags the dead clause), and a stored non-list value degrades to [].
+  defp read_list(data, key) when is_map(data) do
+    case Map.get(data, key) do
+      list when is_list(list) -> Enum.map(list, &to_string/1)
+      _ -> []
+    end
+  end
 
   defp read_string(data, key) when is_map(data) do
     case Map.get(data, key) do

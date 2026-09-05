@@ -68,9 +68,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       `aria-disabled` and cannot be clicked; the select handler refuses
       them server-side too (a click can race the re-render that excluded
       its target). Use for "already picked in another row" state.
-    * `:locale` (required) — locale string for translated display
-      names (`"en"`, `"es"`, etc.). Resolved via
-      `Catalogue.get_translation/2`.
+    * `:locale` — locale string for translated display names (`"en"`,
+      `"et"`, etc.), resolved via `Catalogue.get_translation/2`. Omitted,
+      the process gettext locale applies (the fallback the selector and
+      browse widget share) — pass it only to force a language the
+      process is not already in.
     * `:placeholder` — input placeholder. Defaults to "Search items…".
     * `:empty_query_limit` — how many items to show when the query is
       empty (the "just focused" state). Defaults to `10`.
@@ -117,6 +119,22 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     * `:photo_size` — Tailwind size classes (e.g. `"w-8 h-8"`) applied to
       the thumbnail/placeholder image. Defaults to `"w-8 h-8"`, the
       previously hardcoded size, so existing consumers render unchanged.
+    * `:photo_asset_type` — the Storage variant name passed to
+      `URLSigner.signed_url/2` for the thumbnail/placeholder image (e.g.
+      `"thumbnail"`, `"medium"`). Defaults to `"thumbnail"`, the
+      previously hardcoded variant, so existing consumers render
+      unchanged. Expected to be a developer-chosen literal, like
+      `:photo_size` — it's interpolated unescaped into the signed URL's
+      path, so a host must never bind it to end-user input.
+    * `:show_photo` — when `false`, the real thumbnail image is never
+      rendered for the selected item (regardless of whether it actually
+      has a photo), and a clickable placeholder takes its place whenever
+      `:photo_clickable` is `true` — like `:photo_placeholder`, but for
+      every selected item, not just photo-less ones. Defaults to `true`:
+      unchanged, the real photo renders when the item has one. When
+      `:photo_clickable` is `false` there is no placeholder to click, so
+      `show_photo: false` renders nothing at all in the thumbnail's
+      place.
     * `:initial_query` — optional seed string for the search input. When
       provided (and nothing is selected and the user hasn't typed), the
       input is prefilled with this string and the dropdown opens with
@@ -153,6 +171,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   @default_empty_query_limit 10
   @default_page_size 20
   @default_photo_size "w-8 h-8"
+  @default_photo_asset_type "thumbnail"
 
   @impl true
   def mount(socket) do
@@ -185,6 +204,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
        photo_clickable: false,
        photo_placeholder: false,
        photo_size: @default_photo_size,
+       photo_asset_type: @default_photo_asset_type,
+       show_photo: true,
        card_open: false,
        card_name: nil,
        card_images: [],
@@ -203,6 +224,23 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
 
   @impl true
   def update(assigns, socket) do
+    # A host that passes no :locale gets the process gettext locale, the
+    # same fallback ItemSelectorModal and CatalogueBrowse already use —
+    # this component alone stuck to its "en" mount default, so its
+    # dropdown, breadcrumbs AND its product-card popup stayed English on
+    # localized pages (tim-dev error report, 2026-08-31). Resolved per
+    # update so it also tracks a host whose process locale changes.
+    # `||`, not put_new: `locale={@locale}` with a nil assign is the
+    # common host shape, and a present-but-nil key would skip a
+    # put_new fallback — silent English on a localized page, the exact
+    # bug this fixes (external review, 2026-08-31).
+    assigns =
+      Map.put(
+        assigns,
+        :locale,
+        assigns[:locale] || Gettext.get_locale(PhoenixKitCatalogue.Gettext)
+      )
+
     # If the selected_item UUID *changes* between updates, mirror the
     # new item's name into the input. No change (including first mount
     # with no selection) leaves `:query` alone so a mid-typing user
@@ -534,6 +572,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
 
   defp selected_photo_uuid(_), do: nil
 
+  # `:show_photo` forces the effective uuid to nil regardless of whether the
+  # item actually has a photo — the real `<img>` only renders off this
+  # value, so `false` here is what suppresses it. `show_photo == false` (not
+  # a plain falsy match) so a nil/missing assign — shouldn't happen since
+  # `mount/1` always sets a default, but render/1 reads assigns loosely
+  # elsewhere too — is treated as the `true` default rather than as "hide".
+  defp effective_photo_uuid(_item, false), do: nil
+  defp effective_photo_uuid(item, _show_photo), do: selected_photo_uuid(item)
+
   # Resolves the product card's images + filled fields for `item` and
   # opens the modal. The main (featured) image is the first one, shown
   # expanded. Called from `photo_click`, which now matches `%Item{}` itself —
@@ -551,13 +598,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
 
   defp item_display_name(nil, _locale), do: nil
 
-  defp item_display_name(%Item{} = item, locale) do
-    translation = safe_get_translation(item, locale)
-
-    Map.get(translation, "_name") ||
-      Map.get(translation, "name") ||
-      item.name
-  end
+  defp item_display_name(%Item{} = item, locale),
+    do: Catalogue.translated_name(item, locale)
 
   # Full path: catalogue / every ancestor category (root → direct parent) /
   # the item's own category. `category_paths` (built by `ensure_category_paths/2`)
@@ -593,19 +635,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     |> Enum.join(" / ")
   end
 
-  defp translated_name(record, locale) do
-    translation = safe_get_translation(record, locale)
-
-    Map.get(translation, "_name") ||
-      Map.get(translation, "name") ||
-      Map.get(record, :name)
-  end
-
-  defp safe_get_translation(record, locale) do
-    Catalogue.get_translation(record, locale)
-  rescue
-    _ -> %{}
-  end
+  # Presence-guarded and rescue-safe via the canonical helper — the
+  # ad-hoc copies of this chain let a stored blank override blank the
+  # display (external review, 2026-08-31).
+  defp translated_name(record, locale), do: Catalogue.translated_name(record, locale)
 
   defp format_price_display(_item, nil), do: nil
 
@@ -646,7 +679,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       )
       |> assign(
         :selected_photo_uuid,
-        selected_photo_uuid(assigns[:selected_item])
+        effective_photo_uuid(assigns[:selected_item], assigns[:show_photo])
       )
 
     ~H"""
@@ -675,23 +708,25 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
           title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View item details")}
         >
           <img
-            src={URLSigner.signed_url(@selected_photo_uuid, "thumbnail")}
-            alt=""
+            src={URLSigner.signed_url(@selected_photo_uuid, @photo_asset_type)}
+            alt={item_display_name(@selected_item, @locale) || ""}
             onerror="this.style.display='none'"
             class={[@photo_size, "shrink-0 rounded object-cover bg-base-200 border border-base-300"]}
           />
         </button>
         <img
           :if={@selected_photo_uuid && !@photo_clickable}
-          src={URLSigner.signed_url(@selected_photo_uuid, "thumbnail")}
-          alt=""
+          src={URLSigner.signed_url(@selected_photo_uuid, @photo_asset_type)}
+          alt={item_display_name(@selected_item, @locale) || ""}
           onerror="this.style.display='none'"
           class={[@photo_size, "shrink-0 rounded object-cover bg-base-200 border border-base-300"]}
         />
         <%!--
-        Placeholder shown instead of the thumbnail when the selected item has
-        no photo. Opt-in (`photo_placeholder`) and only meaningful alongside
-        `photo_clickable` — its only purpose is to give a photo-less item a
+        Placeholder shown instead of the thumbnail when there's no real photo
+        to show — either the selected item has none (opt-in via
+        `photo_placeholder`), or the host forced it off for every item via
+        `show_photo={false}`. Only meaningful alongside `photo_clickable` —
+        its only purpose is to give an item without a visible photo a
         clickable target for the product card, which already opens fine for
         such items once the event reaches the server (see `photo_click`
         above); without this branch there is simply no element in the DOM
@@ -699,7 +734,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         photo-less item, exactly as before.
         --%>
         <button
-          :if={!@selected_photo_uuid && @selected_item && @photo_clickable && @photo_placeholder}
+          :if={
+            !@selected_photo_uuid && @selected_item && @photo_clickable &&
+              (@photo_placeholder || @show_photo == false)
+          }
           type="button"
           phx-click="photo_click"
           phx-target={@myself}
@@ -709,7 +747,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         >
           <.icon
             name="hero-photo"
-            class={"#{@photo_size} shrink-0 rounded bg-base-200 border border-base-300 p-1.5 opacity-40"}
+            class={"#{@photo_size} shrink-0 rounded bg-base-200 border border-base-300 opacity-40"}
           />
         </button>
         <div class="relative flex-1">

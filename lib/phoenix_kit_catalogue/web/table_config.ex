@@ -114,9 +114,9 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("updated", fn -> g("Updated") end,
         default?: true,
         sortable?: true,
-        sort_key: & &1.updated_at
+        sort_key: &epoch(&1.updated_at)
       ),
-      col("created", fn -> g("Created") end, sortable?: true, sort_key: & &1.inserted_at)
+      col("created", fn -> g("Created") end, sortable?: true, sort_key: &epoch(&1.inserted_at))
     ]
   end
 
@@ -144,7 +144,7 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
         sortable?: true,
         sort_key: &down(&1.contact_info)
       ),
-      col("updated", fn -> g("Updated") end, sortable?: true, sort_key: & &1.updated_at)
+      col("updated", fn -> g("Updated") end, sortable?: true, sort_key: &epoch(&1.updated_at))
     ]
   end
 
@@ -221,7 +221,7 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("updated", fn -> g("Updated") end,
         default?: true,
         sortable?: true,
-        sort_key: & &1.updated_at
+        sort_key: &epoch(&1.updated_at)
       )
     ]
   end
@@ -269,4 +269,14 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
   defp dec(%Decimal{} = d), do: Decimal.to_float(d)
   defp dec(n) when is_number(n), do: n
   defp dec(_), do: 0.0
+
+  # Chronological, not structural: `Enum.sort_by/3`'s default term order
+  # compares DateTime structs field-alphabetically (day before month), so
+  # a bare `& &1.updated_at` sort key misordered across month boundaries.
+  defp epoch(%DateTime{} = dt), do: DateTime.to_unix(dt, :microsecond)
+
+  defp epoch(%NaiveDateTime{} = dt),
+    do: NaiveDateTime.diff(dt, ~N[1970-01-01 00:00:00], :microsecond)
+
+  defp epoch(_), do: 0
 end

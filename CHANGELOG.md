@@ -1,3 +1,141 @@
+## 0.26.0 - 2026-09-01
+
+### Added
+
+- **One shared sort for the whole module** (#94) — the item-selector popup and
+  the `CatalogueBrowse` embed now order by the same `catalogue_sort_*` settings
+  the admin pages sort by, instead of their own hardcoded order. `BrowseState`
+  gained an `:order` (`{field, :asc | :desc}`, fixed at init like the scope and
+  validated against the sortable `:detail_items` column ids), `Browse.global_items_order/0`
+  and `Browse.global_categories_order/0` read the shared settings, and the
+  popup's listings, category tiles, catalogue tiles and the embed's chip row
+  all follow. A live search stays name-ordered, which is what the admin's own
+  search does.
+- **Directional item orders in `Catalogue.search_items/2`** (#94) — `order:
+  {field, dir}` for `name` / `sku` / `base_price` / `status` reproduces the
+  admin's `item_order_by/3` chain, uuid tie-break included, so browse paging
+  stays deterministic. `order: {:position, _}` folds into the existing
+  category-position chain and ignores the direction, like the admin's Manual
+  sort.
+
+### Fixed
+
+- **Date columns sorted structurally, not chronologically** (#94) —
+  `Enum.sort_by/2`'s default term order compares `DateTime` structs
+  field-alphabetically (day before month), so `Updated` / `Created` sorts put
+  Jan 2nd after Feb 1st. Fixed in the catalogues, suppliers, manufacturers and
+  attribute-groups tables (`TableConfig`), in the detail page's categories sort,
+  and — found in the post-merge review — in `Catalogue.reorder_items_by/4`'s
+  `:created_asc` / `:created_desc` strategies, the one place that *persists* the
+  wrong order into `position`.
+- **A settings failure no longer crashes the selector popup** (#94) — the
+  shared-sort read is a `Settings` (database) call that landed outside
+  `ItemSelectorModal`'s tree-degradation guard. It now falls back to Manual
+  (`{:position, :asc}`, the scope's own default) and logs, keeping the popup's
+  "tiles are navigation, not data" contract.
+
+## 0.25.0 - 2026-08-31
+
+### Added
+
+- **Catalogue-first drilling in the item selector** (#90) — a scope naming
+  several catalogues now lists them as tiles at the root; choosing one lands
+  on that catalogue's own level (its top categories, its `Uncategorized`
+  bucket) and `Back` climbs the same chain. `BrowseState` gained
+  `{:set_catalogue, uuid | nil}`, membership-checked against
+  `scope.catalogue_uuids` like every other narrowing, and only accepted when
+  the scope actually offers several.
+- **Smart-catalogue fees are presented instead of blank** (#90) —
+  `Browse.smart_fee/1` resolves a fee item with no intrinsic price to
+  `{:price, decimal}` (a standalone flat fee IS the price), `{:note, "12%"}`,
+  or a localized `Computed`. Presented maps carry a `:fee_note`, the confirm
+  payload carries it too, and the product card's Price row falls back to it —
+  so a percent-fee pick no longer arrives indistinguishable from a free item.
+- **Drag-reorder for a resource's photos and files** (#90) — the attachments
+  grid is a `draggable_list`; the order persists at save in
+  `data["media_order"]` and drives the product card's carousel and file list.
+  `Attachments.apply_media_order/2` and `handle_reorder_files/2` are shared by
+  the catalogue, category and item forms.
+- **A live context header in the item selector** (#90) — the header names the
+  level being browsed (drilled category, chosen catalogue, the `Uncategorized`
+  bucket) and carries the `Back` button, replacing the in-list `Up`.
+- **Instant selection feedback** (#90) — a colocated `QtySignal` hook flips
+  `data-selected` on keystroke, mirroring the server's accept set
+  (`select_floor` / `zero_deselects`) so a value the server will reject never
+  previews as selected. Rows and cards style off `data-selected`, and the
+  browse surfaces use `phx-click-loading` for click feedback.
+- **`show_photo` and `photo_asset_type` on `<.item_picker>`** (#91) —
+  `show_photo={false}` suppresses the real thumbnail for every selected item
+  (the clickable placeholder stands in), and `photo_asset_type` chooses the
+  Storage variant. Both default to the previous behaviour.
+- **`inline_qty` and `root_switcher` opt-ins on the item selector** (#90) —
+  see Changed; both restore behaviour that stopped being the default.
+
+### Changed
+
+- **The item selector's root is just a level** (#90) — with categories it
+  lists the outline and does not even fetch page 1; items come from entering a
+  level or searching. The `Categories | Items` switcher is now opt-in via
+  `root_switcher: true`.
+- **Click flavour with a visible `:qty` is either-or** (#90) — the leftmost
+  checkbox is the one selected signal and the quantity cell shows the picked
+  amount read-only. `inline_qty: true` restores the legacy checkmark-plus-
+  stepper pairing.
+- **A scope naming exactly one category opens standing in it** (#90) — its
+  child tiles and its own directly-filed items, with `Back` hidden at that
+  floor.
+- **The catalogue index searches items alongside catalogues** (#90) — the
+  `Catalogues | Items` search-mode switcher and its `?mode=` URL state are
+  gone; matching catalogues stay on top as navigation with matching items
+  underneath, and an item result opens that item's edit page. The catalogue
+  detail page's equivalent switcher is retired the same way.
+- **Language switching keeps your place** (#90) — both index and detail
+  LiveViews publish the full current URL as `url_path`, so core's language
+  switcher no longer drops the drilled category and query.
+- **Featured thumbnails enter their record** (#90) — catalogue and category
+  thumbnails on the admin tables are links, like their names.
+- **`item_picker` follows the process locale** (#90) — a host that passes no
+  `:locale` (or an explicit `nil`) gets `Gettext.get_locale/1` instead of a
+  hardcoded `"en"`, so the dropdown, breadcrumbs and product card stop being
+  English on localized pages.
+
+### Fixed
+
+- **Browse listings read in the admin's document order** (#90, corrected
+  post-merge) — `search_items/2` accepts `order: :position`, and it now uses
+  `search_items_in_catalogue/3`'s chain (category position first, then the
+  item's own). Leading with the item's raw position alone interleaved the
+  per-category ordinals for any listing spanning several categories — which is
+  every `CatalogueBrowse` level, since `BrowseState`'s default drill is
+  `:subtree`.
+- **The card view shows the picked quantity too** (#90, post-merge) — the
+  read-only amount in the click-without-`inline_qty` flavour had reached the
+  table row only, so a preselection at another quantity was invisible one view
+  toggle away.
+- **List names were never translated** (#90) — `Browse.present_items/2` read a
+  bare `"name"` key instead of the multilang `"_name"` the editor writes. All
+  the ad-hoc translation chains across the picker, selector, browse and
+  product card now route through the presence-guarded
+  `Catalogue.translated_name/2` / `translated_description/2`, so a stored
+  blank override can no longer blank a display name.
+- **Subcategory tiles were missing for category-only scopes** (#90) — a scope
+  passing `category_uuids` without `catalogue_uuids` fell through to the empty
+  tree. The catalogue is now derived from the scoped categories for the tree
+  only; the browse scope and every fetch stay exactly what the host passed.
+  A tree-build failure is logged instead of degrading silently.
+- **A whitespace-only query counted as a search** (#90) — the fetch layer
+  trims it to no filter, so `BrowseState` and the level-navigation gates now
+  agree it is no search, instead of flipping a `:direct` level to subtree
+  listing while hiding the level nav.
+- **A crafted cross-catalogue `browse_category` is refused** (#90) — under the
+  catalogue-first drill it would have produced a contradictory dead-end level.
+- **The auto-load sentinel pushed to the host LiveView** (#90) — replaced with
+  a colocated hook that pushes through its own `phx-target`, so it works on
+  every published core instead of crashing hosts without a `load_more` clause.
+- **`item_picker` placeholder sizing and `alt` text** (#91) — the placeholder
+  box now matches the image box at every `photo_size`, and both thumbnail
+  branches carry the item's display name as `alt` instead of `""`.
+
 ## 0.24.0 - 2026-08-30
 
 ### Added

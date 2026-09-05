@@ -25,13 +25,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerCardTest do
             nil
         end
 
-      {:ok, assign(socket, item: item, photo_clicks: 0), layout: false}
+      show_photo = Map.get(session, "show_photo", true)
+
+      {:ok, assign(socket, item: item, photo_clicks: 0, show_photo: show_photo), layout: false}
     end
 
     def render(assigns) do
       ~H"""
       <div>
-        <.item_picker id="host-picker" locale="en" selected_item={@item} photo_clickable={true} />
+        <.item_picker
+          id="host-picker"
+          locale="en"
+          selected_item={@item}
+          photo_clickable={true}
+          show_photo={@show_photo}
+        />
         <span id="photo-clicks">{@photo_clicks}</span>
       </div>
       """
@@ -69,6 +77,33 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerCardTest do
     # Closing the card hides it again.
     view |> element(~s(button[phx-click="card_close"])) |> render_click()
     refute render(view) =~ ~s(phx-click="card_close")
+  end
+
+  test "clicking the placeholder (show_photo: false) opens the product card just like a real photo click",
+       %{conn: conn} do
+    item =
+      fixture_item(%{
+        name: "Card Item Hidden Photo",
+        sku: "CARD-2",
+        data: %{"featured_image_uuid" => Ecto.UUID.generate()}
+      })
+
+    {:ok, view, _html} =
+      live_isolated(conn, HostLive, session: %{"item_uuid" => item.uuid, "show_photo" => false})
+
+    # The real <img> is suppressed; the clickable placeholder stands in for it.
+    refute render(view) =~ "<img"
+    assert render(view) =~ "hero-photo"
+    refute render(view) =~ ~s(phx-click="card_close")
+
+    # Click the placeholder — same event as a real thumbnail click.
+    view |> element(~s(button[phx-click="photo_click"])) |> render_click()
+
+    html = render(view)
+    assert html =~ "Card Item Hidden Photo"
+    assert html =~ ~s(phx-click="card_close")
+    assert html =~ "CARD-2"
+    assert has_element?(view, "#photo-clicks", "1")
   end
 
   test "a forged photo_click with nothing selected is inert", %{conn: conn} do

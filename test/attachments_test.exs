@@ -173,6 +173,67 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
     end
   end
 
+  describe "media order (boss, 2026-08-31: reorder images after adding)" do
+    defp file_map(uuid), do: %{uuid: uuid}
+
+    test "apply_media_order/2 sorts by the saved order, unknowns keep tail order" do
+      [a, b, c, d] = for _ <- 1..4, do: Ecto.UUID.generate()
+      files = [file_map(a), file_map(b), file_map(c), file_map(d)]
+
+      # c and a saved first; b/d unknown to the order keep their
+      # relative (inserted_at) positions after them.
+      ordered = Attachments.apply_media_order(files, [c, a])
+      assert Enum.map(ordered, & &1.uuid) == [c, a, b, d]
+
+      # nil/empty order is the identity — legacy records unchanged.
+      assert Attachments.apply_media_order(files, []) == files
+      assert Attachments.apply_media_order(files, nil) == files
+    end
+
+    test "handle_reorder_files/2 reorders the grid and drops crafted ids" do
+      [a, b, c] = for _ <- 1..3, do: Ecto.UUID.generate()
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          __changed__: %{},
+          files_state: %{files: [file_map(a), file_map(b), file_map(c)]},
+          media_order: []
+        }
+      }
+
+      out = Attachments.handle_reorder_files(socket, [c, Ecto.UUID.generate(), a])
+
+      # Crafted unknown id vanished; the file the payload missed (b)
+      # kept its place at the tail — nothing lost, nothing invented.
+      assert Enum.map(out.assigns.files_state.files, & &1.uuid) == [c, a, b]
+      assert out.assigns.media_order == [c, a, b]
+
+      # A garbage payload is a no-op.
+      assert Attachments.handle_reorder_files(socket, "junk") == socket
+    end
+
+    test "inject_attachment_data/2 persists the grid order into data['media_order']" do
+      [a, b] = for _ <- 1..2, do: Ecto.UUID.generate()
+
+      socket = %Phoenix.LiveView.Socket{
+        assigns: %{
+          files_folder_uuid: nil,
+          featured_image_uuid: nil,
+          files_state: %{files: [file_map(b), file_map(a)]}
+        }
+      }
+
+      result = Attachments.inject_attachment_data(%{"name" => "X"}, socket)
+      assert get_in(result, ["data", "media_order"]) == [b, a]
+
+      # No files: a stale saved order is cleared, like the featured pointer.
+      empty_socket = put_in(socket.assigns.files_state, %{files: []})
+      params = %{"name" => "X", "data" => %{"media_order" => ["stale"]}}
+      result = Attachments.inject_attachment_data(params, empty_socket)
+      refute Map.has_key?(result["data"], "media_order")
+    end
+  end
+
   # Build a struct-like fake socket with just the assigns we need.
   # Phoenix.LiveView.Socket has many required fields; build one
   # via struct/2 with minimal overrides.

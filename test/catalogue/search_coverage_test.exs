@@ -208,4 +208,127 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
       assert render_change(view, "table_search", %{"query" => "Köögisari"}) =~ "Kitchen Range"
     end
   end
+
+  describe "order: :position (admin document order, 2026-08-31)" do
+    test "browse fetches read position order; the default stays name order" do
+      cat = fixture_catalogue(%{name: "Ordered Range"})
+      grouping = fixture_category(cat, %{name: "Grouping"})
+
+      # Names invert the positions, so the two orders are distinguishable.
+      z_first =
+        fixture_item(%{name: "Zed First", catalogue_uuid: cat.uuid, category_uuid: grouping.uuid})
+
+      a_last =
+        fixture_item(%{
+          name: "Alpha Last",
+          catalogue_uuid: cat.uuid,
+          category_uuid: grouping.uuid
+        })
+
+      {:ok, _} = Catalogue.update_item(Catalogue.get_item!(z_first.uuid), %{position: 1})
+      {:ok, _} = Catalogue.update_item(Catalogue.get_item!(a_last.uuid), %{position: 2})
+
+      opts = [category_uuids: [grouping.uuid], include_descendants: false]
+
+      by_position = Catalogue.search_items("", opts ++ [order: :position])
+      assert Enum.map(by_position, & &1.name) == ["Zed First", "Alpha Last"]
+
+      by_name = Catalogue.search_items("", opts)
+      assert Enum.map(by_name, & &1.name) == ["Alpha Last", "Zed First"]
+    end
+
+    # `i.position` is per-(catalogue, category), so a listing that spans
+    # SEVERAL categories — every CatalogueBrowse level (drill: :subtree
+    # is the BrowseState default) and the selector popup's opt-in flat
+    # root — must lead with the CATEGORY's position or the per-category
+    # ordinals interleave: all the 1s, then all the 2s. The pin above
+    # uses one category, where the two chains are indistinguishable.
+    test "a listing spanning several categories walks category by category, not ordinal by ordinal" do
+      cat = fixture_catalogue(%{name: "Two Section Range"})
+      first = fixture_category(cat, %{name: "First Section", position: 1})
+      second = fixture_category(cat, %{name: "Second Section", position: 2})
+
+      for {category, names} <- [{first, ["F One", "F Two"]}, {second, ["S One", "S Two"]}] do
+        names
+        |> Enum.with_index(1)
+        |> Enum.each(fn {name, position} ->
+          item =
+            fixture_item(%{
+              name: name,
+              catalogue_uuid: cat.uuid,
+              category_uuid: category.uuid
+            })
+
+          {:ok, _} = Catalogue.update_item(Catalogue.get_item!(item.uuid), %{position: position})
+        end)
+      end
+
+      # A loose item has no category position at all — it sorts last,
+      # exactly as search_items_in_catalogue/3 places it.
+      loose = fixture_item(%{name: "Loose End", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.update_item(Catalogue.get_item!(loose.uuid), %{position: 1})
+
+      names =
+        ""
+        |> Catalogue.search_items(catalogue_uuids: [cat.uuid], order: :position)
+        |> Enum.map(& &1.name)
+
+      assert names == ["F One", "F Two", "S One", "S Two", "Loose End"]
+
+      # The same chain the admin's catalogue-wide read walks.
+      assert names ==
+               cat.uuid
+               |> Catalogue.search_items_in_catalogue("")
+               |> Enum.map(& &1.name)
+    end
+
+    test "{field, dir} orders read the admin's directional sorts" do
+      # Client, 2026-09-01: the module's shared sort names one of the
+      # admin's directional fields, and browse fetches carry it as
+      # `order: {field, dir}` — same chain as `item_order_by/3`, uuid
+      # tie-broken.
+      cat = fixture_catalogue(%{name: "Directional Range"})
+      grouping = fixture_category(cat, %{name: "Grouping"})
+
+      cheap =
+        fixture_item(%{
+          name: "Bravo Cheap",
+          sku: "SKU-1",
+          base_price: Decimal.new("1.00"),
+          catalogue_uuid: cat.uuid,
+          category_uuid: grouping.uuid
+        })
+
+      dear =
+        fixture_item(%{
+          name: "Alpha Dear",
+          sku: "SKU-2",
+          base_price: Decimal.new("9.00"),
+          catalogue_uuid: cat.uuid,
+          category_uuid: grouping.uuid
+        })
+
+      # Positions invert the names so {:position, _} is distinguishable
+      # from every field sort.
+      {:ok, _} = Catalogue.update_item(Catalogue.get_item!(cheap.uuid), %{position: 1})
+      {:ok, _} = Catalogue.update_item(Catalogue.get_item!(dear.uuid), %{position: 2})
+
+      opts = [category_uuids: [grouping.uuid], include_descendants: false]
+
+      fetch = fn order ->
+        Enum.map(Catalogue.search_items("", opts ++ [order: order]), & &1.name)
+      end
+
+      assert fetch.({:name, :asc}) == ["Alpha Dear", "Bravo Cheap"]
+      assert fetch.({:name, :desc}) == ["Bravo Cheap", "Alpha Dear"]
+      # SKUs invert the names, so this cannot be satisfied by the name
+      # fallback (the non-distinguishing shape the first pin had).
+      assert fetch.({:sku, :asc}) == ["Bravo Cheap", "Alpha Dear"]
+      assert fetch.({:sku, :desc}) == ["Alpha Dear", "Bravo Cheap"]
+      assert fetch.({:base_price, :desc}) == ["Alpha Dear", "Bravo Cheap"]
+      assert fetch.({:base_price, :asc}) == ["Bravo Cheap", "Alpha Dear"]
+      # Manual ignores the direction, exactly like the admin's.
+      assert fetch.({:position, :desc}) == ["Bravo Cheap", "Alpha Dear"]
+    end
+  end
 end

@@ -91,9 +91,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html =~ "?category=uncategorized"
       assert html =~ "Uncategorized"
 
-      # Items mode still lists the loose items catalogue-wide.
-      {:ok, _view, html} = live(conn, url(catalogue.uuid) <> "?mode=items")
-      assert html =~ "Loose Item"
+      # The loose items themselves stay behind the bucket drill — the
+      # root browser lists sections, not content.
+      refute html =~ "Loose Item"
     end
 
     test "an empty Uncategorized bucket stays out of the browser", %{conn: conn} do
@@ -107,19 +107,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       refute html =~ "?category=uncategorized"
     end
 
-    test "with no categories, the catalogue's loose items live behind Items mode",
+    test "with no categories, the root simply lists the loose items",
          %{conn: conn} do
       catalogue = fixture_catalogue()
       fixture_item(%{name: "Loose Alpha", catalogue_uuid: catalogue.uuid})
 
-      # The category browser shows no items — it points at Items mode.
+      # The popup's rule (Max, 2026-08-31): a category-less root lists
+      # its items — no empty outline pointing at a retired Items mode.
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
-      refute html =~ "Loose Alpha"
-      assert html =~ "Switch to Items"
-
-      {:ok, _view, html} = live(conn, url(catalogue.uuid) <> "?mode=items")
       assert html =~ "Loose Alpha"
-      refute html =~ "?category=uncategorized"
     end
 
     test "does NOT render category items inline at the root level", %{conn: conn} do
@@ -921,22 +917,20 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       refute html_after =~ "Oak in B"
     end
 
-    test "items mode lists the WHOLE catalogue with the full surface", %{conn: conn} do
+    test "a legacy ?mode=items URL is ignored: the root keeps its outline", %{conn: conn} do
       catalogue = fixture_catalogue()
       cat_a = fixture_category(catalogue, %{name: "Chapter A"})
       fixture_item(%{name: "Widget in A", category_uuid: cat_a.uuid})
       fixture_item(%{name: "Loose widget", catalogue_uuid: catalogue.uuid})
 
-      # With drilling gone there is no level to stand in: root Items mode
-      # answers for every item in the catalogue, in document order.
+      # The flat root Items page retired with its switcher (2026-08-31);
+      # an old bookmark simply lands on the outline.
       {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?mode=items")
       html = render_async(view)
 
-      assert html =~ "Loose widget"
-      assert html =~ "Widget in A"
-      # The category browser is folded away, and the chips yield to the mode.
-      refute html =~ "catalogue-categories-views"
-      refute html =~ "set_search_type"
+      assert html =~ "catalogue-categories-views"
+      assert html =~ "Chapter A"
+      refute html =~ "Widget in A"
 
       # A legacy drilled link still scopes to that category's own items.
       {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, cat_a.uuid) <> "&mode=items")
@@ -945,19 +939,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       refute html =~ "Loose widget"
     end
 
-    test "searching inside items mode narrows the flat list", %{conn: conn} do
+    test "a root search answers with categories AND items — no mode needed", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue, %{name: "Oak chapter"})
       fixture_item(%{name: "Oak panel", category_uuid: category.uuid})
       fixture_item(%{name: "Pine board", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?mode=items&q=oak")
+      # The unified rule (Max, 2026-08-31): whatever matches shows —
+      # the chapter as navigation, the item as a result. The type chips
+      # remain the refinement.
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?q=oak")
       html = render_async(view)
 
+      assert html =~ "Oak chapter"
       assert html =~ "Oak panel"
       refute html =~ "Pine board"
-      # No category hits in items mode, even when the name matches.
-      refute html =~ "Oak chapter"
+      assert html =~ "set_search_type"
     end
 
     test "a category's page shows its subcategories above its items", %{conn: conn} do
@@ -969,17 +966,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       # The exact gap Max hit (2026-08-29): a category nested under
       # Hardware was invisible on Hardware's own page — the old drilled
       # view showed subcategories and the no-drilling rework lost them.
-      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, parent.uuid) <> "&mode=items")
+      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, parent.uuid))
       html = render_async(view)
 
       assert html =~ "Frames sub"
       assert html =~ "Hinge item"
 
-      # The ROOT items page stays pure items — the outline lives in
-      # Categories mode there.
-      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?mode=items")
+      # The ROOT stays a pure outline — its items live one drill down.
+      {:ok, view, _html} = live(conn, url(catalogue.uuid))
       html = render_async(view)
-      refute html =~ "catalogue-categories-views"
+      assert html =~ "catalogue-categories-views"
+      refute html =~ "Hinge item"
     end
 
     test "the subtree toggle widens the SEARCH, never the browse list", %{conn: conn} do
@@ -1051,20 +1048,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert :sys.get_state(view.pid).socket.assigns.show_items_reorder
     end
 
-    test "root items mode hides the toolbar Reorder via CSS", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      fixture_category(catalogue, %{name: "Grouping chapter"})
-      fixture_item(%{name: "Loose item", catalogue_uuid: catalogue.uuid})
-
-      # Root items mode with categories present cannot strategy-reorder
-      # (document order is grouped by category). The substring match is
-      # load-bearing: Tailwind reads a bare `_` in an arbitrary value
-      # as a space, and escaping cannot work because Tailwind scans
-      # the raw source while HEEx renders the parsed string.
-      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?mode=items")
-      assert render_async(view) =~ "[data-bulk-action*=reorder]]:!hidden"
-    end
-
     test "a stale ?items=subtree does not leak into root or the bucket", %{conn: conn} do
       catalogue = fixture_catalogue()
       fixture_category(catalogue, %{name: "Any chapter"})
@@ -1082,7 +1065,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       # AFTER the search used to stamp itself for items mode — the reply
       # then failed its own stamp and the spinner never cleared (panel
       # finding). The search now runs after the level settles.
-      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?mode=items&q=binned")
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?q=binned")
       render_async(view)
       refute :sys.get_state(view.pid).socket.assigns.search_loading
     end
@@ -1111,55 +1094,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html =~ "Oak veneers"
       assert html =~ "Oak panel"
       refute html =~ "set_search_type"
-    end
-
-    test "the Categories switcher returns to the root outline, expanded to where you were",
-         %{conn: conn} do
-      catalogue = fixture_catalogue()
-      parent = fixture_category(catalogue, %{name: "Outer chapter"})
-      category = fixture_category(catalogue, %{name: "Deep chapter", parent_uuid: parent.uuid})
-      fixture_item(%{name: "Deep item", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid) <> "&mode=items")
-      assert render_async(view) =~ "Deep item"
-
-      render_click(view, "set_search_mode", %{"mode" => "categories"})
-      path = assert_patch(view)
-
-      # Both the mode AND the drilled category clear — the outline
-      # browser lives only at the root — and the tree opens expanded
-      # down to the category just left: a collapsed root made it look
-      # vanished (Max's Frames report, 2026-08-29). "Deep chapter" is
-      # NESTED, so seeing it in the tree proves the expansion.
-      refute path =~ "mode="
-      refute path =~ "category="
-      assert view |> element("#catalogue-categories-tree") |> render() =~ "Deep chapter"
-    end
-
-    test "the mode switcher patches ?mode= and leaving restores the outline", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      category = fixture_category(catalogue, %{name: "Only chapter"})
-      fixture_item(%{name: "Only item", category_uuid: category.uuid})
-      fixture_item(%{name: "Loose thing", catalogue_uuid: catalogue.uuid})
-
-      {:ok, view, _html} = live(conn, url(catalogue.uuid))
-
-      render_click(view, "set_search_mode", %{"mode" => "items"})
-      assert assert_patch(view) =~ "mode=items"
-      # The CLICK path must reload the level, not just flip the assign —
-      # UrlState auto-assigns params before the callback, so a naive
-      # changed? check reads "unchanged" and skips the reload (bug found
-      # live, 2026-08-29). The loose root item proves the load ran.
-      html = render_async(view)
-      assert html =~ "Loose thing"
-      # Catalogue-wide: the categorized item is in the flat list too.
-      assert html =~ "Only item"
-
-      render_click(view, "set_search_mode", %{"mode" => "categories"})
-      path = assert_patch(view)
-      refute path =~ "mode="
-      # The outline browse is back.
-      assert render(view) =~ "Only chapter"
     end
 
     test "items mode pages by @per_page and a search page tiles without duplicates",

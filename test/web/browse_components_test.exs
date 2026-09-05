@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
   import Phoenix.Component, only: [sigil_H: 2]
   import Phoenix.LiveViewTest, only: [rendered_to_string: 1, render_component: 2]
 
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components.Browse
 
   defp presented(over \\ %{}) do
@@ -38,7 +39,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ ">M</span>"
     end
 
-    test "a photo renders lazily inside the fixed square frame" do
+    test "a photo renders eagerly inside the fixed square frame" do
       html =
         render_component(&Browse.item_card/1,
           id: "c1",
@@ -46,20 +47,28 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
         )
 
       assert html =~ ~s(src="/signed/medium/x")
-      assert html =~ ~s(loading="lazy")
+      # No loading="lazy": lazy images patched into an open top-layer
+      # <dialog> can stay unloaded in Chromium ("photos invisible in the
+      # popup", 2026-08-31), and a capped modal page saves nothing lazy.
+      refute html =~ ~s(loading="lazy")
       assert html =~ "aspect-square"
       assert html =~ "object-cover"
     end
 
-    test "selected state draws the ring and badge; unselected draws neither" do
+    test "selected state rides data-selected; the badge stays server-drawn" do
+      # Since 2026-08-31 the ring/border classes are data-[selected=true]
+      # variants present on EVERY card — the attribute drives the look, so
+      # the qty hook can flip it instantly (Max: highlight "only after a
+      # delay").
       selected =
         render_component(&Browse.item_card/1, id: "c1", item: presented(), selected: true)
 
       plain = render_component(&Browse.item_card/1, id: "c1", item: presented())
 
-      assert selected =~ "ring-2"
+      assert selected =~ ~s(data-selected="true")
       assert selected =~ "hero-check"
-      refute plain =~ "ring-2"
+      assert plain =~ ~s(data-selected="false")
+      assert plain =~ "data-[selected=true]:ring-2"
       refute plain =~ "hero-check"
     end
 
@@ -100,8 +109,10 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
 
       assert html =~ ~s(phx-click="show_detail")
       assert html =~ ~s(phx-click="card_click")
-      # The two gestures carry distinct accessible names.
-      assert html =~ "View item details"
+      # Exactly ONE details trigger — the figure; the title sits inside
+      # the select button (boss, 2026-08-31: only the thumbnail is the
+      # look-closer gesture).
+      assert length(String.split(html, ~s(phx-click="show_detail"))) == 2
 
       # Without photo_click: one button, no details affordance.
       plain = render_component(&Browse.item_card/1, id: "c1", item: item)
@@ -109,7 +120,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       refute plain =~ "View item details"
     end
 
-    test "the select toggle keeps a hit area when sku and price both hide" do
+    test "the select toggle always carries the title — it can never render empty" do
       item = %{
         uuid: "u-1",
         name: "Widget",
@@ -120,9 +131,10 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
         thumb_url: nil
       }
 
-      # With the details split on, the title opens details and the select
-      # toggle is only what is LEFT of the body — nothing at all here. It
-      # must still be hittable, or the card cannot be picked in card view.
+      # With details on, the body (title included) IS the select button
+      # (boss, 2026-08-31) — so even with sku and price both hidden the
+      # card keeps a real select target, which retired the #89 review's
+      # min-height patch for the empty-button case.
       html =
         render_component(&Browse.item_card/1,
           id: "c1",
@@ -132,15 +144,8 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
         )
 
       assert html =~ ~s(phx-click="card_click")
-      assert html =~ "min-h-[1.5rem]"
-
-      # The quantity flavour's disabled toggle adds no blank strip.
-      refute render_component(&Browse.item_card/1,
-               id: "c1",
-               item: item,
-               clickable: false,
-               photo_click: "show_detail"
-             ) =~ "min-h-[1.5rem]"
+      assert html =~ "Widget"
+      refute html =~ "min-h-[1.5rem]"
     end
   end
 
@@ -161,6 +166,133 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       }
     end
 
+    test "smart fees show where the price goes: flat IS the price, percent and rules display" do
+      # Smart-catalogue items rendered a BLANK price everywhere
+      # (2026-08-31 — tim-dev's rule-priced services). Flat standalone
+      # fees are real prices (line totals included); percent shows its
+      # number; rule-priced items say Computed.
+      flat = %Item{
+        uuid: "sf-1",
+        name: "Delivery",
+        unit: "piece",
+        base_price: nil,
+        default_value: Decimal.new("49.00"),
+        default_unit: "flat",
+        markup_percentage: nil,
+        discount_percentage: nil,
+        catalogue: nil,
+        category: nil,
+        data: %{}
+      }
+
+      percent = %Item{
+        flat
+        | uuid: "sf-2",
+          default_value: Decimal.new("12"),
+          default_unit: "percent"
+      }
+
+      computed = %Item{flat | uuid: "sf-3", default_value: nil, default_unit: "percent"}
+
+      [p_flat, p_percent, p_computed] = Browse.present_items([flat, percent, computed], "en")
+
+      assert Decimal.equal?(p_flat.price, Decimal.new("49.00"))
+      assert p_flat.fee_note == nil
+
+      assert p_percent.price == nil
+      assert p_percent.fee_note == "12%"
+
+      assert p_computed.price == nil
+      assert p_computed.fee_note == "Computed"
+
+      # The row shows the note in the price cell; the card shows it on
+      # the price line (and hides it with show_price=false, the same
+      # grant as prices).
+      row =
+        render_component(&Browse.item_row/1, id: "r1", item: p_percent, columns: [:name, :price])
+
+      assert row =~ "12%"
+
+      card = render_component(&Browse.item_card/1, id: "c1", item: p_percent)
+      assert card =~ "12%"
+
+      hidden = render_component(&Browse.item_card/1, id: "c1", item: p_percent, show_price: false)
+      refute hidden =~ "12%"
+    end
+
+    test "smart_fee crosses the {unit, value} product — the margins hid a clause once" do
+      flat_base = %Item{
+        uuid: "sfx-1",
+        name: "Fee",
+        unit: "piece",
+        base_price: nil,
+        default_value: Decimal.new("49.00"),
+        default_unit: "flat",
+        markup_percentage: nil,
+        discount_percentage: nil,
+        catalogue: nil,
+        category: nil,
+        data: %{}
+      }
+
+      # A DB numeric arrives with its scale — the display must normalize
+      # (the "12.0000%" regression this pins, and the flat twin).
+      db_percent = %Item{
+        flat_base
+        | default_value: Decimal.new("12.0000"),
+          default_unit: "percent"
+      }
+
+      assert Browse.smart_fee(db_percent) == {:note, "12%"}
+
+      # Flat with NO value: a fee item missing its number says Computed —
+      # the same words the percent twin uses.
+      assert Browse.smart_fee(%Item{flat_base | default_value: nil}) ==
+               {:note, "Computed"}
+
+      # A PRICED item carrying fee fields is a plain item — the fee
+      # fallback must never override a real price.
+      assert Browse.smart_fee(%Item{flat_base | base_price: Decimal.new("10.00")}) == nil
+
+      # A fee-less unit with no price is simply price-less, not Computed.
+      assert Browse.smart_fee(%Item{flat_base | default_unit: nil, default_value: nil}) == nil
+    end
+
+    test "instant qty feedback: hook on the stepper, styling keyed off data-selected" do
+      # Max, 2026-08-31: "I add 1 and it gets highlighted blue but only
+      # after a delay" — the QtySignal hook flips data-selected locally,
+      # so the row/card highlight must key off the ATTRIBUTE, not a
+      # server-computed class.
+      stepper =
+        render_component(&Browse.qty_stepper/1,
+          id: "q1",
+          uuid: "u-1",
+          qty: "0",
+          precision: 0
+        )
+
+      # The colocated hook's rendered name is the expanded module form.
+      assert stepper =~ "QtySignal"
+
+      row =
+        render_component(&Browse.item_row/1,
+          id: "r1",
+          item: row_item(),
+          columns: [:name, :qty]
+        )
+
+      assert row =~ "data-selected"
+      assert row =~ "data-[selected=true]:bg-primary/10"
+
+      card =
+        render_component(&Browse.item_card/1,
+          id: "c1",
+          item: row_item()
+        )
+
+      assert card =~ "data-[selected=true]:border-primary"
+    end
+
     test "the qty cell is never click-bound; data cells carry the select toggle" do
       html =
         render_component(&Browse.item_row/1,
@@ -176,7 +308,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       refute qty_cell =~ "card_click"
     end
 
-    test "thumb_click rides the thumb AND name cells; checkbox renders when asked" do
+    test "thumb_click rides ONLY the thumb cell; checkbox renders when asked" do
       html =
         render_component(&Browse.item_row/1,
           id: "r1",
@@ -188,10 +320,11 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
 
       assert html =~ ~s(phx-click="show_detail")
       assert html =~ ~s(input type="checkbox")
-      # Exactly the thumb and name cells carry the details event (Max,
-      # 2026-08-31: clicking the title means the same as clicking the
-      # image); the sku cell keeps the select toggle.
-      assert length(String.split(html, ~s(phx-click="show_detail"))) == 3
+      # Exactly the thumb cell carries the details event (boss,
+      # 2026-08-31: only the thumbnail is the look-closer gesture —
+      # supersedes the title-joins-the-photo ruling); the name and sku
+      # cells follow the row's select behaviour.
+      assert length(String.split(html, ~s(phx-click="show_detail"))) == 2
       assert html =~ ~s(phx-click="card_click")
     end
 

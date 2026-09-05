@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.MixProject do
   use Mix.Project
 
-  @version "0.24.0"
+  @version "0.26.0"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_catalogue"
 
   def project do
@@ -9,6 +9,15 @@ defmodule PhoenixKitCatalogue.MixProject do
       app: :phoenix_kit_catalogue,
       version: @version,
       elixir: "~> 1.18",
+      # Writes _build/*/phoenix-colocated/phoenix_kit_catalogue/index.js —
+      # the manifest hosts import as "phoenix-colocated/phoenix_kit_catalogue".
+      # Without this compiler the colocated hooks (ItemPicker's keyboard
+      # handling, the QtySignal instant highlight) extract but never get a
+      # manifest, so every host bundle fails to resolve the import — they
+      # were silently dead on every deployment (found 2026-08-31).
+      # Prepended like phx.new does: the task registers an after-:elixir
+      # callback, so it must run before :elixir to attach at all.
+      compilers: [:phoenix_live_view] ++ Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),
       # Elixir 1.19 mix test requires explicit filters to know which test
       # files to load and which to ignore. Without this it warns about

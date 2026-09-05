@@ -17,7 +17,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       current_folder: [default: "", url_key: "folder"],
       # What the search looks for: "" = catalogues (the page's own rows),
       # "items" = a cross-catalogue item search (Max, 2026-08-29).
-      search_mode: [default: "", url_key: "mode"],
       # Attribute VALUE slugs, comma-joined — item-level, so they apply
       # only in items mode.
       attribute_filter: [default: "", url_key: "attr"]
@@ -97,7 +96,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        show_new_set_modal: false,
        attribute_filter_options: [],
        attribute_value_counts: %{},
-       search_mode: "",
        item_results: nil,
        item_total: 0,
        item_has_more: false,
@@ -256,15 +254,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       |> assign(:active_tab, action)
       |> assign(:page_title, tab_title(action))
       |> assign(:attribute_filter, state.attribute_filter)
-      # Three states since 2026-08-31 (boss: searching finds items by
-      # default): "" is the AUTO default — the normal listing until a
-      # question exists, then item results; "items" is the explicit full
-      # item browser; "catalogues" is the explicit catalogue search. The
-      # value is client-forgeable URL state, hence the allowlist shape.
-      |> assign(
-        :search_mode,
-        if(state.search_mode in ["items", "catalogues"], do: state.search_mode, else: "")
-      )
       |> assign(:view_configs, Map.put(socket.assigns.view_configs, scope, cfg))
 
     socket =
@@ -272,16 +261,23 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         load_data(socket, action)
       else
         # Item results and facet counts are QUERIES, so they are resolved
-        # once per URL change rather than per render — `?mode=`, `?attr=`,
-        # `?q=` and `?folder=` all move them. A tab change went through
+        # once per URL change rather than per render — `?attr=`, `?q=`
+        # and `?folder=` all move them. A tab change went through
         # `load_data`, which ends by doing this itself.
-        refresh_search_mode(socket)
+        refresh_item_results(socket)
       end
 
     # Expansion AFTER load_data: on a deep link the first call is also
     # the one that populates folder_lookup — expanding before it would
     # no-op and leave the ancestor chain collapsed when the user goes Up.
-    maybe_expand_url_folder(socket, scope, state.current_folder)
+    socket = maybe_expand_url_folder(socket, scope, state.current_folder)
+
+    # Publish the FULL current URL (query included) as url_path: the layout
+    # hands it to core's language switcher as current_path, and a bare path
+    # meant switching languages threw you out of the drilled category
+    # (boss, 2026-08-31). Core's tab matching strips queries, and UrlState
+    # keeps its own bare-path base, so nothing else shifts.
+    assign(socket, :url_path, url_state_path(socket, %{}))
   end
 
   # Maps the active UI tab to a TableConfig/ViewConfig scope.
@@ -436,7 +432,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         :attribute_filter_options,
         Catalogue.attribute_filter_options(:all, lang: socket.assigns[:current_locale])
       )
-      |> refresh_search_mode()
+      |> refresh_item_results()
       |> assign(:index_loaded, true)
     else
       socket
@@ -479,8 +475,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # the mode (Max, 2026-08-29 — "the attributes doesn't really make
   # sense here"), taking the old "catalogues CONTAINING matching items"
   # proxy with it.
-  defp refresh_search_mode(socket) do
-    if items_mode?(socket.assigns) do
+  defp refresh_item_results(socket) do
+    if item_results?(socket.assigns) do
       load_item_results(socket)
     else
       assign(socket,
@@ -493,21 +489,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     end
   end
 
-  # Items mode is an index, Active-view feature: the trash lists deleted
-  # catalogues whose items are deleted with them, and the attributes tab
-  # has its own search. `?mode=` stays in the URL for the trip back,
-  # same rule as `?attr=`.
-  #
-  # Since 2026-08-31 the DEFAULT ("" — auto) searches items (boss): with
-  # nothing to search for the page keeps its normal catalogues listing,
-  # and the item-results surface engages the moment a query or attribute
-  # filter exists. Explicit "items" is the full item browser as before;
-  # explicit "catalogues" keeps the search on this page's own rows.
-  defp items_mode?(assigns) do
+  # The item-results SECTION engages the moment a question exists — a
+  # query or an attribute filter — and never replaces the listing:
+  # matching catalogues stay on top as navigation, matching items render
+  # underneath. The popup search's two-list idiom, brought to the index
+  # (Max, 2026-08-31); it retires the Catalogues|Items search-mode
+  # switcher, its auto-mode subtleties, and the `?mode=` URL state.
+  # Index + Active-view only: the trash lists deleted catalogues whose
+  # items are deleted with them, and the attributes tab has its own
+  # search. The query is TRIMMED — a whitespace-only string filters
+  # nothing and must engage nothing (the #89 review's deliberate skip,
+  # retired with the mode it belonged to).
+  defp item_results?(assigns) do
     assigns[:active_tab] == :index and assigns.catalogue_view_mode == "active" and
-      (assigns.search_mode == "items" or
-         (assigns.search_mode == "" and
-            (assigns.search_query != "" or assigns.attribute_filter not in [nil, ""])))
+      (String.trim(assigns.search_query) != "" or assigns.attribute_filter not in [nil, ""])
   end
 
   # The question items mode is currently asking, in one comparable
@@ -576,7 +571,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     # Only apply if the socket is still asking the same question; a
     # superseding kickoff owns item_loading, so a stale reply changes
     # nothing at all.
-    if items_mode?(socket.assigns) and item_stamp(socket.assigns, 0) == stamp do
+    if item_results?(socket.assigns) and item_stamp(socket.assigns, 0) == stamp do
       {:noreply,
        assign(socket,
          item_results: results,
@@ -593,7 +588,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   def handle_async(:item_page, {:ok, {stamp, offset, page}}, socket) do
     loaded = socket.assigns.item_results || []
 
-    if items_mode?(socket.assigns) and item_stamp(socket.assigns, offset) == stamp and
+    if item_results?(socket.assigns) and item_stamp(socket.assigns, offset) == stamp and
          length(loaded) == offset do
       results = loaded ++ page
 
@@ -751,7 +746,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # The `?attr=` slugs are item-level, so they act only in items mode —
   # in catalogues mode (and the trash) they ride the URL inert.
   defp active_attribute_slugs(assigns) do
-    if items_mode?(assigns), do: attribute_filter_slugs(assigns), else: []
+    if item_results?(assigns), do: attribute_filter_slugs(assigns), else: []
   end
 
   # "Show limit, elide the rest" — EXCEPT when exactly one would be
@@ -1699,10 +1694,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                     :if={@photo_col?}
                     class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
                   >
-                    <.featured_thumb
-                      resource={c_row}
-                      has_files={Map.get(@file_counts, c_row.uuid, 0) > 0}
-                    />
+                    <.link navigate={Paths.catalogue_detail(c_row.uuid)} draggable="false">
+                      <.featured_thumb
+                        resource={c_row}
+                        has_files={Map.get(@file_counts, c_row.uuid, 0) > 0}
+                      />
+                    </.link>
                   </.table_default_cell>
                   <.tree_name_cell
                     depth={depth}
@@ -2717,19 +2714,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     {:noreply, push_url_state(socket, [search_query: q], replace: true)}
   end
 
-  # The Catalogues/Items switcher. Not `replace:` — changing what the
-  # page lists is a step Back should undo, unlike keystrokes.
-  def handle_event("set_search_mode", %{"mode" => mode}, socket)
-      when mode in ["catalogues", "items"] do
-    # Both clicks write EXPLICIT modes — "" is reserved for the auto
-    # default a fresh landing gets (2026-08-31).
-    {:noreply, push_url_state(socket, search_mode: mode)}
-  end
-
-  def handle_event("set_search_mode", _params, socket), do: {:noreply, socket}
-
   def handle_event("load_more_items", _params, socket) do
-    if items_mode?(socket.assigns) and socket.assigns.item_has_more and
+    if item_results?(socket.assigns) and socket.assigns.item_has_more and
          not socket.assigns.item_loading do
       {:noreply, append_item_page(socket)}
     else
@@ -2907,49 +2893,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         </div>
         <div :if={@active_tab == :index and @index_loaded} class="flex flex-col gap-4">
           <% cfg = @view_configs.catalogues %>
-          <% items? = items_mode?(assigns) %>
+          <% items? = item_results?(assigns) %>
           <.table_toolbar
             scope={:catalogues}
             cfg={cfg}
             allow_flat_reorder={@folder_tree == []}
-            show_table_tools={not items?}
           >
             <:view_toggle>
               <.view_toggle view={cfg.view} />
             </:view_toggle>
-            <:mode :if={@catalogue_view_mode == "active"}>
-              <%!-- What the search looks FOR (Max, 2026-08-29): this
-                    page's own rows, or the items inside them. Both obey
-                    the same "where the user stands" folder scope. --%>
-              <div class="join" role="group" aria-label={gettext("Search for")}>
-                <%!-- Highlight follows the SEARCH semantic, not the body:
-                the auto default ("") searches items, so Items reads
-                active on a fresh landing even while the catalogues
-                listing still shows (2026-08-31). --%>
-                <button
-                  type="button"
-                  phx-click="set_search_mode"
-                  phx-value-mode="catalogues"
-                  class={["btn btn-sm join-item", @search_mode == "catalogues" && "btn-active"]}
-                >
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
-                </button>
-                <button
-                  type="button"
-                  phx-click="set_search_mode"
-                  phx-value-mode="items"
-                  class={["btn btn-sm join-item", @search_mode != "catalogues" && "btn-active"]}
-                >
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")}
-                </button>
-              </div>
-            </:mode>
             <:filters>
               <%!-- No folder select here: search works where the user
                     stands — the drilled folder's subtree — and scope is
                     chosen by navigating folders (Max, 2026-08-29). --%>
               <.enum_filter
-                :if={not items?}
                 id="status"
                 label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
                 value={cfg.filters["status"]}
@@ -2961,7 +2918,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                     (Max, 2026-08-29 — it used to mean "catalogues
                     containing such items", which needed a disclaimer). --%>
               <.attribute_filter
-                :if={items? and @attribute_filter_options != []}
+                :if={@catalogue_view_mode == "active" and @attribute_filter_options != []}
                 options={@attribute_filter_options}
                 selected={active_attribute_slugs(assigns)}
                 counts={@attribute_value_counts}
@@ -2988,12 +2945,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               </.link>
             </:actions>
           </.table_toolbar>
-          <% tree? = not items? and catalogues_tree_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
+          <% tree? = catalogues_tree_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
           <% card_level? =
-            not items? and catalogues_card_level_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
+            catalogues_card_level_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
           <p
             :if={
-              not items? and @catalogue_view_mode == "active" and cfg.sort_by == "position" and
+              @catalogue_view_mode == "active" and cfg.sort_by == "position" and
                 cfg.view != "card" and not tree?
             }
             class="text-xs text-base-content/50"
@@ -3017,7 +2974,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                one. Items mode is a live view of items, so the trash
                toggle rests with it. --%>
           <div
-            :if={not items? and (deleted_count > 0 or @catalogue_view_mode == "deleted")}
+            :if={deleted_count > 0 or @catalogue_view_mode == "deleted"}
             class="flex items-center gap-0.5"
           >
             <button
@@ -3103,6 +3060,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <div class="skeleton h-24 w-full"></div>
             <div class="skeleton h-24 w-full"></div>
           </div>
+          <div
+            :if={items? and @item_results != nil}
+            class="text-sm font-semibold text-base-content/70 -mb-2"
+          >
+            {gettext("Items")} ({@item_total})
+          </div>
           <.item_search_results
             :if={items? and @item_results != nil}
             items={@item_results}
@@ -3111,7 +3074,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             loading={@item_loading}
           />
           <.simple_table
-            :if={not items? and !tree? and !card_level?}
+            :if={!tree? and !card_level?}
             scope={:catalogues}
             cfg={cfg}
             show_view_toggle={false}
@@ -3765,15 +3728,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     """
   end
 
-  # Into the catalogue, drilled to the item's own category (or the
-  # uncategorized bucket), carrying the query along.
-  defp item_result_path(item, query) do
-    params =
-      [category: item.category_uuid || "uncategorized"] ++
-        if(query == "", do: [], else: [q: query])
-
-    Paths.catalogue_detail(item.catalogue_uuid) <> "?" <> URI.encode_query(params)
-  end
+  # Straight to the item's EDIT page (boss, 2026-08-31): whoever
+  # searched an item by name wants THAT item, not its category's page
+  # with the query re-applied and every sibling around it.
+  defp item_result_path(item, _query), do: Paths.item_edit(item.uuid)
 
   # ── Toolbar private component ────────────────────────────────────
 
@@ -3783,9 +3741,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   attr(:show_table_tools, :boolean,
     default: true,
-    doc: "Sort / Reorder / Columns configure THIS scope's table — hidden
-          when the page is showing something else (the index's items
-          search mode)."
+    doc: "Sort / Reorder / Columns configure THIS scope's table — a
+          caller showing something else may hide them."
   )
 
   slot(:mode, doc: "What the search looks for — rendered right after the search box.")
@@ -3952,7 +3909,18 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <.drag_handle_cell :if={@reorderable?} />
           <td :if={!@reorderable?} class="w-8"></td>
           <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
-            <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+            <.link
+              :if={@scope == :catalogues and row.status != "trashed"}
+              navigate={Paths.catalogue_detail(row.uuid)}
+              draggable="false"
+            >
+              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+            </.link>
+            <.featured_thumb
+              :if={@scope != :catalogues or row.status == "trashed"}
+              resource={row}
+              has_files={Map.get(@file_counts, row.uuid, 0) > 0}
+            />
           </.table_default_cell>
           <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
             {render_cell(@scope, c.id, row)}
@@ -3965,7 +3933,18 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       <.table_default_body :if={!@draggable}>
         <.table_default_row :for={row <- @rows}>
           <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
-            <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+            <.link
+              :if={@scope == :catalogues and row.status != "trashed"}
+              navigate={Paths.catalogue_detail(row.uuid)}
+              draggable="false"
+            >
+              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+            </.link>
+            <.featured_thumb
+              :if={@scope != :catalogues or row.status == "trashed"}
+              resource={row}
+              has_files={Map.get(@file_counts, row.uuid, 0) > 0}
+            />
           </.table_default_cell>
           <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
             {render_cell(@scope, c.id, row)}

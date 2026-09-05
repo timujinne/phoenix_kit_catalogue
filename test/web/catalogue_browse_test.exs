@@ -6,6 +6,7 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowseTest do
   use PhoenixKitCatalogue.LiveCase, async: false
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Web.ViewConfig
 
   setup do
     cat = fixture_catalogue(%{name: "Browse Cat"})
@@ -30,6 +31,23 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowseTest do
 
     assert view |> element("#surface-search-form") |> render_submit(%{"search" => "Widget"}) =~
              "Widget"
+  end
+
+  test "listings follow the module's shared item sort", %{conn: conn, cat: cat} do
+    # Client, 2026-09-01: one order everywhere — this embed reads the same
+    # catalogue_sort_detail_items setting the admin and the picker do.
+    {:ok, _} = Catalogue.create_item(%{name: "Anvil", catalogue_uuid: cat.uuid})
+
+    {:ok, _} =
+      ViewConfig.save_global_sort(:detail_items, "name", :desc)
+
+    {:ok, _view, html} = live(conn, "/test/selector-host?browse=true&c=#{cat.uuid}")
+    {widget, _} = :binary.match(html, "Widget")
+    {anvil, _} = :binary.match(html, "Anvil")
+    assert widget < anvil
+
+    {:ok, _} =
+      ViewConfig.save_global_sort(:detail_items, "position", :asc)
   end
 
   test "item click reports the generic message to the host", %{

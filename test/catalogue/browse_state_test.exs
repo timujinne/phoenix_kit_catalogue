@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKitCatalogue.Catalogue.BrowseState
+  alias PhoenixKitCatalogue.Web.TableConfig
 
   defp item(uuid), do: %{uuid: uuid}
 
@@ -134,6 +135,127 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
       assert BrowseState.init(per_page: 0).per_page == 1
       assert BrowseState.init(per_page: 24).per_page == 24
     end
+
+    test "set_catalogue narrows within a multi-catalogue scope and rejects outsiders" do
+      state = BrowseState.init(scope: %{catalogue_uuids: ["cat-a", "cat-b"]})
+
+      assert {drilled, {:fetch, opts, _}} =
+               BrowseState.command(state, {:set_catalogue, "cat-b"})
+
+      assert Map.new(opts)[:catalogue_uuids] == ["cat-b"]
+      assert drilled.catalogue_uuid == "cat-b"
+
+      assert {^state, :noop} = BrowseState.command(state, {:set_catalogue, "cat-evil"})
+      assert {^state, :noop} = BrowseState.command(state, {:set_catalogue, 123})
+
+      # Clearing restores the full offered list.
+      opts = opts_map(BrowseState.command(drilled, {:set_catalogue, nil}))
+      assert opts[:catalogue_uuids] == ["cat-a", "cat-b"]
+    end
+
+    test "set_catalogue is refused on a singleton scope — no catalogue level exists there" do
+      # The documented contract: only accepted when the scope names
+      # SEVERAL catalogues. A crafted accept on [A] would strand the
+      # presentation in a level it never renders tiles for
+      # (external review, 2026-08-31).
+      state = BrowseState.init(scope: %{catalogue_uuids: ["cat-a"]})
+      assert {^state, :noop} = BrowseState.command(state, {:set_catalogue, "cat-a"})
+
+      unscoped = BrowseState.init(scope: %{})
+      assert {^unscoped, :noop} = BrowseState.command(unscoped, {:set_catalogue, "cat-a"})
+    end
+
+    test "browse listings in ONE catalogue read in the admin's position order" do
+      # Max, 2026-08-31: the popup and the admin showed different item
+      # orders — the admin's default is document order (position, name),
+      # the fetch layer's is name. Single-catalogue BROWSE fetches now
+      # ask for :position; several catalogues keep name order (position
+      # is per-catalogue scope, interleaving it is meaningless), and a
+      # live SEARCH stays name-ordered everywhere, like the admin's
+      # results.
+      single = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, drill: :direct)
+      assert opts_map(BrowseState.command(single, :reset))[:order] == :position
+
+      assert opts_map(BrowseState.command(single, {:set_category, Ecto.UUID.generate()}))[
+               :order
+             ] == :position
+
+      # Searching switches to name order; clearing it restores position.
+      opts = opts_map(BrowseState.command(single, {:search, "screw"}))
+      refute Map.has_key?(opts, :order)
+
+      # A multi-catalogue ROOT keeps name order…
+      multi = BrowseState.init(scope: %{catalogue_uuids: ["cat-1", "cat-2"]})
+      refute Map.has_key?(opts_map(BrowseState.command(multi, :reset)), :order)
+
+      # …but drilling catalogue-first into one restores document order.
+      assert opts_map(BrowseState.command(multi, {:set_catalogue, "cat-2"}))[:order] ==
+               :position
+    end
+
+    test "the module's shared sort rides every browse fetch; search still wins" do
+      # Client, 2026-09-01: one order for the whole module, the popup
+      # included. The components pass the shared sort as init `:order`.
+      state =
+        BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, order: {:name, :desc})
+
+      assert opts_map(BrowseState.command(state, :reset))[:order] == {:name, :desc}
+
+      # A field sort is coherent across catalogues — unlike position, a
+      # multi-catalogue root applies it too.
+      multi =
+        BrowseState.init(
+          scope: %{catalogue_uuids: ["cat-1", "cat-2"]},
+          order: {:base_price, :asc}
+        )
+
+      assert opts_map(BrowseState.command(multi, :reset))[:order] == {:base_price, :asc}
+
+      # A live search stays name-ordered, like the admin's results.
+      opts = opts_map(BrowseState.command(state, {:search, "screw"}))
+      refute Map.has_key?(opts, :order)
+
+      # Manual keeps the single-catalogue guard and the direction-less
+      # :position opt (the admin's Manual sort has no direction either).
+      manual = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, order: {:position, :asc})
+      assert opts_map(BrowseState.command(manual, :reset))[:order] == :position
+
+      manual_multi =
+        BrowseState.init(
+          scope: %{catalogue_uuids: ["cat-1", "cat-2"]},
+          order: {:position, :asc}
+        )
+
+      refute Map.has_key?(opts_map(BrowseState.command(manual_multi, :reset)), :order)
+
+      # Junk raises at init — a bad field must not sail into the fetch
+      # layer as a no-op sort.
+      assert_raise ArgumentError, ~r/order must be/, fn ->
+        BrowseState.init(order: {:markup, :asc})
+      end
+
+      assert_raise ArgumentError, ~r/order must be/, fn ->
+        BrowseState.init(order: "name:desc")
+      end
+    end
+
+    test "a whitespace-only search keeps the :direct level's own-items listing" do
+      # The fetch layer trims "   " to no text filter, so treating it as
+      # a live search would flip the level to subtree listing for a query
+      # that filters nothing (external review, 2026-08-31).
+      uuid = Ecto.UUID.generate()
+      state = BrowseState.init(scope: %{}, drill: :direct)
+      {state, _} = BrowseState.command(state, {:set_category, uuid})
+
+      opts = opts_map(BrowseState.command(state, {:search, "   "}))
+      assert opts[:category_uuids] == [uuid]
+      assert opts[:include_descendants] == false
+
+      # A real query still covers the subtree — finding beats filing.
+      opts = opts_map(BrowseState.command(state, {:search, "screw"}))
+      assert opts[:category_uuids] == [uuid]
+      refute Map.has_key?(opts, :include_descendants)
+    end
   end
 
   describe "paging" do
@@ -209,6 +331,23 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
       long = String.duplicate("a", 5_000)
       {state, {:fetch, _, _}} = BrowseState.command(BrowseState.init(), {:search, long})
       assert String.length(state.search) == 200
+    end
+  end
+
+  describe "the shared sort's vocabulary" do
+    test "every sortable :detail_items column is an accepted browse order" do
+      # Two lists that must stay in sync. TableConfig's sortable ids are
+      # exactly what the `catalogue_sort_detail_items` setting may name,
+      # and `init/1` RAISES on a field it does not know — so a new
+      # sortable column would crash every popup and embed the moment an
+      # admin picked it, not at the point it was added. Fail here instead.
+      for %{id: id} <- Enum.filter(TableConfig.columns(:detail_items), & &1.sortable?),
+          dir <- [:asc, :desc] do
+        order = {String.to_existing_atom(id), dir}
+
+        assert %BrowseState{order: ^order} =
+                 BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, order: order)
+      end
     end
   end
 

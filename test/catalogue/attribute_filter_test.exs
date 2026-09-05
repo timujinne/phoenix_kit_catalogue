@@ -292,18 +292,17 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       assert counts[ctx.blue.slug] == 1
     end
 
-    test "the index's items mode filters the items themselves", ctx do
+    test "toggling the filter engages the item results and narrows them", ctx do
       # The filter used to mean "which catalogues have blue in them" —
       # an item question grafted onto a catalogue list, which needed a
-      # disclaimer line. Since 2026-08-29 it lives in items mode and
-      # narrows the actual items.
+      # disclaimer line. Since 2026-08-29 it narrows actual items, and
+      # since 2026-08-31 it ENGAGES the item-results section by itself
+      # (the modes are retired — one surface).
       other = fixture_catalogue(%{name: "No Attributes Here"})
       fixture_item(%{name: "Plain thing", catalogue_uuid: other.uuid})
 
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue?mode=items")
-      html = render_async(view)
-      assert html =~ "Blue oak door"
-      assert html =~ "Plain thing"
+      {:ok, view, html} = live(ctx.conn, "/en/admin/catalogue")
+      refute html =~ "item-result-"
 
       render_click(view, "toggle_attribute_filter", %{"slug" => ctx.blue.slug})
       html = render_async(view)
@@ -312,19 +311,20 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       assert html =~ "Blue pine door"
       refute html =~ "Plain thing"
 
+      # Clearing the last narrowing disengages the section entirely.
       render_click(view, "clear_attribute_filter", %{})
-      assert render_async(view) =~ "Plain thing"
+      refute render_async(view) =~ "item-result-"
     end
 
-    test "the catalogues mode offers no attribute filter at all", ctx do
+    test "the filter is offered on the plain index — it is the way IN", ctx do
       assert ctx.catalogue
 
-      # The control's own DOM id — the word "Attributes" and the swatch
-      # icon both also appear in the admin chrome, so they prove nothing.
+      # With the modes retired (2026-08-31) the filter must be visible
+      # before any results exist: toggling a value is what engages the
+      # item-results section. The control's own DOM id — the word
+      # "Attributes" and the swatch icon both also appear in the admin
+      # chrome, so they prove nothing.
       {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue")
-      refute html =~ ~s(id="attribute-filter")
-
-      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue?mode=items")
       assert html =~ ~s(id="attribute-filter")
     end
 
@@ -395,12 +395,12 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       other = fixture_catalogue(%{name: "No Attributes Here"})
       fixture_item(%{name: "Plain thing", catalogue_uuid: other.uuid})
 
-      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue?mode=items&q=plain")
+      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue?q=plain")
       assert html =~ ~s(id="attribute-filter")
 
-      # Same on the detail page's items mode, searched into nothing.
+      # Same on the detail page, searched into nothing.
       {:ok, view, _html} =
-        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?mode=items&q=zzznothing")
+        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?q=zzznothing")
 
       assert render_async(view) =~ ~s(id="attribute-filter")
     end
@@ -492,7 +492,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
           AttributeSets.set_attachment_selection(stray.uuid, ctx.colour.uuid, [ctx.red.slug])
 
         {:ok, view, _html} =
-          live(ctx.conn, "/en/admin/catalogue?mode=items&folder=#{parent.uuid}")
+          live(ctx.conn, "/en/admin/catalogue?folder=#{parent.uuid}&attr=#{ctx.red.slug}")
 
         render_async(view)
         counts = :sys.get_state(view.pid).socket.assigns.attribute_value_counts

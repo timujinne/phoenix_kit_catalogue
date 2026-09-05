@@ -23,6 +23,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       items
       |> Browse.present_items(locale)
       # => [%{uuid: "…", name: "…", sku: "…", price: %Decimal{}|nil,
+      #       fee_note: "12%"|"Computed"|nil,
       #       base_price: %Decimal{}|nil, unit: "piece",
       #       photo_url: "/…/medium/…"|nil, thumb_url: "/…/thumbnail/…"|nil,
       #       manufacturer: "…"|nil, category: "…"|nil,
@@ -30,7 +31,9 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   `item_row/1`'s default columns read `thumb_url`, `category` and
   `base_price` too — a host hand-building presented maps needs the full
-  shape above, not a subset.
+  shape above, not a subset (`fee_note` is the one key read
+  `Map.get`-safely, so legacy hand-built maps merely lose the smart-fee
+  display rather than crash).
 
   Pair them with `PhoenixKitCatalogue.Catalogue.BrowseState` for the
   fetch/paging state machine; the moduledoc there shows the loop.
@@ -55,13 +58,50 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.Translations
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Web.ViewConfig
+
+  require Logger
 
   @photo_variant "medium"
 
   @doc """
+  What a surface can DISPLAY for a smart-catalogue fee item that has no
+  intrinsic price (the guide: a standalone `default_value` + `"flat"` IS
+  the price; percent fees and rule-priced items get their number at
+  order time, host-side):
+
+    * `{:price, %Decimal{}}` — a flat standalone fee; safe to use as the
+      price (line totals included).
+    * `{:note, text}` — display-only: `"12%"` for a percent fee, a
+      localized "Computed" for a fee item (`default_unit` set) whose
+      number is missing.
+    * `nil` — a plain item (priced or simply price-less). An item priced
+      purely by catalogue RULES with no fee fields of its own lands here
+      too: the rules live on the catalogue, not the row, so the two are
+      indistinguishable at presentation time.
+
+  Before this, smart items rendered a BLANK price everywhere
+  (2026-08-31 — tim-dev's rule-priced services, Nordic Line's fees).
+  """
+  @spec smart_fee(map() | struct()) :: {:price, Decimal.t()} | {:note, String.t()} | nil
+  def smart_fee(%Item{base_price: nil, default_unit: "flat", default_value: %Decimal{} = v}),
+    do: {:price, v}
+
+  def smart_fee(%Item{base_price: nil, default_unit: "percent", default_value: %Decimal{} = v}),
+    do: {:note, Decimal.to_string(Decimal.normalize(v), :normal) <> "%"}
+
+  def smart_fee(%Item{base_price: nil, default_unit: unit}) when unit in ["flat", "percent"],
+    do: {:note, gettext("Computed")}
+
+  def smart_fee(_), do: nil
+
+  @doc """
   Denormalizes schema items into presented maps: translated name, signed
   featured-photo URL, selling price (`Catalogue.item_pricing/1`'s
-  `final_price`, matching `ItemPicker`), and a starting quantity of 1.
+  `final_price`, matching `ItemPicker`), a `:fee_note` (`smart_fee/1`'s
+  display text for fee items with no numeric price — nil otherwise, and
+  optional in hand-built maps, hence the `Map.get` reads downstream),
+  and a starting quantity of 1.
 
   `Item.default_value` is the smart-catalogue fee fallback (percent/flat),
   not a pick quantity — do not use it as a stepper default.
@@ -72,13 +112,22 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   @spec present_items([map() | struct()], String.t() | nil) :: [map()]
   def present_items(items, locale) do
     Enum.map(items, fn item ->
-      translated = Translations.get_translation(item, locale)
+      {price, fee_note} = presented_price_and_fee(item)
 
       %{
         uuid: to_string(item.uuid),
-        name: translated["name"] || item.name,
+        # Translations.translated_name/2 reads "_name" — where the
+        # multilang editor stores translated names — then legacy "name",
+        # then the primary column, presence-guarding each so a stored
+        # blank override can't blank the list. This read used a bare
+        # "name" lookup, so list names NEVER translated — the detail
+        # popup resolved "_name" and came out right, which is how the
+        # miss stayed invisible until a real bilingual catalogue
+        # (tim-dev error report, 2026-08-31).
+        name: Translations.translated_name(item, locale),
         sku: item.sku,
-        price: presented_price(item),
+        price: price,
+        fee_note: fee_note,
         base_price: Map.get(item, :base_price),
         unit: item.unit,
         manufacturer: item.manufacturer_name || item.manufacturer_name_snapshot,
@@ -108,6 +157,16 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   defp presented_price(%Item{} = item), do: Catalogue.item_pricing(item).final_price
   defp presented_price(%{base_price: price}), do: price
   defp presented_price(_), do: nil
+
+  # A flat standalone fee IS the price (line totals included); anything
+  # only representable as text rides fee_note instead.
+  defp presented_price_and_fee(item) do
+    case {presented_price(item), smart_fee(item)} do
+      {nil, {:price, fee}} -> {fee, nil}
+      {nil, {:note, note}} -> {nil, note}
+      {price, _} -> {price, nil}
+    end
+  end
 
   @doc """
   Signed URL for an item's featured photo (`#{@photo_variant}` variant), or
@@ -195,6 +254,48 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   end
 
   @doc """
+  The module's shared item sort, in `BrowseState.init/1`'s `:order` shape
+  (the client's 2026-09-01 ask: one order for the whole module, and the
+  popup uses it). Reads the same `catalogue_sort_detail_items` setting the
+  admin detail page sorts by, so the popup's listings and the admin's
+  agree by construction. `load_global_sort/1` validates the field against
+  the sortable column ids, so `String.to_existing_atom/1` is safe.
+
+  Falls back to Manual (`{:position, :asc}`, the scope's default sort) if
+  the setting read fails — see `read_global_sort/1`.
+  """
+  @spec global_items_order() :: {atom(), :asc | :desc}
+  def global_items_order, do: read_global_sort(:detail_items)
+
+  @doc """
+  The module's shared CATEGORY sort (`catalogue_sort_detail_categories`),
+  as `{atom_field, dir}` — what the popup's category tiles order by, so
+  they read like the admin detail page's categories table.
+  """
+  @spec global_categories_order() :: {atom(), :asc | :desc}
+  def global_categories_order, do: read_global_sort(:detail_categories)
+
+  # The shared sort is a Settings (DB) read, and it feeds surfaces whose
+  # contract is that a DB hiccup degrades rather than crashes — the
+  # popup's tiles are navigation, not data (see
+  # `ItemSelectorModal.build_category_tree/3`'s rescue, which this read
+  # sits outside of). Fall back to the scope's own default, Manual, so a
+  # settings failure costs the shared order and nothing else. LOGGED, so
+  # it never masquerades as "the sort setting isn't sticking".
+  defp read_global_sort(scope) do
+    {by, dir} = ViewConfig.load_global_sort(scope)
+    {String.to_existing_atom(by), dir}
+  rescue
+    error ->
+      Logger.warning(
+        "Catalogue shared sort for #{inspect(scope)} fell back to Manual: " <>
+          Exception.format(:error, error, __STACKTRACE__)
+      )
+
+      {:position, :asc}
+  end
+
+  @doc """
   The chip row's categories for a scope, translated for the viewer.
   Only meaningful when the scope names exactly one catalogue — with
   several (or all), a flat chip row of every category across catalogues
@@ -236,18 +337,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   def chip_categories(_scope, _locale), do: []
 
-  defp chip_name(record, locale) do
-    translation =
-      try do
-        Catalogue.get_translation(record, locale)
-      rescue
-        _ -> %{}
-      end
-
-    Map.get(translation, "_name") ||
-      Map.get(translation, "name") ||
-      Map.get(record, :name)
-  end
+  defp chip_name(record, locale), do: Translations.translated_name(record, locale)
 
   @doc """
   Horizontally scrollable category filter chips: "All" plus one per
@@ -271,7 +361,10 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
     <div id={@id} class="flex gap-1.5 overflow-x-auto pb-1" role="group" aria-label={gettext("Categories")}>
       <button
         type="button"
-        class={["btn btn-xs rounded-full", if(@active_uuid, do: "btn-ghost", else: "btn-primary")]}
+        class={[
+          "btn btn-xs rounded-full phx-click-loading:animate-pulse",
+          if(@active_uuid, do: "btn-ghost", else: "btn-primary")
+        ]}
         phx-click="browse_category"
         phx-value-uuid=""
         phx-target={@target}
@@ -282,7 +375,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         :for={category <- @categories}
         type="button"
         class={[
-          "btn btn-xs rounded-full whitespace-nowrap",
+          "btn btn-xs rounded-full whitespace-nowrap phx-click-loading:animate-pulse",
           if(@active_uuid == to_string(category.uuid), do: "btn-primary", else: "btn-ghost")
         ]}
         phx-click="browse_category"
@@ -295,7 +388,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         :if={@show_uncategorized}
         type="button"
         class={[
-          "btn btn-xs rounded-full whitespace-nowrap",
+          "btn btn-xs rounded-full whitespace-nowrap phx-click-loading:animate-pulse",
           if(@active_uuid == :uncategorized, do: "btn-primary", else: "btn-ghost")
         ]}
         phx-click="browse_category"
@@ -363,14 +456,15 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   def item_card(assigns) do
     ~H"""
+    <%!-- Selected styling keys off data-selected (see item_row): the qty
+    hook flips the attribute instantly, the server render reconciles. --%>
     <div
       id={@id}
       class={[
         "card bg-base-100 border transition-shadow overflow-hidden",
-        if(@selected,
-          do: "border-primary ring-2 ring-primary/40",
-          else: "border-base-300 hover:shadow-md"
-        )
+        "border-base-300 hover:shadow-md",
+        "data-[selected=true]:border-primary data-[selected=true]:ring-2",
+        "data-[selected=true]:ring-primary/40"
       ]}
       data-selected={to_string(@selected)}
     >
@@ -380,7 +474,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       <button
         :if={@photo_click}
         type="button"
-        class="w-full cursor-pointer"
+        class="w-full cursor-pointer phx-click-loading:animate-pulse"
         phx-click={@photo_click}
         phx-value-uuid={@item.uuid}
         phx-target={@target}
@@ -393,35 +487,17 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           show_sku={@show_sku}
         />
       </button>
-      <%!-- With the details affordance on, the TITLE dispatches the same
-      event as the photo (Max, 2026-08-31: "clicking the title of an
-      image should be the same as clicking the image") — the two always
-      mean "look closer" together — and only the rest of the body keeps
-      the select toggle. --%>
+      <%!-- Only the THUMBNAIL is the look-closer gesture (boss,
+      2026-08-31 — supersedes the earlier title-joins-the-photo ruling):
+      the body, TITLE INCLUDED, is the select surface. With the name
+      always inside it the select button can never render empty, which
+      also retires the #89 review's min-height patch for that case. --%>
       <div :if={@photo_click} class="card-body p-3 gap-0.5">
         <button
           type="button"
-          class="text-left cursor-pointer"
-          phx-click={@photo_click}
-          phx-value-uuid={@item.uuid}
-          phx-target={@target}
-          title={gettext("View item details")}
-        >
-          <span class="font-medium text-sm leading-snug line-clamp-2" title={@item.name}>
-            {@item.name}
-          </span>
-        </button>
-        <%!-- The min height is load-bearing: sku and price are both
-        conditional, so with neither shown (an embed that granted no
-        :price over items with no SKU) this button renders EMPTY, and a
-        card whose row isn't stretched then has no select target at all
-        — the title only opens details. Only while clickable, so the
-        quantity flavour's disabled button adds no blank strip. --%>
-        <button
-          type="button"
           class={[
-            "text-left w-full flex-1 flex flex-col gap-0.5 cursor-pointer disabled:cursor-default",
-            @clickable && "min-h-[1.5rem]"
+            "text-left w-full flex-1 flex flex-col gap-0.5",
+            "cursor-pointer disabled:cursor-default phx-click-loading:animate-pulse"
           ]}
           phx-click={@clickable && "card_click"}
           phx-value-uuid={@item.uuid}
@@ -430,6 +506,9 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           aria-pressed={@selected}
           aria-label={@item.name}
         >
+          <span class="font-medium text-sm leading-snug line-clamp-2" title={@item.name}>
+            {@item.name}
+          </span>
           <span :if={@show_sku && @item.sku} class="font-mono text-xs text-base-content/60">
             {@item.sku}
           </span>
@@ -439,12 +518,18 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               / {@item.unit}
             </span>
           </span>
+          <span
+            :if={@show_price && !@item.price && Map.get(@item, :fee_note)}
+            class="text-sm font-semibold"
+          >
+            {Map.get(@item, :fee_note)}
+          </span>
         </button>
       </div>
       <button
         :if={!@photo_click}
         type="button"
-        class="text-left w-full cursor-pointer disabled:cursor-default"
+        class="text-left w-full cursor-pointer disabled:cursor-default phx-click-loading:animate-pulse"
         phx-click={@clickable && "card_click"}
         phx-value-uuid={@item.uuid}
         phx-target={@target}
@@ -470,6 +555,12 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               / {@item.unit}
             </span>
           </span>
+          <span
+            :if={@show_price && !@item.price && Map.get(@item, :fee_note)}
+            class="text-sm font-semibold"
+          >
+            {Map.get(@item, :fee_note)}
+          </span>
         </div>
       </button>
       {render_slot(@footer)}
@@ -489,7 +580,6 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         src={@item.photo_url}
         alt={@item.name}
         class="w-full h-full object-cover"
-        loading="lazy"
         decoding="async"
       />
       <%!-- No photo: a deliberate tile (SKU initial), not a broken image.
@@ -536,7 +626,10 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         phx-click={@event}
         phx-value-mode={m.mode}
         phx-target={@target}
-        class={["btn btn-sm join-item", @current == m.mode && "btn-active"]}
+        class={[
+          "btn btn-sm join-item phx-click-loading:animate-pulse",
+          @current == m.mode && "btn-active"
+        ]}
         title={m.label}
         aria-pressed={to_string(@current == m.mode)}
       >
@@ -576,7 +669,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
             phx-click={@event}
             phx-value-col={col}
             phx-target={@target}
-            class="justify-start gap-2"
+            class="justify-start gap-2 phx-click-loading:animate-pulse"
           >
             <input
               type="checkbox"
@@ -781,11 +874,14 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   def item_row(assigns) do
     ~H"""
+    <%!-- Styling keys off data-selected (not a server-computed class):
+    the qty hook flips the attribute for INSTANT feedback and the next
+    server render reconciles it — one styling source either way. --%>
     <.table_default_row
       id={@id}
       data-selected={to_string(@selected)}
       aria-selected={to_string(@selected)}
-      class={@selected && "bg-primary/10"}
+      class="data-[selected=true]:bg-primary/10"
     >
       <.table_default_cell
         :if={@checkbox}
@@ -809,7 +905,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         class={[
           row_cell_class(col),
           col_responsive_class(col),
-          event && "cursor-pointer"
+          event && "cursor-pointer phx-click-loading:animate-pulse"
         ]}
         phx-click={event}
         phx-value-uuid={if event, do: @item.uuid}
@@ -823,7 +919,6 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               src={@item.thumb_url}
               alt=""
               class="w-8 h-8 rounded object-cover bg-base-200"
-              loading="lazy"
             />
             <div
               :if={!@item.thumb_url}
@@ -868,7 +963,17 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
                 / {@item.unit}
               </span>
             </span>
-            <span :if={!@item.price && @item.unit} class="text-base-content/60">
+            <%!-- Smart fee with no numeric price: "12%" / Computed. --%>
+            <span
+              :if={!@item.price && Map.get(@item, :fee_note)}
+              class="font-semibold whitespace-nowrap"
+            >
+              {Map.get(@item, :fee_note)}
+            </span>
+            <span
+              :if={!@item.price && !Map.get(@item, :fee_note) && @item.unit}
+              class="text-base-content/60"
+            >
               {@item.unit}
             </span>
           <% :base_price -> %>
@@ -887,9 +992,11 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   # image"); every other cell (bar :qty, whose stepper must never toggle
   # the row underneath) carries the select toggle while the row is
   # clickable.
+  # Only the THUMBNAIL opens details (boss, 2026-08-31 — supersedes the
+  # earlier ruling that the name cell joined it); every other cell,
+  # name included, follows the row's select behaviour.
   defp cell_event(:qty, _assigns), do: nil
   defp cell_event(:thumb, %{thumb_click: event}) when is_binary(event), do: event
-  defp cell_event(:name, %{thumb_click: event}) when is_binary(event), do: event
   defp cell_event(_col, %{clickable: true}), do: "card_click"
   defp cell_event(_col, _assigns), do: nil
 
@@ -960,6 +1067,29 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   attr(:precision, :integer, default: 0)
   attr(:min, :string, default: nil, doc: "min attr for the control (arrows stop here)")
   attr(:max, :string, default: nil)
+
+  attr(:select_floor, :string,
+    default: nil,
+    doc: """
+    the smallest value the SERVER accepts as a selection (the host's
+    qty_min) — may differ from `min`, which is "0" in quantity mode so
+    the down arrow can reach the deselect state. The instant-highlight
+    hook flips to selected only at/above it; a value the server will
+    reject changes nothing, because a rejection produces no diff to
+    undo a premature flip (external review, 2026-08-31). Nil falls back
+    to `min`.
+    """
+  )
+
+  attr(:zero_deselects, :boolean,
+    default: false,
+    doc: """
+    whether a typed 0 previews as DESELECTED (quantity mode's contract).
+    In click+inline_qty mode the server clamps 0 back to the minimum
+    and keeps the row selected, so the preview must not un-highlight.
+    """
+  )
+
   attr(:target, :any, default: nil)
   attr(:size, :string, default: "sm", values: ~w(xs sm))
 
@@ -982,9 +1112,57 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       phx-submit="qty_commit"
       phx-change="qty_change"
       phx-target={@target}
+      phx-hook=".QtySignal"
+      data-select-floor={@select_floor}
+      data-zero-deselects={to_string(@zero_deselects)}
       novalidate
     >
       <input type="hidden" name="uuid" value={@uuid} />
+      <%!-- Instant selected feedback (Max, 2026-08-31: "I add 1 and it
+      gets highlighted blue but only after a delay"): the debounce + round
+      trip stay authoritative for STATE, but the row/card highlight is
+      keyed off data-selected, which this hook flips the moment a
+      keystroke or arrow changes the value. The flip mirrors the ACCEPT
+      SET, not `> 0`: a value the server rejects (below the select
+      floor) must not flip, because the rejection changes no server
+      state and so produces no diff to undo a premature flip — the row
+      would stay wrongly highlighted until the next real diff (external
+      review, 2026-08-31). Values inside the accept set reconcile on
+      the next server render as before. --%>
+      <script :type={Phoenix.LiveView.ColocatedHook} name=".QtySignal">
+        export default {
+          mounted() {
+            this.input = this.el.querySelector('input[type="number"]')
+            this.holder = this.el.closest("[data-selected]")
+            if (!this.input || !this.holder) return
+            this._onInput = () => {
+              const v = parseFloat(this.input.value.replace(",", "."))
+              if (Number.isNaN(v)) return
+              const floor = parseFloat(this.el.dataset.selectFloor || this.input.min)
+              let sel = null
+              if (v <= 0) {
+                // 0 previews as deselected only where the server treats
+                // it that way (quantity mode); elsewhere it clamps back
+                // to the minimum and keeps the selection.
+                if (this.el.dataset.zeroDeselects === "true") sel = "false"
+              } else if (!(floor > 0) || v >= floor) {
+                sel = "true"
+              }
+              // 0 < v < floor: the server will reject — leave the
+              // current state alone.
+              if (sel === null) return
+              this.holder.setAttribute("data-selected", sel)
+              if (this.holder.hasAttribute("aria-selected")) {
+                this.holder.setAttribute("aria-selected", sel)
+              }
+            }
+            this.input.addEventListener("input", this._onInput)
+          },
+          destroyed() {
+            if (this._onInput) this.input.removeEventListener("input", this._onInput)
+          }
+        }
+      </script>
       <div class="join" role="group" aria-label={gettext("Quantity")}>
         <input
           id={"#{@id}-input"}

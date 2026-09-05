@@ -173,6 +173,33 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardTest do
       refute "Description" in labels
       refute "Unit" in labels
     end
+
+    test "the Price row falls back to the smart fee, formatted like the listing" do
+      # The detail card must never disagree with the row the click came
+      # from: flat fee formats through Browse.format_price ("49.00", not
+      # "49.0000"), percent renders its note (external review pins,
+      # 2026-08-31).
+      flat = %Item{
+        name: "Delivery",
+        sku: nil,
+        unit: nil,
+        description: nil,
+        catalogue: nil,
+        base_price: nil,
+        default_value: Decimal.new("49.0000"),
+        default_unit: "flat",
+        data: %{}
+      }
+
+      assert {"Price", "49.00"} in ProductCard.build_fields(flat, "en")
+
+      percent = %Item{flat | default_value: Decimal.new("12.0000"), default_unit: "percent"}
+      assert {"Price", "12%"} in ProductCard.build_fields(percent, "en")
+
+      # And the fee row obeys the price grant like a real price.
+      no_price = ProductCard.build_fields(percent, "en", include_price: false)
+      refute Enum.any?(no_price, fn {label, _v} -> label == "Price" end)
+    end
   end
 
   # ── Files section (pdf viewer / file list) ────────────────────────

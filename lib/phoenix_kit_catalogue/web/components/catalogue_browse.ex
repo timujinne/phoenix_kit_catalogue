@@ -80,7 +80,10 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
       browse =
         BrowseState.init(
           scope: Browse.expand_scope(assigns[:scope] || %{}),
-          per_page: assigns[:per_page] || 24
+          per_page: assigns[:per_page] || 24,
+          # The module's shared sort (client, 2026-09-01): this embed's
+          # listings read in the same order the admin detail page does.
+          order: Browse.global_items_order()
         )
 
       {browse, effect} = BrowseState.command(browse, :reset)
@@ -104,11 +107,26 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
           view: Browse.resolve_view!(assigns[:view], "card"),
           columns: columns,
           visible_columns: visible_columns(assigns[:columns], columns),
-          categories: Browse.chip_categories(browse.scope, locale),
+          categories: order_chips(Browse.chip_categories(browse.scope, locale)),
           browse: browse
         )
 
       {:ok, run_fetch(socket, effect)}
+    end
+  end
+
+  # The chip row follows the module's shared category sort where a chip
+  # carries the data — name (chips are `%{uuid, name}` maps, so the
+  # count/date sorts have nothing to read and keep the query's position
+  # order, the same fallback the admin's manual baseline is).
+  defp order_chips(chips) do
+    case Browse.global_categories_order() do
+      {:name, dir} ->
+        sorted = Enum.sort_by(chips, &String.downcase(&1.name || ""))
+        if dir == :desc, do: Enum.reverse(sorted), else: sorted
+
+      _ ->
+        chips
     end
   end
 

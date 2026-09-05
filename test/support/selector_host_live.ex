@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
   Query params:
 
     * `c`         — catalogue uuid for `scope.catalogue_uuids`
+    * `c2`        — second catalogue uuid (multi-catalogue scopes)
     * `pre`       — preselection, `uuid:qty[,uuid:qty…]`
     * `mode`      — "single" for `mode: :single`
     * `immediate` — "true" with single mode
@@ -25,6 +26,10 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
     * `ch`        — "false" turns the context header off
     * `tray`      — "false" hides the cart button + review tray
     * `title`     — explicit modal title
+    * `loc`       — puts the HOST process gettext locale (nothing passed on)
+    * `clocale`   — passed to the component as its `locale` attr
+    * `iq`        — "true" passes inline_qty (the legacy check+stepper opt-in)
+    * `rs`        — "true" passes root_switcher (the opt-in root either-or)
   """
 
   use Phoenix.LiveView
@@ -34,6 +39,12 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
 
   @impl true
   def mount(params, _session, socket) do
+    # `loc` — the Andi/tim-dev shape (2026-08-31): the HOST process
+    # carries the viewer's gettext locale, and nothing locale-shaped is
+    # passed to the component; the component's process fallback must
+    # pick it up.
+    if loc = params["loc"], do: Gettext.put_locale(loc)
+
     scope = build_scope(params)
 
     selected =
@@ -63,6 +74,9 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
        show_tray: params["tray"] != "false",
        show_item_details: params["details"] != "false",
        title: params["title"],
+       clocale: params["clocale"],
+       inline_qty: params["iq"] == "true",
+       root_switcher: params["rs"] == "true",
        per_page: params["pp"] && String.to_integer(params["pp"]),
        two: params["two"] == "true",
        browse: params["browse"] == "true",
@@ -75,14 +89,17 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
 
   defp build_scope(params) do
     %{}
-    |> maybe_put_catalogue(params["c"])
+    |> maybe_put_catalogue(params["c"], params["c2"])
     |> maybe_put_category(params["cat_scope"])
     |> maybe_put_only(params["only"])
     |> maybe_put_statuses(params["statuses"])
   end
 
-  defp maybe_put_catalogue(scope, nil), do: scope
-  defp maybe_put_catalogue(scope, uuid), do: Map.put(scope, :catalogue_uuids, [uuid])
+  defp maybe_put_catalogue(scope, nil, _second), do: scope
+  defp maybe_put_catalogue(scope, uuid, nil), do: Map.put(scope, :catalogue_uuids, [uuid])
+
+  defp maybe_put_catalogue(scope, uuid, second),
+    do: Map.put(scope, :catalogue_uuids, [uuid, second])
 
   defp maybe_put_category(scope, nil), do: scope
   defp maybe_put_category(scope, uuid), do: Map.put(scope, :category_uuids, [uuid])
@@ -165,6 +182,9 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
         show_tray={@show_tray}
         show_item_details={@show_item_details}
         title={@title}
+        locale={@clocale}
+        inline_qty={@inline_qty}
+        root_switcher={@root_switcher}
         per_page={@per_page}
         current_user={Map.get(assigns, :phoenix_kit_current_user)}
       />

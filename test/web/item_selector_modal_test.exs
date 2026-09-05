@@ -48,8 +48,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
   defp picker(view), do: with_target(view, "#picker")
 
-  # A root that has categories opens as the admin-style category browser;
-  # tests that assert on the ROOT's flat item list switch it over first.
+  # The root either-or is opt-in since 2026-08-31 (root_switcher) — a
+  # test that asserts on the ROOT's flat item list must open with
+  # `rs=true` and switch over first.
   defp to_items_mode(view),
     do: view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
 
@@ -226,7 +227,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       cat: cat,
       screw: screw
     } do
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&precision=1&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&precision=1&sel=click&iq=true")
       uuid = to_string(screw.uuid)
 
       view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
@@ -505,7 +506,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
            cat: cat,
            screw: screw
          } do
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&iq=true")
       uuid = to_string(screw.uuid)
 
       view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
@@ -519,6 +520,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
       assert html =~ ~s(id="picker-qty-#{uuid}-r1")
       refute html =~ ~s(id="picker-qty-#{uuid}-r0")
+    end
+
+    test "quantity mode ignores inline_qty — the documented disjunct has a pin", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      # In click mode the stepper appears only on SELECTED rows under
+      # iq=true; in quantity mode every rendered row carries it at 0
+      # regardless of iq. Deleting/inverting the inline_qty half of
+      # stepper?/2 for quantity mode used to fail nothing (external
+      # review, 2026-08-31).
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}&iq=true")
+
+      assert html =~ ~s(id="picker-qty-#{screw.uuid}-r0")
     end
 
     test "exponent quantities are rejected, not parsed to 1e9", %{
@@ -796,7 +812,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       cat: cat,
       screw: screw
     } do
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&iq=true")
 
       # Row cells carry the same card_click binding the card face uses.
       # (The thumb AND name cells are the details affordance now, so
@@ -806,7 +822,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       |> render_click()
 
       assert has_element?(view, ~s(#picker-row-#{screw.uuid}[data-selected="true"]))
-      # The stepper appeared in the qty cell…
+      # The stepper appeared in the qty cell (the inline_qty opt-in)…
       assert has_element?(view, "#picker-qty-#{screw.uuid}-r0-input")
       # …and that cell is not click-bound, so stepping can't deselect.
       refute has_element?(view, ~s(#picker-row-#{screw.uuid} td:last-of-type[phx-click]))
@@ -952,7 +968,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
           category_uuid: fasteners.uuid
         })
 
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&rs=true")
       to_items_mode(view)
 
       # Off by default, offered in the dropdown.
@@ -1012,7 +1028,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
           category_uuid: tools.uuid
         })
 
-      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click&rs=true")
       assert html =~ "Uncategorized"
 
       # Narrow to the loose items: the categorized one disappears, the
@@ -1080,14 +1096,22 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       assert html =~ "M8-100"
     end
 
-    test "root covers the subtree; a drilled level lists its own items; search covers the subtree again",
+    test "a scoped category's popup OPENS standing in it: own items + child tiles",
          %{conn: conn, cat: cat} do
-      # Admin-page semantics since 2026-08-31 (the tiles rework): standing
-      # in a category shows ITS items — subtree coverage belongs to the
-      # popup root and to search. (Before the tiles, chips were flat and a
-      # parent chip had to mean the whole subtree; that pin lived here.)
+      # Boss, 2026-08-31 (the trashcans report): a category-scoped popup
+      # is the drilled level from the first paint — its child tiles AND
+      # the items filed directly on it. Subtree coverage belongs to
+      # search; there is no synthetic outline above the floor, so no
+      # Back either.
       parent = fixture_category(cat, %{name: "Parent Scope"})
       child = fixture_category(cat, %{name: "Child Scope", parent_uuid: parent.uuid})
+
+      {:ok, _} =
+        Catalogue.create_item(%{
+          name: "Direct On Parent",
+          catalogue_uuid: cat.uuid,
+          category_uuid: parent.uuid
+        })
 
       {:ok, _} =
         Catalogue.create_item(%{
@@ -1096,27 +1120,29 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
           category_uuid: child.uuid
         })
 
-      # Root of a parent-scoped popup, Items mode: the whole subtree.
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&cat_scope=#{parent.uuid}&sel=click")
-      assert to_items_mode(view) =~ "Deep Nested Item"
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&cat_scope=#{parent.uuid}&sel=click")
 
-      # Drilling into the parent level: its own (zero) items, its child
-      # as a tile to drill on.
-      html = view |> picker() |> render_click("browse_category", %{"uuid" => parent.uuid})
+      # The floor: own items + the child tile, header names the level,
+      # no Back (nowhere further back in this popup).
+      assert html =~ "Direct On Parent"
       refute html =~ "Deep Nested Item"
       assert html =~ "Child Scope"
+      assert has_element?(view, "h3", "Parent Scope")
+      refute has_element?(view, "#picker-back")
 
-      # A search from the drilled level still finds down the subtree.
+      # A search still finds down the subtree…
       html = view |> picker() |> render_change("browse_search", %{"search" => "deep"})
       assert html =~ "Deep Nested Item"
 
-      # Clearing the search returns to the level's own listing.
+      # …and clearing it returns to the floor's own listing.
       html = view |> picker() |> render_change("browse_search", %{"search" => ""})
       refute html =~ "Deep Nested Item"
+      assert html =~ "Direct On Parent"
 
-      # And the child level lists the item directly.
+      # The child level lists its item, and Back climbs to the floor.
       html = view |> picker() |> render_click("browse_category", %{"uuid" => child.uuid})
       assert html =~ "Deep Nested Item"
+      assert has_element?(view, ~s(#picker-back[phx-value-uuid="#{parent.uuid}"]))
     end
 
     test "qty bounds that invert after precision rounding raise at init", %{
@@ -1298,7 +1324,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       # Default columns include Category, populated per row. Assertions
       # scope to the table — the chips row legitimately shows the name
       # regardless of columns (navigation, not data).
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&rs=true")
       to_items_mode(view)
       assert has_element?(view, "#picker-table th", "Category")
       assert has_element?(view, "#picker-table td", "Shelving")
@@ -1325,7 +1351,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
       # The subtree is part of the scope, so its tiles must be offered…
       assert html =~ "Child Cat"
-      assert to_items_mode(view) =~ "Nested Item"
 
       # …and narrowing to a descendant is accepted, not rejected as
       # out-of-scope.
@@ -1427,30 +1452,74 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       refute html =~ "White Paint"
     end
 
-    test "clicking the title is the same as clicking the image — both open details", %{
+    test "only the THUMBNAIL opens details; the title selects instead", %{
       conn: conn,
       cat: cat,
       screw: screw
     } do
-      # Quantity mode (the default) — where the title used to be dead.
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}")
+      # Boss, 2026-08-31 — supersedes the earlier title-joins-the-photo
+      # ruling: the look-closer gesture is the image alone.
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
 
-      # Table: the NAME cell carries the same details binding the thumb does.
+      # Table: the NAME cell does NOT carry the details binding…
+      refute has_element?(
+               view,
+               ~s(#picker-row-#{screw.uuid} td[phx-click="show_detail"]),
+               "M8 Screw"
+             )
+
+      # …it follows the row's select behaviour in click mode.
       view
-      |> element(~s(#picker-row-#{screw.uuid} td[phx-click="show_detail"]), "M8 Screw")
+      |> element(~s(#picker-row-#{screw.uuid} td[phx-click="card_click"]), "M8 Screw")
       |> render_click()
 
-      assert render(view) =~ "close_detail"
-      view |> picker() |> render_click("close_detail", %{})
+      view |> picker() |> render_click("confirm", %{})
+      assert render(view) =~ "M8 Screw|M8-100|qty=1"
+    end
 
-      # Cards: the TITLE is its own details button beside the figure's.
+    test "in card view the title sits inside the select button, not the details one", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
       view |> picker() |> render_click("set_view", %{"mode" => "card"})
 
+      refute has_element?(
+               view,
+               ~s(#picker-card-#{screw.uuid} button[phx-click="show_detail"]),
+               "M8 Screw"
+             )
+
       view
-      |> element(~s(#picker-card-#{screw.uuid} button[phx-click="show_detail"]), "M8 Screw")
+      |> element(~s(#picker-card-#{screw.uuid} button[phx-click="card_click"]), "M8 Screw")
       |> render_click()
 
+      view |> picker() |> render_click("confirm", %{})
+      assert render(view) =~ "M8 Screw|M8-100|qty=1"
+    end
+
+    test "a cancel with the details stacked closes only the details", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      # Esc's server contract (Max, 2026-08-31: "Esc closes both popups,
+      # but only top one needs to go"): core's PkDialog relays the
+      # grouped cancel, and on the server a cancel arriving with @detail
+      # open must close the TOP popup only — the selector keeps its
+      # state. The second cancel closes the selector itself.
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      view |> picker() |> render_click("show_detail", %{"uuid" => to_string(screw.uuid)})
       assert render(view) =~ "close_detail"
+
+      html = view |> picker() |> render_click("cancel", %{})
+      refute html =~ "close_detail"
+      refute has_element?(view, "#closed")
+
+      view |> picker() |> render_click("cancel", %{})
+      assert has_element?(view, "#closed")
     end
 
     test "a foreign uuid is refused by the rendered-uuid gate", %{
@@ -1605,6 +1674,30 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       assert render(view) =~ "Za Last Item|ZZZ-1|qty=3"
     end
 
+    test "the auto-load sentinel is the colocated hook targeting the component", %{
+      conn: conn,
+      cat: cat
+    } do
+      {:ok, _} =
+        Catalogue.create_item(%{name: "Page Two Item", sku: "P2-1", catalogue_uuid: cat.uuid})
+
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&pp=2")
+
+      # Core's InfiniteScroll routed its push to the ROOT LiveView on
+      # every published core — a host without a load_more clause crashed
+      # and remounted, dropping the popup and every pick (external
+      # review, 2026-08-31). The colocated .AutoLoad pushes through the
+      # sentinel's own phx-target instead, so both attributes ARE the
+      # contract.
+      assert has_element?(view, "#picker-scroll-sentinel[phx-target]")
+      assert html =~ "AutoLoad"
+      refute html =~ ~s(phx-hook="InfiniteScroll")
+
+      # The cursor carries the full list identity — the catalogue drill
+      # included, so drilling re-arms it even on equal page lengths.
+      assert has_element?(view, ~s(#picker-scroll-sentinel[data-cursor]))
+    end
+
     test "the tray's remove drops exactly the named pick and its draft state", %{
       conn: conn,
       cat: cat,
@@ -1753,14 +1846,53 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       assert has_element?(view, "#picker-row-#{screw.uuid} input[type=checkbox][checked]")
     end
 
-    test "forcing click with a visible :qty keeps the legacy stepper-on-select, no checkbox", %{
+    test "forcing click with a visible :qty stays either-or: leftmost checkbox, read-only qty", %{
       conn: conn,
       cat: cat,
       screw: screw
     } do
+      # Max, 2026-08-31: "if there is a checkmark then no need for a
+      # number" — the old default paired a check icon with a
+      # stepper-on-select here.
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
 
-      # Either-or holds even when forced: qty visible → no checkbox.
+      assert has_element?(view, "#picker-row-#{screw.uuid} input[type=checkbox]")
+      refute has_element?(view, "#picker-qty-#{screw.uuid}-r0-input")
+
+      view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
+      # Still no number ENTRY — the picked amount shows read-only.
+      refute has_element?(view, "#picker-qty-#{screw.uuid}-r0-input")
+      assert has_element?(view, "#picker-row-#{screw.uuid} input[type=checkbox][checked]")
+      assert has_element?(view, "#picker-row-#{screw.uuid} td:last-of-type span", "1")
+    end
+
+    test "the read-only amount reaches CARD view too, not just the table row", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      # The row carried the picked amount from the start; the card
+      # footer only got the stepper, so a host preselecting at another
+      # quantity saw the number in one view and not the other.
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
+      html = view |> picker() |> render_click("set_view", %{"mode" => "card"})
+
+      assert html =~ ~s(id="picker-card-#{screw.uuid}")
+      # Still no number ENTRY in this flavour…
+      refute has_element?(view, "#picker-qty-#{screw.uuid}-r0-input")
+      # …but the amount is visible on the card.
+      assert has_element?(view, "#picker-card-#{screw.uuid} div.tabular-nums", "1")
+    end
+
+    test "inline_qty is the deliberate both-signals opt-in", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&iq=true")
+
+      # The legacy pairing: no checkbox column, stepper once selected.
       refute has_element?(view, "#picker-row-#{screw.uuid} input[type=checkbox]")
       refute has_element?(view, "#picker-qty-#{screw.uuid}-r0-input")
 
@@ -1770,7 +1902,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
     test "the native control carries the mode's floor: qty_min in click mode, 0 in quantity mode",
          %{conn: conn, cat: cat, screw: screw} do
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&min=2&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&min=2&sel=click&iq=true")
       view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
       assert has_element?(view, ~s(#picker-qty-#{screw.uuid}-r0-input[min="2"]))
 
@@ -1822,17 +1954,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
                "Bolts"
              )
 
-      # Up from a root-level tile returns to the popup root.
-      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid=""]), "Up")
+      # Back (in the modal header since 2026-08-31) from a root-level
+      # tile returns to the popup root.
+      assert has_element?(view, ~s(#picker-back[phx-value-uuid=""]))
 
       view |> picker() |> render_click("browse_category", %{"uuid" => child.uuid})
 
-      # Up from the child names its actual parent; the level lists its item.
-      assert has_element?(
-               view,
-               ~s(#picker-levelnav button[phx-value-uuid="#{parent.uuid}"]),
-               "Up"
-             )
+      # Back from the child names its actual parent; the level lists its
+      # item.
+      assert has_element?(view, ~s(#picker-back[phx-value-uuid="#{parent.uuid}"]))
 
       assert render(view) =~ "Hex Bolt"
     end
@@ -1855,7 +1985,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
                "Fasteners"
              )
 
-      assert has_element?(view, "#picker-root-mode button", "Categories")
+      # No switcher by default (Max, 2026-08-31): a root is just a level.
+      refute has_element?(view, "#picker-root-mode")
       refute has_element?(view, "#picker-items-heading")
 
       # Card view: the shared admin tiles, no table.
@@ -1874,9 +2005,56 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       assert has_element?(view, "#picker-items-heading", "Items")
     end
 
-    test "the root is either-or like the admin: category browser first, flat list one switch away",
+    test "a root is just a level: tiles only, no switcher, no page-1 fetch, flip refused",
          %{conn: conn, cat: cat} do
+      # Max, 2026-08-31: the switcher read as a search-mode control while
+      # flipping the browse listing — dropped from the default. The root
+      # renders the outline alone; items come from drilling or searching.
       {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      assert has_element?(view, "#picker-levelnav")
+      refute has_element?(view, "#picker-root-mode")
+      # The skipped fetch is observable: no item markup at the root at
+      # all — not even hidden rows.
+      refute html =~ "M8-100"
+      refute html =~ "Hex Bolt"
+
+      # A crafted set_root_mode must not reveal the unfetched (empty)
+      # item block.
+      html = view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
+      assert has_element?(view, "#picker-levelnav")
+      refute html =~ "M8-100"
+
+      # Drilling fetches and lists as always.
+      html = view |> picker() |> render_click("browse_category", %{"uuid" => "__uncategorized__"})
+      assert html =~ "M8 Screw"
+
+      # And climbing back up returns to the tiles-only root.
+      html = view |> picker() |> render_click("browse_category", %{"uuid" => ""})
+      refute html =~ "M8-100"
+      assert has_element?(view, "#picker-levelnav")
+
+      # Search still answers with items from the root.
+      html = view |> picker() |> render_change("browse_search", %{"search" => "bolt"})
+      assert html =~ "Hex Bolt"
+    end
+
+    test "tile triggers carry a pointer cursor in both views", %{conn: conn, cat: cat} do
+      # A bare <button> gets NO pointer cursor from the browser — the
+      # admin's tiles point because they are patch <a> links; the
+      # popup's identical-looking tiles are buttons and didn't (Max,
+      # 2026-08-31: "the mouse doesn't change on hovering").
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      assert view |> element("#picker-levelnav") |> render() =~ "cursor-pointer"
+
+      view |> picker() |> render_click("set_view", %{"mode" => "card"})
+      assert view |> element("#picker-levelnav") |> render() =~ "cursor-pointer"
+    end
+
+    test "root_switcher: true restores the admin either-or — flat list one switch away",
+         %{conn: conn, cat: cat} do
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click&rs=true")
 
       # Categories mode (default): the outline only — no item rows, not
       # even the seed items ("in the hardware catalogue there are 3
@@ -1926,6 +2104,143 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     end
   end
 
+  describe "multi-catalogue level navigation (tim-dev wide picker, 2026-08-31)" do
+    # A scope naming SEVERAL catalogues used to get no tiles, no switcher,
+    # no category hits at all ("check why the categories and sub
+    # categories aren't showing up"). The root now groups each offered
+    # catalogue's top-level categories under the catalogue's name;
+    # drilling below the root works exactly like the single-catalogue
+    # tree — category uuids are global and the fetch re-ANDs the scope.
+    setup %{cat: cat, other: other} do
+      doors = fixture_category(cat, %{name: "Doors"})
+      tools = fixture_category(other, %{name: "Other Tools"})
+      sub = fixture_category(other, %{name: "Other Drills", parent_uuid: tools.uuid})
+
+      {:ok, drill} =
+        Catalogue.create_item(%{
+          name: "Power Drill",
+          catalogue_uuid: other.uuid,
+          category_uuid: sub.uuid
+        })
+
+      %{doors: doors, tools: tools, sub: sub, drill: drill}
+    end
+
+    test "the root lists CATALOGUES; drilling goes catalogue, category, subcategory", %{
+      conn: conn,
+      cat: cat,
+      other: other,
+      doors: doors,
+      tools: tools,
+      sub: sub
+    } do
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&c2=#{other.uuid}&sel=click")
+
+      # Catalogue-first (Max, 2026-08-31: "we should first have the user
+      # choose a catalogue"): the root shows catalogue tiles only — no
+      # category is offered yet — with the switcher labeled Catalogues.
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{cat.uuid}"]))
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{other.uuid}"]))
+      refute has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{doors.uuid}"]))
+      refute has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{tools.uuid}"]))
+      # No switcher by default; with root_switcher it reads Catalogues
+      # (pinned below).
+      refute has_element?(view, "#picker-root-mode")
+      refute html =~ "__uncategorized__"
+
+      # Choosing a catalogue shows ITS top categories + its own
+      # Uncategorized bucket, like a single-catalogue root.
+      view |> picker() |> render_click("browse_catalogue", %{"uuid" => other.uuid})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{tools.uuid}"]))
+      refute has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{doors.uuid}"]))
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="__uncategorized__"]))
+      assert has_element?(view, ~s(#picker-back[phx-value-uuid=""]))
+
+      # Category and subcategory levels work as in a single catalogue.
+      view |> picker() |> render_click("browse_category", %{"uuid" => tools.uuid})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{sub.uuid}"]))
+
+      html = view |> picker() |> render_click("browse_category", %{"uuid" => sub.uuid})
+      assert html =~ "Power Drill"
+
+      # Up chain: subcategory -> category -> catalogue level -> root.
+      view |> picker() |> render_click("browse_category", %{"uuid" => tools.uuid})
+      view |> picker() |> render_click("browse_category", %{"uuid" => ""})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{tools.uuid}"]))
+
+      view |> picker() |> render_click("browse_catalogue", %{"uuid" => ""})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{cat.uuid}"]))
+    end
+
+    test "a chosen catalogue narrows the items; a foreign catalogue uuid is refused", %{
+      conn: conn,
+      cat: cat,
+      other: other,
+      drill: drill
+    } do
+      third = fixture_catalogue(%{name: "Unoffered Catalogue"})
+
+      {:ok, _} =
+        Catalogue.create_item(%{name: "Unoffered Item", catalogue_uuid: third.uuid})
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&c2=#{other.uuid}&sel=click&rs=true")
+
+      # Items mode at the root: everything offered, nothing beyond.
+      html = view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
+      assert html =~ "M8 Screw"
+      assert html =~ drill.name
+      refute html =~ "Unoffered Item"
+
+      # Chosen catalogue: its items only.
+      view |> picker() |> render_click("set_root_mode", %{"mode" => "categories"})
+      view |> picker() |> render_click("browse_catalogue", %{"uuid" => other.uuid})
+      html = view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
+      refute html =~ "M8 Screw"
+      assert html =~ "Forbidden Item"
+
+      # A crafted uuid outside the offered list is a no-op — the drilled
+      # catalogue stands (its item still listed, the outsider's absent).
+      html = view |> picker() |> render_click("browse_catalogue", %{"uuid" => third.uuid})
+      refute html =~ "Unoffered Item"
+      assert html =~ "Forbidden Item"
+    end
+
+    test "with root_switcher the multi-catalogue switcher reads Catalogues", %{
+      conn: conn,
+      cat: cat,
+      other: other
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&c2=#{other.uuid}&sel=click&rs=true")
+      assert has_element?(view, "#picker-root-mode button", "Catalogues")
+    end
+
+    test "a crafted category from ANOTHER offered catalogue is refused while drilled", %{
+      conn: conn,
+      cat: cat,
+      other: other,
+      doors: doors,
+      tools: tools,
+      sub: sub
+    } do
+      # The tiles and search hits never offer B's categories while
+      # drilled into A; a crafted event naming one would wed A to B's
+      # category — a contradictory, empty dead-end level (external
+      # review, 2026-08-31). The component refuses it like BrowseState
+      # refuses out-of-scope uuids.
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&c2=#{other.uuid}&sel=click")
+
+      view |> picker() |> render_click("browse_catalogue", %{"uuid" => cat.uuid})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{doors.uuid}"]))
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => tools.uuid})
+
+      # Still standing at cat's catalogue level — the crafted drill did
+      # nothing (tools' subcategory tile would render if it had).
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{doors.uuid}"]))
+      refute has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{sub.uuid}"]))
+    end
+  end
+
   describe "search category hits (the admin two-list surface)" do
     # The popup search works like the admin's (Max, 2026-08-31): item
     # results are the primary, default list; categories whose name (in
@@ -1968,7 +2283,111 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       assert html =~ "Hex Bolt"
       refute has_element?(view, "#picker-search-cats")
       refute has_element?(view, ~s(#picker-search[value="bolt"]))
-      assert has_element?(view, "#picker-levelnav", "Bolts")
+      assert has_element?(view, "h3", "Bolts")
+      assert has_element?(view, "#picker-back")
+    end
+
+    test "a CATEGORY-ONLY scope still gets the subcategory tiles", %{
+      conn: conn,
+      cat: cat
+    } do
+      # tim-dev's per-category narrow pickers pass category_uuids with
+      # catalogue_uuids: nil — the tree builder keyed off the catalogue
+      # and handed that shape the EMPTY tree, so WASTE SORTERS' healthy
+      # children never rendered (error report, 2026-08-31). The
+      # catalogue is implied by the scoped category; the tree derives it.
+      sorters = fixture_category(cat, %{name: "Waste Sorters"})
+      franke = fixture_category(cat, %{name: "Franke Sorter", parent_uuid: sorters.uuid})
+      blanco = fixture_category(cat, %{name: "Blanco", parent_uuid: sorters.uuid})
+
+      {:ok, _} =
+        Catalogue.create_item(%{
+          name: "Franke 90L",
+          catalogue_uuid: cat.uuid,
+          category_uuid: franke.uuid
+        })
+
+      # No c= param: the scope names ONLY the category, like Andi's.
+      {:ok, view, _html} = open(conn, "cat_scope=#{sorters.uuid}&sel=click")
+
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{franke.uuid}"]))
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{blanco.uuid}"]))
+
+      # Drilling one works, lists its item, and Back climbs home.
+      html = view |> picker() |> render_click("browse_category", %{"uuid" => franke.uuid})
+      assert html =~ "Franke 90L"
+      assert has_element?(view, "h3", "Franke Sorter")
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => ""})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{blanco.uuid}"]))
+
+      # The derived catalogue feeds the TREE only — the fetch stays on
+      # the host's category scope (out-of-scope items never appear).
+      html = view |> picker() |> render_change("browse_search", %{"search" => "m8"})
+      refute html =~ "M8 Screw"
+    end
+
+    test "a tile's IMAGE enters the level like its name does", %{
+      conn: conn,
+      cat: cat
+    } do
+      # Max, 2026-08-31: "for the categories and catalogues… image and
+      # title should be clickable to enter them." The table view's thumb
+      # cell used to be inert.
+      pictured =
+        fixture_category(cat, %{
+          name: "Pictured",
+          data: %{"featured_image_uuid" => Ecto.UUID.generate()}
+        })
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      # The thumb cell's button carries the same drill event + uuid the
+      # name button does — two triggers per pictured tile.
+      html = view |> element("#picker-levelnav-table") |> render()
+      assert length(String.split(html, ~s(phx-value-uuid="#{pictured.uuid}"))) == 3
+
+      # And the uncategorized row's folder icon drills the bucket —
+      # two triggers there as well.
+      assert length(String.split(html, ~s(phx-value-uuid="__uncategorized__"))) == 3
+    end
+
+    test "the header names where you stand and carries Back (Max, 2026-08-31)", %{
+      conn: conn,
+      cat: cat,
+      parent: parent
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      # Root: no Back, the host-scoped context (or plain title) stands.
+      refute has_element?(view, "#picker-back")
+
+      # Drilled: the header names the level and offers the way back.
+      view |> picker() |> render_click("browse_category", %{"uuid" => parent.uuid})
+      assert has_element?(view, "h3", "Fasteners")
+      assert has_element?(view, "#picker-back")
+
+      # Back climbs; the header follows.
+      view |> picker() |> render_click("browse_category", %{"uuid" => ""})
+      refute has_element?(view, "h3", "Fasteners")
+      refute has_element?(view, "#picker-back")
+    end
+
+    test "a whitespace-only query is no search: level navigation and drill stand", %{
+      conn: conn,
+      cat: cat,
+      parent: parent
+    } do
+      # The fetch layer trims "   " to no text filter, so treating it as
+      # live search flipped a :direct level to subtree listing and hid
+      # the tiles for a query that filters nothing (external review,
+      # 2026-08-31).
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{parent.uuid}"]))
+
+      view |> picker() |> render_change("browse_search", %{"search" => "   "})
+      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{parent.uuid}"]))
+      refute has_element?(view, "#picker-search-cats")
     end
 
     test "hits respect the scope allow-list and the drilled subtree", %{
@@ -1997,44 +2416,99 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       refute has_element?(view, ~s(#picker-search-cats button[phx-value-uuid="#{outside.uuid}"]))
     end
 
-    test "a hit on the scoped root itself leaves Up alive", %{conn: conn, cat: cat} do
-      # A scoped embed's OWN root category is inside the tree, so a
-      # search that matches its name offers it as a hit. Drilling there
-      # used to aim Up at the grandparent — outside the scope, refused
-      # by BrowseState — so the only way back up was a dead button.
+    test "the scoped floor: hits cover descendants only, Back climbs home to it", %{
+      conn: conn,
+      cat: cat
+    } do
+      # A category-scoped popup OPENS standing in its category (boss,
+      # 2026-08-31), so the old drill-to-the-standing-root hit scenario
+      # dissolved: hits offer the subtree BELOW the floor, never the
+      # floor itself or its out-of-scope ancestors — and Back at the
+      # floor stays hidden (the grandparent-aimed dead button this test
+      # used to guard against cannot render at all).
       top = fixture_category(cat, %{name: "Hardware"})
       mid = fixture_category(cat, %{name: "Widgets", parent_uuid: top.uuid})
       leaf = fixture_category(cat, %{name: "Widget Clips", parent_uuid: mid.uuid})
 
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&cat_scope=#{mid.uuid}&sel=click")
+      refute has_element?(view, "#picker-back")
+
       view |> picker() |> render_change("browse_search", %{"search" => "widget"})
 
-      assert has_element?(view, ~s(#picker-search-cats button[phx-value-uuid="#{mid.uuid}"]))
-      view |> picker() |> render_click("open_category_hit", %{"uuid" => mid.uuid})
+      assert has_element?(view, ~s(#picker-search-cats button[phx-value-uuid="#{leaf.uuid}"]))
+      refute has_element?(view, ~s(#picker-search-cats button[phx-value-uuid="#{mid.uuid}"]))
+      refute has_element?(view, ~s(#picker-search-cats button[phx-value-uuid="#{top.uuid}"]))
 
-      assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid=""]), "Up")
-      refute has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{top.uuid}"]))
+      # Drilling a hit works, and Back names the floor, not the
+      # out-of-scope grandparent.
+      view |> picker() |> render_click("open_category_hit", %{"uuid" => leaf.uuid})
+      assert has_element?(view, ~s(#picker-back[phx-value-uuid="#{mid.uuid}"]))
 
-      # And the climb actually lands back on the popup root's tiles.
-      view |> picker() |> render_click("browse_category", %{"uuid" => ""})
-
-      assert has_element?(
-               view,
-               ~s(#picker-levelnav button[phx-value-uuid="#{leaf.uuid}"]),
-               "Widget Clips"
-             )
+      view |> picker() |> render_click("browse_category", %{"uuid" => mid.uuid})
+      refute has_element?(view, "#picker-back")
     end
 
-    test "the root's Items mode searches items only — the admin's items-type search", %{
+    test "the root's Items mode (opt-in) searches items only — the admin's items-type search", %{
       conn: conn,
       cat: cat
     } do
-      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&rs=true")
       view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
 
       html = view |> picker() |> render_change("browse_search", %{"search" => "bolt"})
       assert html =~ "Hex Bolt"
       refute has_element?(view, "#picker-search-cats")
+    end
+  end
+
+  describe "content language (tim-dev error report, 2026-08-31)" do
+    # The host process carries the viewer's gettext locale and passes no
+    # :locale attr — exactly Andi's integration. The list used to read
+    # the wrong translation key ("name" where the editor stores "_name"),
+    # so names never translated; the detail popup resolved "_name" and
+    # came out right, which kept the miss invisible on single-language
+    # data.
+    test "the process locale reaches the list AND the inspection popup with no locale attr",
+         %{conn: conn, cat: cat, screw: screw} do
+      {:ok, _} =
+        Catalogue.update_item(screw, %{
+          data: %{
+            "_primary_language" => "en",
+            "en" => %{"_name" => "M8 Screw", "_description" => "Steel screw"},
+            "et" => %{"_name" => "M8 Kruvi", "_description" => "Teraskruvi"}
+          }
+        })
+
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click&loc=et")
+
+      # The list translates (this line is the fixed bug)…
+      assert html =~ "M8 Kruvi"
+      refute html =~ "M8 Screw"
+
+      # …and the inspection popup translates name and description.
+      html = view |> picker() |> render_click("show_detail", %{"uuid" => to_string(screw.uuid)})
+      assert html =~ "M8 Kruvi"
+      assert html =~ "Teraskruvi"
+    end
+
+    test "an explicit :locale attr still wins over the process locale", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, _} =
+        Catalogue.update_item(screw, %{
+          data: %{
+            "_primary_language" => "en",
+            "en" => %{"_name" => "M8 Screw"},
+            "et" => %{"_name" => "M8 Kruvi"}
+          }
+        })
+
+      # Host process in et, component forced to en.
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}&sel=click&loc=et&clocale=en")
+      assert html =~ "M8 Screw"
+      refute html =~ "M8 Kruvi"
     end
   end
 
@@ -2122,6 +2596,58 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       # A grant that never had those columns just ignores the stale names.
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&cols=thumb,name&sel=click")
       assert has_element?(view, "#picker-table th", "Name")
+    end
+  end
+
+  describe "the module's shared sort (client, 2026-09-01: one order everywhere)" do
+    defp appears_before?(html, first, second) do
+      {i1, _} = :binary.match(html, first)
+      {i2, _} = :binary.match(html, second)
+      i1 < i2
+    end
+
+    test "listings follow catalogue_sort_detail_items", %{conn: conn, cat: cat} do
+      # The seed items tie on position, so the default document order
+      # falls to name asc — a name:desc setting must flip them.
+      {:ok, _} = ViewConfig.save_global_sort(:detail_items, "name", :desc)
+
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}")
+      assert appears_before?(html, "White Paint", "M8 Screw")
+
+      # Back to the default: document order (name asc on the tie).
+      {:ok, _} = ViewConfig.save_global_sort(:detail_items, "position", :asc)
+
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}")
+      assert appears_before?(html, "M8 Screw", "White Paint")
+    end
+
+    test "category tiles follow catalogue_sort_detail_categories", %{conn: conn, cat: cat} do
+      # Positions invert the names, so which order is active is readable
+      # from which tile renders first.
+      fixture_category(cat, %{name: "Alpha Section", position: 2})
+      fixture_category(cat, %{name: "Zed Section", position: 1})
+
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}")
+      assert appears_before?(html, "Zed Section", "Alpha Section")
+
+      {:ok, _} = ViewConfig.save_global_sort(:detail_categories, "name", :asc)
+
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}")
+      assert appears_before?(html, "Alpha Section", "Zed Section")
+
+      {:ok, _} = ViewConfig.save_global_sort(:detail_categories, "position", :asc)
+    end
+
+    test "manual category tiles tie-break on the lowercased name", %{conn: conn, cat: cat} do
+      # Equal positions force the tie-break; the names are cased so a raw
+      # C-collation query order ("Zebra" < "apple" by byte) differs from
+      # the admin's lowercased key ("apple" < "zebra"). On an en_US-collated
+      # DB both agree - the pin still guards "no in-memory sort at all".
+      fixture_category(cat, %{name: "Zebra Tie", position: 5})
+      fixture_category(cat, %{name: "apple tie", position: 5})
+
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}")
+      assert appears_before?(html, "apple tie", "Zebra Tie")
     end
   end
 end

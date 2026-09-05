@@ -42,9 +42,6 @@ defmodule PhoenixKitCatalogue.GettextTest do
           {"A category cannot move into its own subtree.",
            "Категорию нельзя переместить в её собственное поддерево.",
            "Kategooriat ei saa viia tema enda alampuusse."},
-          {"No subcategories here. Switch to Items to browse this level's items.",
-           "Здесь нет подкатегорий. Переключитесь на Позиции, чтобы просмотреть позиции этого уровня.",
-           "Siin pole alamkategooriaid. Vali Tooted, et sirvida selle taseme tooteid."},
           # Written as the macro inside a HEEx attribute on purpose: the
           # runtime form is NOT extracted from attribute interpolation, which
           # is how these two were in the catalogues but absent from a
@@ -61,7 +58,17 @@ defmodule PhoenixKitCatalogue.GettextTest do
           {"Multiple values", "Несколько значений", "Mitu väärtust"},
           {"Fixed value", "Фиксированное значение", "Kindel väärtus"},
           {"Previous page", "Предыдущая страница", "Eelmine leht"},
-          {"Next page", "Следующая страница", "Järgmine leht"}
+          {"Next page", "Следующая страница", "Järgmine leht"},
+          # The 2026-08-31 boss report (English "New subcategory" in the
+          # Russian admin): all three were runtime-form calls, which the
+          # extractor cannot see, so no catalogue ever held them.
+          {"New subcategory", "Новая подкатегория", "Uus alamkategooria"},
+          {"That category belongs to another catalogue.",
+           "Эта категория принадлежит другому каталогу.",
+           "See kategooria kuulub teise kataloogi."},
+          {"Drag-reorder needs the Manual sort — choose it in the sort selector.",
+           "Для перетаскивания выберите ручную сортировку в списке сортировки.",
+           "Lohistades järjestamiseks vali sortimise valikust käsitsi järjestus."}
         ] do
       Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
       assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru
@@ -641,6 +648,24 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert po_msgstr("en", msgid) != nil
       assert gettext_in("et", msgid) == "Tagasi"
       assert gettext_in("ru", msgid) == "Назад"
+    end
+
+    # The opt-in root switcher's group label — it flips what the level
+    # LISTS, so it must not claim to be a search control (2026-08-31).
+    test "Browse" do
+      msgid = "Browse"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Sirvi"
+      assert gettext_in("ru", msgid) == "Обзор"
+    end
+
+    # The smart-fee price placeholder for rule-priced items whose number
+    # only exists at order time (2026-08-31).
+    test "Computed" do
+      msgid = "Computed"
+      assert po_msgstr("en", msgid) != nil
+      assert gettext_in("et", msgid) == "Arvutuslik"
+      assert gettext_in("ru", msgid) == "Рассчитывается"
     end
 
     # The kmpl (Estonian set/komplekt) unit option (boss, 2026-08-31).

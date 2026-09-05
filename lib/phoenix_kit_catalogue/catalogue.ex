@@ -4072,14 +4072,22 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> Enum.sort_by(&downcase_or_empty(&1.name), :desc)
       |> Enum.map(& &1.uuid)
 
+  # The DateTime sorter, not term order — structurally, DateTime structs
+  # compare field-alphabetically (day before month), so a bare
+  # `& &1.inserted_at` key put Jan 2nd AFTER Feb 1st. The category-side
+  # strategies (`order_categories_for_strategy/2`) already sort this way.
   defp item_strategy_order(rows, :created_asc),
-    do: rows |> Enum.sort_by(& &1.uuid) |> Enum.sort_by(& &1.inserted_at) |> Enum.map(& &1.uuid)
+    do:
+      rows
+      |> Enum.sort_by(& &1.uuid)
+      |> Enum.sort_by(& &1.inserted_at, {:asc, DateTime})
+      |> Enum.map(& &1.uuid)
 
   defp item_strategy_order(rows, :created_desc),
     do:
       rows
       |> Enum.sort_by(& &1.uuid, :desc)
-      |> Enum.sort_by(& &1.inserted_at, :desc)
+      |> Enum.sort_by(& &1.inserted_at, {:desc, DateTime})
       |> Enum.map(& &1.uuid)
 
   defp downcase_or_empty(nil), do: ""

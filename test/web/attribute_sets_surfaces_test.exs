@@ -130,13 +130,13 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
 
         {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
 
-        # Page 1 of 2, 30 sets total; page 2 reachable and clamped.
-        assert html =~ "Page 1 of 2"
+        # 25 of 30 sets loaded; core's load_more appends the rest and then
+        # has nothing left to offer.
+        assert has_element?(view, "#attribute-sets-load-more")
         refute html =~ "Filler 29"
-        html = render_click(view, "attr_sets_page", %{"dir" => "next"})
+        html = render_click(view, "attr_sets_load_more", %{})
         assert html =~ "Filler 29"
-        html = render_click(view, "attr_sets_page", %{"dir" => "next"})
-        assert html =~ "Page 2 of 2"
+        assert html =~ "Filler 01"
 
         # Search narrows and resets to page 1.
         html = render_change(view, "attr_sets_search", %{"q" => "Big Set"})

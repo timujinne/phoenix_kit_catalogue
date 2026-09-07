@@ -935,7 +935,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     total = length(filtered)
     max_page = max(ceil(total / @attr_sets_page_size), 1)
     page = socket.assigns.attr_sets_page |> max(1) |> min(max_page)
-    page_rows = Enum.slice(filtered, (page - 1) * @attr_sets_page_size, @attr_sets_page_size)
+    # Load-more model (core's `<.load_more>`): every advanced page keeps the
+    # earlier rows in the DOM, so the loaded set is the first `page` pages.
+    page_rows = Enum.take(filtered, page * @attr_sets_page_size)
 
     uuids = Enum.map(page_rows, & &1.uuid)
     value_counts = Catalogue.attribute_set_value_counts(uuids)
@@ -2618,16 +2620,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   def handle_event("attr_sets_search", _params, socket), do: {:noreply, socket}
 
-  def handle_event("attr_sets_page", %{"dir" => dir}, socket) when dir in ["prev", "next"] do
-    delta = if dir == "next", do: 1, else: -1
-
+  def handle_event("attr_sets_load_more", _params, socket) do
     {:noreply,
      socket
-     |> assign(:attr_sets_page, socket.assigns.attr_sets_page + delta)
+     |> assign(:attr_sets_page, socket.assigns.attr_sets_page + 1)
      |> derive_attribute_sets_page()}
   end
-
-  def handle_event("attr_sets_page", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_set_items_modal", %{"uuid" => uuid}, socket) when is_binary(uuid) do
     set = Enum.find(socket.assigns.attr_sets_all, &(&1.uuid == uuid))
@@ -3366,38 +3364,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             </:card_actions>
           </.table_default>
 
-          <div
-            :if={@attr_sets_max_page > 1}
-            class="flex items-center justify-end gap-3 text-sm text-base-content/60"
-          >
-            <span>
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Page %{page} of %{max} — %{total} sets",
-                page: @attr_sets_page,
-                max: @attr_sets_max_page,
-                total: @attr_sets_total
-              )}
-            </span>
-            <div class="join">
-              <button
-                type="button"
-                class="btn btn-sm join-item"
-                phx-click="attr_sets_page"
-                phx-value-dir="prev"
-                disabled={@attr_sets_page <= 1}
-              >
-                «
-              </button>
-              <button
-                type="button"
-                class="btn btn-sm join-item"
-                phx-click="attr_sets_page"
-                phx-value-dir="next"
-                disabled={@attr_sets_page >= @attr_sets_max_page}
-              >
-                »
-              </button>
-            </div>
-          </div>
+          <.load_more
+            :if={@attr_sets_total > 0}
+            id="attribute-sets-load-more"
+            loaded={length(@attribute_set_rows)}
+            total={@attr_sets_total}
+            on_load_more="attr_sets_load_more"
+            noun_plural={Gettext.gettext(PhoenixKitCatalogue.Gettext, "sets")}
+          />
 
           <.modal
             :if={@show_new_set_modal}

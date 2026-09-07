@@ -3076,9 +3076,6 @@ msgstr ""
 msgid "No sets match your search."
 msgstr ""
 
-msgid "Page %{page} of %{max} — %{total} sets"
-msgstr ""
-
 msgid "No values yet"
 msgstr ""
 
@@ -3378,3 +3375,8 @@ msgid "Queued %{count} translation."
 msgid_plural "Queued %{count} translations."
 msgstr[0] "%{count} Übersetzung in die Warteschlange gestellt."
 msgstr[1] "%{count} Übersetzungen in die Warteschlange gestellt."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3373
+#, elixir-autogen, elixir-format
+msgid "sets"
+msgstr "Sets"

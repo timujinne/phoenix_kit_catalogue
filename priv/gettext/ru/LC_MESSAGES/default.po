@@ -3085,9 +3085,6 @@ msgstr "Поиск наборов и значений…"
 msgid "No sets match your search."
 msgstr "Нет наборов по вашему запросу."
 
-msgid "Page %{page} of %{max} — %{total} sets"
-msgstr "Страница %{page} из %{max} — %{total} наборов"
-
 msgid "No values yet"
 msgstr "Значений пока нет"
 
@@ -3390,3 +3387,8 @@ msgid_plural "Queued %{count} translations."
 msgstr[0] "В очередь поставлен %{count} перевод."
 msgstr[1] "В очередь поставлено %{count} перевода."
 msgstr[2] "В очередь поставлено %{count} переводов."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3373
+#, elixir-autogen, elixir-format
+msgid "sets"
+msgstr "наборов"

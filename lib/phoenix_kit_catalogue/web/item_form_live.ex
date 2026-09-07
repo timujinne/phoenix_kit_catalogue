@@ -2577,7 +2577,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       current_path={assigns[:url_path] || (if @catalogue_uuid, do: Paths.catalogue_detail(@catalogue_uuid), else: Paths.index())}
       current_locale={assigns[:current_locale]}
     >
-      <div class="flex flex-col mx-auto max-w-2xl px-4 py-8 gap-6">
+      <div class="container flex flex-col mx-auto px-4 py-6 gap-6">
 
       <.live_component
         :if={@action == :edit}

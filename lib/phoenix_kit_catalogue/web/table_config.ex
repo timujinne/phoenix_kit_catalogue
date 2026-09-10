@@ -4,9 +4,17 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
   (`:catalogues`, `:suppliers`, `:manufacturers`). Pure data — cell and
   card rendering live in the LiveView. Labels are zero-arity fns so they
   resolve in the request's current locale.
+
+  For `:detail_items` / `:detail_categories`, the list also folds in
+  enabled extensions' contributed columns (`PhoenixKitCatalogue.Extensions.columns/1`)
+  — off by default, ids namespaced under the extension's key, and
+  carrying their own `render` fn (see `extension_columns/1`) since the
+  catalogue can't hardcode a case clause for a column it doesn't know
+  about.
   """
   use Gettext, backend: PhoenixKitCatalogue.Gettext
 
+  alias PhoenixKitCatalogue.Extensions
   alias PhoenixKitCatalogue.Gettext, as: G
 
   @type scope ::
@@ -25,7 +33,8 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
           sort_key: (map() -> term()) | nil,
           align: :left | :right,
           filterable?: boolean(),
-          filter_type: :enum | nil
+          filter_type: :enum | nil,
+          render: (map() -> Phoenix.LiveView.Rendered.t()) | nil
         }
 
   defp g(s), do: Gettext.gettext(G, s)
@@ -41,8 +50,20 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       sort_key: Keyword.get(opts, :sort_key),
       align: Keyword.get(opts, :align, :left),
       filterable?: Keyword.get(opts, :filterable?, false),
-      filter_type: Keyword.get(opts, :filter_type)
+      filter_type: Keyword.get(opts, :filter_type),
+      render: Keyword.get(opts, :render)
     }
+  end
+
+  # Enabled extensions' contributed columns (`PhoenixKitCatalogue.Extensions.columns/1`,
+  # already namespaced under each extension's key), converted to this
+  # module's column shape — `default?: false` (opt-in only, an extension
+  # can't force itself into anyone's view) and not sortable/filterable
+  # (extensions don't currently get a say over query building).
+  defp contributed_columns(scope) when scope in [:detail_items, :detail_categories] do
+    Enum.map(Extensions.columns(scope), fn ext_col ->
+      col(ext_col.id, ext_col.label, render: ext_col.render)
+    end)
   end
 
   @spec columns(scope()) :: [column()]
@@ -161,6 +182,12 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("name", fn -> g("Name") end, default?: true, managed?: false, sortable?: true),
       col("position", fn -> gettext("Manual order") end, managed?: false, sortable?: true),
       col("base_price", fn -> g("Price") end, managed?: false, sortable?: true),
+      # Off by default: the table already shows a thumbnail automatically
+      # whenever some row on the level has one (`any_media_thumb?/2`);
+      # this managed twin is for admins who want the picture as an
+      # explicit, orderable column instead of (or alongside) that auto
+      # column — same opt-in treatment shop-extension columns get.
+      col("image", fn -> g("Image") end, []),
       col("sku", fn -> g("SKU") end, default?: true, sortable?: true),
       col("price", fn -> g("Price") end, default?: true),
       col("supplier_price", fn -> g("Supplier price") end, default?: true),
@@ -171,7 +198,7 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("description", fn -> g("Description") end, []),
       col("updated", fn -> g("Updated") end, []),
       col("created", fn -> g("Created") end, [])
-    ]
+    ] ++ contributed_columns(:detail_items)
   end
 
   # The detail page's categories table (Name is unmanaged; the rest
@@ -181,6 +208,8 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
     [
       col("name", fn -> g("Name") end, default?: true, managed?: false, sortable?: true),
       col("position", fn -> gettext("Manual order") end, managed?: false, sortable?: true),
+      # See the matching comment on `columns(:detail_items)` above.
+      col("image", fn -> g("Image") end, []),
       col("items", fn -> g("Items") end, default?: true, sortable?: true),
       col("subcategories", fn -> g("Subcategories") end, default?: true),
       col("description", fn -> g("Description") end, []),
@@ -188,7 +217,7 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("status", fn -> g("Status") end, []),
       col("updated", fn -> g("Updated") end, sortable?: true),
       col("created", fn -> g("Created") end, [])
-    ]
+    ] ++ contributed_columns(:detail_categories)
   end
 
   def columns(:attribute_groups) do
@@ -236,6 +265,21 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
 
   @spec column_map(scope()) :: %{String.t() => column()}
   def column_map(scope), do: scope |> columns() |> Map.new(&{&1.id, &1})
+
+  @doc """
+  This scope's extension-contributed columns, keyed by their (already
+  namespaced) id — the shape a cell renderer needs: `%{id => %{label:,
+  render:}}`. Empty for scopes extensions don't contribute to.
+
+  Callers that render a table once per page (not once per row) should
+  fetch this ONCE and pass it down, the same discipline
+  `CatalogueDetailLive` already applies to `any_media_thumb?/2` — an
+  extension lookup inside a per-row loop would rescan on every cell.
+  """
+  @spec extension_columns(scope()) :: %{String.t() => column()}
+  def extension_columns(scope) do
+    scope |> columns() |> Enum.filter(& &1.render) |> Map.new(&{&1.id, &1})
+  end
 
   @spec validate_columns(scope(), [String.t()]) :: [String.t()]
   def validate_columns(scope, ids) when is_list(ids) do

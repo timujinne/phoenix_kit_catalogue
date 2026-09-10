@@ -50,6 +50,32 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormSeoTest do
       assert saved.slug["en-US"] == "vases"
     end
 
+    test "stores seo_title/seo_description even when multilang is disabled", %{conn: conn} do
+      # Regression: `merge_translatable_params/4` only touches `data` inside
+      # its `multilang_enabled` branch, so on a single-language install
+      # (multilang never enabled) `seo_title`/`seo_description` — which have
+      # no DB column — used to be silently dropped by `cast/2` on every save.
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue, %{name: "Vases"})
+
+      {:ok, view, _html} = live(conn, edit_category_url(category.uuid))
+
+      view
+      |> form("form[action=\"#\"][phx-submit=save]", %{
+        "category" => %{
+          "name" => "Vases",
+          "seo_title" => "Buy Vases",
+          "seo_description" => "Nice vases"
+        }
+      })
+      |> render_submit()
+
+      saved = Catalogue.get_category!(category.uuid)
+
+      assert Translations.translated_seo_title(saved, "en-US") == "Buy Vases"
+      assert Translations.translated_seo_description(saved, "en-US") == "Nice vases"
+    end
+
     test "a category form with no ecommerce extension still renders the slug and seo inputs", %{
       conn: conn
     } do

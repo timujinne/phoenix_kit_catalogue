@@ -52,6 +52,32 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSeoTest do
       assert saved.slug["en-US"] == "vase"
     end
 
+    test "stores seo_title/seo_description even when multilang is disabled", %{conn: conn} do
+      # Regression: `merge_translatable_params/4` only touches `data` inside
+      # its `multilang_enabled` branch, so on a single-language install
+      # (multilang never enabled) `seo_title`/`seo_description` — which have
+      # no DB column — used to be silently dropped by `cast/2` on every save.
+      catalogue = fixture_catalogue()
+      item = fixture_item(%{catalogue_uuid: catalogue.uuid, name: "Vase"})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      view
+      |> form("form[action=\"#\"][phx-submit=save]", %{
+        "item" => %{
+          "name" => "Vase",
+          "seo_title" => "Buy Vase",
+          "seo_description" => "Nice"
+        }
+      })
+      |> render_submit()
+
+      saved = Catalogue.get_item!(item.uuid)
+
+      assert Translations.translated_seo_title(saved, "en-US") == "Buy Vase"
+      assert Translations.translated_seo_description(saved, "en-US") == "Nice"
+    end
+
     test "on the fr-FR tab, seo_title submits as lang_seo_title, round-trips with the fr-FR slug, and keeps the existing en-US slug",
          %{conn: conn} do
       # Mutation-proof regression: `apply_slug/2` merges the submitted

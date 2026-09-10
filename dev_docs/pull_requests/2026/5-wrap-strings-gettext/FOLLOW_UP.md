@@ -36,7 +36,7 @@ CLAUDE_REVIEW only.
 
 - **#1** `Gettext.gettext/3` runtime function bypasses
   `mix gettext.extract` — this is the workspace convention. Per
-  [feedback_gettext_translation.md](~/.claude/projects/-Users-maxdon-Desktop-Elixir/memory/feedback_gettext_translation.md):
+  [feedback_gettext_translation.md]the agent memory note `feedback_gettext_translation.md`:
   feature modules wrap call sites in `gettext(...)` but never own
   `.po`/`.pot` files; translation files live in core `phoenix_kit`.
   The runtime form `Gettext.gettext(PhoenixKitWeb.Gettext, "...")` is

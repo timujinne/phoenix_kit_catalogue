@@ -537,7 +537,10 @@ defmodule PhoenixKitCatalogue.Attachments do
   under the hood), and persists `data["featured_image_uuid"]`
   (`opts[:featured]`, default the first uuid) and `data["media_order"]`
   (`opts[:order]`, default `file_uuids` as given) via
-  `PhoenixKitCatalogue.Catalogue.update_item/2`.
+  `PhoenixKitCatalogue.Catalogue.update_item/3`. Pass `opts[:actor_uuid]`
+  so the write is attributed in the activity log, same as every other
+  mutating context call — this is the one non-LiveView entry point, so
+  there is no mount-time actor to fall back on.
 
   An unknown uuid returns `{:error, {:file_not_found, uuid}}` before any
   write happens — the item and its folder are left untouched.
@@ -558,7 +561,9 @@ defmodule PhoenixKitCatalogue.Attachments do
         )
         |> put_or_delete("media_order", Keyword.get(opts, :order, file_uuids))
 
-      PhoenixKitCatalogue.Catalogue.update_item(item, %{data: data})
+      PhoenixKitCatalogue.Catalogue.update_item(item, %{data: data},
+        actor_uuid: opts[:actor_uuid]
+      )
     end
   end
 

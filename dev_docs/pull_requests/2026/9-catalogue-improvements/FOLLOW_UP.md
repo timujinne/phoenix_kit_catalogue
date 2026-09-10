@@ -23,7 +23,7 @@ the branch before merge.
 All remaining items are perf or polish observations the reviewer
 explicitly classified as "suggestions, not blockers" and offered to
 file as followups. Per the
-[quality-sweep memory](~/.claude/projects/-Users-maxdon-Desktop-Elixir/memory/feedback_quality_sweep_scope.md):
+[quality-sweep memory]the agent memory note `feedback_quality_sweep_scope.md`:
 "refactor existing paths; don't add missing features even if PR
 reviews flagged them. Classify each finding explicitly."
 

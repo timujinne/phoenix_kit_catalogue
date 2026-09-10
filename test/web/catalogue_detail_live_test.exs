@@ -300,10 +300,19 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       # Estonian — lists showed Estonian names even though English
       # translations existed. Lists must render the locale-resolved
       # name (Catalogue.localize/2 at load), falling back to primary.
-      catalogue = fixture_catalogue(%{name: "Primaarne kataloog"})
-      category = fixture_category(catalogue, %{name: "Uksed"})
-      item = fixture_item(%{name: "Tamm", category_uuid: category.uuid})
-      untranslated = fixture_category(catalogue, %{name: "Aknad"})
+      #
+      # The fixture must make "et" the record's ACTUAL primary language
+      # (not just its narrative one) — this test env's system default
+      # is "en-US", so without an explicit `_primary_language` the "en"
+      # override below would land in the primary bucket itself (same
+      # base as "en-US") instead of a genuinely secondary one, and
+      # translations.ex's `primary_locale?/2` would then correctly read
+      # the (stale) column instead of it. See PR discussion.
+      primary_data = %{data: %{"_primary_language" => "et"}}
+      catalogue = fixture_catalogue(Map.merge(%{name: "Primaarne kataloog"}, primary_data))
+      category = fixture_category(catalogue, Map.merge(%{name: "Uksed"}, primary_data))
+      item = fixture_item(Map.merge(%{name: "Tamm", category_uuid: category.uuid}, primary_data))
+      untranslated = fixture_category(catalogue, Map.merge(%{name: "Aknad"}, primary_data))
       _keep = untranslated
 
       {:ok, _} =

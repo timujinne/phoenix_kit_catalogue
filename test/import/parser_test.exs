@@ -132,12 +132,24 @@ defmodule PhoenixKitCatalogue.Import.ParserTest do
     end
   end
 
+  # Points at a real spreadsheet only when the developer supplies one:
+  #
+  #     CATALOGUE_SAMPLE_XLSX=/path/to/file.xlsx mix test --include integration
+  #
+  # These two tests assert against the shape of ONE specific workbook (its
+  # header row, its 74 rows), so they cannot ship a fixture without shipping
+  # that file. They previously hardcoded an absolute path inside one
+  # developer's home directory, which meant they silently no-opped for
+  # everyone else while publishing that path — and the customer file name —
+  # in a public repository.
+  defp sample_xlsx_path, do: System.get_env("CATALOGUE_SAMPLE_XLSX")
+
   describe "parse/3 with XLSX" do
     @tag :integration
     test "parses sample xlsx file" do
-      path = "/Users/maxdon/Downloads/ANDI MÖÖBEL HINNAKIRI 2026.xlsx"
+      path = sample_xlsx_path()
 
-      if File.exists?(path) do
+      if path && File.exists?(path) do
         binary = File.read!(path)
         assert {:ok, result} = Parser.parse(binary, "test.xlsx")
         assert result.headers == ["Artikkel", "Kirjeldus", "Ühik", "Hind teile ilma km-ta"]
@@ -149,9 +161,9 @@ defmodule PhoenixKitCatalogue.Import.ParserTest do
 
     @tag :integration
     test "lists sheets from xlsx" do
-      path = "/Users/maxdon/Downloads/ANDI MÖÖBEL HINNAKIRI 2026.xlsx"
+      path = sample_xlsx_path()
 
-      if File.exists?(path) do
+      if path && File.exists?(path) do
         binary = File.read!(path)
         assert {:ok, sheets} = Parser.list_sheets(binary)
         assert "Data" in sheets

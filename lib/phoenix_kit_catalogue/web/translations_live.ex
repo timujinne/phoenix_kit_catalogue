@@ -100,25 +100,37 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    # `endpoint_and_prompts/0` can WRITE (`AIPrompt.ensure_prompt/0` and
+    # `ensure_sets_prompt/0` upsert a default prompt on first use), and
+    # `mount/3` runs on both the disconnected HTTP render and the WebSocket
+    # connect — calling it unconditionally would double-fire that write on
+    # every page visit. Deferring to the connected mount (matching
+    # `Helpers.maybe_preselect_catalogue_prompt/2`'s guard) means the dead
+    # render just shows the "unavailable" notice until the socket connects
+    # and re-mounts with the real state.
     socket =
-      case TranslationSweepWorker.endpoint_and_prompts() do
-        {:ok, endpoint_uuid, prompts} ->
-          if connected?(socket), do: Translations.subscribe()
+      if connected?(socket) do
+        case TranslationSweepWorker.endpoint_and_prompts() do
+          {:ok, endpoint_uuid, prompts} ->
+            Translations.subscribe()
 
-          assign(socket,
-            ai_available: true,
-            endpoint_uuid: endpoint_uuid,
-            prompts: prompts,
-            languages: default_languages(),
-            in_flight: MapSet.new(),
-            refresh_scheduled?: false,
-            rows: [],
-            counts: %{},
-            total: 0
-          )
+            assign(socket,
+              ai_available: true,
+              endpoint_uuid: endpoint_uuid,
+              prompts: prompts,
+              languages: default_languages(),
+              in_flight: MapSet.new(),
+              refresh_scheduled?: false,
+              rows: [],
+              counts: %{},
+              total: 0
+            )
 
-        :unavailable ->
-          assign(socket, ai_available: false)
+          :unavailable ->
+            assign(socket, ai_available: false)
+        end
+      else
+        assign(socket, ai_available: false)
       end
 
     {:ok, assign(socket, :page_title, gettext("Translations"))}

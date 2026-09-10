@@ -188,8 +188,23 @@ defmodule PhoenixKitCatalogue.AITranslatable do
         fresh -> merge_translation!(repo, fresh, target_lang, fields, update_fn, opts)
       end
     end)
-    |> tap_broadcast()
+    |> finish_write()
   end
+
+  # `merge_translation!/6` reports which of the two things happened inside
+  # the transaction: `{:written, updated}` when at least one field was
+  # actually persisted (broadcast fires, matching the pre-narrowing
+  # behaviour), or `{:skipped, fresh}` when EVERY field was left alone by
+  # the per-field write-narrowing below — a "success without a write"
+  # (design source §4.4): no DB write happened, so no catalogue broadcast
+  # either.
+  defp finish_write({:ok, {:written, updated}}) do
+    broadcast_translated(updated)
+    {:ok, updated}
+  end
+
+  defp finish_write({:ok, {:skipped, fresh}}), do: {:ok, fresh}
+  defp finish_write({:error, _reason} = error), do: error
 
   @doc """
   Strips a model's leaked "note" aside from a translated field value.
@@ -197,53 +212,107 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   Despite the prompt's explicit "output only the markers, no commentary"
   rule (`PhoenixKitCatalogue.AIPrompt`), a model asked to translate a
   resource that only has a `name` (no description/summary/SEO) has been
-  observed to append text like `"\\n\\n(Note: I've omitted the fields
-  with placeholder values ... as per the rules...)"` straight onto the
-  translated marker's value — which then feeds the slug rule
+  observed to append an aside straight onto the translated marker's value
+  — as its own paragraph (`"\\n\\n(Note: I've omitted the fields with
+  placeholder values ... as per the rules...)"`, `"\\n\\nNotes:\\n1. The
+  \`Label\` field ..."`, `"\\n\\nNote that the \\"Label\\" field ..."`) or as
+  a bare parenthetical tacked onto the same line (`"Cartes (Note: skipped
+  description as instructed)"`) — which then feeds the slug rule
   (`generate_slug/5`) and produces a slug with a trailing "-note-i-ve-
   omitted" segment. This is a defensive backstop for when the prompt
-  alone isn't obeyed: cuts everything from the first occurrence of any
-  known note marker onward and trims the result.
+  alone isn't obeyed: cuts everything from the start of the first such
+  aside onward and trims the result.
+
+  Narrow by construction, though not airtight: two of its own trigger
+  words ("field", "placeholder") can appear in an ordinary product aside
+  that happens to open with "Note:" (a sizing disclaimer mentioning a
+  "placeholder" dimension, a personalization note about a "name field") —
+  a residual false-positive this design accepts because those two bare
+  words are also how three of the real leaked notes below are caught, and
+  tightening them further (e.g. requiring nearby punctuation) loses that
+  detection. Locating the
+  candidate aside is only half the check: it must start its own line
+  (optionally wrapped in a leading paren) or open a bare `(Note:` anywhere
+  on the line — never "note" appearing mid-sentence (`"Please note: sizes
+  vary"`, `"Veuillez noter : ..."`). But an anchor alone isn't enough — a
+  genuine product aside can start the exact same way (`"Note: hand wash
+  only."`, `"(Note: 100% merino wool)."`, `"Note: use \`cast iron\` pan for
+  best results."`, `"Note: fits sizes {{S,M,L}} as shown."`, `"Note:
+  available in \"Blue\" and \"Red\" glazes."`), and ordinary product copy
+  can contain backticks, `{{...}}`, or a quoted capitalized word for its
+  own reasons — none of those are reliable evidence of a leaked note by
+  themselves. So the candidate is only cut when its text names the
+  translation machinery in plain words — a `"field"`, a `"placeholder"`,
+  a `"template slot"` — or uses one of the model's stock phrases for
+  skipping one (`"was skipped"`, `"no actual value"`, `"as per the
+  rules"`, `"as instructed"`, …). Lacking any of those, the value is left
+  untouched. That content check only inspects the anchored aside's own
+  paragraph (up to the next blank line or the end of the value) — a
+  trigger word in some later, unrelated paragraph never reaches back to
+  implicate an earlier, legitimate "Note:" aside.
   """
+  # Anchors the start of a candidate leaked aside, the same way as before:
+  #   1. a "Note"/"Notes" paragraph starting its own line, optionally
+  #      wrapped in a leading "(" — `\n\n(Note: ...)`, `\n\nNotes:\n1. ...`,
+  #      `\nNote that the ... field ...`;
+  #   2. a bare `(Note:` opened anywhere on the same line — `Cartes
+  #      (Note: skipped description as instructed)`.
+  # Requiring the paragraph break (or the literal `(Note:` open-paren) as
+  # the anchor is what keeps this from firing on "Please note: ..."
+  # running text or an unrelated parenthetical/enumerated paragraph.
+  @note_anchor_regex ~r/\n\s*\(?\s*Notes?\b[:\-–]?\s|\(Note:/i
+
+  # Whether the candidate aside actually talks about the translation
+  # process — the tell that separates a leaked model note from legitimate
+  # product copy that merely happens to start with "Note:". Deliberately
+  # does NOT trigger on backticks, quoted capitalized words, or `{{...}}`
+  # alone — ordinary product copy uses all three (a quoted color name, a
+  # backtick-quoted material, a `{{...}}` size chart) with no relation to
+  # the translation pipeline. Instead requires plain-word evidence: a
+  # named "field"/"placeholder"/"template slot", or one of the model's
+  # stock phrases for explaining why it skipped one. "is translated" /
+  # "not translated" alone are deliberately excluded — they read just as
+  # naturally as marketing copy about the listing itself.
+  @note_content_regex ~r/\b(?:field|placeholder|template\s+slot|was\s+skipped|
+    is\s+skipped|no\s+actual\s+value|not\s+a\s+real\s+value|as\s+per\s+the\s+rules|
+    as\s+instructed)\b/xi
+
   @spec strip_ai_note(String.t()) :: String.t()
   def strip_ai_note(value) when is_binary(value) do
-    case earliest_note_marker_index(value) do
-      nil -> value
-      idx -> value |> binary_part(0, idx) |> String.trim_trailing()
+    case Regex.run(@note_anchor_regex, value, return: :index) do
+      [{start, len} | _] ->
+        after_anchor = start + len
+        search_from = binary_part(value, after_anchor, byte_size(value) - after_anchor)
+
+        # Only the anchored aside's own paragraph is evidence — a trigger
+        # word in a later, unrelated paragraph must not retroactively
+        # implicate an earlier legitimate "Note:" aside and cut everything
+        # (including that later paragraph) off the end of the value.
+        aside_end =
+          case :binary.match(search_from, "\n\n") do
+            {idx, _len} -> after_anchor + idx
+            :nomatch -> byte_size(value)
+          end
+
+        aside = binary_part(value, start, aside_end - start)
+
+        if Regex.match?(@note_content_regex, aside) do
+          binary_part(value, 0, start)
+        else
+          value
+        end
+
+      nil ->
+        value
     end
+    |> String.trim()
   end
 
   def strip_ai_note(value), do: value
 
-  @note_markers ["\n\n(Note", "\nNote:", "(Note:", " (Note "]
-
-  defp earliest_note_marker_index(value) do
-    @note_markers
-    |> Enum.map(&note_marker_index(value, &1))
-    |> Enum.reject(&is_nil/1)
-    |> case do
-      [] -> nil
-      indices -> Enum.min(indices)
-    end
-  end
-
-  defp note_marker_index(value, marker) do
-    case :binary.match(value, marker) do
-      {idx, _len} -> idx
-      :nomatch -> nil
-    end
-  end
-
   defp sanitize_fields(fields) when is_map(fields) do
     Map.new(fields, fn {k, v} -> {k, strip_ai_note(v)} end)
   end
-
-  defp tap_broadcast({:ok, updated} = ok) do
-    broadcast_translated(updated)
-    ok
-  end
-
-  defp tap_broadcast(other), do: other
 
   defp broadcast_translated(%CatalogueSchema{uuid: uuid}),
     do: PubSub.broadcast(:catalogue, uuid, uuid)
@@ -268,44 +337,85 @@ defmodule PhoenixKitCatalogue.AITranslatable do
     end
   end
 
-  # Merge `fields` into the freshly-locked row's `data` and persist, rolling
-  # the surrounding transaction back on a changeset error.
+  # Item/category carry a `TranslationStatus` freshness model — merge
+  # through the per-field write-narrowing path. Every other resource type
+  # this adapter serves (the catalogue root, attribute group/attribute/
+  # value) has no fingerprint storage key (`TranslationStatus.
+  # fingerprint_location/1` has no clause for them) and no freshness
+  # tracking at all, so they keep the unconditional full-field write this
+  # adapter has always done for them.
+  defp merge_translation!(repo, %Item{} = fresh, target_lang, fields, update_fn, opts),
+    do: merge_tracked_translation!(repo, fresh, target_lang, fields, update_fn, opts)
+
+  defp merge_translation!(repo, %Category{} = fresh, target_lang, fields, update_fn, opts),
+    do: merge_tracked_translation!(repo, fresh, target_lang, fields, update_fn, opts)
+
   defp merge_translation!(repo, fresh, target_lang, fields, update_fn, opts) do
-    # Re-prefix plain engine field names to the multilang `_`-form the form
-    # reads (`_name`/`_description`), so the translation shows.
     lang_fields = Map.new(fields, fn {k, v} -> {"_" <> k, v} end)
+    new_data = fresh.data |> Kernel.||(%{}) |> force_put_language(target_lang, lang_fields)
 
-    new_data =
-      fresh.data
-      |> Kernel.||(%{})
-      |> force_put_language(target_lang, lang_fields)
-      |> maybe_put_fingerprint(fresh, target_lang)
-
-    attrs = %{data: new_data} |> maybe_generate_slug(fresh, target_lang, fields)
-
-    case update_fn.(fresh, attrs, opts) do
-      {:ok, updated} -> updated
+    case update_fn.(fresh, %{data: new_data}, opts) do
+      {:ok, updated} -> {:written, updated}
       {:error, reason} -> repo.rollback(reason)
     end
+  end
+
+  # Per-field write narrowing (design source §4.4, §12.2): decide, field by
+  # field, whether the AI's answer actually needs to land. Only fields
+  # whose `TranslationStatus.field_state/3` — computed against THIS
+  # freshly-locked row — is `:missing`, `:unknown`, or `:stale` get
+  # written; a `:fresh` field (translation already matches the current
+  # source) is left untouched, so a hand-corrected translation survives a
+  # re-translate that only changed a sibling field. A field with no
+  # current source (`field_state/3` returns `nil`) is excluded the same
+  # way. When every field is left alone, this is a "success without a
+  # write" (no DB write, no broadcast — see `finish_write/1`).
+  defp merge_tracked_translation!(repo, fresh, target_lang, fields, update_fn, opts) do
+    written = writable_fields(fresh, target_lang, fields)
+
+    if map_size(written) == 0 do
+      {:skipped, fresh}
+    else
+      lang_fields = Map.new(written, fn {k, v} -> {"_" <> k, v} end)
+
+      new_data =
+        fresh.data
+        |> Kernel.||(%{})
+        |> force_put_language(target_lang, lang_fields)
+        |> put_field_fingerprints(fresh, target_lang, written)
+
+      attrs = maybe_generate_slug(%{data: new_data}, fresh, new_data, target_lang)
+
+      case update_fn.(fresh, attrs, opts) do
+        {:ok, updated} -> {:written, updated}
+        {:error, reason} -> repo.rollback(reason)
+      end
+    end
+  end
+
+  defp writable_fields(fresh, target_lang, fields) do
+    Map.filter(fields, fn {field, _value} ->
+      TranslationStatus.field_state(fresh, target_lang, field) in [:missing, :unknown, :stale]
+    end)
   end
 
   # Slugs are write-once (see `Slugs`'s moduledoc): a translation job
   # fills in a still-blank slug for its target language from the
   # translated name, but never touches a language that already has one —
   # a retranslation must not move a URL that may already be published or
-  # bookmarked. Only items/categories carry a `:slug` column; every other
-  # resource type is untouched.
-  defp maybe_generate_slug(attrs, %Item{} = fresh, target_lang, fields),
-    do: generate_slug(attrs, fresh, target_lang, fields, &Catalogue.get_item_by_slug/2)
+  # bookmarked. The name comes from the POST-MERGE `new_data`, not the raw
+  # AI response — when `name` itself was narrowed away (skipped as
+  # already-fresh), the slug step still has the already-stored translated
+  # title to work from (design source §4.4).
+  defp maybe_generate_slug(attrs, %Item{} = fresh, new_data, target_lang),
+    do: generate_slug(attrs, fresh, new_data, target_lang, &Catalogue.get_item_by_slug/2)
 
-  defp maybe_generate_slug(attrs, %Category{} = fresh, target_lang, fields),
-    do: generate_slug(attrs, fresh, target_lang, fields, &Catalogue.get_category_by_slug/2)
+  defp maybe_generate_slug(attrs, %Category{} = fresh, new_data, target_lang),
+    do: generate_slug(attrs, fresh, new_data, target_lang, &Catalogue.get_category_by_slug/2)
 
-  defp maybe_generate_slug(attrs, _fresh, _target_lang, _fields), do: attrs
-
-  defp generate_slug(attrs, fresh, target_lang, fields, lookup_fun) do
+  defp generate_slug(attrs, fresh, new_data, target_lang, lookup_fun) do
     slug_map = fresh.slug || %{}
-    name = fields["name"]
+    name = new_data |> Multilang.get_raw_language_data(target_lang) |> Map.get("_name")
 
     if nonempty(name) and not nonempty(Map.get(slug_map, target_lang)) do
       default_slug = Slugs.default_lang_slug(fresh.data || %{}, slug_map)
@@ -335,34 +445,43 @@ defmodule PhoenixKitCatalogue.AITranslatable do
     end)
   end
 
-  # Records the freshness fingerprint alongside the translation, in the
-  # SAME write: the fingerprint `source_fields/2` captured for THIS job
-  # (`TranslationStatus.captured_fingerprint/2`), falling back to hashing
-  # `fresh`'s own current source when nothing was captured — a direct
+  # Records the per-field freshness fingerprints alongside the
+  # translation, in the SAME write: for each WRITTEN field, the fingerprint
+  # `source_fields/2` captured for THIS job (`TranslationStatus.
+  # captured_fingerprint/2`), falling back to hashing `fresh`'s own current
+  # source for that field when nothing was captured — a direct
   # `put_translation/4` call that skipped `source_fields/2` (a test, a CLI
-  # write). See `TranslationStatus` for the storage-key convention.
-  defp maybe_put_fingerprint(new_data, %Item{} = fresh, target_lang),
-    do: put_fingerprint(new_data, "catalogue_item", fresh, target_lang)
+  # write). Fields NOT in `written_fields` (narrowed away as already-fresh)
+  # keep whatever fingerprint was already stored for them — this merge
+  # never drops a sibling field's fingerprint. See `TranslationStatus` for
+  # the storage-key convention and the legacy single-hash format it also
+  # has to tolerate on read.
+  defp put_field_fingerprints(new_data, fresh, target_lang, written_fields) do
+    resource_type = resource_type_for(fresh)
+    captured = TranslationStatus.captured_fingerprint(resource_type, fresh.uuid) || %{}
 
-  defp maybe_put_fingerprint(new_data, %Category{} = fresh, target_lang),
-    do: put_fingerprint(new_data, "catalogue_category", fresh, target_lang)
+    current_hashes =
+      fresh
+      |> source_fields_pure(Multilang.primary_language())
+      |> TranslationStatus.field_fingerprints()
 
-  defp maybe_put_fingerprint(new_data, _fresh, _target_lang), do: new_data
+    new_entries =
+      for {field, _v} <- written_fields, into: %{} do
+        {field, Map.get(captured, field) || Map.fetch!(current_hashes, field)}
+      end
 
-  defp put_fingerprint(new_data, resource_type, fresh, target_lang) do
-    fp =
-      TranslationStatus.captured_fingerprint(resource_type, fresh.uuid) ||
-        fresh
-        |> source_fields_pure(Multilang.primary_language())
-        |> TranslationStatus.fingerprint()
+    merged = Map.merge(TranslationStatus.stored_fingerprint_map(fresh, target_lang), new_entries)
 
     Map.update(
       new_data,
       "_translation_fingerprints",
-      %{target_lang => fp},
-      &Map.put(&1, target_lang, fp)
+      %{target_lang => merged},
+      &Map.put(&1, target_lang, merged)
     )
   end
+
+  defp resource_type_for(%Item{}), do: "catalogue_item"
+  defp resource_type_for(%Category{}), do: "catalogue_category"
 
   @doc """
   Store a secondary language's values **verbatim**, like

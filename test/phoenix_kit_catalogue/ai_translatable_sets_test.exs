@@ -11,6 +11,7 @@ defmodule PhoenixKitCatalogue.AITranslatableSetsTest do
 
   alias PhoenixKitCatalogue.AITranslatable.Sets
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
+  alias PhoenixKitCatalogue.TranslationStatus
 
   # Ecto's default `telemetry_prefix` for `PhoenixKitCatalogue.Test.Repo`
   # (no override in `test/support/test_repo.ex`): the module split,
@@ -200,7 +201,7 @@ defmodule PhoenixKitCatalogue.AITranslatableSetsTest do
 
       test "strips a leaked AI note from the translated label" do
         set = create_set!()
-        noisy = "Couleurs\n\n(Note: no other fields were provided.)"
+        noisy = "Couleurs\n\n(Note: the description field was skipped.)"
         assert {:ok, _} = Sets.put_translation(set, "fr-FR", %{"label" => noisy}, [])
 
         reloaded = PhoenixKitEntities.get_entity(set.uuid)
@@ -260,7 +261,7 @@ defmodule PhoenixKitCatalogue.AITranslatableSetsTest do
       test "strips a leaked AI note from the translated title" do
         set = create_set!()
         value = create_value!(set, "Oak")
-        noisy = "Chêne\n\n(Note: no other fields were provided.)"
+        noisy = "Chêne\n\n(Note: the description field was skipped.)"
         assert {:ok, _} = Sets.put_translation(value, "fr-FR", %{"title" => noisy}, [])
 
         reloaded = EntityData.get(value.uuid)
@@ -273,6 +274,61 @@ defmodule PhoenixKitCatalogue.AITranslatableSetsTest do
         assert {:ok, unchanged} = Sets.put_translation(value, "fr-FR", %{}, [])
         assert unchanged.uuid == value.uuid
         refute EntityData.get(value.uuid).data["fr-FR"]
+      end
+    end
+
+    describe "put_translation/4 — per-field write narrowing (design source §4.4/§12.2)" do
+      test "set label: a fresh translation is left untouched by a re-translate whose source didn't change" do
+        set = create_set!()
+        {:ok, _} = Sets.put_translation(set, "fr-FR", %{"label" => "Couleurs"}, [])
+        translated = PhoenixKitEntities.get_entity(set.uuid)
+        assert TranslationStatus.state(translated, "fr-FR") == :fresh
+
+        # Hand-edit the translation directly (not through put_translation/4) —
+        # simulates an operator correction. The next AI re-translate (source
+        # unchanged) must not clobber it.
+        {:ok, hand_edited} =
+          PhoenixKitEntities.set_entity_translation(translated, "fr-FR", %{
+            "display_name" => "Couleurs (corrigé)"
+          })
+
+        assert {:ok, unchanged} =
+                 Sets.put_translation(hand_edited, "fr-FR", %{"label" => "Couleurs AI"}, [])
+
+        assert unchanged.uuid == hand_edited.uuid
+        reloaded = PhoenixKitEntities.get_entity(set.uuid)
+        assert reloaded.settings["translations"]["fr-FR"]["display_name"] == "Couleurs (corrigé)"
+      end
+
+      test "set label: a re-translate DOES write when the source changed since the last translation" do
+        set = create_set!("Ikea colors")
+        {:ok, _} = Sets.put_translation(set, "fr-FR", %{"label" => "Couleurs"}, [])
+        translated = PhoenixKitEntities.get_entity(set.uuid)
+
+        {:ok, renamed} = PhoenixKitEntities.update_entity(translated, %{display_name: "Colours"})
+        assert TranslationStatus.state(renamed, "fr-FR") == :stale
+
+        assert {:ok, _} = Sets.put_translation(renamed, "fr-FR", %{"label" => "Couleurs 2"}, [])
+        reloaded = PhoenixKitEntities.get_entity(set.uuid)
+        assert reloaded.settings["translations"]["fr-FR"]["display_name"] == "Couleurs 2"
+      end
+
+      test "value title: a fresh translation is left untouched by a re-translate whose source didn't change" do
+        set = create_set!()
+        value = create_value!(set, "Oak")
+        {:ok, _} = Sets.put_translation(value, "fr-FR", %{"title" => "Chêne"}, [])
+        translated = EntityData.get(value.uuid)
+        assert TranslationStatus.state(translated, "fr-FR") == :fresh
+
+        {:ok, hand_edited} =
+          PhoenixKitEntities.EntityData.set_title_translation(translated, "fr-FR", "Chêne (fix)")
+
+        assert {:ok, unchanged} =
+                 Sets.put_translation(hand_edited, "fr-FR", %{"title" => "Chêne AI"}, [])
+
+        assert unchanged.uuid == hand_edited.uuid
+        reloaded = EntityData.get(value.uuid)
+        assert reloaded.data["fr-FR"]["_title"] == "Chêne (fix)"
       end
     end
 

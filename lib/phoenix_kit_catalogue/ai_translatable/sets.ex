@@ -131,12 +131,19 @@ defmodule PhoenixKitCatalogue.AITranslatable.Sets do
   # Bare-changeset merge (no `Entities.set_entity_translation/3`/
   # `update_entity/3` — see the moduledoc): folds the "never drop other
   # languages" merge AND the fingerprint into the single write the locked
-  # transaction makes, then broadcasts once after it commits.
+  # transaction makes, then broadcasts once after it commits. Skips the
+  # write (and the broadcast) entirely when the field is already `:fresh`
+  # — per-field write narrowing, design source §4.4/§12.2, same rule the
+  # item/category adapter applies: a hand-edited label/title survives a
+  # re-translate whose source didn't actually change.
   defp put_set_label(set, target_lang, label) do
-    case locked_update(Entities, set.uuid, &merge_label(&1, target_lang, label)) do
-      {:ok, updated} = result ->
+    case locked_update(Entities, set.uuid, &decide_label(&1, target_lang, label)) do
+      {:ok, {:written, updated}} ->
         Events.broadcast_entity_updated(updated.uuid)
-        result
+        {:ok, updated}
+
+      {:ok, {:skipped, fresh}} ->
+        {:ok, fresh}
 
       error ->
         error
@@ -144,13 +151,42 @@ defmodule PhoenixKitCatalogue.AITranslatable.Sets do
   end
 
   defp put_value_title(value, target_lang, title) do
-    case locked_update(EntityData, value.uuid, &merge_title(&1, target_lang, title)) do
-      {:ok, updated} = result ->
+    case locked_update(EntityData, value.uuid, &decide_title(&1, target_lang, title)) do
+      {:ok, {:written, updated}} ->
         Events.broadcast_data_updated(updated.entity_uuid, updated.uuid)
-        result
+        {:ok, updated}
+
+      {:ok, {:skipped, fresh}} ->
+        {:ok, fresh}
 
       error ->
         error
+    end
+  end
+
+  # Same eligibility rule as `AITranslatable.writable_fields/3`: write only
+  # when the field is `:missing`, `:unknown`, or `:stale`. A `:fresh` field
+  # is left untouched (the narrowing this whole block exists for); a `nil`
+  # state (no current source right now) is left untouched too, though in
+  # practice unreachable here — both `display_name` and `title` are
+  # required columns on their respective entities schemas.
+  @writable_states [:missing, :unknown, :stale]
+
+  defp decide_label(fresh, target_lang, label) do
+    if TranslationStatus.field_state(fresh, target_lang, "label") in @writable_states do
+      with {:ok, updated} <- merge_label(fresh, target_lang, label),
+           do: {:ok, {:written, updated}}
+    else
+      {:ok, {:skipped, fresh}}
+    end
+  end
+
+  defp decide_title(fresh, target_lang, title) do
+    if TranslationStatus.field_state(fresh, target_lang, "title") in @writable_states do
+      with {:ok, updated} <- merge_title(fresh, target_lang, title),
+           do: {:ok, {:written, updated}}
+    else
+      {:ok, {:skipped, fresh}}
     end
   end
 
@@ -178,8 +214,8 @@ defmodule PhoenixKitCatalogue.AITranslatable.Sets do
         do: Map.delete(settings, "translations"),
         else: Map.put(settings, "translations", updated_translations)
 
-    fp = fingerprint_for("catalogue_set_label", fresh, target_lang)
-    final_settings = put_fingerprint(new_settings, target_lang, fp)
+    fp = fingerprint_for("catalogue_set_label", fresh, "label")
+    final_settings = put_field_fingerprint(new_settings, fresh, target_lang, "label", fp)
 
     fresh |> Ecto.Changeset.change(%{settings: final_settings}) |> repo().update()
   end
@@ -196,8 +232,8 @@ defmodule PhoenixKitCatalogue.AITranslatable.Sets do
 
     primary = (fresh.data || %{})["_primary_language"] || Multilang.primary_language()
 
-    fp = fingerprint_for("catalogue_set_value", fresh, target_lang)
-    final_metadata = put_fingerprint(fresh.metadata || %{}, target_lang, fp)
+    fp = fingerprint_for("catalogue_set_value", fresh, "title")
+    final_metadata = put_field_fingerprint(fresh.metadata || %{}, fresh, target_lang, "title", fp)
 
     attrs = %{data: updated_data, metadata: final_metadata}
     attrs = if target_lang == primary, do: Map.put(attrs, :title, title), else: attrs
@@ -207,21 +243,28 @@ defmodule PhoenixKitCatalogue.AITranslatable.Sets do
 
   # The fingerprint `source_fields/2` captured for THIS job
   # (`TranslationStatus.captured_fingerprint/2`), falling back to hashing
-  # `fresh`'s own current source — via the PURE extraction, never the
-  # capturing `source_fields/2` — when nothing was captured (a direct
-  # `put_translation/4` call that skipped `source_fields/2`: a test, a CLI
-  # write).
-  defp fingerprint_for(resource_type, fresh, _target_lang) do
-    TranslationStatus.captured_fingerprint(resource_type, fresh.uuid) ||
+  # `fresh`'s own current source for `field` — via the PURE extraction,
+  # never the capturing `source_fields/2` — when nothing was captured (a
+  # direct `put_translation/4` call that skipped `source_fields/2`: a
+  # test, a CLI write).
+  defp fingerprint_for(resource_type, fresh, field) do
+    captured = TranslationStatus.captured_fingerprint(resource_type, fresh.uuid) || %{}
+
+    Map.get(captured, field) ||
       fresh
       |> source_fields_pure(Multilang.primary_language())
-      |> TranslationStatus.fingerprint()
+      |> TranslationStatus.field_fingerprints()
+      |> Map.get(field)
   end
 
-  defp put_fingerprint(container, target_lang, fp) do
-    fingerprints =
-      container |> Map.get("translation_fingerprints", %{}) |> Map.put(target_lang, fp)
-
+  # Folds `field`'s new hash into the WHOLE per-field fingerprint map
+  # already stored for `lang` (read from `fresh`, i.e. the row's state
+  # BEFORE this write) — a set only ever has the one field ("label" or
+  # "title"), but this keeps the storage shape identical to the
+  # item/category adapter's multi-field map.
+  defp put_field_fingerprint(container, fresh, lang, field, fp) do
+    updated = fresh |> TranslationStatus.stored_fingerprint_map(lang) |> Map.put(field, fp)
+    fingerprints = container |> Map.get("translation_fingerprints", %{}) |> Map.put(lang, updated)
     Map.put(container, "translation_fingerprints", fingerprints)
   end
 

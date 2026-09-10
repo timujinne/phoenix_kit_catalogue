@@ -49,5 +49,54 @@ defmodule PhoenixKitCatalogue.Extension do
   @callback cast_category(params :: map(), current :: map()) ::
               {:ok, map()} | {:error, [{atom(), String.t()}]}
 
-  @optional_callbacks item_section: 1, category_section: 1, cast_item: 2, cast_category: 2
+  @typedoc """
+  One column this extension contributes to the catalogue admin's
+  configurable item/category tables (`item_columns/0` /
+  `category_columns/0`) — the "Columns" modal on `CatalogueDetailLive`.
+
+    * `:id` — this extension's own identifier, unique among its own
+      columns only. `PhoenixKitCatalogue.Extensions.columns/1`
+      namespaces it under `key/0` (`"<key>:<id>"`) before it ever
+      reaches the catalogue, so it cannot collide with a catalogue
+      column or another extension's.
+    * `:label` — zero-arity fn returning the display label (a fn so it
+      resolves in the request's current locale, matching
+      `PhoenixKitCatalogue.Web.TableConfig`'s own columns).
+    * `:render` — one-arity fn `(record) -> Phoenix.LiveView.Rendered.t()`;
+      `record` is the item or category struct the table is currently
+      rendering a row for. Return the cell's inner content only — the
+      catalogue supplies the surrounding table cell.
+
+      A raise, throw, exit, or a return value with no `Phoenix.HTML.Safe`
+      representation degrades to an empty cell instead of breaking the
+      page — see `PhoenixKitCatalogue.Extensions.columns/1`. Never give
+      the returned markup an `id` scoped only by `record`: the SAME
+      call renders the row's desktop-table cell AND its mobile-card
+      fact, both present in the DOM on one page load (CSS/JS, not the
+      server, decides which is visible) — an id that repeats across
+      them is invalid HTML. Use a `data-*` attribute instead if the
+      cell needs to be addressable.
+  """
+  @type column :: %{
+          id: String.t(),
+          label: (-> String.t()),
+          render: (record :: map() -> Phoenix.LiveView.Rendered.t())
+        }
+
+  @doc """
+  Extra columns for the catalogue item table's Columns modal
+  (`PhoenixKitCatalogue.Web.TableConfig`'s `:detail_items` scope). Off by
+  default — an admin opts in exactly like any catalogue column.
+  """
+  @callback item_columns() :: [column()]
+
+  @doc "Same as `item_columns/0`, for the catalogue category table (`:detail_categories`)."
+  @callback category_columns() :: [column()]
+
+  @optional_callbacks item_section: 1,
+                      category_section: 1,
+                      cast_item: 2,
+                      cast_category: 2,
+                      item_columns: 0,
+                      category_columns: 0
 end

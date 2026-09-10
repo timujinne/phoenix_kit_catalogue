@@ -31,6 +31,8 @@ defmodule PhoenixKitCatalogue do
 
   use PhoenixKit.Module
 
+  @version Mix.Project.config()[:version]
+
   alias PhoenixKit.Dashboard.Tab
   alias PhoenixKit.Settings
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
@@ -97,7 +99,7 @@ defmodule PhoenixKitCatalogue do
   # ===========================================================================
 
   @impl PhoenixKit.Module
-  def version, do: "0.25.0"
+  def version, do: @version
 
   @impl PhoenixKit.Module
   def route_module, do: PhoenixKitCatalogue.Web.Routes

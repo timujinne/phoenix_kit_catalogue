@@ -15,7 +15,34 @@ defmodule PhoenixKitCatalogue.Migrations do
   item_catalogue_rules, pdfs, pdf_pages, pdf_page_contents,
   pdf_extractions; V149: item_supplier_info; V173: attribute_groups,
   attributes, attribute_values, item_attribute_groups; V177:
-  item_attribute_sets):
+  item_attribute_sets).
+
+  Those four versions only CREATE the tables; five more reshape them, and
+  the DDL below is the sum of all nine — check every one of them when
+  auditing a table's shape, not just its creator:
+
+    * V146 adds `items.primary_supplier_uuid` (+ its partial index and FK);
+    * V151 adds `item_supplier_info.supplier_source` / `is_primary`
+      (+ the source CHECK and the one-primary-per-item partial unique);
+    * V178 adds `manufacturers.crm_company_uuid` (+ the partial unique
+      indexes on both directories' `crm_company_uuid`);
+    * V179 adds `items.manufacturer_source` /
+      `manufacturer_name_snapshot` (+ the source CHECK) and **DROPS**
+      `phoenix_kit_cat_items_manufacturer_uuid_fkey`;
+    * V180 adds `manufacturer_suppliers.manufacturer_source` /
+      `supplier_source` (+ both source CHECKs and the current-pair unique
+      on `item_supplier_info`) and **DROPS** both
+      `phoenix_kit_cat_manufacturer_suppliers_*_uuid_fkey` constraints.
+
+  The three dropped foreign keys are the reason `foreign_keys/2` does not
+  simply mirror V135: core carries them as `:legacy_optional` in
+  `ExpectedSchema` — present only on installs that stopped before V179/
+  V180 — so re-adding one here would pin an item's manufacturer and both
+  sides of the M:N graph back to a local row, undoing the CRM federation.
+  `test/phoenix_kit_catalogue/migrations_test.exs` pins that against the
+  manifest in both directions.
+
+  So, concretely:
 
     * on an install already at core's V180+ shape (crm_company_uuid,
       manufacturer_source/supplier_source, the item/manufacturer_suppliers
@@ -54,10 +81,12 @@ defmodule PhoenixKitCatalogue.Migrations do
 
   V2 adds shape on top of two core-known tables (`phoenix_kit_cat_items`,
   `phoenix_kit_cat_categories`): a `slug jsonb NOT NULL DEFAULT '{}'`
-  column on each. Core's `ExpectedSchema` repair only ever audits the
-  columns it manifests for a table — it treats an extra, unmanifested
-  column as an `:info` finding, never a mismatch to repair away — so
-  this is safe without a core release. The rest of V2 (the two
+  column on each. Core's `ExpectedSchema` resolver only ever iterates
+  the manifest's *declared* objects — it never enumerates a table's
+  actual columns to notice one that isn't manifested, so an extra
+  column is not inspected at all (not classified as an `:info`
+  finding; simply outside what the resolver looks at) — so this is
+  safe without a core release. The rest of V2 (the two
   `phoenix_kit_cat_item_slugs` / `phoenix_kit_cat_category_slugs`
   projection tables, their sync triggers, and the attribute-set GIN
   index) creates objects core's manifest never names at all, which is
@@ -296,7 +325,7 @@ defmodule PhoenixKitCatalogue.Migrations do
     end
   end
 
-  # ── CREATE TABLE (core V135/V149/V173/V177) ──────────────────────────
+  # ── CREATE TABLE (core V135/V146/V149/V151/V173/V177/V178/V179/V180) ─
 
   defp tables(p) do
     [

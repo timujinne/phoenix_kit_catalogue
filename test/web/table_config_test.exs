@@ -52,4 +52,30 @@ defmodule PhoenixKitCatalogue.Web.TableConfigTest do
     assert TC.default_columns(:suppliers) == ["name", "website", "status"]
     assert TC.default_columns(:manufacturers) == ["name", "website", "status"]
   end
+
+  describe "the managed Image column (detail_items / detail_categories)" do
+    test "is a managed, off-by-default column on both tables" do
+      for scope <- [:detail_items, :detail_categories] do
+        col = TC.column_map(scope)["image"]
+        assert col, "expected an \"image\" column for #{scope}"
+        assert col.managed?
+        refute col.default?
+        refute "image" in TC.default_columns(scope)
+        assert Enum.any?(TC.managed_columns(scope), &(&1.id == "image"))
+      end
+    end
+
+    test "validate_columns accepts it once selected" do
+      assert TC.validate_columns(:detail_items, ["sku", "image"]) == ["sku", "image"]
+      assert TC.validate_columns(:detail_categories, ["items", "image"]) == ["items", "image"]
+    end
+  end
+
+  describe "extension_columns/1" do
+    test "is empty for scopes with no extension-contributed columns" do
+      assert TC.extension_columns(:detail_items) == %{}
+      assert TC.extension_columns(:detail_categories) == %{}
+      assert TC.extension_columns(:catalogues) == %{}
+    end
+  end
 end

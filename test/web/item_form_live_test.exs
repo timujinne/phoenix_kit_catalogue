@@ -961,7 +961,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
     test "the group dropdown shows the viewer's locale, not the primary language", %{
       conn: conn
     } do
-      {:ok, group} = Catalogue.create_attribute_group(%{name: "Ideedeuksed"})
+      # An explicit non-English `_primary_language` keeps "en" a
+      # genuinely secondary locale here — this test env's system
+      # default is "en-US", so without it the "en" override below would
+      # land in the primary bucket itself (same base as "en-US")
+      # instead of a secondary one. See PR discussion.
+      {:ok, group} =
+        Catalogue.create_attribute_group(%{
+          name: "Ideedeuksed",
+          data: %{"_primary_language" => "et"}
+        })
 
       {:ok, _} =
         Catalogue.set_translation(group, "en", %{"_name" => "Idea doors"}, fn g, a ->

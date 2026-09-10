@@ -1,6 +1,7 @@
 defmodule PhoenixKitCatalogue.MigrationsTest do
   use ExUnit.Case, async: true
 
+  alias PhoenixKit.Migrations.ExpectedSchema.Resolver
   alias PhoenixKitCatalogue.Migrations
 
   @tables ~w(
@@ -293,5 +294,114 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     assert idx.("phoenix_kit_cat_suppliers") < idx.("phoenix_kit_cat_item_supplier_info")
     assert idx.("phoenix_kit_cat_pdf_page_contents") < idx.("phoenix_kit_cat_pdf_pages")
     assert idx.("phoenix_kit_cat_items") < idx.("phoenix_kit_cat_item_attribute_sets")
+  end
+
+  # ── the drift lock ───────────────────────────────────────────────────
+  #
+  # Core's `ExpectedSchema` manifest is the audit authority for every
+  # `phoenix_kit_cat_*` object, and V01 only holds together while this
+  # chain reproduces exactly what that manifest describes. Nothing else
+  # pins that: a core release that adds a column to an adopted table
+  # leaves this chain quietly building the older shape on fresh installs,
+  # and the string tests above all still pass. Compare the two lists.
+  #
+  # Resolved through `Resolver` rather than the manifest module directly —
+  # `mix.exs` floors core at `~> 2.8` and the manifest only ships in later
+  # releases, so "not generated" is an ordinary condition here, not a
+  # failure.
+  describe "core's ExpectedSchema manifest" do
+    setup do
+      case Resolver.resolve() do
+        {:ok, manifest} -> {:ok, objects: catalogue_objects(manifest)}
+        {:error, :not_generated} -> {:ok, objects: nil}
+      end
+    end
+
+    test "every required catalogue-owned object is emitted by up_statements/1", ctx do
+      if ctx.objects do
+        # A manifest that resolved but tagged nothing `owner: :catalogue`
+        # (a renamed owner atom upstream) would make every assertion in
+        # this describe block pass on an empty list.
+        refute ctx.objects == []
+
+        stmts = Migrations.up_statements("public")
+
+        missing =
+          ctx.objects
+          |> Enum.filter(&(&1.presence == :required))
+          |> Enum.reject(&emitted?(stmts, &1))
+          |> Enum.map(& &1.id)
+
+        assert missing == [],
+               "core's manifest requires these on a fresh install, and the chain " <>
+                 "does not create them:\n  " <> Enum.join(missing, "\n  ")
+      end
+    end
+
+    test "the constraints core's own chain dropped are NOT re-created", ctx do
+      if ctx.objects do
+        stmts = Migrations.up_statements("public")
+
+        # V179/V180 dropped the manufacturer FKs to federate those
+        # references onto CRM parties. The manifest carries them as
+        # `:legacy_optional` — present only on installs that stopped
+        # before those versions. Re-adding one here would pin every
+        # item's manufacturer back to a local row.
+        resurrected =
+          ctx.objects
+          |> Enum.filter(&(&1.presence == :legacy_optional and emitted?(stmts, &1)))
+          |> Enum.map(& &1.id)
+
+        assert resurrected == [],
+               "chain re-creates objects core deliberately dropped:\n  " <>
+                 Enum.join(resurrected, "\n  ")
+      end
+    end
+  end
+
+  defp catalogue_objects(manifest) do
+    Enum.filter(manifest.objects("public"), &(&1.owner == :catalogue))
+  end
+
+  # The manifest's id format (`table:<t>` / `column:<t>.<c>` /
+  # `index:<name>` / `constraint:<t>.<name>`) is what identifies the object
+  # in the DDL this chain emits.
+  defp emitted?(stmts, %{class: :table, id: "table:" <> table}) do
+    Enum.any?(stmts, &creates_table?(&1, table))
+  end
+
+  defp emitted?(stmts, %{class: :index, id: "index:" <> name}) do
+    Enum.any?(stmts, &String.contains?(&1, "INDEX IF NOT EXISTS #{name} ON "))
+  end
+
+  defp emitted?(stmts, %{class: :column, id: "column:" <> rest}) do
+    [table, column] = String.split(rest, ".", parts: 2)
+
+    stmts
+    |> Enum.find(&creates_table?(&1, table))
+    |> declared_columns()
+    |> Enum.member?(column)
+  end
+
+  defp emitted?(stmts, %{class: :constraint, id: "constraint:" <> rest}) do
+    [table, name] = String.split(rest, ".", parts: 2)
+
+    Enum.any?(stmts, fn s ->
+      String.contains?(s, table) and String.contains?(s, "CONSTRAINT #{name} ")
+    end)
+  end
+
+  defp creates_table?(statement, table) do
+    String.contains?(statement, "CREATE TABLE IF NOT EXISTS public.#{table} (")
+  end
+
+  defp declared_columns(nil), do: []
+
+  defp declared_columns(statement) do
+    statement
+    |> String.split("\n")
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == "" or String.starts_with?(&1, ["CREATE ", "CONSTRAINT ", ")"])))
+    |> Enum.map(fn line -> line |> String.split(" ", parts: 2) |> hd() |> String.trim("\"") end)
   end
 end

@@ -29,6 +29,31 @@ defmodule PhoenixKitCatalogue.Test.FakeExtension do
   @impl true
   def cast_category(params, current), do: cast(params, current)
 
+  # `id: "status"` deliberately collides with the catalogue's own
+  # "status" column id — `PhoenixKitCatalogue.Extensions.columns/1` must
+  # namespace it under `key/0` ("fake:status") before it ever reaches
+  # `PhoenixKitCatalogue.Web.TableConfig`, so a naive implementation
+  # that forgot to namespace would show up here as a collision.
+  @impl true
+  def item_columns, do: [%{id: "status", label: fn -> "Fake status" end, render: &column/1}]
+
+  @impl true
+  def category_columns, do: [%{id: "status", label: fn -> "Fake status" end, render: &column/1}]
+
+  defp column(record) do
+    assigns = %{record: record}
+
+    ~H"""
+    <%!-- `data-marker`, not `id`: the same column renders through this
+         same `render/1` for BOTH the desktop table row and the mobile
+         card's facts grid on one page load (CSS/JS picks which is
+         visible, not the server) — an `id` scoped only by the record
+         would duplicate across the two. `data-*` has no such
+         uniqueness constraint. --%>
+    <span data-marker={"ext-fake-status-#{@record.uuid}"}>fake-status</span>
+    """
+  end
+
   defp section(assigns, form_prefix) do
     note =
       assigns
@@ -88,4 +113,182 @@ defmodule PhoenixKitCatalogue.Test.FakeModule do
   alias PhoenixKitCatalogue.Test.FakeExtension
 
   def catalogue_extensions, do: [FakeExtension]
+end
+
+defmodule PhoenixKitCatalogue.Test.BrokenColumnsExtension do
+  @moduledoc """
+  A `PhoenixKitCatalogue.Extension` implementer whose `item_columns/0`
+  and `category_columns/0` raise — exercises
+  `PhoenixKitCatalogue.Extensions.columns/1`'s resilience contract (a
+  raising extension contributes nothing rather than crashing the
+  Columns modal or the table render), the same way `contributed_by/1`
+  already tolerates a raising `catalogue_extensions/0`.
+  """
+
+  @behaviour PhoenixKitCatalogue.Extension
+
+  @impl true
+  def key, do: "broken"
+
+  @impl true
+  def enabled?, do: true
+
+  @impl true
+  def item_columns, do: raise("boom")
+
+  @impl true
+  def category_columns, do: raise("boom")
+end
+
+defmodule PhoenixKitCatalogue.Test.BrokenColumnsModule do
+  @moduledoc "Registry carrier for `BrokenColumnsExtension` (see `FakeModule`)."
+
+  alias PhoenixKitCatalogue.Test.BrokenColumnsExtension
+
+  def catalogue_extensions, do: [BrokenColumnsExtension]
+end
+
+defmodule PhoenixKitCatalogue.Test.HostileRenderExtension do
+  @moduledoc """
+  A `PhoenixKitCatalogue.Extension` implementer whose contributed
+  columns are individually well-formed — `item_columns/0` /
+  `category_columns/0` return valid entries, so
+  `PhoenixKitCatalogue.Extensions.columns/1`'s DISCOVERY-time
+  validation (`valid_column?/1`, the same check `BrokenColumnsExtension`
+  above exercises by raising) lets every one of them through — but
+  whose `label`/`render` misbehave once actually INVOKED against a row,
+  in each of the ways a cell renderer can: raise, throw, exit, or
+  return a value with no `Phoenix.HTML.Safe` representation. Discovery-
+  time validation cannot see any of this; it only checks that `label`
+  is a 0-arity fn and `render` a 1-arity fn, never calls them.
+
+  `"ok"` is a normal, well-behaved sibling column — present so a test
+  can assert the REST of a row (and the rest of the table) survives a
+  neighbor column blowing up.
+  """
+
+  use Phoenix.Component
+
+  @behaviour PhoenixKitCatalogue.Extension
+
+  @impl true
+  def key, do: "hostile"
+
+  @impl true
+  def enabled?, do: true
+
+  @impl true
+  def item_columns, do: columns()
+
+  @impl true
+  def category_columns, do: columns()
+
+  defp columns do
+    [
+      %{
+        id: "raises",
+        label: fn -> "Raises" end,
+        render: fn _record -> raise "cell render exploded" end
+      },
+      %{
+        id: "throws",
+        label: fn -> "Throws" end,
+        render: fn _record -> throw(:cell_render_boom) end
+      },
+      %{
+        id: "exits",
+        label: fn -> "Exits" end,
+        render: fn _record -> exit(:cell_render_boom) end
+      },
+      %{
+        id: "unrenderable",
+        label: fn -> "Unrenderable" end,
+        # No `Phoenix.HTML.Safe` impl for a PID — the value itself is
+        # the failure, not the call producing it.
+        render: fn _record -> self() end
+      },
+      %{
+        id: "label_raises",
+        label: fn -> raise "label render exploded" end,
+        render: &ok_cell/1
+      },
+      %{id: "ok", label: fn -> "OK" end, render: &ok_cell/1}
+    ]
+  end
+
+  defp ok_cell(record) do
+    assigns = %{record: record}
+
+    ~H"""
+    <%!-- `data-marker`, not `id` — see `FakeExtension.column/1`'s
+         comment: this same render/1 runs for both the table row and
+         the card facts grid on one page load. --%>
+    <span data-marker={"ext-hostile-ok-#{@record.uuid}"}>hostile-ok</span>
+    """
+  end
+end
+
+defmodule PhoenixKitCatalogue.Test.HostileRenderModule do
+  @moduledoc "Registry carrier for `HostileRenderExtension` (see `FakeModule`)."
+
+  alias PhoenixKitCatalogue.Test.HostileRenderExtension
+
+  def catalogue_extensions, do: [HostileRenderExtension]
+end
+
+defmodule PhoenixKitCatalogue.Test.BadIdExtension do
+  @moduledoc """
+  A well-formed `key/0` but a column `id` that itself carries the
+  namespace delimiter (`"a:b"`) — exercises
+  `PhoenixKitCatalogue.Extensions.valid_column?/1`'s guard against an
+  ambiguous namespaced id: without it, key `"badid"` + id `"a:b"` and
+  key `"badid:a"` + id `"b"` would both namespace to `"badid:a:b"`, so
+  the composed string alone couldn't tell the two apart.
+  """
+
+  @behaviour PhoenixKitCatalogue.Extension
+
+  @impl true
+  def key, do: "badid"
+
+  @impl true
+  def enabled?, do: true
+
+  @impl true
+  def item_columns, do: [%{id: "a:b", label: fn -> "Ambiguous" end, render: fn _ -> "x" end}]
+
+  @impl true
+  def category_columns, do: item_columns()
+end
+
+defmodule PhoenixKitCatalogue.Test.BadKeyExtension do
+  @moduledoc """
+  A `key/0` that itself carries the namespace delimiter — every column
+  it contributes must be dropped, since a key already containing the
+  delimiter creates the same ambiguity `BadIdExtension` above tests for
+  the id half.
+  """
+
+  @behaviour PhoenixKitCatalogue.Extension
+
+  @impl true
+  def key, do: "bad:key"
+
+  @impl true
+  def enabled?, do: true
+
+  @impl true
+  def item_columns, do: [%{id: "status", label: fn -> "Evil" end, render: fn _ -> "x" end}]
+
+  @impl true
+  def category_columns, do: item_columns()
+end
+
+defmodule PhoenixKitCatalogue.Test.DelimiterModule do
+  @moduledoc "Registry carrier for `BadIdExtension` and `BadKeyExtension` (see `FakeModule`)."
+
+  alias PhoenixKitCatalogue.Test.BadIdExtension
+  alias PhoenixKitCatalogue.Test.BadKeyExtension
+
+  def catalogue_extensions, do: [BadIdExtension, BadKeyExtension]
 end

@@ -92,7 +92,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        attr_sets_search: "",
        attr_sets_page: 1,
        attr_sets_total: 0,
-       attr_sets_max_page: 1,
        show_new_set_modal: false,
        attribute_filter_options: [],
        attribute_value_counts: %{},
@@ -897,8 +896,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         sets_enabled: false,
         attr_sets_all: [],
         attribute_set_rows: [],
-        attr_sets_total: 0,
-        attr_sets_max_page: 1
+        attr_sets_total: 0
       )
     end
   end
@@ -961,8 +959,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     assign(socket,
       attribute_set_rows: rows,
       attr_sets_total: total,
-      attr_sets_page: page,
-      attr_sets_max_page: max_page
+      attr_sets_page: page
     )
   end
 

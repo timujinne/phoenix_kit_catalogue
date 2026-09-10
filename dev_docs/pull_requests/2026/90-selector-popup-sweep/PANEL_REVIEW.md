@@ -134,6 +134,6 @@ survive verification — consistent with earlier sweeps.
 
 ## Gate
 
-Full suite: 2 doctests, 2194 tests, 0 failures (PGUSER=maxdon).
+Full suite: 2 doctests, 2194 tests, 0 failures (with PGUSER set for the local role).
 `mix precommit` clean. Core JS: `node --check` clean (JS-only bundle
 edits, no version bump — the boss releases).

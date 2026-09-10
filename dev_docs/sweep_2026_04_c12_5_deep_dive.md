@@ -50,7 +50,7 @@ C12 agent #1 found 3 candidates:
    leak, not a defect.
 2. **`show_delete_confirm` buttons missing `phx-disable-with`** —
    false positive. Per the workspace C5 rule
-   ([feedback_async_ux](~/.claude/projects/-Users-maxdon-Desktop-Elixir/memory/feedback_quality_sweep_scope.md)),
+   ([feedback_async_ux]the agent memory note `feedback_quality_sweep_scope.md`),
    UI-state-only buttons (modal_close, switch_view,
    show_delete_confirm) don't need the attr — they fire a synchronous
    socket assign, not an async DB call. Adding it would briefly

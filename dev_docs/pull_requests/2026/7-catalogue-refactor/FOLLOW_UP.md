@@ -77,7 +77,7 @@ would force the same code through two passes.
   concern, not correctness. A real GIN/`pg_trgm` solution requires a
   core phoenix_kit migration (the underlying tables live in core). Out
   of scope per the
-  [quality-sweep memory](~/.claude/projects/-Users-maxdon-Desktop-Elixir/memory/feedback_quality_sweep_scope.md):
+  [quality-sweep memory]the agent memory note `feedback_quality_sweep_scope.md`:
   "refactor existing paths; don't add missing features".
 - **3.1** `load_filter_options` fetches up to 1000 rows — same family as
   2.3 (perf). The LV's filter dropdown surface today is small; if event

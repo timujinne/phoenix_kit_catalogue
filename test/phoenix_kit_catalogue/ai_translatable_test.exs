@@ -10,7 +10,9 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.AITranslatable
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.TranslationStatus
 
   defp primary, do: Multilang.primary_language()
 
@@ -144,7 +146,10 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
     end
 
     test "merges into an existing lang subtree (keeps sibling fields)" do
-      item = create_item()
+      # `description` needs actual source text — a field with no current
+      # source is excluded from the per-field write narrowing (design
+      # source §4.1) and its translation, if any, is left untouched.
+      item = create_item(%{description: "A thing"})
       {:ok, _} = AITranslatable.put_translation(item, "es", %{"name" => "Artilugio"}, [])
       item2 = Catalogue.get_item(item.uuid)
       {:ok, _} = AITranslatable.put_translation(item2, "es", %{"description" => "Una cosa"}, [])
@@ -155,7 +160,13 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
     end
 
     test "stores seo_title alongside name under the multilang `_`-prefixed keys" do
-      item = create_item()
+      # seo_title has no schema column — it only has current source when
+      # the primary language's override is set, same as `describe
+      # "source_fields/2"`'s "includes seo_title when set" case above.
+      item =
+        create_item(%{
+          data: %{"_primary_language" => primary(), primary() => %{"_seo_title" => "Buy Vase"}}
+        })
 
       assert {:ok, _} =
                AITranslatable.put_translation(
@@ -211,7 +222,10 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
       assert updated.data["ecommerce"] == foreign_data["ecommerce"]
       assert updated.data["meta"] == foreign_data["meta"]
       assert updated.data["fr-FR"]["_name"] == "Cartes"
-      assert is_binary(updated.data["_translation_fingerprints"]["fr-FR"])
+
+      assert updated.data["_translation_fingerprints"]["fr-FR"] == %{
+               "name" => TranslationStatus.field_fingerprint("Cards")
+             }
 
       reloaded = Catalogue.get_category(category.uuid)
       assert reloaded.data["ecommerce"] == foreign_data["ecommerce"]
@@ -320,6 +334,107 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
     end
   end
 
+  describe "put_translation/4 — per-field write narrowing (design source §4.4/§12.2)" do
+    test "a changed field is rewritten while an untouched sibling's hand-edit survives, in the SAME run" do
+      item = create_item(%{name: "Widget", description: "A thing"})
+
+      {:ok, _} =
+        AITranslatable.put_translation(
+          item,
+          "fr-FR",
+          %{"name" => "Widget FR", "description" => "Une chose"},
+          []
+        )
+
+      translated = Catalogue.get_item(item.uuid)
+
+      # Operator hand-corrects the description translation directly (not
+      # through put_translation/4) — no fingerprint stamp accompanies it,
+      # same as a save from the multilang form.
+      hand_edited_data =
+        AITranslatable.force_put_language(translated.data, "fr-FR", %{
+          "_description" => "Correction manuelle"
+        })
+
+      {:ok, hand_edited} = Catalogue.update_item(translated, %{data: hand_edited_data})
+
+      # The ENGLISH name changes — description's source does not.
+      {:ok, changed} = Catalogue.update_item(hand_edited, %{name: "Widget Mk2"})
+
+      assert {:ok, updated} =
+               AITranslatable.put_translation(
+                 changed,
+                 "fr-FR",
+                 %{"name" => "Widget Mk2 FR", "description" => "AI would overwrite this"},
+                 []
+               )
+
+      # name: source changed -> rewritten.
+      assert updated.data["fr-FR"]["_name"] == "Widget Mk2 FR"
+      # description: source unchanged since the last translation -> the
+      # hand edit is untouched, even though this SAME call also carried a
+      # (different) AI answer for it.
+      assert updated.data["fr-FR"]["_description"] == "Correction manuelle"
+    end
+
+    test "when every field is narrowed away, this is a success without a write: no broadcast, no version bump" do
+      item = create_item(%{name: "Widget"})
+      {:ok, _} = AITranslatable.put_translation(item, "fr-FR", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+
+      :ok = PubSub.subscribe()
+
+      assert {:ok, unchanged} =
+               AITranslatable.put_translation(
+                 translated,
+                 "fr-FR",
+                 %{"name" => "Widget FR bis"},
+                 []
+               )
+
+      # Original (untouched) translation text, not the new AI answer.
+      assert unchanged.data["fr-FR"]["_name"] == "Widget FR"
+      assert unchanged.updated_at == translated.updated_at
+      refute_receive {:catalogue_data_changed, :item, _uuid, _parent}, 100
+    end
+
+    test "category: the same per-field narrowing rule applies" do
+      category = create_category(%{name: "Cards", description: "Playing cards"})
+
+      {:ok, _} =
+        AITranslatable.put_translation(
+          category,
+          "fr-FR",
+          %{"name" => "Cartes", "description" => "Cartes a jouer"},
+          []
+        )
+
+      translated = Catalogue.get_category(category.uuid)
+      {:ok, changed} = Catalogue.update_category(translated, %{name: "Cards Mk2"})
+
+      assert {:ok, updated} =
+               AITranslatable.put_translation(
+                 changed,
+                 "fr-FR",
+                 %{"name" => "Cartes 2", "description" => "AI would overwrite this"},
+                 []
+               )
+
+      assert updated.data["fr-FR"]["_name"] == "Cartes 2"
+      assert updated.data["fr-FR"]["_description"] == "Cartes a jouer"
+    end
+
+    test "a field the AI response doesn't mention is never a candidate, written or skipped" do
+      item = create_item(%{name: "Widget", description: "A thing"})
+
+      assert {:ok, updated} =
+               AITranslatable.put_translation(item, "fr-FR", %{"name" => "Widget FR"}, [])
+
+      refute Map.has_key?(updated.data["fr-FR"], "_description")
+      assert TranslationStatus.field_state(updated, "fr-FR", "description") == :missing
+    end
+  end
+
   describe "force_put_language/3" do
     test "merges rather than wholesale-replacing the lang subtree" do
       data = %{"_primary_language" => "en", "es" => %{"_name" => "Hola", "_keep" => "x"}}
@@ -355,12 +470,13 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
     end
 
     test "cuts from a bare Note: marker" do
-      value = "Objet\nNote: description and summary were not provided."
+      value = "Objet\nNote: the description field was skipped."
       assert AITranslatable.strip_ai_note(value) == "Objet"
     end
 
     test "cuts a trailing note paragraph from a multi-paragraph description" do
-      value = "Ce produit est magnifique.\n\nIl est fait de bois.\n\n(Note: SEO fields omitted.)"
+      value =
+        "Ce produit est magnifique.\n\nIl est fait de bois.\n\n(Note: the SEO field was skipped.)"
 
       assert AITranslatable.strip_ai_note(value) ==
                "Ce produit est magnifique.\n\nIl est fait de bois."
@@ -372,6 +488,97 @@ defmodule PhoenixKitCatalogue.AITranslatableTest do
 
     test "passes through non-binary values unchanged" do
       assert AITranslatable.strip_ai_note(nil) == nil
+    end
+
+    test "cuts a trailing enumerated 'Notes:' paragraph" do
+      value = "Objet decoratif\n\nNotes:\n1. The `Label` field was left as-is."
+      assert AITranslatable.strip_ai_note(value) == "Objet decoratif"
+    end
+
+    test "cuts a trailing 'Note that ...' paragraph with no colon" do
+      value = "Objet decoratif\n\nNote that the \"Label\" field was not translated."
+      assert AITranslatable.strip_ai_note(value) == "Objet decoratif"
+    end
+
+    test "does not cut 'Please note:' appearing mid-sentence" do
+      value = "Please note: sizes vary slightly by batch."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut the French 'Veuillez noter' aside" do
+      value = "Fait main. Veuillez noter : les couleurs peuvent varier."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut a legitimate German 'Hinweis:' paragraph" do
+      value = "Handgefertigt.\n\nHinweis: Farben können variieren."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut a legitimate care-instructions 'Note:' paragraph" do
+      value = "Handmade wooden vase.\n\nNote: hand wash only."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut a legitimate bare (Note: parenthetical" do
+      value = "Cozy wool scarf (Note: 100% merino wool)."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "cuts a parenthetical note naming a skipped quoted field with a placeholder" do
+      value =
+        "Vase\n\n(Note: The \"Title\" field was skipped as it contained only a placeholder " <>
+          "{{title}} with no actual value bound to it.)"
+
+      assert AITranslatable.strip_ai_note(value) == "Vase"
+    end
+
+    test "cuts a note describing a template-slot field in backticks" do
+      value =
+        "Vase\n\nNote: Since `Title: {{title}}` is a template slot (indicated by the double " <>
+          "curly braces) and not a real value, it is skipped silently as per the rules. Only " <>
+          "the `Label` field with an actual value is translated."
+
+      assert AITranslatable.strip_ai_note(value) == "Vase"
+    end
+
+    test "cuts an enumerated Notes: list naming a skipped placeholder field in backticks" do
+      value =
+        "Objet decoratif\n\nNotes:\n1. The `Label` field was skipped because it contains a " <>
+          "placeholder."
+
+      assert AITranslatable.strip_ai_note(value) == "Objet decoratif"
+    end
+
+    test "does not cut a legitimate 'Note:' paragraph that quotes color names" do
+      value = "Ceramic mug.\n\nNote: available in \"Blue\" and \"Red\" glazes."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut a legitimate 'Note:' paragraph that backtick-quotes a material" do
+      value = "Cast iron skillet.\n\nNote: use `cast iron` pan for best results."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut a legitimate 'Note:' paragraph using {{...}} for a size chart" do
+      value = "Merino wool scarf.\n\nNote: fits sizes {{S,M,L}} as shown."
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not cut marketing copy about the listing itself using 'is/not translated'" do
+      value =
+        "Elegant scarf.\n\nNote: every listing in our shop is translated by hand and not " <>
+          "translated by any automatic tool, to keep the wording natural."
+
+      assert AITranslatable.strip_ai_note(value) == value
+    end
+
+    test "does not let a trigger word in a later unrelated paragraph cut a legitimate Note: aside" do
+      value =
+        "Nice scarf.\n\nNote: hand wash only.\n\nComes with a reusable gift box; the box's " <>
+          "engraving field allows personalization."
+
+      assert AITranslatable.strip_ai_note(value) == value
     end
   end
 

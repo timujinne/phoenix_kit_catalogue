@@ -363,6 +363,38 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       else: "#{form_prefix}[lang_#{field}]"
   end
 
+  # `seo_title`/`seo_description` have no DB column — they only ever live
+  # under `data["_seo_title"]`/`data["_seo_description"]`. When multilang
+  # is enabled, `merge_translatable_params/4` (via `@translatable_fields`)
+  # already folds them in. When it's disabled, that helper leaves `params`
+  # untouched entirely (it only writes `data` inside its `multilang_enabled`
+  # branch), so on a single-language install the two fields would
+  # otherwise be silently dropped by `cast/2` on every save. Mirrors
+  # `extract_translatable_data/4`'s own logic for the primary-language case.
+  defp merge_seo_params(params, socket) do
+    if socket.assigns.multilang_enabled do
+      params
+    else
+      data =
+        Map.get(params, "data") ||
+          Ecto.Changeset.get_field(socket.assigns.changeset, :data) || %{}
+
+      data = Enum.reduce(["seo_title", "seo_description"], data, &put_seo_field(&1, &2, params))
+
+      Map.put(params, "data", data)
+    end
+  end
+
+  # One SEO field folded into the single-language `data` map, keyed with the
+  # leading underscore the multilang reader expects. A field the form did not
+  # submit leaves `data` untouched.
+  defp put_seo_field(field, data, params) do
+    case Map.get(params, field) do
+      value when is_binary(value) -> Map.put(data, "_#{field}", value)
+      _ -> data
+    end
+  end
+
   # Current `data` value for the registered extensions' sections — read off
   # the form so a mid-edit validate (multilang merges, metadata, an
   # extension's own submitted values) shows immediately, not just the
@@ -614,6 +646,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         changeset: socket.assigns.changeset,
         preserve_fields: @preserve_fields
       )
+      |> merge_seo_params(socket)
       |> apply_slug(socket)
 
     {item_params, extension_error} = absorb_item_extensions(item_params, socket)
@@ -641,6 +674,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         changeset: socket.assigns.changeset,
         preserve_fields: @preserve_fields
       )
+      |> merge_seo_params(socket)
       |> apply_slug(socket)
 
     {item_params, extension_error} = absorb_item_extensions(item_params, socket)

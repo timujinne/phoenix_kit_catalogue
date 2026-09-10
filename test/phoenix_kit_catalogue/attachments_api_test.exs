@@ -44,6 +44,14 @@ defmodule PhoenixKitCatalogue.AttachmentsApiTest do
       assert Repo.get!(StorageFile, b).folder_uuid == folder_uuid
     end
 
+    test "forwards opts[:actor_uuid] to the activity log", %{item: item, user_uuid: user_uuid} do
+      a = insert_file!(user_uuid, nil, "a.jpg")
+
+      assert {:ok, updated} = Attachments.attach_files(item, [a], actor_uuid: user_uuid)
+
+      assert_activity_logged("item.updated", resource_uuid: updated.uuid, actor_uuid: user_uuid)
+    end
+
     test "with no opts, featured defaults to the first uuid and order to the given list",
          %{item: item, user_uuid: user_uuid} do
       a = insert_file!(user_uuid, nil, "a.jpg")

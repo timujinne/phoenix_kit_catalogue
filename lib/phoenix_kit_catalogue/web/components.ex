@@ -794,6 +794,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
     doc: "Which facts the grid shows, in order — the admin Columns modal's vocabulary."
   )
 
+  attr(:extension_columns, :map,
+    default: %{},
+    doc:
+      "`TableConfig.extension_columns(:detail_categories)` — shop-extension " <>
+        "columns keyed by their (namespaced) id, same map `category_header_cells/1` " <>
+        "and `category_body_cells/1` take. Fetch ONCE per page render and pass down."
+  )
+
   attr(:count, :integer, default: 0)
   attr(:subcat_count, :integer, default: 0)
   attr(:file_count, :integer, default: 0)
@@ -852,6 +860,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
               <% "items" -> %>
                 <div class="text-base-content/50">{gettext("Items")}</div>
                 <div class="tabular-nums">{@count}</div>
+              <% "image" -> %>
+                <%!-- No-op here, deliberately: the card's media band above
+                     (`<.featured_thumb>`) already shows this same
+                     `featured_image_uuid` unconditionally, so repeating it
+                     as a fact would show the same picture twice in one
+                     card — unlike the table, which has no such band and
+                     needs the managed column to show a picture at all. --%>
               <% "subcategories" -> %>
                 <div class="text-base-content/50">{gettext("Subcategories")}</div>
                 <div class="tabular-nums">{@subcat_count}</div>
@@ -870,7 +885,11 @@ defmodule PhoenixKitCatalogue.Web.Components do
               <% "created" -> %>
                 <div class="text-base-content/50">{gettext("Created")}</div>
                 <div>{Calendar.strftime(@category.inserted_at, "%Y-%m-%d %H:%M")}</div>
-              <% _ -> %>
+              <% other -> %>
+                <%= if ext = Map.get(@extension_columns, other) do %>
+                  <div class="text-base-content/50">{ext.label.()}</div>
+                  <div>{ext.render.(@category)}</div>
+                <% end %>
             <% end %>
           <% end %>
         </div>
@@ -986,6 +1005,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
   """
   attr(:columns, :list, required: true)
 
+  attr(:extension_columns, :map,
+    default: %{},
+    doc:
+      "`TableConfig.extension_columns(:detail_categories)` — shop-extension " <>
+        "columns keyed by their (namespaced) id. Fetch ONCE per page render " <>
+        "and pass down; see that function's doc."
+  )
+
   def category_header_cells(assigns) do
     ~H"""
     <%= for col <- @columns do %>
@@ -993,6 +1020,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <% "items" -> %>
           <.table_default_header_cell class="text-right">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")}
+          </.table_default_header_cell>
+        <% "image" -> %>
+          <.table_default_header_cell>
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Image")}
           </.table_default_header_cell>
         <% "updated" -> %>
           <.table_default_header_cell>
@@ -1018,7 +1049,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
           <.table_default_header_cell>
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Created")}
           </.table_default_header_cell>
-        <% _ -> %>
+        <% other -> %>
+          <%= if ext = Map.get(@extension_columns, other) do %>
+            <.table_default_header_cell>{ext.label.()}</.table_default_header_cell>
+          <% end %>
       <% end %>
     <% end %>
     """
@@ -1034,6 +1068,11 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:child_subcat_counts, :map, default: %{})
   attr(:file_counts, :map, default: %{})
 
+  attr(:extension_columns, :map,
+    default: %{},
+    doc: "Same map as `category_header_cells/1`'s — see that attr's doc."
+  )
+
   def category_body_cells(assigns) do
     ~H"""
     <%= for col <- @columns do %>
@@ -1041,6 +1080,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <% "items" -> %>
           <.table_default_cell class="text-right tabular-nums">
             {Map.get(@child_counts, @cat.uuid, 0)}
+          </.table_default_cell>
+        <% "image" -> %>
+          <.table_default_cell>
+            <.image_column_cell resource={@cat} />
           </.table_default_cell>
         <% "updated" -> %>
           <.table_default_cell class="text-sm text-base-content/60">
@@ -1066,7 +1109,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
           <.table_default_cell class="text-sm text-base-content/60">
             {Calendar.strftime(@cat.inserted_at, "%Y-%m-%d %H:%M")}
           </.table_default_cell>
-        <% _ -> %>
+        <% other -> %>
+          <%= if ext = Map.get(@extension_columns, other) do %>
+            <.table_default_cell>{ext.render.(@cat)}</.table_default_cell>
+          <% end %>
       <% end %>
     <% end %>
     """
@@ -1111,6 +1157,35 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <.icon name="hero-paper-clip" class="w-2.5 h-2.5 rotate-45 text-base-content/70" />
       </span>
     </span>
+    """
+  end
+
+  @doc """
+  The managed "Image" column's cell content (`TableConfig.columns/1`'s
+  `"image"` id): the item/category's `featured_image_uuid`, or empty
+  space — never a broken-image glyph — when it has none.
+
+  A plain, opt-in twin of `featured_thumb/1`'s automatic photo column:
+  that one appears on its own whenever some row on the level has a
+  picture (or an attached file) and isn't listed in the Columns modal;
+  this one is an ordinary managed column an admin turns on/off/reorders
+  like any other, and always shows the "small" storage variant with no
+  paperclip/attachment badge.
+  """
+  attr(:resource, :any, required: true)
+
+  def image_column_cell(assigns) do
+    assigns = assign(assigns, :uuid, featured_image_uuid(assigns.resource))
+
+    ~H"""
+    <img
+      :if={@uuid}
+      src={URLSigner.signed_url(@uuid, "small")}
+      alt=""
+      loading="lazy"
+      onerror="this.style.display='none'"
+      class="w-10 h-10 rounded object-cover bg-base-200"
+    />
     """
   end
 
@@ -2505,6 +2580,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
       "This item's entry from `Catalogue.supplier_cost_ranges/1` (drives `\"supplier_price\"`)."
   )
 
+  attr(:extension_columns, :map,
+    default: %{},
+    doc:
+      "`TableConfig.extension_columns(:detail_items)` — shop-extension " <>
+        "columns keyed by their (namespaced) id. Fetch ONCE per page render " <>
+        "and pass down; see that function's doc."
+  )
+
   def item_pricing_cell(assigns) do
     pricing = Catalogue.item_pricing(assigns.item)
     assigns = assign(assigns, :sale_price, pricing.sale_price)
@@ -2532,6 +2615,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <% "sku" -> %>
           <.table_default_cell class="text-sm font-mono text-base-content/60">
             {@item.sku || "—"}
+          </.table_default_cell>
+        <% "image" -> %>
+          <.table_default_cell>
+            <.image_column_cell resource={@item} />
           </.table_default_cell>
         <% "price" -> %>
           <.table_default_cell class="text-sm font-semibold">
@@ -2577,7 +2664,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
           <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
             {Calendar.strftime(@item.inserted_at, "%Y-%m-%d %H:%M")}
           </.table_default_cell>
-        <% _ -> %>
+        <% other -> %>
+          <%= if ext = Map.get(@extension_columns, other) do %>
+            <.table_default_cell>{ext.render.(@item)}</.table_default_cell>
+          <% end %>
       <% end %>
     <% end %>
     """

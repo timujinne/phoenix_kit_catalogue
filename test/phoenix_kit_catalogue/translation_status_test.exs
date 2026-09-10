@@ -68,7 +68,7 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
       :ok = TranslationStatus.capture_fingerprint("catalogue_item", uuid, %{"name" => "Widget"})
 
       assert TranslationStatus.captured_fingerprint("catalogue_item", uuid) ==
-               TranslationStatus.fingerprint(%{"name" => "Widget"})
+               TranslationStatus.field_fingerprints(%{"name" => "Widget"})
     end
 
     test "nothing captured → nil" do
@@ -128,6 +128,250 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
     end
   end
 
+  describe "field_state/3" do
+    test "folds independently per field — one field fresh, its sourced sibling still missing" do
+      item = create_item(%{description: "A thing"})
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :fresh
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :missing
+      # state/2 folds worst-wins across fields: missing beats fresh.
+      assert TranslationStatus.state(reloaded, "fr") == :missing
+    end
+
+    test "a field with no current source is excluded — nil, not :missing" do
+      item = create_item()
+      assert TranslationStatus.field_state(item, "fr", "description") == nil
+    end
+
+    test "a changed field is :stale while an untouched sibling field stays :fresh" do
+      item = create_item(%{description: "A thing"})
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+
+      {:ok, _} =
+        AITranslatable.put_translation(translated, "fr", %{"description" => "Une chose"}, [])
+
+      with_both = Catalogue.get_item(item.uuid)
+      {:ok, _} = Catalogue.update_item(with_both, %{name: "Widget Mk2"})
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :stale
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :fresh
+    end
+  end
+
+  describe "stamp_fresh/3 (field-narrowed)" do
+    test "stamps only the requested field, leaving an untranslated sibling alone" do
+      item = create_item(%{description: "A thing"})
+
+      new_data =
+        AITranslatable.force_put_language(item.data, "fr", %{
+          "_name" => "Widget FR",
+          "_description" => "Une chose"
+        })
+
+      {:ok, item} = Catalogue.update_item(item, %{data: new_data})
+      assert TranslationStatus.field_state(item, "fr", "name") == :unknown
+      assert TranslationStatus.field_state(item, "fr", "description") == :unknown
+
+      assert {:ok, _} = TranslationStatus.stamp_fresh(item, "fr", "name")
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :fresh
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :unknown
+    end
+
+    test "accepts a list of fields" do
+      item = create_item(%{description: "A thing"})
+
+      new_data =
+        AITranslatable.force_put_language(item.data, "fr", %{
+          "_name" => "Widget FR",
+          "_description" => "Une chose"
+        })
+
+      {:ok, item} = Catalogue.update_item(item, %{data: new_data})
+
+      assert {:ok, _} = TranslationStatus.stamp_fresh(item, "fr", ["name", "description"])
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :fresh
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :fresh
+    end
+
+    test "refuses only when NONE of the requested fields are translated" do
+      item = create_item(%{description: "A thing"})
+      assert {:error, :no_translation} = TranslationStatus.stamp_fresh(item, "fr", "description")
+    end
+
+    test "one qualifying field among several requested is enough to proceed" do
+      item = create_item(%{description: "A thing"})
+      new_data = AITranslatable.force_put_language(item.data, "fr", %{"_name" => "Widget FR"})
+      {:ok, item} = Catalogue.update_item(item, %{data: new_data})
+
+      assert {:ok, _} = TranslationStatus.stamp_fresh(item, "fr", ["name", "description"])
+      reloaded = Catalogue.get_item(item.uuid)
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :fresh
+      # description was never translated — nothing to stamp for it, no crash.
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :missing
+    end
+  end
+
+  describe "reset_baseline/3" do
+    test "deletes the stored fingerprint for the chosen field, dropping it to :unknown, without touching the translation" do
+      item = create_item()
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+      assert TranslationStatus.field_state(translated, "fr", "name") == :fresh
+
+      assert {:ok, _} = TranslationStatus.reset_baseline(translated, "fr", "name")
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :unknown
+      assert reloaded.data["fr"]["_name"] == "Widget FR"
+    end
+
+    test "leaves fingerprints of OTHER fields intact" do
+      item = create_item(%{description: "A thing"})
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      t1 = Catalogue.get_item(item.uuid)
+      {:ok, _} = AITranslatable.put_translation(t1, "fr", %{"description" => "Une chose"}, [])
+      t2 = Catalogue.get_item(item.uuid)
+
+      assert {:ok, _} = TranslationStatus.reset_baseline(t2, "fr", "name")
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :unknown
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :fresh
+    end
+
+    test "forces the next translate to rewrite that field (the whole point of a reset baseline)" do
+      item = create_item()
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+
+      # A plain re-translate with an UNCHANGED source would normally be
+      # narrowed away (skip — see the write-narrowing tests). Reset first.
+      {:ok, reset} = TranslationStatus.reset_baseline(translated, "fr", "name")
+
+      assert {:ok, updated} =
+               AITranslatable.put_translation(reset, "fr", %{"name" => "Widget FR bis"}, [])
+
+      assert updated.data["fr"]["_name"] == "Widget FR bis"
+      assert TranslationStatus.field_state(updated, "fr", "name") == :fresh
+    end
+
+    test "a no-op on a field with nothing stored" do
+      item = create_item()
+      assert {:ok, unchanged} = TranslationStatus.reset_baseline(item, "fr", "name")
+      assert unchanged.uuid == item.uuid
+    end
+  end
+
+  describe "legacy single-hash fingerprint format (pre-per-field rollout)" do
+    # Resources translated before this model shipped store a single hex
+    # STRING at `data["_translation_fingerprints"][lang]` (the old
+    # `fingerprint/1` whole-resource digest) instead of a per-field map.
+    # Decision (see the module's moduledoc): treat it as ABSENT for every
+    # field — :unknown, not :stale, and never a match. Rationale: reading
+    # it as "every field hashed to this value" would make virtually every
+    # field :stale (a combined multi-field hash never equals a lone
+    # field's hash), and :stale feeds the sweep worker's automatic
+    # candidate list — turning 38 live items + 13 live categories `:stale`
+    # the moment this ships would silently enqueue an unauthorized
+    # AI-translation storm on deploy (design source §13: a mass run only
+    # happens by separate owner decision). :unknown is never auto-swept
+    # and matches what the write path does for these rows regardless.
+    test "a legacy row reads as :unknown per field, not :stale, even though the source hasn't changed" do
+      item = create_item(%{name: "Widget"})
+
+      legacy_data =
+        item.data
+        |> Kernel.||(%{})
+        |> AITranslatable.force_put_language("fr", %{"_name" => "Widget FR"})
+        |> Map.put("_translation_fingerprints", %{
+          "fr" => TranslationStatus.fingerprint(%{"name" => "Widget"})
+        })
+
+      {:ok, legacy} = Catalogue.update_item(item, %{data: legacy_data})
+
+      # Sanity: the legacy value really is what the OLD whole-resource
+      # digest would have stored for this exact source.
+      assert is_binary(legacy.data["_translation_fingerprints"]["fr"])
+
+      assert TranslationStatus.field_state(legacy, "fr", "name") == :unknown
+      assert TranslationStatus.state(legacy, "fr") == :unknown
+    end
+
+    test "a write over a legacy row replaces the string with a clean per-field map, stamping only the written field" do
+      item = create_item(%{name: "Widget", description: "A thing"})
+
+      legacy_data =
+        item.data
+        |> Kernel.||(%{})
+        |> AITranslatable.force_put_language("fr", %{
+          "_name" => "Widget FR",
+          "_description" => "Une chose"
+        })
+        |> Map.put("_translation_fingerprints", %{"fr" => "deadbeef"})
+
+      {:ok, legacy} = Catalogue.update_item(item, %{data: legacy_data})
+
+      # Re-translating "name" only touches "name": the legacy string is
+      # gone, replaced by a map holding just the field that was actually
+      # written this round — "description"'s (nonexistent) legacy entry
+      # doesn't reappear, and its state stays :unknown either way.
+      assert {:ok, updated} =
+               AITranslatable.put_translation(legacy, "fr", %{"name" => "Widget FR2"}, [])
+
+      assert updated.data["_translation_fingerprints"]["fr"] == %{
+               "name" => TranslationStatus.field_fingerprint("Widget")
+             }
+
+      assert TranslationStatus.field_state(updated, "fr", "name") == :fresh
+      assert TranslationStatus.field_state(updated, "fr", "description") == :unknown
+    end
+
+    test "stamp_fresh/2 on a legacy row upgrades storage to a per-field map" do
+      item = create_item(%{name: "Widget"})
+
+      legacy_data =
+        item.data
+        |> Kernel.||(%{})
+        |> AITranslatable.force_put_language("fr", %{"_name" => "Widget FR"})
+        |> Map.put("_translation_fingerprints", %{"fr" => "deadbeef"})
+
+      {:ok, legacy} = Catalogue.update_item(item, %{data: legacy_data})
+
+      assert {:ok, updated} = TranslationStatus.stamp_fresh(legacy, "fr")
+
+      assert updated.data["_translation_fingerprints"]["fr"] == %{
+               "name" => TranslationStatus.field_fingerprint("Widget")
+             }
+    end
+  end
+
+  describe "degenerate cases — no AI module involvement, nothing translated at all" do
+    # `TranslationStatus` never references `PhoenixKitAI` (grep the
+    # module — only the doc text does) and computes everything from plain
+    # Ecto structs + `PhoenixKit.Utils.Multilang`, so a resource with zero
+    # translations behaves the same whether or not an AI provider is
+    # configured, or even installed. These exercises don't touch
+    # `PhoenixKitAI.Translations` (endpoint/prompt config) at all.
+    test "a brand-new item with only a name: state/2, field_state/3, and list/2 all behave, no crash" do
+      {cat, item} = create_catalogue_with_item(%{})
+
+      assert TranslationStatus.state(item, "de-DE") == :missing
+      assert TranslationStatus.field_state(item, "de-DE", "name") == :missing
+      assert TranslationStatus.field_state(item, "de-DE", "description") == nil
+
+      rows = TranslationStatus.list(:item, catalogue_uuid: cat.uuid, langs: ["de-DE"])
+      assert Enum.find(rows, &(&1.uuid == item.uuid)).state == :missing
+    end
+  end
+
   describe "state/2 — category" do
     test "round-trips missing → fresh → stale" do
       category = create_category()
@@ -157,9 +401,9 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
       {:ok, _} = AITranslatable.put_translation(mutated, "fr", %{"name" => "Traduit"}, [])
 
       reloaded = Catalogue.get_item(item.uuid)
-      stored_fp = reloaded.data["_translation_fingerprints"]["fr"]
-      assert stored_fp == TranslationStatus.fingerprint(%{"name" => "Widget"})
-      refute stored_fp == TranslationStatus.fingerprint(%{"name" => "Mutated"})
+      stored_fp = reloaded.data["_translation_fingerprints"]["fr"]["name"]
+      assert stored_fp == TranslationStatus.field_fingerprint("Widget")
+      refute stored_fp == TranslationStatus.field_fingerprint("Mutated")
     end
 
     test "state/2, a read-only check, does not clobber a fingerprint an in-flight RETRANSLATION job already captured" do
@@ -187,9 +431,9 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
       {:ok, _} = AITranslatable.put_translation(v3, "fr", %{"name" => "Widget V2 FR"}, [])
 
       reloaded = Catalogue.get_item(item.uuid)
-      stored_fp = reloaded.data["_translation_fingerprints"]["fr"]
-      assert stored_fp == TranslationStatus.fingerprint(%{"name" => "Widget V2"})
-      refute stored_fp == TranslationStatus.fingerprint(%{"name" => "Widget V3"})
+      stored_fp = reloaded.data["_translation_fingerprints"]["fr"]["name"]
+      assert stored_fp == TranslationStatus.field_fingerprint("Widget V2")
+      refute stored_fp == TranslationStatus.field_fingerprint("Widget V3")
     end
   end
 

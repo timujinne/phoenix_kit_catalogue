@@ -958,9 +958,17 @@ defmodule PhoenixKitCatalogue.Attachments do
     Map.put(params, "data", Map.put(data, "files_folder_uuid", folder_uuid))
   end
 
+  # `nil`, not `Map.delete/2` — an EXPLICIT "clear this" the caller can
+  # act on, as opposed to simply never mentioning the key at all (which
+  # `Catalogue.update_item/3` / `update_category/3`'s `:data_owned_keys`
+  # splicing reads as "this form didn't touch it, leave the DB row's own
+  # value alone" — see that option's doc). Every changeset that ever
+  # touches `:data` (`Schemas.Item`/`Schemas.Category`) drops a `nil`
+  # top-level entry before it reaches storage, so the stored shape ends
+  # up identical to a record that never had the key — not a JSON `null`.
   defp inject_featured_image(params, nil) do
     data = ensure_data_map(params)
-    Map.put(params, "data", Map.delete(data, "featured_image_uuid"))
+    Map.put(params, "data", Map.put(data, "featured_image_uuid", nil))
   end
 
   defp inject_featured_image(params, uuid) when is_binary(uuid) do
@@ -977,9 +985,11 @@ defmodule PhoenixKitCatalogue.Attachments do
     Map.put(params, "data", Map.put(data, "media_order", Enum.map(files, &to_string(&1.uuid))))
   end
 
+  # `nil` marker, not `Map.delete/2` — see `inject_featured_image/2`'s
+  # comment just above.
   defp inject_media_order(params, _files_state) do
     data = ensure_data_map(params)
-    Map.put(params, "data", Map.delete(data, "media_order"))
+    Map.put(params, "data", Map.put(data, "media_order", nil))
   end
 
   defp ensure_data_map(params) do

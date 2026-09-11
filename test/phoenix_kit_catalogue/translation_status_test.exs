@@ -270,6 +270,77 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
     end
   end
 
+  describe "stamp_preimage/3" do
+    test "stamps a fingerprint computed from the GIVEN value, not the current source" do
+      item = create_item()
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+
+      # Current source is still "Widget" (unchanged) — a fingerprint
+      # computed from the current source would read :fresh here. Since
+      # stamp_preimage/3 hashes the value it's TOLD instead, it reads
+      # :stale.
+      assert {:ok, _} = TranslationStatus.stamp_preimage(translated, "fr", %{"name" => "Old"})
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :stale
+    end
+
+    test "touches only the listed fields, leaving other fields' fingerprints untouched" do
+      item = create_item(%{description: "A thing"})
+
+      {:ok, _} =
+        AITranslatable.put_translation(
+          item,
+          "fr",
+          %{"name" => "Widget FR", "description" => "Une chose"},
+          []
+        )
+
+      translated = Catalogue.get_item(item.uuid)
+      assert TranslationStatus.field_state(translated, "fr", "description") == :fresh
+
+      assert {:ok, _} = TranslationStatus.stamp_preimage(translated, "fr", %{"name" => "Old"})
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :stale
+      assert TranslationStatus.field_state(reloaded, "fr", "description") == :fresh
+    end
+
+    test "the pair reads :stale (not :unknown) once the sync's own write lands — the whole point" do
+      item = create_item()
+      {:ok, _} = AITranslatable.put_translation(item, "fr", %{"name" => "Widget FR"}, [])
+      translated = Catalogue.get_item(item.uuid)
+
+      # A sync about to overwrite the English name knows the value it's
+      # replacing — stamp it as the reference BEFORE the write lands.
+      assert {:ok, _} = TranslationStatus.stamp_preimage(translated, "fr", %{"name" => "Widget"})
+      {:ok, _} = Catalogue.update_item(translated, %{name: "Widget Mk2"})
+      reloaded = Catalogue.get_item(item.uuid)
+
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :stale
+    end
+
+    test "refuses when the language has no translation at all, like stamp_fresh/2" do
+      item = create_item()
+
+      assert {:error, :no_translation} =
+               TranslationStatus.stamp_preimage(item, "fr", %{"name" => "Old"})
+    end
+
+    test "works for categories too" do
+      category = create_category()
+      {:ok, _} = AITranslatable.put_translation(category, "fr", %{"name" => "Cartes FR"}, [])
+      translated = Catalogue.get_category(category.uuid)
+
+      assert {:ok, _} =
+               TranslationStatus.stamp_preimage(translated, "fr", %{"name" => "Old Cards"})
+
+      reloaded = Catalogue.get_category(category.uuid)
+      assert TranslationStatus.field_state(reloaded, "fr", "name") == :stale
+    end
+  end
+
   describe "legacy single-hash fingerprint format (pre-per-field rollout)" do
     # Resources translated before this model shipped store a single hex
     # STRING at `data["_translation_fingerprints"][lang]` (the old

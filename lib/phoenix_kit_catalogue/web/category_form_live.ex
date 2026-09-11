@@ -19,7 +19,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     only: [
       actor_opts: 1,
       assign_ai_translation: 3,
-      ai_translate_config: 1
+      ai_translate_config: 1,
+      data_owned_keys: 2
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -45,6 +46,14 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   # without this, filling all languages before the first save loses the
   # primary text on :new).
   @preserve_fields %{"name" => :name, "description" => :description}
+
+  # Top-level `data` keys this form writes OUTSIDE the shared multilang/
+  # extension pipeline `data_owned_keys/2` already covers — see
+  # `Attachments.inject_attachment_data/2`. No metadata namespace on
+  # categories (`PhoenixKitCatalogue.Metadata` only covers `:item` /
+  # `:catalogue`). Threaded into `Catalogue.update_category/3`'s
+  # `:data_owned_keys` option at the save call site below.
+  @category_extra_owned_data_keys ~w(files_folder_uuid featured_image_uuid media_order)
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
   # views via socket.private[:live_layout]. Opt out here so this view can
@@ -527,7 +536,11 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   end
 
   defp save_category(socket, :edit, params, mode) do
-    case Catalogue.update_category(socket.assigns.category, params, actor_opts(socket)) do
+    update_opts =
+      actor_opts(socket) ++
+        [data_owned_keys: data_owned_keys(socket, @category_extra_owned_data_keys)]
+
+    case Catalogue.update_category(socket.assigns.category, params, update_opts) do
       {:ok, category} ->
         socket =
           put_flash(

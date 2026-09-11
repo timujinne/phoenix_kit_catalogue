@@ -57,6 +57,7 @@ defmodule PhoenixKitCatalogue.Schemas.Category do
   def changeset(category, attrs) do
     category
     |> cast(attrs, @required_fields ++ @optional_fields)
+    |> update_change(:data, &drop_nil_data_values/1)
     |> validate_required(@required_fields)
     |> validate_length(:name, min: 1, max: 255)
     |> validate_inclusion(:status, @statuses)
@@ -67,6 +68,16 @@ defmodule PhoenixKitCatalogue.Schemas.Category do
       message: "is already taken in this language"
     )
   end
+
+  # See the identical helper (and its full rationale) in
+  # `PhoenixKitCatalogue.Schemas.Item.changeset/2` — `nil` is never a
+  # legitimate stored value for a top-level `data` key; a caller that
+  # wants one gone (see `Attachments.inject_featured_image/2`) means
+  # "this key doesn't exist", not "JSON null".
+  defp drop_nil_data_values(data) when is_map(data),
+    do: Map.reject(data, fn {_k, v} -> is_nil(v) end)
+
+  defp drop_nil_data_values(other), do: other
 
   defp validate_not_self_parent(changeset) do
     uuid = get_field(changeset, :uuid)

@@ -114,14 +114,17 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
 
   describe "inject_attachment_data/2 — folder + featured image threading" do
     test "no folder_uuid + no featured_image still ensures data key exists" do
-      # The current implementation always passes through
-      # `inject_featured_image(params, nil)` which writes an empty
-      # data map. Pin the behaviour explicitly — non-data keys are
-      # preserved untouched.
+      # `inject_featured_image/2` and `inject_media_order/2` both run
+      # unconditionally and, with nothing set, write an explicit `nil`
+      # "clear this" marker rather than omitting the key — the signal
+      # `Catalogue.update_item/3`'s `:data_owned_keys` splicing (and the
+      # Item/Category changesets, as a backstop) read as "drop this key",
+      # not "leave it alone". Pin the behaviour explicitly — non-data
+      # keys are preserved untouched.
       socket = build_fake_socket(folder: nil, featured: nil)
       result = Attachments.inject_attachment_data(%{"name" => "X"}, socket)
       assert result["name"] == "X"
-      assert result["data"] == %{}
+      assert result["data"] == %{"featured_image_uuid" => nil, "media_order" => nil}
     end
 
     test "folder_uuid lands in params['data']['files_folder_uuid']" do
@@ -226,11 +229,15 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
       result = Attachments.inject_attachment_data(%{"name" => "X"}, socket)
       assert get_in(result, ["data", "media_order"]) == [b, a]
 
-      # No files: a stale saved order is cleared, like the featured pointer.
+      # No files: a stale saved order is cleared, like the featured
+      # pointer — signaled as an explicit `nil` marker (not an absent
+      # key; see `Catalogue.update_item/3`'s `:data_owned_keys` doc for
+      # why the two are not interchangeable).
       empty_socket = put_in(socket.assigns.files_state, %{files: []})
       params = %{"name" => "X", "data" => %{"media_order" => ["stale"]}}
       result = Attachments.inject_attachment_data(params, empty_socket)
-      refute Map.has_key?(result["data"], "media_order")
+      assert Map.has_key?(result["data"], "media_order")
+      assert result["data"]["media_order"] == nil
     end
   end
 

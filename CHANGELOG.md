@@ -1,3 +1,35 @@
+## 0.28.4 - 2026-09-10
+
+### Fixed
+
+- The item/category form no longer clobbers `data` on Save with a stale
+  page-load snapshot: `Catalogue.update_item/3` / `update_category/3` gain
+  a `:data_owned_keys` option that re-reads the row inside the write
+  transaction and preserves any top-level `data` key the form didn't
+  actually render (a translation fingerprint written by the sweep worker,
+  a sync's own namespace, …), while still applying the form's own edits
+  and honoring an explicit "clear this field" (#106).
+- An AI-translate action followed by a Save moments later no longer reverts
+  `_translation_fingerprints` to the pre-translate snapshot —
+  `AITranslateBinding.apply_translation/4` re-reads the row's current
+  fingerprints before folding the translation into the live changeset
+  (#106).
+- Clearing the featured image or the media order on an item/category and
+  saving now actually persists the clear; the previous `Map.delete/2` was
+  indistinguishable, once `:data_owned_keys` landed, from the field simply
+  not being rendered by the form (#106).
+
+### Added
+
+- `PhoenixKitCatalogue.TranslationStatus.stamp_preimage/3`: stamps
+  fingerprints computed from a value about to be overwritten (e.g. by an
+  external sync), so the affected (resource, language) pair reads `:stale`
+  rather than `:unknown` once the overwrite lands (#106).
+
+### Changed
+
+- Bumped the transitive `leaf` test dependency (0.6.1 → 0.7.0).
+
 ## 0.28.3 - 2026-09-10
 
 ### Added

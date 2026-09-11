@@ -272,6 +272,36 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
     locked_reset(resource, lang, List.wrap(fields))
   end
 
+  @doc """
+  Sync/operator action: "the value I'm about to overwrite is the
+  reference" — writes fingerprints computed from `previous_source_fields`
+  (a map of ENGINE field name => the value being REPLACED, not the
+  resource's current value) under `lang`, for exactly the fields named
+  there. Every other field's stored fingerprint is left untouched, same
+  as `stamp_fresh/3`'s narrowing.
+
+  For a caller (a Shopify sync, say) that is about to overwrite the
+  PRIMARY-language source of one or more fields and already knows the
+  value it's replacing: stamping that value FIRST turns the (resource,
+  lang) pair `:stale` once the sync's own write lands — "this
+  translation was made against real prior text" — instead of `:unknown`,
+  which the sweep worker never auto-picks up (see the moduledoc).
+
+  Refuses exactly like `stamp_fresh/2`: `{:error, :no_translation}` when
+  `lang` has no translation at all. Locked `FOR UPDATE`, same as
+  `stamp_fresh/2` and `/3`.
+  """
+  @spec stamp_preimage(struct(), String.t(), %{String.t() => String.t()}) ::
+          {:ok, struct()} | {:error, term()}
+  def stamp_preimage(resource, lang, previous_source_fields)
+      when is_map(previous_source_fields) do
+    if translated?(resource, lang) do
+      locked_stamp_preimage(resource, lang, previous_source_fields)
+    else
+      {:error, :no_translation}
+    end
+  end
+
   defp locked_stamp(%schema{uuid: uuid}, lang, fields) do
     repo().transaction(fn ->
       query = where(schema, [r], r.uuid == ^uuid) |> lock("FOR UPDATE")
@@ -303,6 +333,30 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
       fresh,
       lang,
       Map.merge(stored_fingerprint_map(fresh, lang), new_entries)
+    )
+  end
+
+  defp locked_stamp_preimage(%schema{uuid: uuid}, lang, previous_source_fields) do
+    repo().transaction(fn ->
+      query = where(schema, [r], r.uuid == ^uuid) |> lock("FOR UPDATE")
+
+      case repo().one(query) do
+        nil -> repo().rollback(:resource_not_found)
+        fresh -> apply_preimage_stamp(fresh, lang, previous_source_fields)
+      end
+    end)
+  end
+
+  # `field_fingerprints/1` already yields exactly `%{field => hash}` for
+  # every entry of `previous_source_fields` — no filtering against the
+  # resource's CURRENT source needed, unlike `apply_stamp/3`: the whole
+  # point here is hashing a value that is deliberately NOT the current
+  # source.
+  defp apply_preimage_stamp(fresh, lang, previous_source_fields) do
+    write_fingerprint_map(
+      fresh,
+      lang,
+      Map.merge(stored_fingerprint_map(fresh, lang), field_fingerprints(previous_source_fields))
     )
   end
 

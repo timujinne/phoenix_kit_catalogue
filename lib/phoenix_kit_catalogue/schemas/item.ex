@@ -153,6 +153,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   def changeset(item, attrs) do
     item
     |> cast(attrs, @required_fields ++ @optional_fields)
+    |> update_change(:data, &drop_nil_data_values/1)
     |> validate_required(@required_fields)
     |> validate_length(:name, min: 1, max: 255)
     |> validate_length(:sku, max: 100)
@@ -174,6 +175,25 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
       message: "is already taken in this language"
     )
   end
+
+  # `nil` is never a legitimate STORED value for a top-level `data` key —
+  # a caller that wants to clear one (see
+  # `PhoenixKitCatalogue.Attachments.inject_featured_image/2` /
+  # `inject_media_order/2`, which write an explicit `nil` as their
+  # "absent, not merely untouched" signal for
+  # `Catalogue.update_item/3`'s `:data_owned_keys` splicing) means
+  # "this key doesn't exist", not "this key's value is JSON null". Drop
+  # such entries here so every write path lands on the same shape a
+  # record that never had the key would have — `create_item/2`, a plain
+  # `update_item/2` with no `:data_owned_keys`, and the owned-keys path
+  # (which resolves its own `nil` markers before the changeset ever
+  # runs, but a caller could still hand one straight to `changeset/2`).
+  # Top-level only: nested per-language/extension subtrees keep
+  # whatever shape their own owner gives them.
+  defp drop_nil_data_values(data) when is_map(data),
+    do: Map.reject(data, fn {_k, v} -> is_nil(v) end)
+
+  defp drop_nil_data_values(other), do: other
 
   @doc """
   Calculates the sale price for an item.

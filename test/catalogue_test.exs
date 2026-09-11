@@ -618,6 +618,80 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert "would create a cycle" in errors_on(changeset).parent_uuid
     end
 
+    test "update_category/3 :data_owned_keys — without the option, data is a full replace (unchanged default behavior)" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      {:ok, category} = Catalogue.update_category(category, %{data: %{"keep" => "me"}})
+
+      {:ok, updated} = Catalogue.update_category(category, %{data: %{"other" => "value"}})
+
+      refute Map.has_key?(updated.data, "keep")
+      assert updated.data["other"] == "value"
+    end
+
+    test "update_category/3 :data_owned_keys — an owned key is written from the caller's attrs" do
+      cat = create_catalogue()
+      category = create_category(cat)
+
+      assert {:ok, updated} =
+               Catalogue.update_category(category, %{data: %{"en" => %{"_name" => "Hi"}}},
+                 data_owned_keys: ["en"]
+               )
+
+      assert updated.data["en"]["_name"] == "Hi"
+    end
+
+    test "update_category/3 :data_owned_keys — an unowned key changed by someone else after the caller's snapshot survives the save" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      {:ok, category} = Catalogue.update_category(category, %{data: %{"fingerprint" => "old"}})
+      stale_snapshot = category.data
+
+      {:ok, category} =
+        Catalogue.update_category(category, %{
+          data: Map.put(category.data, "fingerprint", "fresh")
+        })
+
+      assert {:ok, updated} =
+               Catalogue.update_category(
+                 category,
+                 %{data: Map.put(stale_snapshot, "en", %{"_name" => "Hi"})},
+                 data_owned_keys: ["en"]
+               )
+
+      assert updated.data["fingerprint"] == "fresh"
+      assert updated.data["en"]["_name"] == "Hi"
+    end
+
+    test "update_category/3 :data_owned_keys — an owned key absent from the caller's attrs is left untouched, not deleted" do
+      cat = create_catalogue()
+      category = create_category(cat)
+
+      {:ok, category} =
+        Catalogue.update_category(category, %{data: %{"fake" => %{"note" => "keep"}}})
+
+      assert {:ok, updated} =
+               Catalogue.update_category(category, %{data: %{}}, data_owned_keys: ["fake"])
+
+      assert updated.data["fake"] == %{"note" => "keep"}
+    end
+
+    test "update_category/3 :data_owned_keys — still rejects a bad parent while owning a data key (validate_parent_in_same_catalogue still runs)" do
+      cat_a = create_catalogue(%{name: "A"})
+      cat_b = create_catalogue(%{name: "B"})
+      child = create_category(cat_a, %{name: "Child"})
+      foreign_parent = create_category(cat_b, %{name: "Foreign"})
+
+      assert {:error, changeset} =
+               Catalogue.update_category(
+                 child,
+                 %{parent_uuid: foreign_parent.uuid, data: %{"en" => %{"_name" => "Hi"}}},
+                 data_owned_keys: ["en"]
+               )
+
+      assert "must belong to the same catalogue" in errors_on(changeset).parent_uuid
+    end
+
     test "next_category_position/2 scopes by (catalogue, parent)" do
       cat = create_catalogue()
       parent = create_category(cat, %{name: "Parent", position: 0})
@@ -1124,6 +1198,109 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert {:ok, updated} = Catalogue.update_item(item, form_params)
       assert updated.catalogue_uuid == cat_b.uuid
       assert updated.category_uuid == category_b.uuid
+    end
+
+    test "update_item/3 :data_owned_keys — without the option, data is a full replace (unchanged default behavior)" do
+      item = create_item()
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"keep" => "me"}})
+
+      {:ok, updated} = Catalogue.update_item(item, %{data: %{"other" => "value"}})
+
+      refute Map.has_key?(updated.data, "keep")
+      assert updated.data["other"] == "value"
+    end
+
+    test "update_item/3 :data_owned_keys — an owned key is written from the caller's attrs" do
+      item = create_item()
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, %{data: %{"en" => %{"_name" => "Hi"}}},
+                 data_owned_keys: ["en"]
+               )
+
+      assert updated.data["en"]["_name"] == "Hi"
+    end
+
+    test "update_item/3 :data_owned_keys — an unowned key changed by someone else after the caller's snapshot survives the save" do
+      item = create_item()
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"fingerprint" => "old"}})
+      # The caller's own snapshot, taken before the concurrent write below.
+      stale_snapshot = item.data
+
+      # A concurrent writer (a translation worker, a Shopify sync) lands
+      # on the row after the caller's snapshot was taken.
+      {:ok, item} =
+        Catalogue.update_item(item, %{data: Map.put(item.data, "fingerprint", "fresh")})
+
+      # The caller now saves from its STALE snapshot, owning only "en" —
+      # "fingerprint" must survive untouched, not revert to "old".
+      assert {:ok, updated} =
+               Catalogue.update_item(
+                 item,
+                 %{data: Map.put(stale_snapshot, "en", %{"_name" => "Hi"})},
+                 data_owned_keys: ["en"]
+               )
+
+      assert updated.data["fingerprint"] == "fresh"
+      assert updated.data["en"]["_name"] == "Hi"
+    end
+
+    test "update_item/3 :data_owned_keys — an owned key absent from the caller's attrs is left untouched, not deleted" do
+      item = create_item()
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"fake" => %{"note" => "keep me"}}})
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, %{data: %{}}, data_owned_keys: ["fake"])
+
+      assert updated.data["fake"] == %{"note" => "keep me"}
+    end
+
+    test "update_item/3 :data_owned_keys — an unowned key absent from the caller's attrs is left alone" do
+      item = create_item()
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"untouched" => "value"}})
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, %{data: %{}}, data_owned_keys: ["fake"])
+
+      assert updated.data["untouched"] == "value"
+    end
+
+    test "update_item/3 :data_owned_keys — works with string-keyed attrs (form params shape)" do
+      item = create_item()
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"keep" => "value"}})
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, %{"data" => %{"en" => %{"_name" => "Hi"}}},
+                 data_owned_keys: ["en"]
+               )
+
+      assert updated.data["en"]["_name"] == "Hi"
+      assert updated.data["keep"] == "value"
+    end
+
+    test "update_item/3 :data_owned_keys — multiple owned keys are each spliced in independently" do
+      item = create_item()
+
+      {:ok, item} =
+        Catalogue.update_item(item, %{
+          data: %{
+            "en" => %{"_name" => "Old"},
+            "es" => %{"_name" => "Viejo"},
+            "meta" => %{"color" => "red"}
+          }
+        })
+
+      assert {:ok, updated} =
+               Catalogue.update_item(
+                 item,
+                 %{data: %{"en" => %{"_name" => "New"}, "es" => %{"_name" => "Viejo"}}},
+                 data_owned_keys: ["en", "es"]
+               )
+
+      assert updated.data["en"]["_name"] == "New"
+      assert updated.data["es"]["_name"] == "Viejo"
+      # "meta" was never owned, never mentioned — survives untouched.
+      assert updated.data["meta"] == %{"color" => "red"}
     end
 
     test "create_item/1 derives catalogue_uuid from string-keyed form params" do

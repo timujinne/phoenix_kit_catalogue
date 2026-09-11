@@ -39,7 +39,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     only: [
       actor_opts: 1,
       assign_ai_translation: 3,
-      ai_translate_config: 1
+      ai_translate_config: 1,
+      data_owned_keys: 2
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -123,6 +124,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     "category_uuid" => :category_uuid,
     "manufacturer_uuid" => :manufacturer_uuid
   }
+
+  # Top-level `data` keys this form writes OUTSIDE the shared multilang/
+  # extension pipeline `data_owned_keys/2` already covers — see
+  # `Metadata.inject_into_data/3` and `Attachments.inject_attachment_data/2`.
+  # Threaded into `Catalogue.update_item/3`'s `:data_owned_keys` option at
+  # the save call site below.
+  @item_extra_owned_data_keys ~w(meta files_folder_uuid featured_image_uuid media_order)
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
   # views via socket.private[:live_layout]. Opt out here so this view can
@@ -2033,8 +2041,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       |> scope_to_catalogue(socket)
       |> put_manufacturer_source(socket.assigns.manufacturers)
 
+    update_opts =
+      actor_opts(socket) ++
+        [data_owned_keys: data_owned_keys(socket, @item_extra_owned_data_keys)]
+
     with :ok <- validate_category_scope(params, socket),
-         {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, actor_opts(socket)),
+         {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, update_opts),
          {:ok, _rules} <- maybe_put_rules(socket, item) do
       apply_attribute_assignment(socket, item)
 

@@ -20,12 +20,17 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
       `db_pending: true` so the user-visible audit feed records the
       attempted action even when it fails. The function's own docs
       describe the success-vs-failure layering in detail.
+    * `data_owned_keys/2` — the top-level `data` keys an item/category
+      form actually rendered this render, for
+      `Catalogue.update_item/3` / `update_category/3`'s
+      `:data_owned_keys` option.
   """
 
   require Logger
 
   alias PhoenixKitAI.Components.AITranslate.FormGlue
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
+  alias PhoenixKitCatalogue.Extensions
 
   @typedoc "Convenience alias for the keyword list shape mutating ctx fns accept."
   @type actor_opts :: [actor_uuid: Ecto.UUID.t()] | []
@@ -54,6 +59,67 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
       %{uuid: uuid} -> uuid
       _ -> nil
     end
+  end
+
+  @doc """
+  The top-level `data` keys the item/category form actually rendered —
+  for `Catalogue.update_item/3` / `update_category/3`'s
+  `:data_owned_keys` option (see that option's doc for the full
+  rationale: a form built from a page-load snapshot must not clobber a
+  `data` key it never showed, like a translation fingerprint or a sync's
+  own namespace, with that stale snapshot).
+
+  Derived from live assigns rather than hardcoded, so it tracks the form
+  instead of drifting from it:
+
+    * every enabled language's code plus `"_primary_language"`, when
+      multilang is on (`socket.assigns.language_tabs`,
+      `PhoenixKit.Utils.Multilang.build_language_tabs/0`'s shape) — the
+      keys `merge_translatable_params/4` reads/writes under `data`
+    * `"_seo_title"` / `"_seo_description"` instead, when multilang is
+      off — the keys the SEO fields write directly at the top level in
+      that mode (`merge_seo_params/2`'s non-multilang branch)
+    * `key/0` of every enabled catalogue extension
+      (`PhoenixKitCatalogue.Extensions.all/0`) — today's only
+      implementer (`"ecommerce"`) both renders and casts on the item AND
+      category form, so this doesn't over-claim a key that some future
+      extension might only cast for the OTHER form; that stays a `.all/0`
+      call to re-audit if that ever changes.
+
+  `extra_keys` adds literal keys a specific form writes outside the
+  shared multilang/extension pipeline — item passes the metadata/
+  attachments keys (`"meta"`, `"files_folder_uuid"`,
+  `"featured_image_uuid"`, `"media_order"`), category passes the
+  attachments subset only (no metadata on categories).
+
+  ## Known gap: read at Save time, not at page-load time
+
+  This is computed fresh from LIVE global settings at the moment the
+  form calls it (mount and every validate re-derive it too, but only
+  the Save-time call feeds `update_item/3`/`update_category/3`). If an
+  operator flips a setting this depends on — `shop_enabled` (adds/drops
+  the `"ecommerce"` extension key), or enables/disables multilang —
+  in the narrow window between this form's page load and the user's
+  Save, the computed set can include a key the form never actually
+  rendered this session. `:data_owned_keys` would then let that key's
+  stale in-memory snapshot (whatever `attrs["data"]` happens to carry
+  for it, inherited from page load) overwrite the row's current value
+  for it — the very bug this option exists to prevent, just for a
+  key that changed ownership out from under the open form instead of
+  one nobody owns. Narrow window, not fixed here.
+  """
+  @spec data_owned_keys(Phoenix.LiveView.Socket.t(), [String.t()]) :: [String.t()]
+  def data_owned_keys(socket, extra_keys \\ []) do
+    translatable_keys =
+      if socket.assigns.multilang_enabled do
+        Enum.map(socket.assigns.language_tabs, & &1.code) ++ ["_primary_language"]
+      else
+        ["_seo_title", "_seo_description"]
+      end
+
+    extension_keys = Enum.map(Extensions.all(), & &1.key())
+
+    translatable_keys ++ extension_keys ++ extra_keys
   end
 
   @doc """

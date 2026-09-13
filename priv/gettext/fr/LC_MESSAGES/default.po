@@ -345,6 +345,18 @@ msgstr ""
 msgid "Category moved."
 msgstr ""
 
+msgid "Working..."
+msgstr "Traitement..."
+
+msgid "Unknown target language — refresh the page and try again."
+msgstr "Langue cible inconnue — rechargez la page et réessayez."
+
+msgid "Category moved into %{name}."
+msgstr "Catégorie déplacée dans « %{name} »."
+
+msgid "Category moved to the top level."
+msgstr "Catégorie déplacée au niveau supérieur."
+
 msgid "Category moved to another catalogue."
 msgstr ""
 
@@ -1827,6 +1839,9 @@ msgstr ""
 msgid "Could not remove file."
 msgstr ""
 
+msgid "The photo order could not be saved. Try again."
+msgstr "L'ordre des photos n'a pas pu être enregistré. Réessayez."
+
 msgid "Could not save the uploaded file. Please try again or contact support if it persists."
 msgstr ""
 
@@ -2018,6 +2033,15 @@ msgstr ""
 
 msgid "Manual"
 msgstr ""
+
+msgid "System"
+msgstr "Système"
+
+msgid "Scheduled"
+msgstr "Planifié"
+
+msgid "Automatic"
+msgstr "Automatique"
 
 msgid "Manufacturer created but failed to link some suppliers."
 msgstr ""
@@ -2521,6 +2545,9 @@ msgstr ""
 
 msgid "Upload failed for %{name}."
 msgstr ""
+
+msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
+msgstr "%{name} est identique au fichier déjà joint %{existing} — rien n'a été ajouté."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr ""

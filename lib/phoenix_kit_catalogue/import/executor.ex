@@ -282,7 +282,14 @@ defmodule PhoenixKitCatalogue.Import.Executor do
       {:ok, category} ->
         {Map.put(lookup, name, category.uuid), count + 1}
 
-      {:error, _changeset} ->
+      {:error, changeset} ->
+        # Every row naming this category lands uncategorized; say so
+        # somewhere (review sweep, 2026-09-12 — this was silent).
+        Logger.warning(
+          "Import could not create category #{inspect(name)} in #{catalogue_uuid}: " <>
+            format_changeset_errors(changeset)
+        )
+
         {lookup, count}
     end
   end

@@ -13,6 +13,7 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
 
   @behaviour PhoenixKitAI.Components.AITranslate.FormBinding
 
+  alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.AITranslatable
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.Helpers
@@ -40,15 +41,44 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
   @impl true
   def apply_translation(resource_type, changeset, lang, fields) do
     data = Ecto.Changeset.get_field(changeset, :data) || %{}
-    # Re-prefix plain engine names to the multilang `_`-form the form reads.
-    lang_fields = Map.new(fields, fn {k, v} -> {"_" <> k, v} end)
+    row = persisted_row(resource_type, changeset)
 
     new_data =
       data
-      |> AITranslatable.force_put_language(lang, lang_fields)
-      |> put_fresh_fingerprints(resource_type, changeset)
+      |> AITranslatable.force_put_language(lang, translated_bucket(row, lang, fields))
+      |> put_fresh_fingerprints(row)
 
     Ecto.Changeset.put_change(changeset, :data, new_data)
+  end
+
+  # The worker PERSISTED before it broadcast, and its write is the
+  # narrowed, sanitized one (`AITranslatable.put_translation/4`): a field
+  # whose translation was hand-corrected and is still `:fresh` was
+  # skipped, and a leaked model aside was cut by `strip_ai_note/1`. The
+  # payload the form receives is the RAW model output, so until
+  # 2026-09-13 an in-form Translate followed by Save wrote the raw
+  # value over the hand correction — with the fingerprint still saying
+  # fresh, so nothing ever flagged it. Each field is therefore taken
+  # from the row the worker just wrote; the (sanitized) payload is only
+  # the fallback for a field the row has nothing for — a `:new`
+  # resource, a type without the mechanism, a field the worker left
+  # untouched. Plain engine names are re-prefixed to the multilang
+  # `_`-form the form reads.
+  defp translated_bucket(row, lang, fields) do
+    stored =
+      case row do
+        %{data: data} -> Multilang.get_raw_language_data(data || %{}, lang)
+        _ -> %{}
+      end
+
+    Map.new(fields, fn {k, v} ->
+      key = "_" <> k
+
+      case Map.get(stored, key) do
+        value when is_binary(value) and value != "" -> {key, value}
+        _ -> {key, AITranslatable.strip_ai_note(v)}
+      end
+    end)
   end
 
   # `PhoenixKitCatalogue.TranslationStatus` writes
@@ -67,34 +97,28 @@ defmodule PhoenixKitCatalogue.AITranslateBinding do
   # A no-op for resource types with no fingerprint mechanism at all
   # (`"catalogue"`, attribute groups, …) and for a not-yet-persisted
   # (`:new`) resource, which has no row to re-read.
-  defp put_fresh_fingerprints(data, resource_type, changeset) do
+  defp put_fresh_fingerprints(data, %{data: row_data}) when is_map(row_data) do
+    case Map.get(row_data, "_translation_fingerprints") do
+      nil -> data
+      fingerprints -> Map.put(data, "_translation_fingerprints", fingerprints)
+    end
+  end
+
+  defp put_fresh_fingerprints(data, _row), do: data
+
+  # The row as the worker left it — one read, shared by the field values
+  # and the fingerprints above. `nil` for a `:new` resource and for types
+  # this module does not persist translations for.
+  defp persisted_row(resource_type, changeset) do
     case Ecto.Changeset.get_field(changeset, :uuid) do
-      uuid when is_binary(uuid) ->
-        case fresh_fingerprints(resource_type, uuid) do
-          nil -> data
-          fingerprints -> Map.put(data, "_translation_fingerprints", fingerprints)
-        end
-
-      _ ->
-        data
+      uuid when is_binary(uuid) -> fetch_row(resource_type, uuid)
+      _ -> nil
     end
   end
 
-  defp fresh_fingerprints("catalogue_item", uuid) do
-    case Catalogue.get_item(uuid) do
-      %{data: data} -> Map.get(data, "_translation_fingerprints")
-      nil -> nil
-    end
-  end
-
-  defp fresh_fingerprints("catalogue_category", uuid) do
-    case Catalogue.get_category(uuid) do
-      %{data: data} -> Map.get(data, "_translation_fingerprints")
-      nil -> nil
-    end
-  end
-
-  defp fresh_fingerprints(_resource_type, _uuid), do: nil
+  defp fetch_row("catalogue_item", uuid), do: Catalogue.get_item(uuid)
+  defp fetch_row("catalogue_category", uuid), do: Catalogue.get_category(uuid)
+  defp fetch_row(_resource_type, _uuid), do: nil
 
   @impl true
   def actor_uuid(socket), do: Helpers.actor_uuid(socket)

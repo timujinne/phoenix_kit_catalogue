@@ -28,6 +28,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
+      trim_param: 1,
       actor_opts: 1,
       actor_uuid: 1,
       log_operation_error: 3,
@@ -181,7 +182,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   # ── Attributes ─────────────────────────────────────────────────────
 
   def handle_event("add_attribute", %{"attr_name" => name} = params, socket) do
-    name = String.trim(name)
+    name = trim_param(name)
 
     if name == "" do
       {:noreply, socket}
@@ -211,8 +212,8 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
           attribute,
           raw,
           "_name",
-          &Catalogue.update_attribute/2,
-          %{"name" => String.trim(raw)}
+          &Catalogue.update_attribute(&1, &2, actor_opts(socket)),
+          %{"name" => trim_param(raw)}
         )
 
       _ ->
@@ -223,7 +224,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   def handle_event("set_attribute_kind", %{"uuid" => uuid, "kind" => kind}, socket)
       when kind in ["fixed", "multi"] do
     with %{} = attribute <- owned_attribute(socket, uuid),
-         {:ok, _} <- Catalogue.update_attribute(attribute, %{"kind" => kind}) do
+         {:ok, _} <- Catalogue.update_attribute(attribute, %{"kind" => kind}, actor_opts(socket)) do
       {:noreply, reload_group(socket)}
     else
       _ -> {:noreply, socket}
@@ -254,7 +255,11 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   def handle_event("reorder_attributes", %{"ordered_ids" => ids}, socket) when is_list(ids) do
     # A rolled-back reorder is a real outcome, not a MatchError. It used to be
     # unreachable only because the context answered `:ok` unconditionally.
-    case Catalogue.reorder_attributes(socket.assigns.group, Enum.filter(ids, &is_binary/1)) do
+    case Catalogue.reorder_attributes(
+           socket.assigns.group,
+           Enum.filter(ids, &is_binary/1),
+           actor_opts(socket)
+         ) do
       :ok ->
         {:noreply, reload_group(socket)}
 
@@ -278,11 +283,12 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   # ── Values ─────────────────────────────────────────────────────────
 
   def handle_event("add_value", %{"attribute_uuid" => uuid, "value" => raw}, socket) do
-    text = String.trim(raw)
+    text = trim_param(raw)
 
     with true <- text != "",
          %{} = attribute <- owned_attribute(socket, uuid),
-         {:ok, _} <- Catalogue.create_attribute_value(attribute, %{"value" => text}) do
+         {:ok, _} <-
+           Catalogue.create_attribute_value(attribute, %{"value" => text}, actor_opts(socket)) do
       {:noreply, socket |> clear_draft(attribute.uuid) |> reload_group()}
     else
       false ->
@@ -306,8 +312,8 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
           value,
           raw,
           "_value",
-          &Catalogue.update_attribute_value/2,
-          %{"value" => String.trim(raw)}
+          &Catalogue.update_attribute_value(&1, &2, actor_opts(socket)),
+          %{"value" => trim_param(raw)}
         )
 
       _ ->
@@ -317,7 +323,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
 
   def handle_event("delete_value", %{"uuid" => uuid}, socket) do
     with %{} = value <- owned_value(socket, uuid),
-         {:ok, _} <- Catalogue.delete_attribute_value(value) do
+         {:ok, _} <- Catalogue.delete_attribute_value(value, actor_opts(socket)) do
       {:noreply, reload_group(socket)}
     else
       _ -> {:noreply, socket}
@@ -326,7 +332,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
 
   def handle_event("make_default", %{"uuid" => uuid}, socket) do
     with %{} = value <- owned_value(socket, uuid),
-         {:ok, _} <- Catalogue.set_default_value(value) do
+         {:ok, _} <- Catalogue.set_default_value(value, actor_opts(socket)) do
       {:noreply, reload_group(socket)}
     else
       _ -> {:noreply, socket}
@@ -337,7 +343,11 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
       when is_list(ids) do
     case owned_attribute(socket, uuid) do
       %{} = attribute ->
-        case Catalogue.reorder_attribute_values(attribute, Enum.filter(ids, &is_binary/1)) do
+        case Catalogue.reorder_attribute_values(
+               attribute,
+               Enum.filter(ids, &is_binary/1),
+               actor_opts(socket)
+             ) do
           :ok ->
             {:noreply, reload_group(socket)}
 
@@ -629,7 +639,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   # (blank ignored — identity text can't be emptied); a secondary
   # language writes/clears that language's override.
   defp apply_rename(socket, record, raw, data_field, update_fn, primary_attrs) do
-    text = String.trim(raw)
+    text = trim_param(raw)
     primary? = socket.assigns.current_lang == socket.assigns.primary_language
 
     result =

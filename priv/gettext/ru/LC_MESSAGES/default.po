@@ -345,6 +345,18 @@ msgstr "Категория удалена окончательно."
 msgid "Category moved."
 msgstr "Категория перемещена."
 
+msgid "Working..."
+msgstr "Обработка..."
+
+msgid "Unknown target language — refresh the page and try again."
+msgstr "Неизвестный целевой язык — обновите страницу и попробуйте ещё раз."
+
+msgid "Category moved into %{name}."
+msgstr "Категория перемещена в «%{name}»."
+
+msgid "Category moved to the top level."
+msgstr "Категория перемещена на верхний уровень."
+
 msgid "Category moved to another catalogue."
 msgstr "Категория перемещена в другой каталог."
 
@@ -1835,6 +1847,9 @@ msgstr "Не удалось подготовить папку файлов."
 msgid "Could not remove file."
 msgstr "Не удалось удалить файл."
 
+msgid "The photo order could not be saved. Try again."
+msgstr "Не удалось сохранить порядок фото. Попробуйте ещё раз."
+
 msgid "Could not save the uploaded file. Please try again or contact support if it persists."
 msgstr "Не удалось сохранить загруженный файл. Попробуйте снова или обратитесь в поддержку, если ошибка повторяется."
 
@@ -2026,6 +2041,15 @@ msgstr "Сделать позиции без категории"
 
 msgid "Manual"
 msgstr "Вручную"
+
+msgid "System"
+msgstr "Система"
+
+msgid "Scheduled"
+msgstr "По расписанию"
+
+msgid "Automatic"
+msgstr "Автоматически"
 
 msgid "Manufacturer created but failed to link some suppliers."
 msgstr "Производитель создан, но связать некоторых поставщиков не удалось."
@@ -2529,6 +2553,9 @@ msgstr "Ошибка загрузки: %{reason}"
 
 msgid "Upload failed for %{name}."
 msgstr "Не удалось загрузить %{name}."
+
+msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
+msgstr "%{name} совпадает с уже прикреплённым файлом %{existing} — ничего не добавлено."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr "Загрузка не удалась по неожиданной причине. Попробуйте снова."

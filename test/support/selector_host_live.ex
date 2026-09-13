@@ -204,6 +204,11 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
         <div :for={pick <- @picked.picks} id={"pick-#{pick.uuid}"}>
           {pick.name}|{pick.sku}|qty={Decimal.to_string(pick.qty, :normal)}|decimal={inspect(match?(%Decimal{}, pick.qty))}|line={pick.line_total && Decimal.to_string(pick.line_total, :normal)}
         </div>
+        <%!-- The rest of the documented pick shape, key by key — a key that
+             stops reaching the host fails here, not only at present_items/2. --%>
+        <div :for={pick <- @picked.picks} id={"pick-shape-#{pick.uuid}"}>
+          {pick |> Map.take([:uuid, :qty, :unit, :name, :sku, :price, :line_total, :fee_note, :photo_url]) |> Map.keys() |> Enum.sort() |> Enum.join(",")}
+        </div>
       </div>
       <div :if={@closed} id="closed">closed</div>
     </div>

@@ -65,7 +65,45 @@ defmodule PhoenixKitCatalogue.Catalogue.SlugsTest do
     end
   end
 
+  describe "unique/3" do
+    test "returns the base when free, else the first free numbered suffix" do
+      assert Slugs.unique("vase", "en-US", fn _, _ -> false end) == "vase"
+
+      taken = MapSet.new(["vase", "vase-2"])
+      assert Slugs.unique("vase", "en-US", fn c, _ -> MapSet.member?(taken, c) end) == "vase-3"
+    end
+
+    test "probes in the language it generates for" do
+      assert Slugs.unique("vase", "fr-FR", fn
+               "vase", "fr-FR" -> true
+               _, _ -> false
+             end) == "vase-2"
+    end
+  end
+
   describe "maybe_generate/3" do
+    test "suffixes a generated slug the probe reports taken, leaving typed ones alone" do
+      changeset =
+        %Item{}
+        |> Ecto.Changeset.change(%{
+          name: "Wooden Vase",
+          slug: %{"en-US" => "wooden-vase"},
+          data: %{
+            "_primary_language" => "en-US",
+            "en-US" => %{"_name" => "Wooden Vase"},
+            "fr-FR" => %{"_name" => "Vase en Bois"}
+          }
+        })
+
+      taken? = fn candidate, _lang -> candidate in ["wooden-vase", "vase-en-bois"] end
+      updated = Slugs.maybe_generate(changeset, :slug, from: :name, taken?: taken?)
+      slug = Ecto.Changeset.get_field(updated, :slug)
+
+      # The existing en-US slug is the record's own — write-once, not probed.
+      assert slug["en-US"] == "wooden-vase"
+      assert slug["fr-FR"] == "vase-en-bois-2"
+    end
+
     test "fills a missing language from the multilang name and keeps an existing one" do
       changeset =
         %Item{}

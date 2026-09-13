@@ -359,6 +359,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Suppliers do
   # Local directory rows that project this party. Callers prepend the party's
   # own uuid: a reference may name either side, and both mean the same company.
   @doc false
+  @spec projection_uuids(module(), Ecto.UUID.t()) :: [Ecto.UUID.t()]
   def projection_uuids(schema, party_uuid) do
     from(r in schema, where: r.crm_company_uuid == ^party_uuid, select: r.uuid)
     |> repo().all()

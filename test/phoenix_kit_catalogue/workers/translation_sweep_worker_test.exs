@@ -17,6 +17,7 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
   use PhoenixKitCatalogue.DataCase, async: false
   use Oban.Testing, repo: PhoenixKitCatalogue.Test.Repo
 
+  alias PhoenixKit.Modules.Languages
   alias PhoenixKitAI.TranslateWorker
   alias PhoenixKitAI.Translations
   alias PhoenixKitCatalogue.AIPrompt
@@ -33,6 +34,10 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
     start_supervised!({Oban, repo: PhoenixKitCatalogue.Test.Repo, testing: :manual})
 
     {:ok, _} = PhoenixKitAI.enable_system()
+
+    # `sweep_langs/0` keeps only enabled languages, like a manual Translate.
+    {:ok, _} = Languages.enable_system()
+    {:ok, _} = Languages.add_language(@lang)
 
     {:ok, endpoint} =
       PhoenixKitAI.create_endpoint(%{
@@ -55,6 +60,7 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
     # the same reason `TranslationStatusTest`'s `entities_enabled` setup
     # resets on exit.
     on_exit(fn ->
+      Languages.disable_system()
       PhoenixKitAI.disable_system()
       SweepSettings.update_sweep_enabled(false)
       SweepSettings.update_sweep_max_per_run(200)
@@ -71,6 +77,37 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
   end
 
   defp translate_worker_jobs, do: all_enqueued(worker: TranslateWorker)
+
+  # A TranslateWorker job for `item`/@lang that Oban gave up on `ago` seconds ago.
+  defp discard_job!(item, ago_seconds) do
+    args = %{
+      "resource_type" => "catalogue_item",
+      "resource_uuid" => item.uuid,
+      "endpoint_uuid" => Ecto.UUID.generate(),
+      "prompt_uuid" => Ecto.UUID.generate(),
+      "source_lang" => "en-US",
+      "target_lang" => @lang,
+      "actor_uuid" => nil
+    }
+
+    {:ok, job} = args |> TranslateWorker.new() |> Oban.insert()
+    discarded_at = DateTime.add(DateTime.utc_now(), -ago_seconds, :second)
+
+    Repo.update_all(from(j in Oban.Job, where: j.id == ^job.id),
+      set: [state: "discarded", discarded_at: discarded_at]
+    )
+
+    job
+  end
+
+  defp available_translate_uuids do
+    from(j in Oban.Job,
+      where: j.worker == "PhoenixKitAI.TranslateWorker" and j.state == "available",
+      select: fragment("?->>'resource_uuid'", j.args)
+    )
+    |> Repo.all()
+  end
+
   defp sweep_worker_jobs, do: all_enqueued(worker: TranslationSweepWorker)
 
   describe "perform/1 — disabled" do
@@ -128,6 +165,41 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
 
       assert [%{args: %{"resource_uuid" => uuid}}] = translate_worker_jobs()
       assert uuid == item.uuid
+    end
+
+    test "a pair whose job was discarded inside the back-off window is skipped, not re-enqueued" do
+      SweepSettings.update_sweep_enabled(true)
+      SweepSettings.update_sweep_max_per_run(1)
+
+      # Sorted by name: the failing row comes first and, before the
+      # back-off, filled the whole one-job page every tick.
+      failing = create_item!("Alpha")
+      next_in_line = create_item!("Beta")
+      discard_job!(failing, 60)
+
+      assert :ok = TranslationSweepWorker.perform(%Oban.Job{})
+
+      assert available_translate_uuids() == [next_in_line.uuid]
+    end
+
+    test "a discard older than the back-off window is eligible again" do
+      SweepSettings.update_sweep_enabled(true)
+      item = create_item!("Alpha")
+      discard_job!(item, 25 * 3600)
+
+      assert :ok = TranslationSweepWorker.perform(%Oban.Job{})
+
+      assert available_translate_uuids() == [item.uuid]
+    end
+
+    test "a stored sweep language that is not enabled is ignored" do
+      SweepSettings.update_sweep_enabled(true)
+      SweepSettings.update_sweep_langs([@lang, "xx-XX"])
+      create_item!("Alpha")
+
+      assert SweepSettings.sweep_langs() == [@lang]
+      assert :ok = TranslationSweepWorker.perform(%Oban.Job{})
+      assert Enum.all?(translate_worker_jobs(), &(&1.args["target_lang"] == @lang))
     end
 
     test "caps the number of jobs enqueued in one tick" do

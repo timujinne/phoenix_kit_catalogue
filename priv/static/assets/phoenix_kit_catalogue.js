@@ -9,8 +9,28 @@
 
       window.PhoenixKitCatalogueHooks = window.PhoenixKitCatalogueHooks || {};
       window.PhoenixKitCatalogueHooks.CatalogueTreeDnD = {
-        mounted() { this.setupTreeDnD(); },
+        mounted() { this.setupTreeDnD(); this.setupTreeMemory(); },
         updated() { this.setupTreeDnD(); },
+
+        // Which parents are open is browser-local state (Max, 2026-09-13):
+        // the server pushes the open set after every change and it is
+        // restored on the next mount of the same catalogue's tree, so
+        // returning from a form lands where you were. Without this a
+        // category nested into a collapsed parent looked lost (the
+        // client re-created hers, 2026-08-31).
+        setupTreeMemory() {
+          var key = this.el.dataset.treeMemoryKey;
+          if (!key) return;
+          var hook = this;
+          this.handleEvent("category_tree_open", function(payload) {
+            try { localStorage.setItem(key, JSON.stringify(payload.uuids || [])); } catch (e) {}
+          });
+          var saved = null;
+          try { saved = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) {}
+          if (Array.isArray(saved) && saved.length > 0) {
+            hook.pushEvent("restore_expanded_categories", { uuids: saved });
+          }
+        },
         setupTreeDnD() {
           var hook = this;
 

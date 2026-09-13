@@ -443,16 +443,35 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
     end
   end
 
+  # Only the library's own file is handed to the trash. Storage
+  # de-duplicates by content across the whole store, so a library PDF
+  # can point at a file that lives in an item's or category's folder —
+  # trashing that would silently remove the attachment from a product
+  # (review sweep, 2026-09-12). A file that is anyone's folder member
+  # (home or link) stays; nothing else references a root-level one.
   defp maybe_handoff_underlying_file(file_uuid) do
     refcount =
       repo().one(from(p in Pdf, where: p.file_uuid == ^file_uuid, select: count(p.uuid)))
 
-    if refcount == 0 do
-      case Storage.get_file(file_uuid) do
-        nil -> :ok
-        file -> Storage.trash_file(file)
-      end
-    end
+    if refcount == 0, do: handoff_if_unattached(Storage.get_file(file_uuid))
+  end
+
+  defp handoff_if_unattached(%PhoenixKit.Modules.Storage.File{status: "trashed"}), do: :ok
+
+  defp handoff_if_unattached(%PhoenixKit.Modules.Storage.File{folder_uuid: home})
+       when is_binary(home),
+       do: :ok
+
+  defp handoff_if_unattached(%PhoenixKit.Modules.Storage.File{uuid: uuid} = file) do
+    if linked_anywhere?(uuid), do: :ok, else: Storage.trash_file(file)
+  end
+
+  defp handoff_if_unattached(nil), do: :ok
+
+  defp linked_anywhere?(file_uuid) do
+    repo().exists?(
+      from(fl in PhoenixKit.Modules.Storage.FolderLink, where: fl.file_uuid == ^file_uuid)
+    )
   end
 
   # ── Re-extraction / self-heal ───────────────────────────────────────

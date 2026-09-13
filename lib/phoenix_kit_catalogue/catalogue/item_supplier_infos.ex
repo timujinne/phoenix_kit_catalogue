@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
   import Ecto.Query, warn: false
 
   alias Ecto.Multi
-  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub, SupplierComments}
+  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Helpers, PubSub, SupplierComments}
   alias PhoenixKitCatalogue.Schemas.ItemSupplierInfo
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
@@ -209,7 +209,11 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
 
     case result do
       {:ok, info} ->
-        PubSub.broadcast(:item_supplier_info, info.uuid)
+        PubSub.broadcast(
+          :item_supplier_info,
+          info.uuid,
+          Helpers.item_catalogue_uuid(info.item_uuid)
+        )
 
         if info.is_primary == false and primary_for_item(info.item_uuid) == nil do
           set_primary(info, opts)
@@ -261,7 +265,12 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
       )
 
     with {:ok, updated} <- result do
-      PubSub.broadcast(:item_supplier_info, updated.uuid)
+      PubSub.broadcast(
+        :item_supplier_info,
+        updated.uuid,
+        Helpers.item_catalogue_uuid(updated.item_uuid)
+      )
+
       {:ok, updated}
     end
   end
@@ -307,7 +316,12 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
       )
 
     with {:ok, closed} <- result do
-      PubSub.broadcast(:item_supplier_info, closed.uuid)
+      PubSub.broadcast(
+        :item_supplier_info,
+        closed.uuid,
+        Helpers.item_catalogue_uuid(closed.item_uuid)
+      )
+
       {:ok, closed}
     end
   end
@@ -384,7 +398,12 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
           metadata: %{"item_uuid" => updated.item_uuid}
         })
 
-        PubSub.broadcast(:item_supplier_info, updated.uuid)
+        PubSub.broadcast(
+          :item_supplier_info,
+          updated.uuid,
+          Helpers.item_catalogue_uuid(updated.item_uuid)
+        )
+
         {:ok, updated}
 
       {:error, reason} ->
@@ -512,7 +531,13 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
     case result do
       {:ok, %{current: current, successor: successor}} ->
         log_revision(current, successor, new_cost, opts)
-        PubSub.broadcast(:item_supplier_info, successor.uuid)
+
+        PubSub.broadcast(
+          :item_supplier_info,
+          successor.uuid,
+          Helpers.item_catalogue_uuid(successor.item_uuid)
+        )
+
         {:ok, successor}
 
       {:error, _op, reason, _changes} ->

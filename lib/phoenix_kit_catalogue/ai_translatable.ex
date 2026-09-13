@@ -407,42 +407,33 @@ defmodule PhoenixKitCatalogue.AITranslatable do
   # AI response — when `name` itself was narrowed away (skipped as
   # already-fresh), the slug step still has the already-stored translated
   # title to work from (design source §4.4).
-  defp maybe_generate_slug(attrs, %Item{} = fresh, new_data, target_lang),
-    do: generate_slug(attrs, fresh, new_data, target_lang, &Catalogue.get_item_by_slug/2)
+  defp maybe_generate_slug(attrs, %Item{} = fresh, new_data, target_lang) do
+    generate_slug(attrs, fresh, new_data, target_lang, fn candidate, lang ->
+      Catalogue.item_slug_taken?(candidate, lang, exclude_uuid: fresh.uuid)
+    end)
+  end
 
-  defp maybe_generate_slug(attrs, %Category{} = fresh, new_data, target_lang),
-    do: generate_slug(attrs, fresh, new_data, target_lang, &Catalogue.get_category_by_slug/2)
+  defp maybe_generate_slug(attrs, %Category{} = fresh, new_data, target_lang) do
+    generate_slug(attrs, fresh, new_data, target_lang, fn candidate, lang ->
+      Catalogue.category_slug_taken?(candidate, lang, exclude_uuid: fresh.uuid)
+    end)
+  end
 
-  defp generate_slug(attrs, fresh, new_data, target_lang, lookup_fun) do
+  # `Slugs.unique/3` probes the projection — the same probe the forms
+  # run — and suffixes `-2`, `-3`, … on a collision with another
+  # resource's slug (trashed rows included: their slugs stay projected).
+  defp generate_slug(attrs, fresh, new_data, target_lang, taken?) do
     slug_map = fresh.slug || %{}
     name = new_data |> Multilang.get_raw_language_data(target_lang) |> Map.get("_name")
 
     if nonempty(name) and not nonempty(Map.get(slug_map, target_lang)) do
       default_slug = Slugs.default_lang_slug(fresh.data || %{}, slug_map)
       base = Slugs.from_title(name, target_lang, default_slug: default_slug)
-      slug = unique_slug(base, target_lang, lookup_fun)
+      slug = Slugs.unique(base, target_lang, taken?)
       Map.put(attrs, :slug, Map.put(slug_map, target_lang, slug))
     else
       attrs
     end
-  end
-
-  # Probes the global slug projection (`get_item_by_slug/2` /
-  # `get_category_by_slug/2`) for `base` in `target_lang`, retrying with a
-  # `-2`, `-3`, … suffix on a collision with another resource's slug. A
-  # genuine race (two jobs landing on the same free slug at once) still
-  # surfaces as the DB's own `unique_constraint` changeset error on save —
-  # this is a proactive check, not a lock.
-  defp unique_slug(base, target_lang, lookup_fun) do
-    Stream.iterate(1, &(&1 + 1))
-    |> Enum.reduce_while(nil, fn n, _acc ->
-      candidate = if n == 1, do: base, else: "#{base}-#{n}"
-
-      case lookup_fun.(candidate, target_lang) do
-        {:error, :not_found} -> {:halt, candidate}
-        _found -> {:cont, candidate}
-      end
-    end)
   end
 
   # Records the per-field freshness fingerprints alongside the

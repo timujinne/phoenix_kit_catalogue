@@ -739,4 +739,24 @@ defmodule PhoenixKitCatalogue.GettextTest do
                "Импорт неожиданно прервался до завершения. Строки, записанные до сбоя, сохранены. Подробности — в журнале сервера."
     end
   end
+
+  test "the duplicate-upload notice interpolates both names in ru and et" do
+    # Client, 2026-09-12: "uploaded three PDFs, two show" — a runtime-form
+    # call like the rest, so no extractor ever saw it; pinned with real
+    # bindings so interpolation is exercised, not just the msgid.
+    msgid = "%{name} is identical to %{existing}, which is already attached — nothing was added."
+    bindings = [name: "b.pdf", existing: "a.pdf"]
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, bindings) ==
+             "b.pdf совпадает с уже прикреплённым файлом a.pdf — ничего не добавлено."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, bindings) ==
+             "b.pdf on identne juba manustatud failiga a.pdf — midagi ei lisatud."
+  after
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
 end

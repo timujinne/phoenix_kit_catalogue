@@ -53,4 +53,28 @@ defmodule PhoenixKitCatalogue.Web.HelpersTest do
       assert Helpers.actor_uuid(socket) == nil
     end
   end
+
+  describe "trim_param/1 (sweep 2026-09-13)" do
+    test "trims a string and neutralises anything else" do
+      assert Helpers.trim_param("  x ") == "x"
+      assert Helpers.trim_param(nil) == ""
+      assert Helpers.trim_param(["a"]) == ""
+      assert Helpers.trim_param(%{"a" => 1}) == ""
+      assert Helpers.trim_param(7) == ""
+    end
+  end
+
+  describe "narrow_new_data/2 (sweep 2026-09-13)" do
+    test "keeps only the owned data keys on a create payload" do
+      params = %{"name" => "x", "data" => %{"meta" => %{}, "_translation_fingerprints" => %{}}}
+
+      assert Helpers.narrow_new_data(params, ["meta"]) == %{
+               "name" => "x",
+               "data" => %{"meta" => %{}}
+             }
+
+      assert Helpers.narrow_new_data(%{"name" => "x"}, ["meta"]) == %{"name" => "x"}
+      assert Helpers.narrow_new_data(%{"data" => "junk"}, ["meta"]) == %{"data" => "junk"}
+    end
+  end
 end

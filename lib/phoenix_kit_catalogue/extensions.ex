@@ -30,16 +30,68 @@ defmodule PhoenixKitCatalogue.Extensions do
   # render pass) latch — see that function's doc.
   @render_error_latch {__MODULE__, :extension_render_error_logged?}
 
+  # Top-level `data` keys the catalogue owns. An extension whose `key/0`
+  # named one would have `absorb/3` write its namespace over that key
+  # on every save — and `Web.Helpers.data_owned_keys/2` lists extension
+  # keys as owned, so the owned-key splice would let it through.
+  # Underscore-prefixed keys (`_primary_language`, `_seo_title`,
+  # `_translation_fingerprints`, …) and language codes (the multilang
+  # buckets) are reserved by shape.
+  @reserved_keys ~w(meta files_folder_uuid featured_image_uuid media_order pro100 original_unit
+                    seo slug selected_value_slugs)
+  @lang_shaped_key ~r/^[a-z]{2}(-[A-Z]{2})?$/
+  @bad_key_latch {__MODULE__, :extension_bad_key_logged?}
+
   @doc """
   All enabled extension modules contributed by registered `PhoenixKit`
-  modules, in registration order, deduplicated.
+  modules, in registration order, deduplicated. An extension whose
+  `key/0` is not a string, is empty, is underscore-prefixed, looks like
+  a language code, or names a catalogue-owned `data` key is dropped
+  (logged once per process) — see `@reserved_keys`.
   """
   @spec all() :: [module()]
   def all do
     ModuleRegistry.all_modules()
     |> Enum.flat_map(&contributed_by/1)
     |> Enum.uniq()
-    |> Enum.filter(&enabled?/1)
+    |> Enum.filter(&(enabled?(&1) and valid_key?(&1)))
+  end
+
+  defp valid_key?(ext) do
+    key = ext.key()
+
+    cond do
+      not is_binary(key) or key == "" ->
+        reject_key(ext, key, "must be a non-empty string")
+
+      String.starts_with?(key, "_") ->
+        reject_key(ext, key, "underscore-prefixed keys are reserved")
+
+      key =~ @lang_shaped_key ->
+        reject_key(ext, key, "is shaped like a language code")
+
+      key in @reserved_keys ->
+        reject_key(ext, key, "is a catalogue-owned data key")
+
+      true ->
+        true
+    end
+  rescue
+    _ -> false
+  end
+
+  # `all/0` runs many times per render, so the complaint lands once per
+  # process rather than once per call.
+  defp reject_key(ext, key, why) do
+    unless Process.get({@bad_key_latch, ext}) do
+      Process.put({@bad_key_latch, ext}, true)
+
+      Logger.error(
+        "PhoenixKitCatalogue.Extensions: ignoring #{inspect(ext)} — key/0 #{inspect(key)} #{why}"
+      )
+    end
+
+    false
   end
 
   defp contributed_by(mod) do
@@ -84,6 +136,12 @@ defmodule PhoenixKitCatalogue.Extensions do
   calls `E.cast_item/2` (or `cast_category/2`) with the extension's
   current value `data[E.key()] || %{}`, and merges the result under
   `data[E.key()]`. Stops at the first extension that returns an error.
+
+  Same resilience contract as `columns/1`: a cast that raises, throws,
+  exits, or returns neither `{:ok, _}` nor `{:error, _}` is logged and
+  that extension's namespace keeps its current value — one broken
+  extension must not crash the form on every keystroke (`absorb/3` runs
+  on `validate`).
   """
   @spec absorb(:item | :category, map(), map()) ::
           {:ok, map()} | {:error, {module(), [{atom(), String.t()}]}}
@@ -101,13 +159,36 @@ defmodule PhoenixKitCatalogue.Extensions do
   end
 
   defp absorb_one(ext, cast_fun, params, acc) do
-    ext_params = as_map(Map.get(params, ext.key()))
-    current = as_map(Map.get(acc, ext.key()))
+    key = ext.key()
+    ext_params = as_map(Map.get(params, key))
+    current = as_map(Map.get(acc, key))
 
     case apply(ext, cast_fun, [ext_params, current]) do
-      {:ok, casted} -> {:cont, {:ok, Map.put(acc, ext.key(), casted)}}
-      {:error, errors} -> {:halt, {:error, {ext, errors}}}
+      {:ok, casted} ->
+        {:cont, {:ok, Map.put(acc, key, casted)}}
+
+      {:error, errors} ->
+        {:halt, {:error, {ext, errors}}}
+
+      other ->
+        log_cast_failure(ext, cast_fun, "returned #{inspect(other)}")
+        {:cont, {:ok, acc}}
     end
+  rescue
+    error ->
+      log_cast_failure(ext, cast_fun, Exception.format(:error, error, __STACKTRACE__))
+      {:cont, {:ok, acc}}
+  catch
+    kind, reason ->
+      log_cast_failure(ext, cast_fun, Exception.format(kind, reason, __STACKTRACE__))
+      {:cont, {:ok, acc}}
+  end
+
+  defp log_cast_failure(ext, cast_fun, formatted) do
+    Logger.error(
+      "PhoenixKitCatalogue.Extensions: #{inspect(ext)}.#{cast_fun}/2 failed; its " <>
+        "namespace keeps its current value for this save.\n#{formatted}"
+    )
   end
 
   defp as_map(map) when is_map(map), do: map
@@ -216,8 +297,14 @@ defmodule PhoenixKitCatalogue.Extensions do
     # so a raise buried in the extension's own nested HEEx, or a bare
     # value with no safe-HTML representation, is caught right here too,
     # not just a raise from `render_fn`/`label_fn` itself.
-    _ = HtmlSafe.to_iodata(result)
-    result
+    iodata = HtmlSafe.to_iodata(result)
+
+    # For a cell the probe IS the render: handing the template the
+    # already-safe iodata means the extension's body runs once per row,
+    # not once here and again when the template embeds the struct (a
+    # per-row lookup in an extension would otherwise double). A label
+    # is a plain string callers compare, so it is returned as is.
+    if kind == :render, do: {:safe, iodata}, else: result
   rescue
     error ->
       log_render_error_once(

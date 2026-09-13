@@ -166,6 +166,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Web.Components.Browse
   alias PhoenixKitCatalogue.Web.Components.ProductCard
 
   @default_empty_query_limit 10
@@ -494,6 +495,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       |> maybe_put(:catalogue_uuids, catalogue_uuids)
       |> maybe_put(:only, only)
       |> maybe_put(:statuses, statuses)
+      |> maybe_put(:order, browse_order(query))
 
     options = Catalogue.search_items(query || "", opts)
 
@@ -509,6 +511,26 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     |> ensure_category_paths(options)
     |> assign(options: options, has_more: has_more)
   end
+
+  # A blank query is a BROWSE (the reopen list, the focus-to-browse
+  # first page), and a browse reads in the module's shared sort like
+  # every other listing (client, 2026-09-01: one order everywhere;
+  # 2026-09-12: the per-row picker still listed a category's items A→Z
+  # while the admin showed the hand-arranged order — it never asked for
+  # an order, and the fetch layer's default was name). A typed query is a
+  # SEARCH: it passes no order and takes the fetch layer's default,
+  # Manual, like the admin's in-catalogue search results. Manual keeps
+  # the direction-less `:position` opt the admin's Manual sort has.
+  defp browse_order(query) do
+    if String.trim(query || "") == "", do: shared_browse_order(Browse.global_items_order())
+  end
+
+  # `global_items_order/0` already clamps to `BrowseState.order_fields/0`
+  # (the one place that does it, so this picker and the BrowseState-backed
+  # embed/popup cannot disagree); all that is left here is Manual's
+  # direction-less `:position` opt.
+  defp shared_browse_order({:position, _dir}), do: :position
+  defp shared_browse_order({_field, _dir} = field_sort), do: field_sort
 
   defp maybe_put(opts, _key, nil), do: opts
   defp maybe_put(opts, _key, []), do: opts
@@ -564,8 +586,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   # input; a blank or missing pointer renders no thumbnail, leaving the
   # layout unchanged for items without a photo.
   defp selected_photo_uuid(%Item{data: data}) when is_map(data) do
-    case Map.get(data, "featured_image_uuid") do
-      uuid when is_binary(uuid) and uuid != "" -> uuid
+    # Canonical uuid form only: the value goes into a URL path (see
+    # `Components.featured_image_uuid/1`).
+    with uuid when is_binary(uuid) and uuid != "" <- Map.get(data, "featured_image_uuid"),
+         {:ok, ^uuid} <- Ecto.UUID.cast(uuid) do
+      uuid
+    else
       _ -> nil
     end
   end
@@ -745,10 +771,20 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
           aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View item details")}
           title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View item details")}
         >
-          <.icon
-            name="hero-photo"
-            class={"#{@photo_size} shrink-0 rounded bg-base-200 border border-base-300 opacity-40"}
-          />
+          <%!-- The tile is a SPAN and the glyph sits inside it: a hero icon
+          is a CSS mask whose visible colour is its background-color, so
+          painting bg-base-200 on the icon itself repainted the glyph in
+          the surface colour — an empty bordered box (the client patched
+          it in their own CSS, 2026-09-12). --%>
+          <span
+            class={[
+              @photo_size,
+              "shrink-0 rounded bg-base-200 border border-base-300",
+              "flex items-center justify-center text-base-content/40"
+            ]}
+          >
+            <.icon name="hero-photo" class="h-1/2 w-1/2" />
+          </span>
         </button>
         <div class="relative flex-1">
           <input

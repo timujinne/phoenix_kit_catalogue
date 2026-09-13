@@ -37,6 +37,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
+      log_operation_error: 3,
+      narrow_new_data: 2,
       actor_opts: 1,
       assign_ai_translation: 3,
       ai_translate_config: 1,
@@ -347,10 +349,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           existing_slug
       end
 
+    # `taken?` — a generated slug already projected for that language
+    # (another catalogue's "Oak panel", a trashed predecessor) gets a
+    # `-2` suffix instead of failing Save on a field the user never
+    # typed; the item's own rows are not a collision.
+    own_uuid = socket.assigns.item.uuid
+
     generated_slug =
       socket.assigns.item
       |> Catalogue.change_item(Map.put(params, "slug", merged_slug))
-      |> Slugs.maybe_generate(:slug, from: :name)
+      |> Slugs.maybe_generate(:slug,
+        from: :name,
+        taken?: &Catalogue.item_slug_taken?(&1, &2, exclude_uuid: own_uuid)
+      )
       |> Ecto.Changeset.get_field(:slug)
 
     Map.put(params, "slug", generated_slug || merged_slug)
@@ -873,7 +884,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           {:ok, _} ->
             {:noreply, assign_supplier_infos(socket, item.uuid)}
 
-          {:error, _} ->
+          {:error, reason} ->
+            log_operation_error(socket, "set_primary_supplier", %{
+              entity_type: "item_supplier_info",
+              entity_uuid: info.uuid,
+              reason: reason
+            })
+
             {:noreply,
              put_flash(
                socket,
@@ -955,7 +972,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier removed.")
              )}
 
-          {:error, _} ->
+          {:error, reason} ->
+            log_operation_error(socket, "delete_supplier_info", %{
+              entity_type: "item_supplier_info",
+              entity_uuid: info.uuid,
+              reason: reason
+            })
+
             {:noreply,
              put_flash(
                socket,
@@ -1046,7 +1069,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     end
   end
 
-  def handle_event("remove_supplier_field_choice", %{"index" => raw}, socket) do
+  def handle_event("remove_supplier_field_choice", %{"index" => raw}, socket)
+      when is_binary(raw) do
     with editor when not is_nil(editor) <- socket.assigns.supplier_field_editor,
          {index, ""} <- Integer.parse(raw) do
       {:noreply,
@@ -1058,6 +1082,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       _ -> {:noreply, socket}
     end
   end
+
+  def handle_event("remove_supplier_field_choice", _params, socket), do: {:noreply, socket}
 
   def handle_event("save_supplier_field_editor", params, socket) do
     case socket.assigns.supplier_field_editor do
@@ -1129,7 +1155,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   def handle_event("reorder_staged_sets", %{"ordered_ids" => ids}, socket) when is_list(ids) do
     staged = socket.assigns.staged_set_uuids
     # Only reorder what is actually staged — the client list is forgeable.
-    reordered = Enum.filter(ids, &(&1 in staged))
+    # A stale-DOM duplicate keeps its LATEST drop position, as the other
+    # reorder paths do; before, it failed the completeness check below
+    # and the drag silently snapped back.
+    reordered = ids |> Helpers.dedupe_keep_last() |> Enum.filter(&(&1 in staged))
 
     if Enum.sort(reordered) == Enum.sort(staged) do
       {:noreply, assign(socket, :staged_set_uuids, reordered)}
@@ -1920,7 +1949,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item moved."))
          |> push_navigate(to: redirect_target(socket, item))}
 
-      {:error, _} ->
+      {:error, reason} ->
+        log_operation_error(socket, "move_item", %{
+          entity_type: "item",
+          entity_uuid: socket.assigns.item.uuid,
+          reason: reason
+        })
+
         {:noreply,
          put_flash(
            socket,
@@ -1961,9 +1996,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # this form can offer, so it is refused rather than silently dropped.
   defp validate_category_scope(params, socket) do
     scope = socket.assigns[:catalogue_uuid]
-    category_uuid = params["category_uuid"] |> to_string() |> String.trim()
+
+    # Forgeable: anything but a string (or nothing) is refused, not crashed on.
+    category_uuid =
+      case params["category_uuid"] do
+        nil -> ""
+        s when is_binary(s) -> String.trim(s)
+        _ -> :invalid
+      end
 
     cond do
+      category_uuid == :invalid ->
+        {:error, :category_outside_catalogue}
+
       scope == nil or category_uuid == "" ->
         :ok
 
@@ -1980,9 +2025,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       params
       |> scope_to_catalogue(socket)
       |> put_manufacturer_source(socket.assigns.manufacturers)
+      |> narrow_new_data(data_owned_keys(socket, @item_extra_owned_data_keys))
 
     with :ok <- validate_category_scope(params, socket),
          {:ok, item} <- Catalogue.create_item(params, actor_opts(socket)),
+         # Translations the form already holds (a value-mode AI translate,
+         # a typed secondary name) were made against this source: stamp
+         # them fresh rather than leaving the new row `:unknown`.
+         item = PhoenixKitCatalogue.TranslationStatus.stamp_all_translated(item),
          {:ok, _rules} <- maybe_put_rules(socket, item),
          :ok <- Attachments.maybe_rename_pending_folder(socket, item) do
       apply_attribute_assignment(socket, item)
@@ -3494,6 +3544,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                           <.table_row_menu_button
                             :if={not info.is_primary}
                             phx-click="set_primary_supplier"
+                            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                             phx-value-uuid={info.uuid}
                             icon="hero-star"
                             label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make primary")}
@@ -3501,6 +3552,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                           <.table_row_menu_divider />
                           <.table_row_menu_button
                             phx-click="delete_supplier_info"
+                            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                             phx-value-uuid={info.uuid}
                             data-confirm={
                               Gettext.gettext(
@@ -4000,6 +4052,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 size="xs"
                 class="btn-error"
                 phx-click="confirm_remove_supplier_field"
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
               >
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
               </.button>

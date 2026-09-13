@@ -18,7 +18,7 @@ Designed for manufacturing companies (e.g. kitchen/furniture producers) that nee
 - **Multilingual** — all translatable fields use PhoenixKit's multilang system
 - **Move operations** — move categories between catalogues, items between categories
 - **Card/table views** — all tables support card view toggle, persisted per user in localStorage
-- **Reusable components** — `item_table`, `search_input`, `view_mode_toggle`, `empty_state`, `scope_selector`, `catalogue_rules_picker`, `item_picker` (server-side search combobox with colocated keyboard hook) with gettext localization
+- **Reusable components** — `item_table`, `search_input`, `view_mode_toggle`, `scope_selector`, `catalogue_rules_picker`, `item_picker` (server-side search combobox with colocated keyboard hook) with gettext localization
 - **Zero-config discovery** — auto-discovered by PhoenixKit via beam scanning
 
 ## Installation
@@ -70,6 +70,17 @@ Without the import the components still render and work server-side,
 but everything the hooks add is silently absent — the browser console
 logs `unknown hook found` for `.ItemPicker`, `.QtySignal`, `.ScrollTop`
 and `.AutoLoad`.
+
+**Two more hooks ship the other way.** The admin pages' tree
+drag-and-drop (`CatalogueTreeDnD`) and the table/card view memory
+(`ViewPref`) live in `priv/static/assets/phoenix_kit_catalogue.js` and
+are declared by `js_sources/0`. Core's `:phoenix_kit_js_sources` Mix
+compiler folds every enabled module's file into the host's
+`phoenix_kit_modules.js`, which registers them on the LiveSocket at
+construction — nothing to import by hand, but the host must run that
+compiler (a PhoenixKit-generated app already does; see `AGENTS.md`).
+Without it the admin tree cannot be dragged and the view choice does
+not stick, with the same `unknown hook found` console line.
 
 ## Data Model
 
@@ -312,14 +323,26 @@ stacked item details, per-user view/column memory.
 
 ```heex
 <.live_component
+  :if={@show_selector}
   module={PhoenixKitCatalogue.Web.Components.ItemSelectorModal}
   id="item-selector"
-  show={@show_selector}
   scope={%{catalogue_uuids: [@catalogue.uuid]}}
   selected={@picked}
   current_user={@phoenix_kit_current_scope && @phoenix_kit_current_scope.user}
 />
 ```
+
+**It is live while open.** A relay process holds the catalogue PubSub
+subscription for the component and pushes a debounced refresh through
+`send_update/3`, so a price corrected elsewhere, an item another user
+trashed, or a reordered catalogue reaches the open popup with no host
+wiring — the host's `handle_info/2` never sees a catalogue event.
+
+**Mount it with `:if`, not a `show` attr.** The component has no
+`show` attr; its dialog is always open while mounted. The host owns an
+assign that mounts it (`:if={@show_selector}`) and resets that assign on
+`{:item_selector_closed, %{id: id}}` — which fires on cancel, ESC,
+backdrop, AND after a confirm.
 
 **Pass `current_user`** (the phoenix_kit user struct — on any admin page
 it is one `@phoenix_kit_current_scope.user` away): it powers the
@@ -332,8 +355,10 @@ component moduledoc documents the full attr and event contract.
 category tiles, and its catalogue tiles follow the same
 `catalogue_sort_*` settings the admin pages sort by (the admin's sort
 selector writes them), so the picker reads in the same order as the
-admin — one order for the whole module. A live search stays
-name-ordered, like the admin's results.
+admin — one order for the whole module. A live search reads in Manual
+order too, like the admin's own in-catalogue search results; Manual is
+the fetch layer's default (`Catalogue.search_items/2`), so a host's own
+direct calls read the same way.
 
 ### `item_table/1`
 
@@ -429,7 +454,7 @@ def handle_info({:item_picker_clear, id}, socket), do: ...
 
 The dropdown is absolutely positioned with `z-50`; ancestor containers must not `overflow: hidden`.
 
-### `search_results_summary/1` and `empty_state/1`
+### `search_results_summary/1`
 
 ```heex
 <%!-- Full result set loaded --%>
@@ -437,9 +462,20 @@ The dropdown is absolutely positioned with `z-50`; ancestor containers must not 
 
 <%!-- Paged results — renders "Showing 100 of 237 results for …" --%>
 <.search_results_summary count={@total} query={@query} loaded={length(@results)} />
-
-<.empty_state message="No items yet." />
 ```
+
+For an empty state use core's `<.empty_state title="…">` from
+`PhoenixKitWeb.Components.Core.EmptyState` (it takes `title`, not
+`message`); this module ships none of its own.
+
+### `CatalogueBrowse` (a catalogue on any logged-in page)
+
+`PhoenixKitCatalogue.Web.Components.CatalogueBrowse` puts a catalogue,
+or a scoped slice of one, on a host page as a browse widget with level
+navigation and search — the same listing the popup uses, without the
+picking. Its moduledoc carries the attr and event contract
+(`{:catalogue_browse, %{id: id, event: :item_clicked, item: item}}`,
+opt-in via `on_item_click`).
 
 All component text (column headers, action labels, toggle tooltips, result counts) is localizable via PhoenixKit's Gettext backend.
 
@@ -467,10 +503,17 @@ The module registers admin tabs via `PhoenixKit.Module`:
 | `/admin/catalogue/new` | New catalogue form |
 | `/admin/catalogue/:uuid` | Catalogue detail with categories, items, status tabs |
 | `/admin/catalogue/:uuid/edit` | Edit catalogue + permanent delete |
-| `/admin/catalogue/manufacturers` | Manufacturer list |
-| `/admin/catalogue/suppliers` | Supplier list |
 | `/admin/catalogue/categories/:uuid/edit` | Edit category + move + permanent delete |
 | `/admin/catalogue/items/:uuid/edit` | Edit item + move |
+| `/admin/catalogue/attributes` (+ `/new`, `/:uuid/edit`) | Attribute groups |
+| `/admin/catalogue/import` | Import wizard (universal + Pro100) |
+| `/admin/catalogue/export` | Export |
+| `/admin/catalogue/events` | Activity events for the module |
+| `/admin/catalogue/pdfs` (+ `/:uuid`) | PDF library and detail |
+| `/admin/catalogue/translations` | Translation freshness and the AI sweep |
+
+Manufacturers and suppliers are CRM companies since 0.2x; the module has
+no lists of its own for them.
 
 All forms support multilingual content when the Languages module is enabled.
 

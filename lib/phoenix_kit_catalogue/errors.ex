@@ -351,6 +351,16 @@ defmodule PhoenixKitCatalogue.Errors do
   def message(%Changeset{} = changeset), do: changeset
   def message(reason) when is_binary(reason), do: reason
 
+  # A rescued DB exception (`Attributes.run_reorder/1` returns the struct)
+  # must not be `inspect`ed into a flash with its SQL and constraint names.
+  def message(%{__exception__: true} = exception) do
+    Gettext.gettext(
+      PhoenixKitCatalogue.Gettext,
+      "Unexpected error: %{reason}",
+      reason: truncate(Exception.message(exception))
+    )
+  end
+
   def message(reason) do
     Gettext.gettext(
       PhoenixKitCatalogue.Gettext,

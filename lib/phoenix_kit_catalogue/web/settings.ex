@@ -2,8 +2,9 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   @moduledoc """
   Read/write helpers for the catalogue AI-translation sweep's operational
   settings (block-6 plan, Task 4). `PhoenixKitCatalogue.Workers.TranslationSweepWorker`
-  reads these on every tick; the `/admin/catalogue/translations` page (Task 5,
-  not yet built) will write them from its operator panel.
+  reads these on every tick. Nothing in this module's own UI writes them
+  yet — the `/admin/catalogue/translations` page has no settings panel —
+  so enabling the sweep is an operator (or host) call into `update_*`.
 
   Kept as a thin module rather than folding the keys into
   `PhoenixKitCatalogue` itself: the worker only ever reads, a future page
@@ -72,13 +73,20 @@ defmodule PhoenixKitCatalogue.Web.Settings do
 
   @doc """
   Target languages the sweep considers. Defaults to every enabled language
-  except the primary one when nothing is stored.
+  except the primary one when nothing is stored; a stored list is
+  intersected with the enabled languages, so a language disabled after
+  the setting was written stops receiving sweep jobs — the same check the
+  Translations page applies to a manual Translate.
   """
   @spec sweep_langs() :: [String.t()]
   def sweep_langs do
     case Settings.get_json_setting(@langs_key) do
-      %{"codes" => codes} when is_list(codes) -> codes
-      _ -> default_sweep_langs()
+      %{"codes" => codes} when is_list(codes) ->
+        enabled = Multilang.enabled_languages()
+        Enum.filter(codes, &(is_binary(&1) and &1 in enabled))
+
+      _ ->
+        default_sweep_langs()
     end
   end
 

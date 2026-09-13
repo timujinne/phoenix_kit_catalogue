@@ -373,6 +373,15 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ ~s(step="1")
       assert html =~ ~s(inputmode="numeric")
       refute html =~ "join-item pointer-events-none"
+
+      # Boss, 2026-09-12: the arrows were cut off on their right — the
+      # box had 4px on that side and Chrome drew the spin button against
+      # the border. 8px on the arrows' side (daisyUI's own), 4px on the
+      # other; the spinner is NOT hidden, it is the stepper.
+      assert html =~ "pl-1 pr-2"
+      refute html =~ "spin-button"
+      refute html =~ "px-1"
+      assert html =~ "text-center"
       refute html =~ "qty_inc"
       refute html =~ "qty_dec"
     end

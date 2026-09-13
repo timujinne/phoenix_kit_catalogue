@@ -38,7 +38,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   import PhoenixKitCatalogue.Web.TableToolbar
 
   import PhoenixKitCatalogue.Web.Helpers,
-    only: [actor_opts: 1, actor_uuid: 1, log_operation_error: 3, status_label: 1]
+    only: [trim_param: 1, actor_opts: 1, actor_uuid: 1, log_operation_error: 3, status_label: 1]
 
   alias PhoenixKit.Utils.Routes, as: KitRoutes
   alias PhoenixKitCatalogue.Catalogue
@@ -1998,7 +1998,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # (form submit → "name") and by clicking off (phx-blur → "value").
   # A blank name is treated as "no change" — the folder keeps its name.
   def handle_event("rename_folder", %{"uuid" => uuid} = params, socket) do
-    name = (params["name"] || params["value"] || "") |> String.trim()
+    name = trim_param(params["name"] || params["value"])
 
     socket =
       with true <- name != "",
@@ -3655,7 +3655,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <tr :for={item <- @items} id={"item-result-#{item.uuid}"} class="hover">
             <td>
               <.link
-                navigate={item_result_path(item, @query)}
+                navigate={item_result_path(item)}
                 class="font-medium link link-hover"
               >
                 {item.name}
@@ -3676,7 +3676,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
                 />
                 <.table_row_menu_link
-                  navigate={item_result_path(item, @query)}
+                  navigate={item_result_path(item)}
                   icon="hero-eye"
                   label={gettext("View in catalogue")}
                 />
@@ -3702,7 +3702,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # Straight to the item's EDIT page (boss, 2026-08-31): whoever
   # searched an item by name wants THAT item, not its category's page
   # with the query re-applied and every sibling around it.
-  defp item_result_path(item, _query), do: Paths.item_edit(item.uuid)
+  defp item_result_path(item), do: Paths.item_edit(item.uuid)
 
   # ── Toolbar private component ────────────────────────────────────
 
@@ -3710,13 +3710,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:cfg, :map, required: true)
   attr(:allow_flat_reorder, :boolean, default: true)
 
-  attr(:show_table_tools, :boolean,
-    default: true,
-    doc: "Sort / Reorder / Columns configure THIS scope's table — a
-          caller showing something else may hide them."
-  )
-
-  slot(:mode, doc: "What the search looks for — rendered right after the search box.")
   slot(:filters)
   slot(:actions)
   slot(:view_toggle)
@@ -3744,7 +3737,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             />
           </label>
         </form>
-        {render_slot(@mode)}
         {render_slot(@filters)}
       </div>
 
@@ -3753,7 +3745,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
              actions. At widths where both can't share a row, the actions
              cluster drops to its OWN row instead of its buttons scattering
              between rows. The inner flex-wrap is the ultra-narrow fallback. --%>
-        <div :if={@show_table_tools} class="flex items-center gap-2">
+        <div class="flex items-center gap-2">
           <.sort_controls
             scope={@scope}
             selected={["position", "name" | @cfg.columns]}

@@ -350,6 +350,18 @@ msgstr ""
 msgid "Category moved."
 msgstr ""
 
+msgid "Working..."
+msgstr ""
+
+msgid "Unknown target language — refresh the page and try again."
+msgstr ""
+
+msgid "Category moved into %{name}."
+msgstr ""
+
+msgid "Category moved to the top level."
+msgstr ""
+
 msgid "Category moved to another catalogue."
 msgstr ""
 
@@ -1832,6 +1844,9 @@ msgstr ""
 msgid "Could not remove file."
 msgstr ""
 
+msgid "The photo order could not be saved. Try again."
+msgstr ""
+
 msgid "Could not save the uploaded file. Please try again or contact support if it persists."
 msgstr ""
 
@@ -2022,6 +2037,15 @@ msgid "Make items uncategorized"
 msgstr ""
 
 msgid "Manual"
+msgstr ""
+
+msgid "System"
+msgstr ""
+
+msgid "Scheduled"
+msgstr ""
+
+msgid "Automatic"
 msgstr ""
 
 msgid "Manufacturer created but failed to link some suppliers."
@@ -2525,6 +2549,9 @@ msgid "Upload error: %{reason}"
 msgstr ""
 
 msgid "Upload failed for %{name}."
+msgstr ""
+
+msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
 msgstr ""
 
 msgid "Upload failed for an unexpected reason. Please try again."

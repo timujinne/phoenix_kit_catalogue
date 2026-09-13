@@ -195,6 +195,34 @@ defmodule PhoenixKitCatalogue.SlugProjectionTest do
     end
   end
 
+  describe "item_slug_taken?/3 (the generation probe)" do
+    test "sees a live or trashed item's slug, folds the language, and excludes the owner" do
+      catalogue = create_catalogue()
+      item = create_item(catalogue, %{slug: %{"en-US" => "red-vase"}})
+
+      assert Catalogue.item_slug_taken?("red-vase", "en-US")
+      assert Catalogue.item_slug_taken?("red-vase", "en-GB")
+      refute Catalogue.item_slug_taken?("red-vase", "fr-FR")
+      refute Catalogue.item_slug_taken?("blue-vase", "en-US")
+      refute Catalogue.item_slug_taken?("red-vase", "en-US", exclude_uuid: item.uuid)
+
+      # A trashed item keeps its projection row: its slug stays reserved,
+      # so a re-created "Red vase" must probe as taken and get a suffix
+      # instead of failing the projection's primary key.
+      {:ok, _} = Catalogue.trash_item(item)
+      assert Catalogue.item_slug_taken?("red-vase", "en-US")
+    end
+
+    test "category_slug_taken?/3 mirrors it" do
+      catalogue = create_catalogue()
+      category = create_category(catalogue, %{slug: %{"fr-FR" => "vases"}})
+
+      assert Catalogue.category_slug_taken?("vases", "fr")
+      refute Catalogue.category_slug_taken?("vases", "fr", exclude_uuid: category.uuid)
+      refute Catalogue.category_slug_taken?("vases", "en-US")
+    end
+  end
+
   describe "get_category_by_slug/3" do
     test "finds a category by its exact base-language slug" do
       catalogue = create_catalogue()

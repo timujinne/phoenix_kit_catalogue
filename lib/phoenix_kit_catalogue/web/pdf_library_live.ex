@@ -689,6 +689,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                 <button
                   phx-click="restore"
                   phx-value-uuid={pdf.uuid}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                   class="btn btn-ghost btn-xs text-success"
                 >
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
@@ -696,6 +697,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                 <button
                   phx-click="permanently_delete"
                   phx-value-uuid={pdf.uuid}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                   data-confirm={
                     Gettext.gettext(
                       PhoenixKitCatalogue.Gettext,
@@ -711,6 +713,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                   :if={Helpers.pdf_extraction_status(pdf) == "failed"}
                   phx-click="retry_extraction"
                   phx-value-uuid={pdf.uuid}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                   class="btn btn-ghost btn-xs"
                 >
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Retry")}
@@ -718,6 +721,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
                 <button
                   phx-click="trash"
                   phx-value-uuid={pdf.uuid}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Working...")}
                   data-confirm={
                     Gettext.gettext(
                       PhoenixKitCatalogue.Gettext,

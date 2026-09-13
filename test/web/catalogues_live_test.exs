@@ -960,7 +960,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       {:ok, view, _html} = live(conn, "#{@base}?q=widget")
       html = render_async(view)
 
-      # Name-ordered, one page of 50: 01 is on it, 55 is not yet.
+      # Manual-ordered (positions are assigned in creation order, so
+      # 01..55 is also the walk), one page of 50: 01 is on it, 55 is
+      # not yet.
       assert html =~ "Widget 01"
       refute html =~ "Widget 55"
 

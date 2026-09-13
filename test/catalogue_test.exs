@@ -2225,6 +2225,26 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       assert item.category.catalogue.name == "Kitchen"
       assert item.manufacturer_name == "Blum"
     end
+
+    test "still lists an item whose catalogue was hard-deleted, last" do
+      # `catalogue_uuid` is nullable and its FK is ON DELETE SET NULL, so
+      # `delete_catalogue/2` orphans items rather than removing them. The
+      # Manual document order added 2026-09-12 leads with the catalogue;
+      # a plain join there would have dropped every orphan from the ONE
+      # caller this function has — the Translations page's item
+      # enumeration — where a missing row reads as "already translated".
+      live = create_catalogue(%{name: "Live Range"})
+      create_item(%{name: "Filed", catalogue_uuid: live.uuid})
+
+      doomed = create_catalogue(%{name: "Doomed Range"})
+      orphan = create_item(%{name: "Orphan", catalogue_uuid: doomed.uuid})
+      {:ok, _} = Catalogue.delete_catalogue(doomed)
+
+      assert is_nil(Catalogue.get_item(orphan.uuid).catalogue_uuid)
+
+      names = Catalogue.list_items() |> Enum.map(& &1.name)
+      assert names == ["Filed", "Orphan"]
+    end
   end
 
   describe "list_items_for_category/1" do

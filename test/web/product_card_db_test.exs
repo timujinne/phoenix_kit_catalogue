@@ -60,7 +60,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardDBTest do
       user_file_checksum: "uchk-#{uuid}",
       size: 1,
       status: Keyword.get(opts, :status, "active"),
-      system_managed: false,
+      system_managed: Keyword.get(opts, :system_managed, false),
       user_uuid: user_uuid,
       folder_uuid: folder_uuid,
       inserted_at: now,
@@ -149,6 +149,89 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardDBTest do
     assert Catalogue.attached_file_counts([row])[item_a.uuid] == 2
 
     assert Catalogue.attached_file_counts([]) == %{}
+  end
+
+  describe "folder-linked files (the content-duplicate upload shape, 2026-09-12)" do
+    # Storage de-duplicates uploads per user by content: a second upload
+    # of a byte-identical file returns the record the first created, and
+    # Attachments links it into the new folder via FolderLink instead of
+    # moving it. The item form always listed home + linked files; the
+    # card and the paperclip count read the home folder only, so a file
+    # the editor showed was missing everywhere else (client: "uploaded
+    # three PDFs, two show, one does not").
+    alias PhoenixKit.Modules.Storage.FolderLink
+    alias PhoenixKitCatalogue.Attachments
+    alias PhoenixKitCatalogue.Catalogue
+
+    defp link!(file_uuid, folder_uuid) do
+      Repo.insert!(
+        FolderLink.changeset(%FolderLink{}, %{folder_uuid: folder_uuid, file_uuid: file_uuid})
+      )
+    end
+
+    test "a linked PDF is listed by the form, the card and the paperclip count alike", %{
+      user_uuid: user
+    } do
+      home = create_folder(user)
+      other = create_folder(user)
+      own = insert_image(user, home, "own.pdf", file_type: "document", ext: "pdf")
+      linked = insert_image(user, other, "shared.pdf", file_type: "document", ext: "pdf")
+      link!(linked, home)
+
+      item = %Item{uuid: UUIDv7.generate(), data: %{"files_folder_uuid" => home}}
+
+      form = home |> Attachments.list_folder_files() |> Enum.map(& &1.uuid) |> Enum.sort()
+      card = item |> ProductCard.resolve_files() |> Enum.map(& &1.uuid) |> Enum.sort()
+
+      assert form == Enum.sort([own, linked])
+      assert card == form
+      assert Catalogue.attached_file_counts([item])[item.uuid] == 2
+    end
+
+    test "a link row naming the file's own home folder counts it once", %{user_uuid: user} do
+      # A file linked into a folder and later re-homed there (the media
+      # manager moves the row, the link stays) is read once by the
+      # listing's `home OR linked`; the paperclip must agree, not say 2.
+      home = create_folder(user)
+      pdf = insert_image(user, home, "spec.pdf", file_type: "document", ext: "pdf")
+      link!(pdf, home)
+
+      item = %Item{uuid: UUIDv7.generate(), data: %{"files_folder_uuid" => home}}
+
+      assert item |> ProductCard.resolve_files() |> Enum.map(& &1.uuid) == [pdf]
+      assert Catalogue.attached_file_counts([item])[item.uuid] == 1
+    end
+
+    test "the card's documents survive the grid cap: the type filter runs in SQL", %{
+      user_uuid: user
+    } do
+      # Codex, 2026-09-12: 200 images then one PDF — filtering images
+      # after the 200-row cap dropped the PDF while the paperclip said 1.
+      home = create_folder(user)
+      for n <- 1..201, do: insert_image(user, home, "img#{n}.jpg", [])
+      pdf = insert_image(user, home, "late.pdf", file_type: "document", ext: "pdf")
+      item = %Item{uuid: UUIDv7.generate(), data: %{"files_folder_uuid" => home}}
+
+      assert item |> ProductCard.resolve_files() |> Enum.map(& &1.uuid) == [pdf]
+      assert Catalogue.attached_file_counts([item])[item.uuid] == 1
+    end
+
+    test "a linked image joins the card's gallery; trashed and system-managed links do not", %{
+      user_uuid: user
+    } do
+      home = create_folder(user)
+      other = create_folder(user)
+      linked_image = insert_image(user, other, "shared.jpg", [])
+      trashed = insert_image(user, other, "gone.jpg", status: "trashed")
+      managed = insert_image(user, other, "thumb.jpg", system_managed: true)
+      link!(linked_image, home)
+      link!(trashed, home)
+      link!(managed, home)
+
+      item = %Item{uuid: UUIDv7.generate(), data: %{"files_folder_uuid" => home}}
+
+      assert item |> ProductCard.resolve_images() |> Enum.map(& &1.uuid) == [linked_image]
+    end
   end
 
   describe "build_fields/2 attribute rows" do

@@ -128,8 +128,16 @@ Repo-local aliases:
   `{:ok, _}` branch and must never crash the operation. LiveViews obtain the
   actor via `actor_opts/1` from `Web.Helpers`. `test/activity_logging_test.exs`
   pins one test per action atom — extend it for new actions.
-- **PubSub** — mutations broadcast `{:catalogue_data_changed, kind, uuid, nil}`
-  on the `"phoenix_kit_catalogue"` topic via `Catalogue.PubSub`.
+- **PubSub** — mutations broadcast `{:catalogue_data_changed, kind, uuid,
+  parent_catalogue_uuid}` on the `"phoenix_kit_catalogue"` topic via
+  `Catalogue.PubSub` (the 4th element is the owning catalogue's uuid for
+  `:catalogue`/`:category`/`:item`, `nil` for module-global kinds). The
+  same topic also carries `{:catalogue_card_refresh, …}` (6-tuple),
+  `{:catalogue_view_sort_changed, scope, by, dir, from}`,
+  `{:catalogue_category_reorder, catalogue_uuid, moved_id, status, from}`
+  and `{:catalogue_bulk_change, catalogue_uuid, kind, uuids, from}` — a
+  subscriber that pattern-matches only the first shape needs a catch-all
+  `handle_info/2` clause or it crashes on another admin's reorder.
 - **Multilang forms** — name/description go through PhoenixKit `Multilang`. Form
   LVs use `to_form(changeset)` plus a private `assign_changeset/2` (assigns both
   `:changeset` and `:form`) with component-style `<.input field={@form[:x]}>`.
@@ -272,7 +280,10 @@ Settings keys (`PhoenixKit.Settings`):
 | `catalogue_translation_sweep_interval_minutes` | int | default `60` |
 | `catalogue_translation_sweep_langs` | json | `%{"codes" => [...]}`; a bare list is rejected by the `:map` column |
 | `catalogue_translation_sweep_max_per_run` | int | default `200` |
-| `catalogue_view_configs` | json | per-user table/view preferences |
+| `catalogue_sort_catalogues` / `catalogue_sort_detail_items` / `catalogue_sort_detail_categories` | json | the module-global shared sort per scope (`%{"by" => …, "dir" => …}`), written by the admin sort selectors and read by the popup and widgets |
+
+Not a Settings key: per-user table/view preferences live under
+`phoenix_kit_users.custom_fields["catalogue_view_configs"]` (`Web.ViewConfig`).
 
 Permission: one key, `"catalogue"` (`permission_metadata/0`), no sub-permissions.
 PubSub topic: `"phoenix_kit_catalogue"`.
@@ -394,7 +405,11 @@ Pointers, not docs — the moduledocs are the contract.
   CatalogueBrowse, Browse}` over `Catalogue.BrowseState` (a pure reducer). Scope
   is a security boundary fixed at init; selection is only ever for rendered
   uuids; host messages are `{:items_selected, …}`, `{:item_selector_closed, …}`,
-  `{:catalogue_browse, …}`. Read the moduledocs before touching selection,
+  `{:catalogue_browse, …}`. The modal is live while open through
+  `Web.ComponentRelay` — a per-open process that subscribes for the
+  component and delivers debounced refreshes via `send_update/3`, so hosts
+  never handle catalogue PubSub; reuse it for any other embedded component
+  that must follow the catalogue. Read the moduledocs before touching selection,
   quantities (native number input, `qty_change` / `qty_commit`), the checkbox
   column, the context header, `show_tray`, or the `show_item_details` page
   (on by default; `false` is the opt-out for exposure-sensitive embeds).
@@ -437,7 +452,7 @@ Release procedure (the steps the maintainer runs):
 4. `mix hex.publish`.
 5. Tag, matching the form of the newest existing tag (`git tag --sort=-creatordate | head -1` shows it), and push the tag.
 6. No GitHub release. `gh release list` stops at v0.19.0 (2026-08-24) even
-   though tags have continued through v0.28.1 — releases since then have
+   though tags have continued through v0.30.1 — releases since then have
    never gotten a `gh release create`, and the CHANGELOG entry is the release
    note instead. Don't create one from the mere presence of older releases in
    the list; that's the same regression this file previously carried before

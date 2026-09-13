@@ -12,6 +12,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
   import PhoenixKitCatalogue.Web.Components
 
   alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
+  alias PhoenixKitCatalogue.Web.Components
 
   # ─────────────────────────────────────────────────────────────────
   # status_badge
@@ -519,6 +520,30 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
         html = render_component(&featured_thumb/1, resource: resource)
         refute html =~ "<img", "expected no img for #{inspect(resource)}"
       end
+    end
+  end
+
+  describe "featured_image_uuid/1 (sweep 2026-09-13)" do
+    test "accepts only the canonical uuid form — the value goes into a URL path" do
+      uuid = Ecto.UUID.generate()
+
+      assert Components.featured_image_uuid(%{
+               data: %{"featured_image_uuid" => uuid}
+             }) == uuid
+
+      for junk <- [
+            "../../admin/catalogue/items/x/edit?",
+            "0123456789abcdef",
+            "",
+            String.upcase(uuid)
+          ] do
+        assert Components.featured_image_uuid(%{
+                 data: %{"featured_image_uuid" => junk}
+               }) == nil,
+               inspect(junk)
+      end
+
+      assert Components.featured_image_uuid(%{data: %{}}) == nil
     end
   end
 end

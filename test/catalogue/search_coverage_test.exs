@@ -13,6 +13,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
   use PhoenixKitCatalogue.LiveCase, async: false
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.BrowseState
 
   setup %{conn: conn, scope: scope} do
     cat = fixture_catalogue(%{name: "Kitchen Range"})
@@ -210,7 +211,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
   end
 
   describe "order: :position (admin document order, 2026-08-31)" do
-    test "browse fetches read position order; the default stays name order" do
+    test "position order is the default; name order is opt-in" do
       cat = fixture_catalogue(%{name: "Ordered Range"})
       grouping = fixture_category(cat, %{name: "Grouping"})
 
@@ -230,11 +231,102 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
 
       opts = [category_uuids: [grouping.uuid], include_descendants: false]
 
+      # Max, 2026-09-12: "the default should be the manual order".
+      by_default = Catalogue.search_items("", opts)
+      assert Enum.map(by_default, & &1.name) == ["Zed First", "Alpha Last"]
+
       by_position = Catalogue.search_items("", opts ++ [order: :position])
       assert Enum.map(by_position, & &1.name) == ["Zed First", "Alpha Last"]
 
-      by_name = Catalogue.search_items("", opts)
+      by_name = Catalogue.search_items("", opts ++ [order: :name])
       assert Enum.map(by_name, & &1.name) == ["Alpha Last", "Zed First"]
+
+      # An explicit nil (a caller threading an unset option through) is
+      # the default, not a clause miss.
+      by_nil = Catalogue.search_items("", opts ++ [order: nil])
+      assert Enum.map(by_nil, & &1.name) == ["Zed First", "Alpha Last"]
+    end
+
+    test "tied catalogue positions keep each catalogue's items contiguous, name-ordered" do
+      # Panel, 2026-09-12: catalogue positions default to 0 and are one
+      # sequence per folder level, so tied catalogues are the common
+      # case — and with only cat.position leading, two tied catalogues
+      # interleaved at CATEGORY granularity (A.cat1, B.cat1, A.cat2, …).
+      # The index tie-breaks tied catalogues on lowercased name; so does
+      # the chain now.
+      beta = fixture_catalogue(%{name: "beta range", position: 0})
+      alpha = fixture_catalogue(%{name: "Alpha Range", position: 0})
+
+      # Item names run AGAINST the expected order (alpha's items are
+      # named Z…, beta's A…) so a chain that ends in `i.name` alone, or
+      # the old name default, cannot pass this by accident.
+      for {cat, prefix, item_prefix} <- [{beta, "B", "Aa"}, {alpha, "A", "Zz"}] do
+        for {cname, pos} <- [{"Second", 2}, {"First", 1}] do
+          category = fixture_category(cat, %{name: "#{prefix} #{cname}", position: pos})
+
+          fixture_item(%{
+            name: "#{item_prefix} #{prefix} #{cname}",
+            catalogue_uuid: cat.uuid,
+            category_uuid: category.uuid
+          })
+        end
+      end
+
+      names =
+        ""
+        |> Catalogue.search_items(catalogue_uuids: [beta.uuid, alpha.uuid])
+        |> Enum.map(& &1.name)
+
+      assert names == ["Zz A First", "Zz A Second", "Aa B First", "Aa B Second"]
+    end
+
+    test "catalogue POSITION leads, before the catalogue's name" do
+      # Sweep, 2026-09-12: nothing distinguished position-first from
+      # name-first at the catalogue level. Position 1 is named to sort
+      # last, position 2 to sort first; its item likewise.
+      zed = fixture_catalogue(%{name: "zed", position: 1})
+      alpha = fixture_catalogue(%{name: "alpha", position: 2})
+      fixture_item(%{name: "Aaa", catalogue_uuid: zed.uuid})
+      fixture_item(%{name: "Zzz", catalogue_uuid: alpha.uuid})
+
+      names =
+        ""
+        |> Catalogue.search_items(catalogue_uuids: [alpha.uuid, zed.uuid])
+        |> Enum.map(& &1.name)
+
+      assert names == ["Aaa", "Zzz"]
+    end
+
+    test "every field the browse vocabulary offers is one the fetch layer accepts" do
+      # The counterpart to `test/browse_sort_vocabulary_conformance_test.exs`,
+      # which pins the two static lists against each other. This one runs
+      # each of them through the query builder: an entry `BrowseState`
+      # admits but `apply_search_order/2` has no clause for would sail
+      # past init and raise here instead — inside the embed's or the
+      # popup's first fetch.
+      cat = fixture_catalogue(%{name: "Vocabulary"})
+      fixture_item(%{name: "Only", catalogue_uuid: cat.uuid})
+
+      for field <- BrowseState.order_fields(), dir <- [:asc, :desc] do
+        assert [%{name: "Only"}] =
+                 Catalogue.search_items("", catalogue_uuids: [cat.uuid], order: {field, dir})
+      end
+
+      # And the bare `:position` / `:name` atoms the browse layer passes.
+      for order <- [:position, :name] do
+        assert [%{name: "Only"}] =
+                 Catalogue.search_items("", catalogue_uuids: [cat.uuid], order: order)
+      end
+    end
+
+    test "an unknown :order raises rather than silently sorting by name" do
+      assert_raise ArgumentError, ~r/:order must be/, fn ->
+        Catalogue.search_items("", order: {:markup, :asc})
+      end
+
+      assert_raise ArgumentError, ~r/:order must be/, fn ->
+        Catalogue.search_items("", order: "name")
+      end
     end
 
     # `i.position` is per-(catalogue, category), so a listing that spans
@@ -275,11 +367,10 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
 
       assert names == ["F One", "F Two", "S One", "S Two", "Loose End"]
 
-      # The same chain the admin's catalogue-wide read walks.
-      assert names ==
-               cat.uuid
-               |> Catalogue.search_items_in_catalogue("")
-               |> Enum.map(& &1.name)
+      # The same walk the admin's unpaged catalogue-wide read makes —
+      # `list_items_for_catalogue/1` owns a separate order_by, so this
+      # is a real cross-check, not a tautology.
+      assert names == cat.uuid |> Catalogue.list_items_for_catalogue() |> Enum.map(& &1.name)
     end
 
     test "{field, dir} orders read the admin's directional sorts" do

@@ -62,6 +62,29 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
   end
 
   @doc """
+  A trimmed string from an event param, or `""` for anything that is not
+  a string. Event payloads are client data: a list or a map where a
+  string was expected must not crash the LiveView and lose the form.
+  """
+  @spec trim_param(term()) :: String.t()
+  def trim_param(value) when is_binary(value), do: String.trim(value)
+  def trim_param(_), do: ""
+
+  @doc """
+  On create there is no row to splice owned keys into, so the incoming
+  `data` map is narrowed to the keys the form owns here — the create-side
+  twin of `update_*/3`'s `:data_owned_keys` (a crafted `data` could
+  otherwise seed any top-level key, translation fingerprints included).
+  """
+  @spec narrow_new_data(map(), [String.t()]) :: map()
+  def narrow_new_data(params, owned_keys) do
+    case Map.get(params, "data") do
+      %{} = data -> Map.put(params, "data", Map.take(data, owned_keys))
+      _ -> params
+    end
+  end
+
+  @doc """
   The top-level `data` keys the item/category form actually rendered —
   for `Catalogue.update_item/3` / `update_category/3`'s
   `:data_owned_keys` option (see that option's doc for the full

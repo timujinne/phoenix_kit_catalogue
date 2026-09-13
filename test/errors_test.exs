@@ -263,4 +263,21 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
       assert msg =~ "Invalid price:"
     end
   end
+
+  describe "exception structs (sweep 2026-09-13)" do
+    test "a rescued DB exception is not inspected into the flash" do
+      exception = %Postgrex.Error{
+        postgres: %{
+          code: :unique_violation,
+          message: "duplicate key value violates unique constraint \"secret_idx\""
+        }
+      }
+
+      msg = Errors.message(exception)
+      assert msg =~ "Unexpected error:"
+      refute msg =~ "%Postgrex.Error"
+      refute msg =~ "postgres:"
+      assert String.length(msg) < 200
+    end
+  end
 end

@@ -301,14 +301,33 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   end
 
   @doc "Updates an attribute (name, translations, kind, status, position). `key` is immutable."
-  @spec update_attribute(Attribute.t(), map()) ::
+  @spec update_attribute(Attribute.t(), map(), keyword()) ::
           {:ok, Attribute.t()} | {:error, Ecto.Changeset.t()}
-  def update_attribute(%Attribute{} = attribute, attrs) do
+  def update_attribute(%Attribute{} = attribute, attrs, opts \\ []) do
     with {:ok, updated} <-
            attribute |> Attribute.update_changeset(attrs) |> repo().update() do
+      log("attribute_group.attribute_updated", "attribute_group", attribute.group_uuid, opts, %{
+        "name" => updated.name,
+        "key" => updated.key
+      })
+
       PubSub.broadcast(:attribute_group, attribute.group_uuid)
       {:ok, updated}
     end
+  end
+
+  # Every attribute/value mutation writes its audit row, like
+  # `create_attribute/3` and `delete_attribute/2` always did (sweep,
+  # 2026-09-13: seven mutations on this surface logged nothing).
+  defp log(action, resource_type, resource_uuid, opts, metadata) do
+    ActivityLog.log(%{
+      action: action,
+      mode: opts[:mode] || "manual",
+      actor_uuid: opts[:actor_uuid],
+      resource_type: resource_type,
+      resource_uuid: resource_uuid,
+      metadata: metadata
+    })
   end
 
   @doc "Deletes an attribute and its values in one transaction."
@@ -357,8 +376,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   the client list is forgeable, so the write count is bounded by the
   group's real row count, never by payload length (panel finding).
   """
-  @spec reorder_attributes(AttributeGroup.t(), [Ecto.UUID.t()]) :: :ok | {:error, term()}
-  def reorder_attributes(%AttributeGroup{} = group, uuids) when is_list(uuids) do
+  @spec reorder_attributes(AttributeGroup.t(), [Ecto.UUID.t()], keyword()) ::
+          :ok | {:error, term()}
+  def reorder_attributes(%AttributeGroup{} = group, uuids, opts \\ []) when is_list(uuids) do
     known =
       repo().all(from(a in Attribute, where: a.group_uuid == ^group.uuid, select: a.uuid))
 
@@ -390,6 +410,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
     # refactor) to crash as they should.
     case result do
       {:ok, _} ->
+        log("attribute_group.attributes_reordered", "attribute_group", group.uuid, opts, %{
+          "count" => length(ordered)
+        })
+
         PubSub.broadcast(:attribute_group, group.uuid)
         :ok
 
@@ -414,9 +438,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   the display text (deduped within the attribute); position appends at the
   end; the attribute's first value becomes the default automatically.
   """
-  @spec create_attribute_value(Attribute.t(), map()) ::
+  @spec create_attribute_value(Attribute.t(), map(), keyword()) ::
           {:ok, AttributeValue.t()} | {:error, Ecto.Changeset.t()}
-  def create_attribute_value(%Attribute{} = attribute, attrs) do
+  def create_attribute_value(%Attribute{} = attribute, attrs, opts \\ []) do
     text = attrs["value"] || attrs[:value]
 
     taken =
@@ -458,6 +482,11 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
 
     case result do
       {:ok, value} ->
+        log("attribute.value_added", "attribute", attribute.uuid, opts, %{
+          "attribute_key" => attribute.key,
+          "key" => value.key
+        })
+
         PubSub.broadcast(:attribute_group, attribute.group_uuid)
         {:ok, value}
 
@@ -467,11 +496,15 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   end
 
   @doc "Updates a value's display text / translations / status. `key` is immutable."
-  @spec update_attribute_value(AttributeValue.t(), map()) ::
+  @spec update_attribute_value(AttributeValue.t(), map(), keyword()) ::
           {:ok, AttributeValue.t()} | {:error, Ecto.Changeset.t()}
-  def update_attribute_value(%AttributeValue{} = value, attrs) do
+  def update_attribute_value(%AttributeValue{} = value, attrs, opts \\ []) do
     with {:ok, updated} <-
            value |> AttributeValue.update_changeset(attrs) |> repo().update() do
+      log("attribute.value_updated", "attribute", value.attribute_uuid, opts, %{
+        "key" => updated.key
+      })
+
       broadcast_for_attribute(value.attribute_uuid)
       {:ok, updated}
     end
@@ -482,9 +515,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   active value is promoted so a `multi` attribute never silently loses
   its default.
   """
-  @spec delete_attribute_value(AttributeValue.t()) ::
+  @spec delete_attribute_value(AttributeValue.t(), keyword()) ::
           {:ok, AttributeValue.t()} | {:error, term()}
-  def delete_attribute_value(%AttributeValue{} = value) do
+  def delete_attribute_value(%AttributeValue{} = value, opts \\ []) do
     result =
       repo().transaction(fn ->
         # delete_all by uuid: a concurrent delete of the same row is a
@@ -495,6 +528,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
       end)
 
     with {:ok, deleted} <- result do
+      log("attribute.value_removed", "attribute", value.attribute_uuid, opts, %{
+        "key" => value.key
+      })
+
       broadcast_for_attribute(value.attribute_uuid)
       {:ok, deleted}
     end
@@ -510,8 +547,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   fails with `{:error, :not_found}` when the value vanished concurrently
   and `{:error, :conflict}` when two flips race on the index.
   """
-  @spec set_default_value(AttributeValue.t()) :: {:ok, AttributeValue.t()} | {:error, term()}
-  def set_default_value(%AttributeValue{} = value) do
+  @spec set_default_value(AttributeValue.t(), keyword()) ::
+          {:ok, AttributeValue.t()} | {:error, term()}
+  def set_default_value(%AttributeValue{} = value, opts \\ []) do
     result =
       repo().transaction(fn ->
         repo().update_all(
@@ -532,6 +570,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
       end)
 
     with {:ok, updated} <- result do
+      log("attribute.default_set", "attribute", value.attribute_uuid, opts, %{
+        "key" => value.key
+      })
+
       broadcast_for_attribute(value.attribute_uuid)
       {:ok, updated}
     end
@@ -565,8 +607,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
   end
 
   @doc "Persists a manual ordering of an attribute's values (same contract as `reorder_attributes/2`)."
-  @spec reorder_attribute_values(Attribute.t(), [Ecto.UUID.t()]) :: :ok | {:error, term()}
-  def reorder_attribute_values(%Attribute{} = attribute, uuids) when is_list(uuids) do
+  @spec reorder_attribute_values(Attribute.t(), [Ecto.UUID.t()], keyword()) ::
+          :ok | {:error, term()}
+  def reorder_attribute_values(%Attribute{} = attribute, uuids, opts \\ [])
+      when is_list(uuids) do
     known =
       repo().all(
         from(v in AttributeValue, where: v.attribute_uuid == ^attribute.uuid, select: v.uuid)
@@ -588,6 +632,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
 
     case result do
       {:ok, _} ->
+        log("attribute.values_reordered", "attribute", attribute.uuid, opts, %{
+          "count" => length(ordered)
+        })
+
         PubSub.broadcast(:attribute_group, attribute.group_uuid)
         :ok
 

@@ -98,6 +98,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Web.Helpers
 
   # ═══════════════════════════════════════════════════════════════════
   # Featured image card
@@ -1189,10 +1190,18 @@ defmodule PhoenixKitCatalogue.Web.Components do
     """
   end
 
+  # Canonical-form only, like `Browse.signed_featured_url/2`: the value is
+  # free JSONB and is interpolated into a URL path by the signer, so
+  # `"../../x"` must never reach it. `Ecto.UUID.cast/1` alone accepts any
+  # 16-byte binary — equality with the cast result is the actual guard.
   @doc false
   def featured_image_uuid(%{data: %{"featured_image_uuid" => uuid}})
-      when is_binary(uuid) and uuid != "",
-      do: uuid
+      when is_binary(uuid) and uuid != "" do
+    case Ecto.UUID.cast(uuid) do
+      {:ok, ^uuid} -> uuid
+      _ -> nil
+    end
+  end
 
   def featured_image_uuid(_), do: nil
 
@@ -1420,22 +1429,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
   defp status_class("inactive"), do: "badge-warning"
   defp status_class(_), do: "badge-neutral"
 
-  # Status labels are translated via gettext so admin UIs render in the
-  # active locale instead of the raw English DB value. Unknown statuses
-  # render the raw key verbatim — wrapping it in `String.capitalize/1`
-  # would pin English casing on a value the gettext extractor can't
-  # see, so we leave it raw and rely on a future status enum addition
-  # to surface the missing literal here.
-  defp status_label("active"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")
-  defp status_label("inactive"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Inactive")
-  defp status_label("archived"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")
-  defp status_label("deleted"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")
-
-  defp status_label("discontinued"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discontinued")
-
-  defp status_label(other) when is_binary(other), do: other
-  defp status_label(_), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unknown")
+  # One implementation, in `Web.Helpers.status_label/1` (this was a
+  # byte-identical private copy — sweep, 2026-09-13).
+  defp status_label(status), do: Helpers.status_label(status)
 
   defp size_class(:xs), do: "badge-xs"
   defp size_class(:sm), do: "badge-sm"
@@ -2179,7 +2175,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     * `items` — list of items to display (required)
     * `columns` — list of column atoms to show (default: `[:name, :sku, :base_price, :status]`)
       Available: #{inspect(@all_columns)}
-    * `cards` — enable card view toggle (default: `false`). When enabled, renders a
+    * `cards` — enable card view toggle (default: `true`). When enabled, renders a
       table/card toggle button and shows items as cards on mobile. The card view
       shows the item name as the title, selected columns as key-value fields,
       and action buttons in the card footer.
@@ -3138,7 +3134,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   attr(:selected_item, :any, default: nil)
   attr(:excluded_uuids, :list, default: [])
-  attr(:locale, :string, required: true)
+  # Optional, like the LiveComponent it wraps: omitted, the process gettext
+  # locale applies; pass it only to force a language the process is not in.
+  attr(:locale, :string, default: nil)
   attr(:placeholder, :string, default: nil)
   attr(:empty_query_limit, :integer, default: 10)
   attr(:page_size, :integer, default: 20)

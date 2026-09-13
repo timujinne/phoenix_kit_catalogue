@@ -20,6 +20,40 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
     %{catalogue: cat}
   end
 
+  describe "the catalogue form and its row (review round, 2026-09-12)" do
+    test "Save is an owned-key write: a data key the form never shows survives", %{
+      conn: conn,
+      catalogue: cat
+    } do
+      {:ok, _} =
+        PhoenixKitCatalogue.Catalogue.update_catalogue(cat, %{
+          data: Map.put(cat.data || %{}, "sync", %{"remote_id" => "r-1"})
+        })
+
+      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      # Change the row behind the open form so its snapshot is stale.
+      {:ok, _} =
+        PhoenixKitCatalogue.Catalogue.update_catalogue(cat, %{
+          data: Map.put(cat.data || %{}, "sync", %{"remote_id" => "r-2"})
+        })
+
+      render_submit(view, "save", %{"catalogue" => %{"name" => "Renamed Cat"}})
+
+      fresh = PhoenixKitCatalogue.Catalogue.get_catalogue!(cat.uuid)
+      assert fresh.data["sync"] == %{"remote_id" => "r-2"}
+    end
+
+    test "a broadcast for this catalogue refreshes the grid and does not crash the form", %{
+      conn: conn,
+      catalogue: cat
+    } do
+      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      send(view.pid, {:catalogue_data_changed, :catalogue, cat.uuid, cat.uuid})
+      assert render(view) =~ "Attach Cat"
+      assert Process.alive?(view.pid)
+    end
+  end
+
   describe "open_featured_image_picker / close_media_selector" do
     test "open_featured_image_picker flips media selector flags",
          %{conn: conn, catalogue: cat} do

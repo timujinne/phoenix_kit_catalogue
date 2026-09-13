@@ -40,6 +40,18 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
       `"inactive"`, `"discontinued"`). `nil` or `[]` = all non-deleted
       (the historical default). Soft-deleted rows stay excluded even if
       `"deleted"` is listed. Atoms are accepted and stringified.
+    * `:order` — `:position` (default: the admin's Manual document
+      order — catalogue position, category position, item position,
+      name; `{:position, dir}` is accepted and the direction ignored,
+      like the admin's Manual sort), `:name`, or `{field, :asc | :desc}`
+      for `name` / `sku` / `base_price` / `status`. Anything else raises
+      `ArgumentError`.
+      Known limits of the Manual chain: catalogue positions are one
+      sequence per folder level, so across folders it is position then
+      name rather than the index's folder walk; and a subtree listing
+      (a search with `:include_descendants`) orders by each category's
+      sibling position, not a depth-first walk — the same order the
+      admin's own in-catalogue search has always had.
     * `:limit` — max results (default 50).
     * `:offset` — paging offset (default 0).
     * `:preload` — extra associations appended to the default
@@ -52,20 +64,20 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     offset = Keyword.get(opts, :offset, 0)
     preloads = Helpers.merge_preloads([:catalogue, category: :catalogue], opts)
 
-    # Ordering: name by DEFAULT — `position` is per-`(catalogue_uuid,
-    # category_uuid)` scope, so interleaving across catalogues by raw
-    # position is meaningless. A caller whose scope is coherent for it
-    # (one catalogue — the popup's browse listings since 2026-08-31,
-    # matching the admin's document order; Max: "the default look would
-    # be the same") passes `order: :position` and gets the chain
-    # `search_items_in_catalogue/3` uses: category position first, then
-    # the item's own. Leading with `i.position` alone is NOT the admin's
-    # order once a listing spans several categories — the per-category
-    # ordinals interleave (all the 1s, then all the 2s), which is the
-    # same incoherence this note warns about one level down.
+    # Ordering: MANUAL by default (Max, 2026-09-12: "the default should
+    # be the manual order") — the admin's document order at every level:
+    # catalogue position, then category position (uncategorized last),
+    # then the item's own position, name, uuid. Leading with the
+    # catalogue makes the chain coherent for ANY scope — one category,
+    # one catalogue, or several — so no caller has to reason about
+    # whether position "applies" to its scope. Leading with `i.position`
+    # alone would NOT be the admin's order once a listing spans several
+    # categories (the per-category ordinals interleave: all the 1s, then
+    # all the 2s). Pass `order: :name` (or `{field, dir}`) for anything
+    # else.
     query
     |> search_items_base(opts)
-    |> apply_search_order(Keyword.get(opts, :order, :name))
+    |> apply_search_order(Keyword.get(opts, :order) || :position)
     |> limit(^limit)
     |> offset(^offset)
     |> preload(^preloads)
@@ -73,35 +85,58 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     |> Manufacturers.hydrate()
   end
 
-  # Category position first (uncategorized last), then the item's own —
-  # byte-for-byte `search_items_in_catalogue/3`'s chain, so a
-  # catalogue-wide browse listing reads exactly like the admin's. For a
-  # single-category or category-less scope the leading key is constant
-  # and this is identical to ordering by `i.position` alone.
-  defp apply_search_order(query, :position),
+  # Catalogue (position, lowercased name, uuid), then category position
+  # (uncategorized last), then the item's own position, name, uuid — so
+  # a listing reads like walking the admin: the index's Manual order,
+  # each catalogue's categories in their Manual order, each category's
+  # items in theirs. The catalogue tie-break matters: positions default
+  # to 0 and are one sequence per folder level, so tied catalogues are
+  # the common case, and without it their items would interleave at
+  # category granularity (panel, 2026-09-12). The name key is the
+  # index's own tie-break (`lower(name)`), so the two agree. Within one
+  # catalogue the leading keys are constant; within one category the
+  # category key is too.
+  # Public (`@doc false`) so the browse-sort vocabulary conformance test
+  # can build every clause without a database, not only the DB-backed
+  # coverage test — a field added to the two static lists but not here
+  # must fail on a machine with no Postgres too.
+  @doc false
+  @spec apply_search_order(Ecto.Query.t(), term()) :: Ecto.Query.t()
+  def apply_search_order(query, :position),
     do:
-      order_by(query, [i, _cat, c],
+      order_by(query, [i, cat, c],
+        asc_nulls_last: cat.position,
+        asc: fragment("lower(?)", cat.name),
+        asc: cat.uuid,
         asc_nulls_last: c.position,
         asc: i.position,
         asc: i.name,
         asc: i.uuid
       )
 
-  defp apply_search_order(query, {:position, _dir}), do: apply_search_order(query, :position)
+  def apply_search_order(query, {:position, _dir}), do: apply_search_order(query, :position)
 
   # Directional field sorts — the admin's `item_order_by/3` vocabulary
   # (the module's shared sort names one of these when it isn't Manual),
   # same uuid tie-break so paging stays deterministic.
-  defp apply_search_order(query, {field, dir})
-       when field in ~w(name sku base_price status)a and dir in [:asc, :desc],
-       do: order_by(query, [i, _cat, _c], [{^dir, field(i, ^field)}, {:asc, i.uuid}])
+  def apply_search_order(query, {field, dir})
+      when field in ~w(name sku base_price status)a and dir in [:asc, :desc],
+      do: order_by(query, [i, _cat, _c], [{^dir, field(i, ^field)}, {:asc, i.uuid}])
 
-  defp apply_search_order(query, _name),
+  def apply_search_order(query, :name),
     do: order_by(query, [i, _cat, _c], asc: i.name, asc: i.uuid)
+
+  # Loud, not lenient: the old catch-all turned a misspelt sort into a
+  # silent name order. A host passing junk now learns the vocabulary.
+  def apply_search_order(_query, other) do
+    raise ArgumentError,
+          "search_items/2 :order must be :position, :name, or {field, :asc | :desc} " <>
+            "with field in [:name, :sku, :base_price, :status], got: #{inspect(other)}"
+  end
 
   @doc """
   Returns the total number of items matching `search_items/2`'s filters.
-  Ignores `:limit`/`:offset`. Same scope opts as `search_items/2`.
+  Ignores `:limit`/`:offset`/`:order`. Same scope opts as `search_items/2`.
   """
   @spec count_search_items(String.t(), keyword()) :: non_neg_integer()
   def count_search_items(query, opts \\ []) do
@@ -113,33 +148,24 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
 
   @doc """
   Searches items within a specific catalogue. Convenience wrapper
-  around `search_items/2` with `catalogue_uuids: [catalogue_uuid]`,
-  but orders by category position first (then item name) for a stable
-  walk through a catalogue's categories.
+  around `search_items/2` with `catalogue_uuids: [catalogue_uuid]` in
+  the admin's Manual document order (category position, then item
+  position, name, uuid) — a stable walk through a catalogue's
+  categories. It used to carry its own copy of that chain; it now
+  delegates, so the two cannot drift. Pins `:order` — a caller's own
+  `:order` is overridden, since Manual is this wrapper's contract.
 
   Same `:preload` opt as `search_items/2` (extra associations appended
   to the default `[:catalogue, category: :catalogue]`).
   """
   @spec search_items_in_catalogue(Ecto.UUID.t(), String.t(), keyword()) :: [Item.t()]
   def search_items_in_catalogue(catalogue_uuid, query, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-    offset = Keyword.get(opts, :offset, 0)
-    opts = Keyword.put(opts, :catalogue_uuids, [catalogue_uuid])
-    preloads = Helpers.merge_preloads([:catalogue, category: :catalogue], opts)
+    opts =
+      opts
+      |> Keyword.put(:catalogue_uuids, [catalogue_uuid])
+      |> Keyword.put(:order, :position)
 
-    query
-    |> search_items_base(opts)
-    |> order_by([i, _cat, c],
-      asc_nulls_last: c.position,
-      asc: i.position,
-      asc: i.name,
-      asc: i.uuid
-    )
-    |> limit(^limit)
-    |> offset(^offset)
-    |> preload(^preloads)
-    |> repo().all()
-    |> Manufacturers.hydrate()
+    search_items(query, opts)
   end
 
   @doc "Total match count for `search_items_in_catalogue/3`."

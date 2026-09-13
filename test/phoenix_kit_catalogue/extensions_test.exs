@@ -15,7 +15,9 @@ defmodule PhoenixKitCatalogue.ExtensionsTest do
   alias PhoenixKitCatalogue.Test.DelimiterModule
   alias PhoenixKitCatalogue.Test.FakeExtension
   alias PhoenixKitCatalogue.Test.FakeModule
+  alias PhoenixKitCatalogue.Test.HostileCastModule
   alias PhoenixKitCatalogue.Test.HostileRenderModule
+  alias PhoenixKitCatalogue.Test.RaisingCastExtension
 
   setup do
     start_supervised!(PhoenixKit.ModuleRegistry)
@@ -174,9 +176,13 @@ defmodule PhoenixKitCatalogue.ExtensionsTest do
       assert log =~ "label render exploded"
     end
 
-    test "a well-behaved sibling column is unaffected" do
+    test "a well-behaved sibling column is unaffected, rendered once, handed over already safe" do
       assert col("ok").label.() == "OK"
-      assert is_struct(col("ok").render.(%{uuid: "sibling-uuid"}), Phoenix.LiveView.Rendered)
+
+      # The guard's probe IS the render: the template gets the iodata,
+      # not the struct it would have to evaluate a second time.
+      assert {:safe, iodata} = col("ok").render.(%{uuid: "sibling-uuid"})
+      assert IO.iodata_to_binary(iodata) =~ "ext-hostile-ok-sibling-uuid"
     end
 
     test "logs once per column per Extensions.columns/1 call, not once per invocation" do
@@ -195,6 +201,57 @@ defmodule PhoenixKitCatalogue.ExtensionsTest do
 
       log = capture_log(fn -> col("raises").render.(%{uuid: "x"}) end)
       assert log =~ "hostile:raises"
+    end
+  end
+
+  describe "with HostileCastModule registered (cast failures, reserved keys)" do
+    setup do
+      :ok = PhoenixKit.ModuleRegistry.register(HostileCastModule)
+
+      on_exit(fn ->
+        :persistent_term.put(
+          {PhoenixKit, :registered_modules},
+          List.delete(PhoenixKit.ModuleRegistry.all_modules(), HostileCastModule)
+        )
+      end)
+
+      :ok
+    end
+
+    test "an extension whose key names a language bucket is dropped at discovery, once logged" do
+      log =
+        capture_log(fn -> assert Extensions.all() == [RaisingCastExtension, FakeExtension] end)
+
+      assert log =~ "ReservedKeyExtension"
+      assert log =~ "language code"
+
+      # Once per process, not once per call.
+      assert capture_log(fn -> Extensions.all() end) == ""
+    end
+
+    test "a raising cast keeps its namespace's current value and lets the siblings absorb" do
+      log =
+        capture_log(fn ->
+          assert Extensions.absorb(
+                   :item,
+                   %{"raising" => %{"x" => 1}, "fake" => %{"note" => "hi"}},
+                   %{"raising" => %{"kept" => true}}
+                 ) == {:ok, %{"raising" => %{"kept" => true}, "fake" => %{"note" => "hi"}}}
+        end)
+
+      assert log =~ "RaisingCastExtension.cast_item/2 failed"
+      assert log =~ "cast exploded"
+    end
+
+    test "a cast returning neither :ok nor :error is treated the same way" do
+      log =
+        capture_log(fn ->
+          assert Extensions.absorb(:category, %{"fake" => %{"note" => "hi"}}, %{}) ==
+                   {:ok, %{"fake" => %{"note" => "hi"}}}
+        end)
+
+      assert log =~ "cast_category/2 failed"
+      assert log =~ ":not_a_result"
     end
   end
 

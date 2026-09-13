@@ -141,7 +141,22 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
 
   @impl true
   def handle_url_state(state, socket) do
-    if socket.assigns[:ai_available], do: load_rows(socket, state), else: socket
+    if socket.assigns[:ai_available] do
+      # `UrlState`'s own `:in` guard can't cover `lang` — the list of
+      # enabled languages is DB-settings-backed, not a compile-time atom
+      # list — so a hand-edited URL (`?lang=`, `?lang=xx-XX`) reaches this
+      # callback un-vetted. Re-assign `:lang` to the normalized value so
+      # the filter <select> (driven by `@lang`) never lands on something
+      # that isn't one of its own options.
+      lang = normalize_lang(state.lang, languages(socket))
+      state = %{state | lang: lang}
+
+      socket
+      |> assign(:lang, lang)
+      |> load_rows(state)
+    else
+      socket
+    end
   end
 
   # ── Filter form ────────────────────────────────────────────────────
@@ -150,12 +165,17 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   def handle_event("filter", params, socket) do
     filter = Map.get(params, "filter", %{})
 
+    lang =
+      filter
+      |> Map.get("lang", socket.assigns.lang)
+      |> normalize_lang(languages(socket))
+
     {:noreply,
      push_url_state(
        socket,
        [
          type: Map.get(filter, "type", socket.assigns.type),
-         lang: Map.get(filter, "lang", socket.assigns.lang),
+         lang: lang,
          search: Map.get(filter, "search", socket.assigns.search)
        ],
        replace: true
@@ -313,38 +333,82 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
 
   defp default_languages, do: Multilang.enabled_languages() -- [Multilang.primary_language()]
 
+  # `:languages` is only assigned once `mount/3` confirms `ai_available` —
+  # every caller below can still fire (a crafted event, or `filter`'s
+  # `phx-change`) while it's unset, and `socket.assigns.languages` would
+  # then raise `KeyError` instead of the graceful "unknown language"
+  # handling these callers expect. Absent means no language can be valid.
+  defp languages(socket), do: socket.assigns[:languages] || []
+
+  # `lang` is the one `UrlState` param that can't declare a compile-time
+  # `:in` list (`@languages` is DB-settings-backed, not a static atom
+  # list — see `use PhoenixKitWeb.Live.UrlState` above), so anything
+  # reaching this callback — a stale filter submit, a hand-edited
+  # `?lang=` — is normalized here instead. Blank/nil/unknown all fall
+  # back to "all" (the same default `UrlState` would use for a param it
+  # could validate declaratively); "all" itself and any currently
+  # enabled language pass through unchanged.
+  defp normalize_lang("all", _languages), do: "all"
+
+  defp normalize_lang(lang, languages) when is_binary(lang) do
+    if lang in languages, do: lang, else: "all"
+  end
+
+  defp normalize_lang(_lang, _languages), do: "all"
+
+  # A specific translation TARGET (as opposed to the "all languages"
+  # filter scope) must be one of the currently enabled languages — never
+  # blank, never "all", never a value that isn't in `@languages` anymore.
+  # Guards the two places a client-controlled `lang` reaches
+  # `Translations.enqueue/1`: the per-row `phx-value-lang` (a crafted
+  # event can send anything) and bulk enqueue (defense in depth — bulk's
+  # own `lang` already comes from the normalized filter above).
+  defp valid_target_lang?(lang, languages), do: is_binary(lang) and lang in languages
+
   defp filter_by_state(rows, "all"), do: rows
   defp filter_by_state(rows, s), do: Enum.filter(rows, &(Atom.to_string(&1.state) == s))
 
   # ── Row/bulk enqueue ─────────────────────────────────────────────────
 
+  # `lang` is client-supplied (`phx-value-lang` on the row's button) — a
+  # crafted event can send blank/garbage directly, bypassing the filter
+  # form's own normalization entirely. Reject it here, before it ever
+  # reaches `Translations.enqueue/1`'s `target_lang`.
   defp enqueue_one(socket, type, uuid, lang) do
-    resource_type = TranslationSweepWorker.resource_type_for(type)
+    if valid_target_lang?(lang, languages(socket)) do
+      resource_type = TranslationSweepWorker.resource_type_for(type)
 
-    params = %{
-      resource_type: resource_type,
-      resource_uuid: uuid,
-      endpoint_uuid: socket.assigns.endpoint_uuid,
-      prompt_uuid: Map.fetch!(socket.assigns.prompts, resource_type),
-      source_lang: Multilang.primary_language(),
-      target_lang: lang,
-      actor_uuid: Helpers.actor_uuid(socket)
-    }
+      params = %{
+        resource_type: resource_type,
+        resource_uuid: uuid,
+        endpoint_uuid: socket.assigns.endpoint_uuid,
+        prompt_uuid: Map.fetch!(socket.assigns.prompts, resource_type),
+        source_lang: Multilang.primary_language(),
+        target_lang: lang,
+        actor_uuid: Helpers.actor_uuid(socket)
+      }
 
-    case Translations.enqueue(params) do
-      {:ok, %{conflict?: true}} ->
-        socket
-        |> track_key({resource_type, uuid, lang}, true)
-        |> put_flash(:info, gettext("A translation job for this row is already queued."))
+      case Translations.enqueue(params) do
+        {:ok, %{conflict?: true}} ->
+          socket
+          |> track_key({resource_type, uuid, lang}, true)
+          |> put_flash(:info, gettext("A translation job for this row is already queued."))
 
-      {:ok, %{conflict?: false}} ->
-        socket
-        |> track_key({resource_type, uuid, lang}, true)
-        |> put_flash(:info, gettext("Translation queued."))
+        {:ok, %{conflict?: false}} ->
+          socket
+          |> track_key({resource_type, uuid, lang}, true)
+          |> put_flash(:info, gettext("Translation queued."))
 
-      {:error, reason} ->
-        Logger.warning("TranslationsLive: enqueue failed: #{inspect(reason)}")
-        put_flash(socket, :error, gettext("Could not queue the translation."))
+        {:error, reason} ->
+          Logger.warning("TranslationsLive: enqueue failed: #{inspect(reason)}")
+          put_flash(socket, :error, gettext("Could not queue the translation."))
+      end
+    else
+      put_flash(
+        socket,
+        :error,
+        gettext("Unknown target language — refresh the page and try again.")
+      )
     end
   end
 
@@ -381,22 +445,32 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
     |> refresh_rows()
   end
 
+  # `row.lang` comes from `TranslationStatus.list(langs: target_langs(...))`,
+  # which is only ever fed the already-normalized `@lang` — so this can't
+  # currently be reached with an invalid language. Guarded anyway: bulk
+  # enqueues hundreds of rows unattended, and a future `target_langs/1`
+  # change silently producing a bad language must fail loud per-row
+  # (counted as an error below), not by queuing a broken job.
   defp do_bulk_enqueue(socket, row) do
-    resource_type = TranslationSweepWorker.resource_type_for(row.type)
+    if valid_target_lang?(row.lang, languages(socket)) do
+      resource_type = TranslationSweepWorker.resource_type_for(row.type)
 
-    params = %{
-      resource_type: resource_type,
-      resource_uuid: row.uuid,
-      endpoint_uuid: socket.assigns.endpoint_uuid,
-      prompt_uuid: Map.fetch!(socket.assigns.prompts, resource_type),
-      source_lang: Multilang.primary_language(),
-      target_lang: row.lang,
-      actor_uuid: Helpers.actor_uuid(socket)
-    }
+      params = %{
+        resource_type: resource_type,
+        resource_uuid: row.uuid,
+        endpoint_uuid: socket.assigns.endpoint_uuid,
+        prompt_uuid: Map.fetch!(socket.assigns.prompts, resource_type),
+        source_lang: Multilang.primary_language(),
+        target_lang: row.lang,
+        actor_uuid: Helpers.actor_uuid(socket)
+      }
 
-    case Translations.enqueue(params) do
-      {:ok, _} -> {:ok, track_key(socket, {resource_type, row.uuid, row.lang}, true)}
-      {:error, _reason} -> {:error, socket}
+      case Translations.enqueue(params) do
+        {:ok, _} -> {:ok, track_key(socket, {resource_type, row.uuid, row.lang}, true)}
+        {:error, _reason} -> {:error, socket}
+      end
+    else
+      {:error, socket}
     end
   end
 
@@ -483,6 +557,15 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
       {type_label(:set_label), "set_label"},
       {type_label(:set_value), "set_value"}
     ]
+  end
+
+  # "All languages" is a real option value ("all"), not a `prompt` — a
+  # `prompt`-rendered `<option value="">` doesn't match `@lang`'s default
+  # ("all"), so the browser silently falls back to showing its own blank
+  # first option instead of the one that's actually selected. Same fix as
+  # `type_options/0` and `all_states/0`'s "all" chip already use.
+  defp lang_options(languages) do
+    [{gettext("All languages"), "all"} | Enum.map(languages, &{&1, &1})]
   end
 
   defp state_label("missing"), do: gettext("Missing")
@@ -589,8 +672,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
                 id="translations-filter-lang"
                 label={gettext("Language")}
                 value={@lang}
-                prompt={gettext("All languages")}
-                options={Enum.map(@languages, &{&1, &1})}
+                options={lang_options(@languages)}
                 class="select-sm"
               />
             </div>
@@ -616,6 +698,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
           <button
             type="button"
             phx-click="bulk_translate_missing"
+            phx-disable-with={gettext("Working...")}
             data-confirm={bulk_confirm(@counts, :missing)}
             class="btn btn-sm btn-outline"
             disabled={Map.get(@counts, :missing, 0) == 0}
@@ -625,6 +708,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
           <button
             type="button"
             phx-click="bulk_retranslate_stale"
+            phx-disable-with={gettext("Working...")}
             data-confirm={bulk_confirm(@counts, :stale)}
             class="btn btn-sm btn-outline"
             disabled={Map.get(@counts, :stale, 0) == 0}
@@ -672,6 +756,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
                   <button
                     type="button"
                     phx-click="translate"
+            phx-disable-with={gettext("Working...")}
                     phx-value-type={row.type}
                     phx-value-uuid={row.uuid}
                     phx-value-lang={row.lang}
@@ -683,6 +768,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
                   <button
                     type="button"
                     phx-click="stamp_fresh"
+            phx-disable-with={gettext("Working...")}
                     phx-value-type={row.type}
                     phx-value-uuid={row.uuid}
                     phx-value-lang={row.lang}

@@ -107,6 +107,11 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
   alias PhoenixKitEntities, as: Entities
   alias PhoenixKitEntities.EntityData
 
+  # The `xx-YY` shape every core language code has; the only other
+  # top-level `data` keys are namespaces (`meta`, an extension's) and
+  # underscore-prefixed markers.
+  @language_code ~r/^[a-z]{2}-[A-Z]{2}$/
+
   @type state :: :missing | :stale | :unknown | :fresh
 
   # The multilang-override field keys the item/category adapter exposes
@@ -237,6 +242,54 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
       {:error, :no_translation}
     end
   end
+
+  @doc """
+  Stamps every language that currently holds a translation of `resource`
+  as `:fresh` against the CURRENT source — the create-time baseline. A
+  resource saved from the form with translations already in hand (a
+  value-mode AI translate on a not-yet-saved item, a secondary-language
+  name typed by hand) was translated against the source it is created
+  with, so it must not be born `:unknown` — a state the sweep never
+  picks up and an operator would otherwise clear by hand, language by
+  language (week review, 2026-09-13). Item and category only; anything
+  else returns unchanged. Never raises: a stamp that fails leaves that
+  pair `:unknown`, which is what it was.
+  """
+  @spec stamp_all_translated(struct()) :: struct()
+  def stamp_all_translated(%schema{data: data} = resource) when schema in [Item, Category] do
+    data
+    |> translated_languages()
+    |> Enum.reduce(resource, fn lang, acc ->
+      case stamp_fresh(acc, lang) do
+        {:ok, updated} -> updated
+        {:error, _reason} -> acc
+      end
+    end)
+  rescue
+    _ -> resource
+  end
+
+  def stamp_all_translated(resource), do: resource
+
+  # Secondary languages with at least one override present; a flat
+  # (non-multilang) `data` has none.
+  defp translated_languages(data) when is_map(data) do
+    if Multilang.multilang_data?(data) do
+      primary = Map.get(data, "_primary_language")
+
+      data
+      |> Map.keys()
+      |> Enum.filter(fn key ->
+        is_binary(key) and key != primary and key =~ @language_code and
+          any_override_present?(data, key)
+      end)
+      |> Enum.sort()
+    else
+      []
+    end
+  end
+
+  defp translated_languages(_data), do: []
 
   @doc """
   Field-narrowed `stamp_fresh/2`: stamps only `fields` (a field name or a

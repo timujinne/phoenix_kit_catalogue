@@ -235,6 +235,22 @@ defmodule PhoenixKitCatalogue.Import.Pro100Plan do
   defp maybe_put(attrs, key, value), do: Map.put(attrs, key, value)
 
   @doc """
+  The `data` keys an update change actually writes — those whose value
+  differs from the item snapshot the plan diffed against (`"pro100"`, and
+  `"original_unit"` for an unrecognised material unit). Apply writes ONLY
+  these, as owned keys, so a photo attached or reordered between the
+  preview and Apply — or between Apply's read and its write — survives.
+  """
+  @spec data_owned_keys(map()) :: [String.t()]
+  def data_owned_keys(%{item: item, data: data}) when is_map(data) do
+    snapshot = (item && item.data) || %{}
+
+    data
+    |> Enum.reject(fn {key, value} -> Map.get(snapshot, key) == value end)
+    |> Enum.map(&elem(&1, 0))
+  end
+
+  @doc """
   Converts the `:creates` bucket into the plan shape `Executor.execute/4` wants.
 
   Category linkage runs through the `:_category_name` placeholder resolved

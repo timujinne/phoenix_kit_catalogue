@@ -37,6 +37,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   end
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Catalogue.CrmLink
   alias PhoenixKitCatalogue.Import
   alias PhoenixKitCatalogue.Import.{Executor, Mapper, Parser, Pro100Plan}
@@ -214,46 +215,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   end
 
   # Keep old handlers as fallbacks for any standalone selects
-  def handle_event("update_mapping", %{"column" => col_str, "target" => target_str}, socket) do
-    col_idx = String.to_integer(col_str)
-    target = parse_target(target_str)
-
-    # Unique targets: if another column already has this target (except :skip and :data),
-    # reset the old column to :skip
-    unique_targets = [
-      :name,
-      :description,
-      :sku,
-      :base_price,
-      :markup_percentage,
-      :unit,
-      :category
-    ]
-
-    mappings =
-      Enum.map(socket.assigns.column_mappings, fn m ->
-        cond do
-          m.column_index == col_idx -> %{m | target: target}
-          target in unique_targets and m.target == target -> %{m | target: :skip}
-          true -> m
-        end
-      end)
-
-    # Update unit values if unit column changed
-    rows = ets_to_rows(socket.assigns.ets_table)
-    {unit_values, unit_map} = detect_unit_values(mappings, rows)
-
-    {:noreply,
-     assign(socket,
-       column_mappings: mappings,
-       unit_values: unit_values,
-       unit_map:
-         if(unit_values == socket.assigns.unit_values,
-           do: socket.assigns.unit_map,
-           else: unit_map
-         )
-     )}
+  def handle_event("update_mapping", %{"column" => col_str, "target" => target_str}, socket)
+      when is_binary(target_str) do
+    case column_index(col_str) do
+      nil -> {:noreply, socket}
+      col_idx -> update_mapping(socket, col_idx, parse_target(target_str))
+    end
   end
+
+  def handle_event("update_mapping", _params, socket), do: {:noreply, socket}
 
   def handle_event("update_unit_map", %{"source" => source, "target" => target}, socket) do
     unit_map = Map.put(socket.assigns.unit_map, source, target)
@@ -582,15 +552,21 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   defp apply_pro100_update(change, actor, {count, fails}) do
     if should_persist_pro100?(change) do
-      # Re-read the item at Apply time and merge only the plan's own data
-      # changes onto its CURRENT data. The plan snapshotted `item.data` when it
-      # was built; writing that snapshot back wholesale would clobber anything
-      # attached since — e.g. a photo the operator added between the preview and
-      # Apply. Mirrors the merge-under-"pro100" pattern in Pro100TemplateLoader.
+      # Owned-key write of only the keys the plan changed (`"pro100"`,
+      # `"original_unit"`): the row is re-read under lock inside the
+      # update, so a photo attached or reordered between the preview and
+      # Apply — or between a read here and the write — survives. The
+      # earlier read-then-merge closed only the first window (review
+      # sweep, 2026-09-12).
       target = Catalogue.get_item(change.item.uuid) || change.item
-      attrs = pro100_update_attrs(change, target)
+      owned = Pro100Plan.data_owned_keys(change)
+      attrs = pro100_update_attrs(change, owned)
 
-      case Catalogue.update_item(target, attrs, actor_uuid: actor) do
+      case Catalogue.update_item(target, attrs,
+             actor_uuid: actor,
+             data_owned_keys: owned,
+             mode: "auto"
+           ) do
         {:ok, _updated} ->
           {count + 1, fails}
 
@@ -828,8 +804,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     end
   end
 
-  defp apply_mapping_changes(socket, mapping_params) when map_size(mapping_params) == 0,
-    do: socket
+  defp apply_mapping_changes(socket, mapping_params)
+       when not is_map(mapping_params) or map_size(mapping_params) == 0,
+       do: socket
 
   defp apply_mapping_changes(socket, mapping_params) do
     old_mappings = socket.assigns.column_mappings
@@ -901,7 +878,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     )
   end
 
-  defp apply_unit_map_changes(socket, unit_params) when map_size(unit_params) == 0, do: socket
+  defp apply_unit_map_changes(socket, unit_params)
+       when not is_map(unit_params) or map_size(unit_params) == 0,
+       do: socket
 
   defp apply_unit_map_changes(socket, unit_params) do
     unit_map = Map.merge(socket.assigns.unit_map, unit_params)
@@ -1423,10 +1402,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   defp maybe_set_picker_column(socket, picker_mode_assign, col)
        when is_binary(col) and col != "" do
-    col_idx = String.to_integer(col)
-    target = picker_target(picker_mode_assign)
-    mappings = update_column_mappings(socket.assigns.column_mappings, col_idx, target)
-    assign(socket, :column_mappings, mappings)
+    case column_index(col) do
+      nil ->
+        socket
+
+      col_idx ->
+        target = picker_target(picker_mode_assign)
+        mappings = update_column_mappings(socket.assigns.column_mappings, col_idx, target)
+        assign(socket, :column_mappings, mappings)
+    end
   end
 
   defp maybe_set_picker_column(socket, _picker_mode_assign, _), do: socket
@@ -2832,6 +2816,55 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp target_to_string(:supplier), do: "supplier"
   defp target_to_string({:data, name}), do: "data:#{name}"
 
+  # A column index is client data: anything but a whole number is ignored.
+  defp column_index(raw) when is_binary(raw) do
+    case Integer.parse(raw) do
+      {n, ""} when n >= 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp column_index(n) when is_integer(n) and n >= 0, do: n
+  defp column_index(_), do: nil
+
+  defp update_mapping(socket, col_idx, target) do
+    # Unique targets: if another column already has this target (except :skip and :data),
+    # reset the old column to :skip
+    unique_targets = [
+      :name,
+      :description,
+      :sku,
+      :base_price,
+      :markup_percentage,
+      :unit,
+      :category
+    ]
+
+    mappings =
+      Enum.map(socket.assigns.column_mappings, fn m ->
+        cond do
+          m.column_index == col_idx -> %{m | target: target}
+          target in unique_targets and m.target == target -> %{m | target: :skip}
+          true -> m
+        end
+      end)
+
+    # Update unit values if unit column changed
+    rows = ets_to_rows(socket.assigns.ets_table)
+    {unit_values, unit_map} = detect_unit_values(mappings, rows)
+
+    {:noreply,
+     assign(socket,
+       column_mappings: mappings,
+       unit_values: unit_values,
+       unit_map:
+         if(unit_values == socket.assigns.unit_values,
+           do: socket.assigns.unit_map,
+           else: unit_map
+         )
+     )}
+  end
+
   defp parse_target("skip"), do: :skip
   defp parse_target("name"), do: :name
   defp parse_target("description"), do: :description
@@ -2842,7 +2875,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp parse_target("category"), do: :category
   defp parse_target("manufacturer"), do: :manufacturer
   defp parse_target("supplier"), do: :supplier
-  defp parse_target("data:" <> name), do: {:data, name}
+  # `data:<key>` was never offered by the mapping select; parsing it let a
+  # crafted mapping write verbatim cell content into reserved `data` keys
+  # (`featured_image_uuid`, `files_folder_uuid`, `media_order`, …).
   defp parse_target(_), do: :skip
 
   defp has_mapping?(mappings, target) do
@@ -2887,9 +2922,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     if Code.ensure_loaded?(PhoenixKit.Activity) do
       catalogue = socket.assigns[:selected_catalogue]
 
-      PhoenixKit.Activity.log(%{
+      ActivityLog.log(%{
         action: "import.started",
-        module: "catalogue",
         mode: "manual",
         actor_uuid: extract_actor_uuid(socket),
         resource_type: "catalogue",
@@ -2921,7 +2955,6 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
     %{
       action: "import.completed",
-      module: "catalogue",
       mode: "manual",
       actor_uuid: extract_actor_uuid(socket),
       resource_type: "catalogue",
@@ -3046,8 +3079,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       get_in(change.item.data, ["pro100"]) != change.data["pro100"]
   end
 
-  defp pro100_update_attrs(change, target) do
-    attrs = %{data: merge_plan_data(target.data, change)}
+  defp pro100_update_attrs(change, owned_keys) do
+    attrs = %{data: Map.take(change.data, owned_keys)}
 
     attrs =
       case change.changes do
@@ -3059,20 +3092,6 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       %{unit: {_old, new}} -> Map.put(attrs, :unit, new)
       _ -> attrs
     end
-  end
-
-  # Applies only the keys the plan actually changed relative to the item
-  # snapshot it diffed against — so keys attached to the item since (a photo's
-  # `featured_image_uuid`, a `files_folder_uuid`) survive Apply. `change.item.data`
-  # is that snapshot; `change.data` is the snapshot plus the plan's own writes
-  # (`"pro100"`, and `"original_unit"` for unrecognised material units).
-  defp merge_plan_data(current_data, change) do
-    snapshot = (change.item && change.item.data) || %{}
-    current = current_data || %{}
-
-    Enum.reduce(change.data, current, fn {key, value}, acc ->
-      if Map.get(snapshot, key) == value, do: acc, else: Map.put(acc, key, value)
-    end)
   end
 
   defp changeset_error_string(changeset) do

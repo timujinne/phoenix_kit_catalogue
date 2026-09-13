@@ -30,6 +30,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PdfLibrary
   alias PhoenixKitCatalogue.Paths
+  alias PhoenixKitCatalogue.Web.Helpers
 
   @per_pdf 5
   @more_batch_size 50
@@ -128,7 +129,7 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
 
   @impl true
   def handle_event("library_query", %{"q" => raw}, socket) do
-    query = String.trim(raw)
+    query = Helpers.trim_param(raw)
 
     if String.length(query) < 2 do
       {:noreply,

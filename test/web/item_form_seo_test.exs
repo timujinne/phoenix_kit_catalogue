@@ -186,6 +186,35 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSeoTest do
   end
 
   describe "slug uniqueness" do
+    test "an auto-generated slug that another item already holds gets a suffix instead of failing",
+         %{conn: conn} do
+      # Uniqueness is one scope per entity kind across every catalogue,
+      # trashed rows included — a second "Vase" in another catalogue, or
+      # one re-created after its predecessor was trashed, used to fail
+      # Save with "already taken" on a field the user never typed.
+      other_catalogue = fixture_catalogue()
+
+      taken =
+        fixture_item(%{
+          catalogue_uuid: other_catalogue.uuid,
+          name: "Vase",
+          slug: %{"en-US" => "vase"}
+        })
+
+      {:ok, _} = Catalogue.trash_item(taken)
+
+      catalogue = fixture_catalogue()
+      item = fixture_item(%{catalogue_uuid: catalogue.uuid, name: "Vase"})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      view
+      |> form("form[action=\"#\"][phx-submit=save]", %{"item" => %{"name" => "Vase"}})
+      |> render_submit()
+
+      assert Catalogue.get_item!(item.uuid).slug["en-US"] == "vase-2"
+    end
+
     test "a duplicate slug in the same language shows a constraint error and does not save", %{
       conn: conn
     } do

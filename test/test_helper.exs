@@ -101,7 +101,8 @@ repo_available =
       # `Ecto.Migration` run, so replay the statements directly through
       # the repo instead. All of them are idempotent, so re-running the
       # full V1 ∪ V2 set on an install already at V2 is a no-op.
-      if PhoenixKitCatalogue.Migrations.migrated_version_runtime(prefix: "public") < 2 do
+      if PhoenixKitCatalogue.Migrations.migrated_version_runtime(prefix: "public") <
+           PhoenixKitCatalogue.Migrations.current_version() do
         for stmt <- PhoenixKitCatalogue.Migrations.up_statements("public") do
           PhoenixKitCatalogue.Test.Repo.query!(stmt)
         end

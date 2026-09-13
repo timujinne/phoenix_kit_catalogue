@@ -16,6 +16,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   alias PhoenixKit.Utils.Routes
   alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Paths
+  alias PhoenixKitCatalogue.Web.Helpers
 
   @per_page 20
 
@@ -130,7 +131,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       socket
     end
   rescue
-    _ -> socket
+    e ->
+      Logger.warning("EventsLive could not load the filter options: #{Exception.message(e)}")
+      socket
   end
 
   defp reset_and_load(socket) do
@@ -164,7 +167,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       assign(socket, loading: false)
     end
   rescue
-    _ -> assign(socket, loading: false)
+    e ->
+      Logger.warning("EventsLive could not load events: #{Exception.message(e)}")
+      assign(socket, loading: false)
   end
 
   # Translates the raw resource_type string for the filter dropdown.
@@ -239,26 +244,16 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     end
   end
 
-  defp format_time_ago(datetime) do
-    diff = DateTime.diff(DateTime.utc_now(), datetime, :second)
+  # The shared helper: same wording as every other admin surface, and
+  # its date fallback is locale-aware (this file carried a duplicate
+  # with a hard-coded English date — sweep, 2026-09-13).
+  defp format_time_ago(datetime), do: Helpers.format_time_ago(datetime)
 
-    cond do
-      diff < 60 ->
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "just now")
-
-      diff < 3600 ->
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}m ago", count: div(diff, 60))
-
-      diff < 86_400 ->
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}h ago", count: div(diff, 3600))
-
-      diff < 604_800 ->
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count}d ago", count: div(diff, 86_400))
-
-      true ->
-        Calendar.strftime(datetime, "%b %d, %Y")
-    end
-  end
+  defp mode_label("manual"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manual")
+  defp mode_label("auto"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Automatic")
+  defp mode_label("cron"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Scheduled")
+  defp mode_label(other) when is_binary(other), do: other
+  defp mode_label(_), do: ""
 
   # ── Render ───────────────────────────────────────────────────────
 
@@ -331,7 +326,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             <div class="min-w-[60px]">
               <%= if entry.mode do %>
                 <span class={"badge badge-xs #{mode_badge_class(entry.mode)}"}>
-                  {entry.mode}
+                  {mode_label(entry.mode)}
                 </span>
               <% end %>
             </div>
@@ -339,7 +334,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
             <%!-- Resource + name --%>
             <div class="flex-1 min-w-0 flex items-center gap-1.5">
               <%= if entry.resource_type do %>
-                <span class="badge badge-ghost badge-xs shrink-0">{entry.resource_type}</span>
+                <span class="badge badge-ghost badge-xs shrink-0">
+                  {humanize_resource_type(entry.resource_type)}
+                </span>
                 <%= if entry.metadata["name"] do %>
                   <span class="text-sm font-medium shrink-0">{entry.metadata["name"]}</span>
                 <% end %>
@@ -358,7 +355,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
               <%= if entry.actor do %>
                 {entry.actor.email}
               <% else %>
-                <span class="text-base-content/40">System</span>
+                <span class="text-base-content/40">
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "System")}
+                </span>
               <% end %>
             </div>
 

@@ -21,6 +21,27 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveWizardTest do
   end
 
   describe "mapping step — update_mapping / mapping_form_change" do
+    test "a crafted column, a data: target, and a non-map mapping are all ignored (sweep 2026-09-13)",
+         %{conn: conn, catalogue: cat} do
+      view = mount_at_map_step(conn, cat)
+
+      render_change(view, "update_mapping", %{"column" => "x", "target" => "name"})
+
+      render_change(view, "update_mapping", %{
+        "column" => "0",
+        "target" => "data:featured_image_uuid"
+      })
+
+      render_change(view, "update_mapping", %{"column" => ["0"], "target" => "name"})
+      render_change(view, "mapping_form_change", %{"mapping" => "x", "unit_map" => "y"})
+      render_change(view, "select_import_category", %{"category_column" => "nope"})
+
+      assert Process.alive?(view.pid)
+      mappings = current_assigns(view).column_mappings
+      refute Enum.any?(mappings, &match?({:data, _}, &1.target))
+      assert Enum.find(mappings, &(&1.column_index == 0)).target == :skip
+    end
+
     test "update_mapping sets a column to :name", %{conn: conn, catalogue: cat} do
       view = mount_at_map_step(conn, cat)
 

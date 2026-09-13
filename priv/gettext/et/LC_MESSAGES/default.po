@@ -345,6 +345,18 @@ msgstr "Kategooria jäädavalt kustutatud."
 msgid "Category moved."
 msgstr "Kategooria teisaldatud."
 
+msgid "Working..."
+msgstr "Töötlen..."
+
+msgid "Unknown target language — refresh the page and try again."
+msgstr "Tundmatu sihtkeel — värskenda lehte ja proovi uuesti."
+
+msgid "Category moved into %{name}."
+msgstr "Kategooria teisaldatud kategooriasse %{name}."
+
+msgid "Category moved to the top level."
+msgstr "Kategooria teisaldatud ülemisele tasemele."
+
 msgid "Category moved to another catalogue."
 msgstr "Kategooria teisaldati teise kataloogi."
 
@@ -1826,6 +1838,9 @@ msgstr "Failikausta ei õnnestunud ette valmistada."
 msgid "Could not remove file."
 msgstr "Faili ei õnnestunud eemaldada."
 
+msgid "The photo order could not be saved. Try again."
+msgstr "Fotode järjekorda ei õnnestunud salvestada. Proovi uuesti."
+
 msgid "Could not save the uploaded file. Please try again or contact support if it persists."
 msgstr "Üleslaaditud faili ei õnnestunud salvestada. Proovi uuesti või pöördu toe poole, kui viga püsib."
 
@@ -2017,6 +2032,15 @@ msgstr "Muuda tooted kategooriata"
 
 msgid "Manual"
 msgstr "Käsitsi"
+
+msgid "System"
+msgstr "Süsteem"
+
+msgid "Scheduled"
+msgstr "Ajastatud"
+
+msgid "Automatic"
+msgstr "Automaatne"
 
 msgid "Manufacturer created but failed to link some suppliers."
 msgstr "Tootja loodud, kuid mõne tarnija sidumine ebaõnnestus."
@@ -2520,6 +2544,9 @@ msgstr "Üleslaadimise viga: %{reason}"
 
 msgid "Upload failed for %{name}."
 msgstr "%{name} üleslaadimine ebaõnnestus."
+
+msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
+msgstr "%{name} on identne juba manustatud failiga %{existing} — midagi ei lisatud."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr "Üleslaadimine ebaõnnestus ootamatul põhjusel. Proovi uuesti."

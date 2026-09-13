@@ -36,6 +36,8 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorker do
 
   use Oban.Worker, queue: :default, max_attempts: 1
 
+  import Ecto.Query, only: [from: 2]
+
   require Logger
 
   alias PhoenixKit.Utils.Multilang
@@ -58,6 +60,17 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorker do
   def resource_type_for(type), do: Map.fetch!(@resource_types, type)
 
   @unique_opts [period: :infinity, states: [:available, :scheduled]]
+
+  # A pair whose last translation job was DISCARDED (every attempt spent,
+  # or a deterministic failure) this recently is left alone. Without it
+  # the candidate list — deterministic, sorted, capped — re-enqueued the
+  # same failing rows every tick and never reached anything behind them
+  # (week review, 2026-09-13). The state the pair is in does not change:
+  # it is still `:missing`/`:stale`, still on the Translations page, and
+  # a manual Translate there is unaffected — only the automatic top-up
+  # backs off. Oban keeps discarded rows for its pruner's window (7 days
+  # by default), comfortably longer than this.
+  @failure_backoff_hours 24
 
   # Boot-time bootstrap, mirroring `AttributeSets.child_spec/1` /
   # `SupplierFields.child_spec/1`: a one-shot `Task` (not a GenServer —
@@ -165,14 +178,47 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorker do
 
   # Up to `max` (resource, lang) rows across every catalogue translatable
   # type, `:missing` or `:stale` only — `:unknown` is excluded by the state
-  # filter, never reaching this list at all.
+  # filter, never reaching this list at all — minus the pairs that failed
+  # within the back-off window. The page is widened by the size of that
+  # set so the exclusion cannot empty it: two hundred failing rows at the
+  # head of the sort no longer hide the two-hundred-and-first.
   defp candidates(langs, max) do
+    failed = recently_failed()
+    per_page = max + map_size(failed)
+
     @resource_types
-    |> Map.keys()
-    |> Enum.flat_map(fn type ->
-      TranslationStatus.list(type, langs: langs, state: [:missing, :stale], per_page: max)
+    |> Enum.flat_map(fn {type, resource_type} ->
+      type
+      |> TranslationStatus.list(langs: langs, state: [:missing, :stale], per_page: per_page)
+      |> Enum.reject(&Map.has_key?(failed, {resource_type, &1.uuid, &1.lang}))
     end)
     |> Enum.take(max)
+  end
+
+  # `{resource_type, resource_uuid, target_lang}` of every TranslateWorker
+  # job discarded inside the back-off window, as the keys of a plain map
+  # (not a MapSet: dialyzer cannot see through the opaque type across the
+  # `rescue`). Fails open (empty) on any query error — a sweep that cannot
+  # read the job table still sweeps, as it did before the back-off existed.
+  defp recently_failed do
+    since = DateTime.add(DateTime.utc_now(), -@failure_backoff_hours * 3600, :second)
+
+    from(j in "oban_jobs",
+      where: j.worker == "PhoenixKitAI.TranslateWorker",
+      where: j.state == "discarded" and j.discarded_at > ^since,
+      select:
+        {fragment("?->>'resource_type'", j.args), fragment("?->>'resource_uuid'", j.args),
+         fragment("?->>'target_lang'", j.args)}
+    )
+    |> PhoenixKit.RepoHelper.repo().all()
+    |> Map.new(&{&1, true})
+  rescue
+    e ->
+      Logger.warning(
+        "TranslationSweepWorker: could not read failed jobs: #{Exception.message(e)}"
+      )
+
+      %{}
   end
 
   defp enqueue_row(%{type: type, uuid: uuid, lang: lang}, endpoint_uuid, prompts) do

@@ -18,6 +18,56 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
   @base "/en/admin/catalogue"
 
+  describe "crafted payloads (review sweep, 2026-09-12)" do
+    test "a non-string choice index cannot crash the form (sweep 2026-09-13)", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Idx Cat"})
+      item = fixture_item(%{name: "Idx", catalogue_uuid: catalogue.uuid})
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "remove_supplier_field_choice", %{"index" => 0})
+      render_click(view, "remove_supplier_field_choice", %{"index" => %{"x" => 1}})
+      render_click(view, "remove_supplier_field_choice", %{})
+      assert Process.alive?(view.pid)
+    end
+
+    test "a create cannot seed data keys the form does not own (sweep 2026-09-13)", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Seed Cat"})
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      render_submit(view, "save", %{
+        "item" => %{
+          "name" => "Seeded",
+          "data" => %{
+            "_translation_fingerprints" => %{"de" => %{"name" => "deadbeef"}},
+            "evil" => "x"
+          }
+        },
+        "save_action" => "exit"
+      })
+
+      item =
+        Catalogue.list_items_for_catalogue(catalogue.uuid) |> Enum.find(&(&1.name == "Seeded"))
+
+      assert item
+      refute Map.has_key?(item.data || %{}, "_translation_fingerprints")
+      refute Map.has_key?(item.data || %{}, "evil")
+    end
+
+    test "a non-string category_uuid is refused, not crashed on", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Scope Cat"})
+      item = fixture_item(%{name: "Scoped", catalogue_uuid: catalogue.uuid})
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_submit(view, "save", %{
+        "item" => %{"name" => "Renamed", "category_uuid" => %{"x" => "1"}},
+        "save_action" => "stay"
+      })
+
+      assert Process.alive?(view.pid)
+      assert Catalogue.get_item!(item.uuid).name == "Scoped"
+    end
+  end
+
   defp new_item_url(catalogue_uuid), do: "#{@base}/#{catalogue_uuid}/items/new"
   defp edit_item_url(item_uuid), do: "#{@base}/items/#{item_uuid}/edit"
 

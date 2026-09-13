@@ -344,6 +344,9 @@ defmodule PhoenixKitCatalogue.Catalogue.CrmLink do
       :crm_company_uuid,
       "is already linked to another #{kind(record)}"
     )
+    # Built outside a repo call, so nothing sets `:action`; without it a
+    # form renders zero errors for this changeset.
+    |> Map.put(:action, :insert)
   end
 
   defp kind(%Supplier{}), do: "supplier"

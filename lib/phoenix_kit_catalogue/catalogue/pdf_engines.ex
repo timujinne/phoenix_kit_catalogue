@@ -182,6 +182,8 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfEngines do
   @doc false
   # Public for testability — internal pure function over `pdfinfo`'s
   # text output. Returns `{:ok, n}` or `{:error, {:pdfinfo_failed, msg}}`.
+  @spec parse_page_count(String.t()) ::
+          {:ok, non_neg_integer()} | {:error, {:pdfinfo_failed, String.t()}}
   def parse_page_count(output) when is_binary(output) do
     Regex.scan(~r/^Pages:\s+(\d+)/m, output)
     |> List.first()

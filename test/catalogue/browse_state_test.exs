@@ -15,6 +15,53 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
 
   defp opts_map({_state, {:fetch, opts, _gen}}), do: Map.new(opts)
 
+  describe ":refresh re-reads in place" do
+    test "keeps search and level, covers every loaded page in one fetch, pages on from there" do
+      state = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, per_page: 2)
+      {state, _} = BrowseState.command(state, {:search, "screw"})
+      state = BrowseState.ingest(state, state.gen, [item("a"), item("b")], 5)
+      {state, _} = BrowseState.command(state, :load_more)
+      state = BrowseState.ingest(state, state.gen, [item("c"), item("d")], 5)
+      assert state.page == 1
+
+      {refreshed, {:fetch, opts, gen}} = BrowseState.command(state, :refresh)
+
+      assert gen == state.gen + 1
+      assert opts[:search] == nil or opts[:search] == "screw"
+      assert refreshed.search == "screw"
+      assert refreshed.page == 1
+      assert opts[:offset] == 0
+      assert opts[:limit] == 4, "both loaded pages in one read"
+      assert refreshed.items == []
+      assert refreshed.loading?
+
+      # The re-read replaces the accumulator and paging continues after it.
+      refreshed =
+        BrowseState.ingest(refreshed, gen, [item("a"), item("c"), item("d"), item("e")], 5)
+
+      assert Enum.map(refreshed.items, & &1.uuid) == ["a", "c", "d", "e"]
+      refute refreshed.exhausted?
+
+      {next, {:fetch, next_opts, _}} = BrowseState.command(refreshed, :load_more)
+      assert next.page == 2
+      assert next_opts[:offset] == 4
+    end
+
+    test "a refresh that comes back short is exhausted, like any page" do
+      state = BrowseState.init(scope: %{}, per_page: 2)
+      {state, _} = BrowseState.command(state, :reset)
+      state = BrowseState.ingest(state, state.gen, [item("a"), item("b")], 3)
+      {state, _} = BrowseState.command(state, :load_more)
+      state = BrowseState.ingest(state, state.gen, [item("c")], 3)
+
+      {refreshed, {:fetch, _opts, gen}} = BrowseState.command(state, :refresh)
+      refreshed = BrowseState.ingest(refreshed, gen, [item("a"), item("c")], 2)
+
+      assert refreshed.exhausted?
+      assert {_, :noop} = BrowseState.command(refreshed, :load_more)
+    end
+  end
+
   describe "scope is a boundary" do
     test "catalogue_uuids and :only survive every command that fetches" do
       scope = %{
@@ -168,11 +215,9 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
     test "browse listings in ONE catalogue read in the admin's position order" do
       # Max, 2026-08-31: the popup and the admin showed different item
       # orders — the admin's default is document order (position, name),
-      # the fetch layer's is name. Single-catalogue BROWSE fetches now
-      # ask for :position; several catalogues keep name order (position
-      # is per-catalogue scope, interleaving it is meaningless), and a
-      # live SEARCH stays name-ordered everywhere, like the admin's
-      # results.
+      # the fetch layer's was name. BROWSE fetches ask for :position
+      # explicitly (since 2026-09-12 for every scope, and it is the fetch
+      # layer's default as well); a live SEARCH passes no order.
       single = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, drill: :direct)
       assert opts_map(BrowseState.command(single, :reset))[:order] == :position
 
@@ -180,17 +225,60 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
                :order
              ] == :position
 
-      # Searching switches to name order; clearing it restores position.
+      # Searching passes no order (the fetch layer's default, Manual since
+      # 2026-09-12, stands); clearing it restores the explicit position.
       opts = opts_map(BrowseState.command(single, {:search, "screw"}))
       refute Map.has_key?(opts, :order)
 
-      # A multi-catalogue ROOT keeps name order…
+      # A multi-catalogue ROOT reads in document order too (Max,
+      # 2026-09-12: "the default should be the manual order" — the
+      # fetch layer's chain leads with the catalogue's position)…
       multi = BrowseState.init(scope: %{catalogue_uuids: ["cat-1", "cat-2"]})
-      refute Map.has_key?(opts_map(BrowseState.command(multi, :reset)), :order)
+      assert opts_map(BrowseState.command(multi, :reset))[:order] == :position
 
-      # …but drilling catalogue-first into one restores document order.
+      # …and so does drilling catalogue-first into one.
       assert opts_map(BrowseState.command(multi, {:set_catalogue, "cat-2"}))[:order] ==
                :position
+    end
+
+    test "a CATEGORY-ONLY scope reads in position order too" do
+      # Client, 2026-09-12: "the popup's order isn't the catalogue's" —
+      # tim-dev's per-category narrow pickers pass category_uuids with
+      # catalogue_uuids: nil. The Manual gate keyed off the catalogue
+      # alone, so that shape silently dropped :position and the fetch
+      # layer listed the category A→Z while the admin showed the
+      # hand-arranged order. A category belongs to exactly one catalogue,
+      # so an explicit category set is as coherent for position as a
+      # single catalogue is.
+      narrow = BrowseState.init(scope: %{category_uuids: ["cat-a"]}, drill: :direct)
+      assert opts_map(BrowseState.command(narrow, :reset))[:order] == :position
+
+      # The shared Manual sort rides it the same way.
+      manual =
+        BrowseState.init(
+          scope: %{category_uuids: ["cat-a"], catalogue_uuids: nil},
+          drill: :direct,
+          order: {:position, :asc}
+        )
+
+      assert opts_map(BrowseState.command(manual, :reset))[:order] == :position
+
+      # A parent scope expanded to its subtree is still an explicit set.
+      subtree = BrowseState.init(scope: %{category_uuids: ["cat-a", "cat-a-1", "cat-a-2"]})
+      assert opts_map(BrowseState.command(subtree, :reset))[:order] == :position
+
+      # Drilling a category under a multi-catalogue root keeps it.
+      multi = BrowseState.init(scope: %{catalogue_uuids: ["cat-1", "cat-2"]}, drill: :direct)
+
+      assert opts_map(BrowseState.command(multi, {:set_category, Ecto.UUID.generate()}))[
+               :order
+             ] == :position
+
+      # A live search passes no order here as everywhere.
+      refute Map.has_key?(opts_map(BrowseState.command(narrow, {:search, "screw"})), :order)
+
+      # The fetch scope is untouched: no catalogue is invented for it.
+      refute Map.has_key?(opts_map(BrowseState.command(narrow, :reset)), :catalogue_uuids)
     end
 
     test "the module's shared sort rides every browse fetch; search still wins" do
@@ -211,12 +299,13 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
 
       assert opts_map(BrowseState.command(multi, :reset))[:order] == {:base_price, :asc}
 
-      # A live search stays name-ordered, like the admin's results.
+      # A live search passes no order — the fetch layer's Manual default
+      # stands, like the admin's in-catalogue search results.
       opts = opts_map(BrowseState.command(state, {:search, "screw"}))
       refute Map.has_key?(opts, :order)
 
-      # Manual keeps the single-catalogue guard and the direction-less
-      # :position opt (the admin's Manual sort has no direction either).
+      # Manual keeps the direction-less :position opt (the admin's Manual
+      # sort has no direction either), whatever the scope offers.
       manual = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"]}, order: {:position, :asc})
       assert opts_map(BrowseState.command(manual, :reset))[:order] == :position
 
@@ -226,7 +315,7 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
           order: {:position, :asc}
         )
 
-      refute Map.has_key?(opts_map(BrowseState.command(manual_multi, :reset)), :order)
+      assert opts_map(BrowseState.command(manual_multi, :reset))[:order] == :position
 
       # Junk raises at init — a bad field must not sail into the fetch
       # layer as a no-op sort.

@@ -19,6 +19,36 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
 
   defp primary, do: Multilang.primary_language()
 
+  describe "stamp_all_translated/1 (the create-time baseline)" do
+    test "stamps every translated secondary language fresh and leaves the rest alone" do
+      item = create_item(%{name: "Widget"})
+
+      data =
+        item.data
+        |> AITranslatable.force_put_language("fr-FR", %{"_name" => "Widget FR"})
+        |> AITranslatable.force_put_language("de-DE", %{"_name" => "Widget DE"})
+
+      {:ok, item} = Catalogue.update_item(item, %{data: data})
+      assert TranslationStatus.state(item, "fr-FR") == :unknown
+      assert TranslationStatus.state(item, "de-DE") == :unknown
+
+      stamped = TranslationStatus.stamp_all_translated(item)
+
+      assert TranslationStatus.state(stamped, "fr-FR") == :fresh
+      assert TranslationStatus.state(stamped, "de-DE") == :fresh
+      assert TranslationStatus.state(stamped, "et-EE") == :missing
+      assert TranslationStatus.state(Catalogue.get_item(item.uuid), "fr-FR") == :fresh
+    end
+
+    test "is a no-op for a resource without translations or without the mechanism" do
+      item = create_item(%{name: "Plain"})
+      assert TranslationStatus.stamp_all_translated(item) == item
+
+      {:ok, catalogue} = Catalogue.create_catalogue(%{name: "Cat"})
+      assert TranslationStatus.stamp_all_translated(catalogue) == catalogue
+    end
+  end
+
   defp create_catalogue_with_item(attrs) do
     {:ok, cat} = Catalogue.create_catalogue(%{name: "Cat"})
 

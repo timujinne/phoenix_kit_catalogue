@@ -54,6 +54,93 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
   defp to_items_mode(view),
     do: view |> picker() |> render_click("set_root_mode", %{"mode" => "items"})
 
+  # The relay's refresh is asynchronous (debounced, then send_update), so
+  # these tests poll the rendered HTML instead of asserting once.
+  defp eventually(fun, tries \\ 60) do
+    cond do
+      fun.() -> :ok
+      tries == 0 -> flunk("condition never became true")
+      true -> Process.sleep(50) && eventually(fun, tries - 1)
+    end
+  end
+
+  describe "live while open" do
+    test "a rename or price change made elsewhere reaches the open popup", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click")
+      assert html =~ "M8 Screw"
+      refute html =~ "9.99"
+
+      {:ok, _} =
+        Catalogue.update_item(screw, %{name: "M8 Screw Renamed", base_price: Decimal.new("9.99")})
+
+      eventually(fn -> render(view) =~ "M8 Screw Renamed" end)
+      assert render(view) =~ "9.99"
+    end
+
+    test "an item trashed by someone else leaves the listing", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&sel=click")
+      assert html =~ "M8 Screw"
+
+      {:ok, _} = Catalogue.trash_item(screw)
+
+      eventually(fn -> not (render(view) =~ "M8 Screw") end)
+      assert render(view) =~ "White Paint"
+    end
+
+    test "catalogue tiles follow a reorder made on the index", %{
+      conn: conn,
+      cat: cat,
+      other: other
+    } do
+      :ok = Catalogue.reorder_catalogues([cat.uuid, other.uuid])
+      {:ok, view, html} = open(conn, "c=#{cat.uuid}&c2=#{other.uuid}&sel=click")
+
+      before = fn html ->
+        :binary.match(html, "Picker Catalogue") < :binary.match(html, "Forbidden Catalogue")
+      end
+
+      assert before.(html)
+
+      :ok = Catalogue.reorder_catalogues([other.uuid, cat.uuid])
+
+      eventually(fn -> not before.(render(view)) end)
+    end
+
+    test "the user's search and level survive a refresh", %{conn: conn, cat: cat, paint: paint} do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      html = view |> picker() |> render_change("browse_search", %{"search" => "paint"})
+      assert html =~ "White Paint"
+      refute html =~ "M8 Screw"
+
+      {:ok, _} = Catalogue.update_item(paint, %{name: "White Paint 5L"})
+
+      eventually(fn -> render(view) =~ "White Paint 5L" end)
+      refute render(view) =~ "M8 Screw"
+    end
+
+    test "a change in an unrelated catalogue leaves the popup alone", %{
+      conn: conn,
+      cat: cat,
+      forbidden: forbidden
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+      html = render(view)
+
+      {:ok, _} = Catalogue.update_item(forbidden, %{name: "Forbidden Item Renamed"})
+      Process.sleep(400)
+
+      assert render(view) == html
+    end
+  end
+
   describe "scoped browsing" do
     test "renders only the scoped catalogue's items", %{conn: conn, cat: cat} do
       {:ok, _view, html} = open(conn, "c=#{cat.uuid}&sel=click")
@@ -2325,6 +2412,45 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       # the host's category scope (out-of-scope items never appear).
       html = view |> picker() |> render_change("browse_search", %{"search" => "m8"})
       refute html =~ "M8 Screw"
+    end
+
+    test "a CATEGORY-ONLY scope lists the items in the admin's Manual order", %{
+      conn: conn,
+      cat: cat
+    } do
+      # Client, 2026-09-12: ANDI's per-category pickers (category_uuids
+      # only, no catalogue) listed a category's items A→Z while the
+      # admin's Manual view showed the hand-arranged order — the Manual
+      # gate keyed off the catalogue alone. Positions here run against
+      # the alphabet so the two orders are distinguishable.
+      handles = fixture_category(cat, %{name: "Handles"})
+
+      names = ["Recessed handle", "Profile handle", "Handle-less system", "Push for cabinet"]
+
+      items =
+        for name <- names do
+          fixture_item(%{name: name, catalogue_uuid: cat.uuid, category_uuid: handles.uuid})
+        end
+
+      :ok = Catalogue.reorder_items(cat.uuid, handles.uuid, Enum.map(items, & &1.uuid))
+
+      {:ok, view, _html} = open(conn, "cat_scope=#{handles.uuid}&sel=click")
+      html = render(view)
+
+      # Every name renders, and in position order: their offsets ascend.
+      offsets = Enum.map(names, fn name -> {name, :binary.match(html, name) |> elem(0)} end)
+      assert offsets |> Enum.map(&elem(&1, 1)) |> Enum.sort() == Enum.map(offsets, &elem(&1, 1))
+
+      # A typed search reads in Manual order too (Max, 2026-09-12: "the
+      # default should be the manual order"), like the admin's own
+      # in-catalogue search results.
+      html = view |> picker() |> render_change("browse_search", %{"search" => "handle"})
+      handle_names = Enum.filter(names, &(&1 =~ ~r/handle/i))
+
+      assert handle_names
+             |> Enum.map(&{&1, :binary.match(html, &1) |> elem(0)})
+             |> Enum.sort_by(&elem(&1, 1))
+             |> Enum.map(&elem(&1, 0)) == handle_names
     end
 
     test "a tile's IMAGE enters the level like its name does", %{

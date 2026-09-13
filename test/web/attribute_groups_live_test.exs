@@ -224,4 +224,12 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
       assert to == "#{@base}/attributes"
     end
   end
+
+  test "crafted rename/add payloads cannot crash the group form (sweep 2026-09-13)", %{conn: conn} do
+    group = create_group(%{name: "Junk Group"})
+    {:ok, view, _html} = live(conn, "#{@base}/attributes/#{group.uuid}/edit")
+    render_submit(view, "add_attribute", %{"attr_name" => %{"x" => 1}})
+    render_submit(view, "add_attribute", %{"attr_name" => ["x"]})
+    assert Process.alive?(view.pid)
+  end
 end

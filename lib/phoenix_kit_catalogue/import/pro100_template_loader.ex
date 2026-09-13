@@ -370,7 +370,16 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   end
 
   defp apply_update(found, changes) do
-    {:ok, _} = Catalogue.update_item(found, changes, skip_derive: true, broadcast: false)
+    # The "pro100" namespace is the only data key this loader owns; an
+    # owned-key write keeps whatever else landed on the row since `found`
+    # was read (a photo pointer, a fingerprint) — sweep, 2026-09-13.
+    {:ok, _} =
+      Catalogue.update_item(found, changes,
+        skip_derive: true,
+        broadcast: false,
+        data_owned_keys: ["pro100"]
+      )
+
     :updated
   end
 
@@ -403,7 +412,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
     if new == old,
       do: acc,
-      else: Map.put(acc, :data, Map.put(found.data || %{}, "pro100", new))
+      else: Map.put(acc, :data, %{"pro100" => new})
   end
 
   # ── Rules ────────────────────────────────────────────────────────

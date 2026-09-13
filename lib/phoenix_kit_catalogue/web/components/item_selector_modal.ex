@@ -56,6 +56,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         selected={@order_lines_by_uuid}
       />
 
+  ## Other attrs the host may pass
+
+    * `mode` — `:multi` (default) or `:single`.
+    * `immediate` — with `mode: :single`, confirm on the first pick: the
+      `{:items_selected, …}` message fires at once and the Cancel/Confirm
+      row is not rendered. Default `false`.
+    * `per_page` — page size for the listing and load-more. Default `50`.
+    * `locale` — forces the display language; omitted, the process gettext
+      locale applies (the fallback the browse widget and picker share).
+
   ## Required host wiring (do not skip — silent failure otherwise)
 
   This is a `LiveComponent`; it reports through process messages to the
@@ -86,6 +96,20 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       popup client-side also needs the host's vendored core
       `phoenix_kit.js` from core > 2.13.17; on older bundles both
       dialogs close visually and this message still fires once.)
+
+  ## Live while open
+
+  The popup follows the catalogue for as long as it is open, with no
+  host wiring: a relay process (`PhoenixKitCatalogue.Web.ComponentRelay`)
+  holds the PubSub subscription for the component and pushes one
+  debounced refresh per burst of writes through `send_update/3`. A price
+  corrected on the admin side, an item trashed by another user, a
+  reordered or renamed category or catalogue — the tiles, the listing
+  (every page loaded so far), the tray and the stacked details re-read
+  in place, while the user's search, level, scroll and selection stay
+  exactly where they were. The relay stops with the popup; a host that
+  unmounts the component without a close is detected by the relay's
+  ack timeout.
 
   ## Item details page
 
@@ -260,6 +284,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.BrowseState
   alias PhoenixKitCatalogue.Catalogue.Tree
+  alias PhoenixKitCatalogue.Web.ComponentRelay
   alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Components.Browse
   alias PhoenixKitCatalogue.Web.Components.ProductCard
@@ -280,7 +305,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
        confirmed: false,
        root_mode: "categories",
        search_cat_hits: [],
-       drafts: %{}
+       drafts: %{},
+       relay: nil
      )}
   end
 
@@ -306,7 +332,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
            do: open_detail(socket, socket.assigns.detail.uuid, :close),
            else: socket
 
-      {:ok, socket}
+      {:ok, maybe_live_refresh(socket, assigns[:live_refresh])}
     else
       {:ok, initialize(socket, assigns)}
     end
@@ -326,9 +352,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         # items; search still covers the subtree.
         drill: :direct,
         # The module's shared sort (client, 2026-09-01): the popup lists
-        # items in the same order the admin detail page does. Read once at
-        # init, like the tree — a modal open while an admin re-sorts
-        # elsewhere keeps the order it opened with.
+        # items in the same order the admin detail page does. Read here
+        # and again on every live refresh (the sort change broadcasts).
         order: Browse.global_items_order()
       )
 
@@ -370,14 +395,89 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         qty_min: limits.qty_min,
         qty_max: limits.qty_max,
         scoped_root_category: scoped_root,
+        original_scope: original_scope,
+        limits: limits,
         cat_tree: build_category_tree(scope, original_scope, locale),
         presented: %{},
         selection: hydrate_preselection(assigns[:selected] || %{}, scope, locale, limits, mode),
-        browse: browse
+        browse: browse,
+        relay: start_relay(socket, scope)
       )
 
     run_fetch(socket, effect)
   end
+
+  # ── Live refresh ─────────────────────────────────────────────────
+
+  # The popup follows the catalogue while it is open (Max, 2026-09-13:
+  # several users may be picking from a limited stock, and a price
+  # corrected elsewhere must not be confirmed at the old figure). A
+  # LiveComponent cannot subscribe for itself, so a relay process holds
+  # the subscription and pushes a debounced `live_refresh` through
+  # `send_update/3` — the host wires nothing. Only a connected socket
+  # starts one: the dead render has no process to follow.
+  defp start_relay(socket, scope) do
+    if Phoenix.LiveView.connected?(socket) do
+      ComponentRelay.start(__MODULE__, socket.assigns.id,
+        catalogue_uuids: scope[:catalogue_uuids]
+      )
+    end
+  end
+
+  defp stop_relay(socket) do
+    ComponentRelay.stop(socket.assigns[:relay])
+    assign(socket, relay: nil)
+  end
+
+  defp maybe_live_refresh(socket, nil), do: socket
+
+  defp maybe_live_refresh(socket, refresh) do
+    ComponentRelay.ack(refresh)
+    refresh_live(socket)
+  end
+
+  # Everything the user is looking at, re-read in place: the tiles (a
+  # reorder, a rename, a new category), the listing (every page loaded
+  # so far, same search and level — see `BrowseState` `:refresh`), the
+  # tray (a price change, an item that went away — its quantities are
+  # the user's and stay), the stacked details, and the shared sort an
+  # admin may have switched meanwhile. Nothing the user did is touched:
+  # search text, level, scroll depth, selection, typed drafts.
+  defp refresh_live(socket) do
+    %{browse: browse, original_scope: original, locale: locale} = socket.assigns
+
+    browse = %{browse | order: Browse.global_items_order()}
+    {browse, effect} = BrowseState.command(browse, :refresh)
+
+    socket
+    |> assign(
+      browse: browse,
+      cat_tree: build_category_tree(browse.scope, original, locale)
+    )
+    |> rehydrate_selection()
+    |> refresh_detail()
+    |> run_fetch(effect)
+  end
+
+  defp rehydrate_selection(%{assigns: %{selection: selection}} = socket)
+       when selection == %{},
+       do: socket
+
+  defp rehydrate_selection(socket) do
+    %{selection: selection, browse: browse, locale: locale, limits: limits, mode: mode} =
+      socket.assigns
+
+    quantities = Map.new(selection, fn {uuid, entry} -> {uuid, entry.qty} end)
+
+    assign(socket,
+      selection: hydrate_preselection(quantities, browse.scope, locale, limits, mode)
+    )
+  end
+
+  defp refresh_detail(%{assigns: %{detail: %{uuid: uuid}}} = socket),
+    do: open_detail(socket, uuid, :close)
+
+  defp refresh_detail(socket), do: socket
 
   defp scoped_root_category(original_scope) do
     case List.wrap(original_scope[:category_uuids]) do
@@ -1798,7 +1898,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     if confirmable_selection?(socket.assigns.selection) and not socket.assigns.confirmed do
       send(self(), {:items_selected, confirm_payload(socket.assigns)})
       send(self(), {:item_selector_closed, %{id: socket.assigns.id}})
-      {:noreply, assign(socket, confirmed: true)}
+      {:noreply, socket |> assign(confirmed: true) |> stop_relay()}
     else
       {:noreply, socket}
     end
@@ -1815,7 +1915,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       {:noreply, assign(socket, detail: nil)}
     else
       send(self(), {:item_selector_closed, %{id: socket.assigns.id}})
-      {:noreply, socket}
+      {:noreply, stop_relay(socket)}
     end
   end
 
@@ -1934,7 +2034,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
          not socket.assigns.confirmed do
       send(self(), {:items_selected, confirm_payload(socket.assigns)})
       send(self(), {:item_selector_closed, %{id: socket.assigns.id}})
-      assign(socket, confirmed: true)
+      socket |> assign(confirmed: true) |> stop_relay()
     else
       socket
     end

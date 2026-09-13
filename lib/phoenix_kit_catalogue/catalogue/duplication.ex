@@ -29,7 +29,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
 
   alias Ecto.Adapters.SQL
   alias PhoenixKit.Modules.Storage
-  alias PhoenixKit.Modules.Storage.{File, Folder, FolderLink}
+  alias PhoenixKit.Modules.Storage.{Folder, FolderLink}
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub, SupplierComments}
 
   alias PhoenixKitCatalogue.Schemas.{
@@ -522,14 +522,12 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     end
   end
 
+  # The same set every other reader shows — home files plus linked ones
+  # — but UNCAPPED: a copy must carry every file, not the grid's page.
   defp list_files(folder_uuid) do
-    linked = from(fl in FolderLink, where: fl.folder_uuid == ^folder_uuid, select: fl.file_uuid)
-
-    from(f in File,
-      where:
-        (f.folder_uuid == ^folder_uuid or f.uuid in subquery(linked)) and f.status != "trashed",
-      order_by: [asc: f.inserted_at]
-    )
+    folder_uuid
+    |> PhoenixKitCatalogue.Attachments.folder_files_query()
+    |> order_by([f], asc: f.inserted_at, asc: f.uuid)
     |> repo().all()
   end
 

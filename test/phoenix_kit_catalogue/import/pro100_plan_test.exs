@@ -488,4 +488,24 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
                s.foreign_group == length(rows)
     end
   end
+
+  describe "data_owned_keys/1" do
+    test "names only the keys the plan changed against its snapshot" do
+      item = %Item{data: %{"pro100" => %{"v" => 1}, "media_order" => ["a"], "x" => 1}}
+
+      change = %{
+        item: item,
+        data: %{
+          "pro100" => %{"v" => 2},
+          "media_order" => ["a"],
+          "x" => 1,
+          "original_unit" => "tk"
+        }
+      }
+
+      assert Enum.sort(Pro100Plan.data_owned_keys(change)) == ["original_unit", "pro100"]
+      assert Pro100Plan.data_owned_keys(%{item: item, data: item.data}) == []
+      assert Pro100Plan.data_owned_keys(%{item: nil, data: %{"pro100" => 1}}) == ["pro100"]
+    end
+  end
 end

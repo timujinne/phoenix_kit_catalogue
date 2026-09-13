@@ -86,10 +86,22 @@ defmodule PhoenixKitCatalogue.Catalogue.Slugs do
   `opts[:from]` names the source column (`:name` for both items and
   categories); its per-language text is read via
   `PhoenixKitCatalogue.Catalogue.Translations.translated_name/2`.
+
+  `opts[:taken?]` — a `(candidate, lang) -> boolean` probe
+  (`Catalogue.item_slug_taken?/3` with the record's own uuid excluded,
+  in practice). When given, a generated slug that is already projected
+  for that language gets a `-2`, `-3`, … suffix (`unique/3`) instead of
+  failing the save on the projection's primary key. Uniqueness is one
+  scope per entity kind, across every catalogue, trashed rows included
+  — so without the probe two supplier catalogues each holding an "Oak
+  panel", or a re-created item whose predecessor sits in the trash,
+  could not both save on a field the user never typed. Without the
+  option generation stays deterministic, as before.
   """
   @spec maybe_generate(Ecto.Changeset.t(), atom(), keyword()) :: Ecto.Changeset.t()
   def maybe_generate(%Ecto.Changeset{} = changeset, field, opts) do
     source_field = Keyword.fetch!(opts, :from)
+    taken? = Keyword.get(opts, :taken?)
     data = Ecto.Changeset.get_field(changeset, :data) || %{}
     slug_map = Ecto.Changeset.get_field(changeset, field) || %{}
     source = %{data: data, name: Ecto.Changeset.get_field(changeset, source_field)}
@@ -98,7 +110,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Slugs do
     updated =
       data
       |> present_languages()
-      |> Enum.reduce(slug_map, &fill_language(&1, &2, source, default_slug))
+      |> Enum.reduce(slug_map, &fill_language(&1, &2, source, default_slug, taken?))
 
     if updated == slug_map do
       changeset
@@ -107,7 +119,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Slugs do
     end
   end
 
-  defp fill_language(lang, slug_map, source, default_slug) do
+  defp fill_language(lang, slug_map, source, default_slug, taken?) do
     case Map.get(slug_map, lang) do
       value when is_binary(value) and value != "" ->
         slug_map
@@ -115,12 +127,33 @@ defmodule PhoenixKitCatalogue.Catalogue.Slugs do
       _ ->
         case Translations.translated_name(source, lang) do
           title when is_binary(title) and title != "" ->
-            Map.put(slug_map, lang, from_title(title, lang, default_slug: default_slug))
+            Map.put(slug_map, lang, generate(title, lang, default_slug, taken?))
 
           _ ->
             slug_map
         end
     end
+  end
+
+  defp generate(title, lang, default_slug, taken?) do
+    base = from_title(title, lang, default_slug: default_slug)
+    if taken?, do: unique(base, lang, taken?), else: base
+  end
+
+  @doc """
+  The first of `base`, `base-2`, `base-3`, … that `taken?` (a
+  `(candidate, lang) -> boolean`) reports free in `lang`. A proactive
+  probe, not a lock: two writers landing on the same free slug at once
+  still meet the projection's `unique_constraint` on save. Shared by
+  `maybe_generate/3` and the AI translation adapter's write-once fill.
+  """
+  @spec unique(String.t(), String.t(), (String.t(), String.t() -> boolean())) :: String.t()
+  def unique(base, lang, taken?) when is_binary(base) and is_function(taken?, 2) do
+    Stream.iterate(1, &(&1 + 1))
+    |> Enum.reduce_while(base, fn n, _acc ->
+      candidate = if n == 1, do: base, else: "#{base}-#{n}"
+      if taken?.(candidate, lang), do: {:cont, candidate}, else: {:halt, candidate}
+    end)
   end
 
   # A genuinely multilang `data` (one carrying `_primary_language`) has

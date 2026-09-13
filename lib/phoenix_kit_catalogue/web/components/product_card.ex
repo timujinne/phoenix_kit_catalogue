@@ -465,25 +465,26 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
 
   defp list_folder_images(nil), do: []
 
+  # Both read the SAME set the item form lists —
+  # `Attachments.list_folder_files/2`: home files plus folder-linked
+  # ones. Reading the home folder alone (`Storage.list_files_in_scope/2`)
+  # dropped every linked file, which is what a content-duplicate upload
+  # becomes, so a file the editor showed was missing from the card
+  # (client, 2026-09-12).
   defp list_folder_images(folder_uuid) when is_binary(folder_uuid) do
-    {files, _total} =
-      Storage.list_files_in_scope(nil, folder_uuid: folder_uuid, file_type: "image", per_page: 50)
-
-    files
-    |> Enum.reject(&(&1.status == "trashed"))
+    folder_uuid
+    |> Attachments.list_folder_files(file_type: "image", exclude_system_managed: true)
     |> Enum.map(&%{uuid: &1.uuid, name: &1.original_file_name})
   rescue
     _ -> []
   end
 
   defp list_folder_files(folder_uuid) when is_binary(folder_uuid) do
-    {files, _total} = Storage.list_files_in_scope(nil, folder_uuid: folder_uuid, per_page: 50)
-
     # Same set as Counts.attached_file_counts/1 — its docstring promises
     # the paperclip count and this list agree, so system-managed files
     # are excluded here too.
-    files
-    |> Enum.reject(&(&1.status == "trashed" or &1.file_type == "image" or &1.system_managed))
+    folder_uuid
+    |> Attachments.list_folder_files(exclude_file_type: "image", exclude_system_managed: true)
     |> Enum.map(
       &%{uuid: &1.uuid, name: &1.original_file_name, size: &1.size, pdf?: pdf_file?(&1)}
     )

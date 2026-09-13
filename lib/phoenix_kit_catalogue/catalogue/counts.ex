@@ -116,12 +116,15 @@ defmodule PhoenixKitCatalogue.Catalogue.Counts do
   (items / catalogues / row maps) whose `data["files_folder_uuid"]` points
   at their attachment folder, returns `%{resource_uuid => count}` of the
   NON-image, live files in that folder — the same set the product card's
-  Files section lists (`ProductCard.resolve_files/1`: home folder, not
-  trashed, not system-managed, not an image — photos are already conveyed
-  by the featured thumb, so the paperclip means documents).
+  Files section lists (`ProductCard.resolve_files/1`, over
+  `Attachments.folder_files_query/1`: home files PLUS folder-linked
+  ones, not trashed, not system-managed, not an image — photos are
+  already conveyed by the featured thumb, so the paperclip means
+  documents). Linked files are what a content-duplicate upload becomes;
+  counting the home folder alone left them out (client, 2026-09-12).
 
-  One grouped query for the whole page; resources without a folder simply
-  don't appear in the map. Rescued to `%{}` — a Storage hiccup must not
+  Two grouped queries for the whole page (home rows, link rows);
+  resources without a folder simply don't appear in the map. Rescued to `%{}` — a Storage hiccup must not
   take down a list render.
   """
   @spec attached_file_counts([map()]) :: %{optional(String.t()) => non_neg_integer()}
@@ -147,15 +150,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Counts do
         %{}
 
       folder_uuids ->
-        from(f in PhoenixKit.Modules.Storage.File,
-          where: f.folder_uuid in ^folder_uuids,
-          where: f.status != "trashed",
-          where: f.system_managed == false,
-          where: f.file_type != "image",
-          group_by: f.folder_uuid,
-          select: {f.folder_uuid, count(f.uuid)}
-        )
-        |> repo().all()
+        folder_uuids
+        |> attached_document_counts()
         |> Enum.flat_map(fn {folder, count} ->
           folder_to_uuids |> Map.fetch!(folder) |> Enum.map(&{&1, count})
         end)
@@ -163,5 +159,44 @@ defmodule PhoenixKitCatalogue.Catalogue.Counts do
     end
   rescue
     _ -> %{}
+  end
+
+  # Two grouped queries for the whole page — home rows grouped by their
+  # folder, link rows grouped by the folder they point into — summed per
+  # folder. A linked file's own folder_uuid is ANOTHER folder's, so the
+  # home-or-linked set has no single column to group on; two queries
+  # is the honest shape. Filters mirror `ProductCard.list_folder_files/1`:
+  # live, not system-managed, not an image. A folder with nothing
+  # attached stays absent from the result, as callers test presence.
+  #
+  # A link row that names the file's OWN home folder is skipped: the
+  # listing's `home OR linked` reads such a file once, and the sum must
+  # not read it twice. The shape is real — a file linked into a folder
+  # and later re-homed there by the media manager keeps its link row.
+  defp attached_document_counts(folder_uuids) do
+    home =
+      from(f in PhoenixKit.Modules.Storage.File,
+        where: f.folder_uuid in ^folder_uuids,
+        where: f.status != "trashed" and f.system_managed == false and f.file_type != "image",
+        group_by: f.folder_uuid,
+        select: {f.folder_uuid, count(f.uuid)}
+      )
+      |> repo().all()
+
+    linked =
+      from(fl in PhoenixKit.Modules.Storage.FolderLink,
+        join: f in PhoenixKit.Modules.Storage.File,
+        on: f.uuid == fl.file_uuid,
+        where: fl.folder_uuid in ^folder_uuids,
+        where: f.status != "trashed" and f.system_managed == false and f.file_type != "image",
+        where: is_nil(f.folder_uuid) or f.folder_uuid != fl.folder_uuid,
+        group_by: fl.folder_uuid,
+        select: {fl.folder_uuid, count(f.uuid)}
+      )
+      |> repo().all()
+
+    Enum.reduce(home ++ linked, %{}, fn {folder, n}, acc ->
+      Map.update(acc, folder, n, &(&1 + n))
+    end)
   end
 end

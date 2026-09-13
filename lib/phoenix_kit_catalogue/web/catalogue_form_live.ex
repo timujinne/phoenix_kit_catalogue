@@ -18,9 +18,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
+      narrow_new_data: 2,
       actor_opts: 1,
       assign_ai_translation: 3,
-      ai_translate_config: 1
+      ai_translate_config: 1,
+      data_owned_keys: 2
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -31,11 +33,20 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
 
   @translatable_fields ["name", "description"]
+
+  # The `data` keys this form renders and may write, beyond the
+  # translatable buckets and extension keys `data_owned_keys/2` covers.
+  # Save is an owned-key write: a key this form never shows (a sync
+  # namespace, a translation fingerprint, an order persisted by another
+  # open form) keeps the row's freshest value instead of the snapshot
+  # this form loaded.
+  @catalogue_extra_owned_data_keys ~w(meta files_folder_uuid featured_image_uuid media_order)
   @preserve_fields %{
     # Translatable primaries: submitted only on the primary tab, so a
     # secondary-tab validate/save must re-inject them or :new loses them.
@@ -61,22 +72,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   def mount(params, _session, socket) do
     action = socket.assigns.live_action
 
-    {catalogue, changeset} =
-      case action do
-        :new ->
-          cat = %CatalogueSchema{}
-          {cat, Catalogue.change_catalogue(cat)}
+    # Subscribe before the read so a write landing in between is not
+    # dropped; the files grid follows the resource's broadcasts.
+    if connected?(socket), do: PubSub.subscribe()
 
-        :edit ->
-          case Catalogue.get_catalogue(params["uuid"]) do
-            nil ->
-              Logger.warning("Catalogue not found for edit: #{params["uuid"]}")
-              {nil, nil}
-
-            cat ->
-              {cat, Catalogue.change_catalogue(cat)}
-          end
-      end
+    {catalogue, changeset} = load_catalogue(action, params)
 
     if is_nil(catalogue) and action == :edit do
       {:ok,
@@ -104,6 +104,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
        |> assign_changeset(changeset)
        |> mount_multilang()
        |> assign_ai_translation("catalogue", if(action == :edit, do: catalogue, else: nil))}
+    end
+  end
+
+  defp load_catalogue(:new, _params) do
+    cat = %CatalogueSchema{}
+    {cat, Catalogue.change_catalogue(cat)}
+  end
+
+  defp load_catalogue(:edit, params) do
+    case Catalogue.get_catalogue(params["uuid"]) do
+      nil ->
+        Logger.warning("Catalogue not found for edit: #{params["uuid"]}")
+        {nil, nil}
+
+      cat ->
+        {cat, Catalogue.change_catalogue(cat)}
     end
   end
 
@@ -264,6 +280,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   def handle_info({:media_selector_closed}, socket),
     do: {:noreply, Attachments.close_media_selector(socket)}
 
+  # This catalogue changed elsewhere (an upload, a removal, a photo
+  # reorder in another tab): re-read the files grid, which is the one
+  # thing this form shows from the DB; typed fields stay as they are.
+  def handle_info(
+        {:catalogue_data_changed, :catalogue, uuid, _parent},
+        %{assigns: %{catalogue: %{uuid: catalogue_uuid}}} = socket
+      )
+      when is_binary(uuid) and uuid == catalogue_uuid do
+    {:noreply, Attachments.refresh_files(socket)}
+  end
+
   # Catch-all so stray monitor signals or unrelated PubSub traffic
   # can't crash the form mid-edit.
   def handle_info(msg, socket) do
@@ -282,6 +309,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   # actor_opts/1 imported from PhoenixKitCatalogue.Web.Helpers
 
   defp save_catalogue(socket, :new, params, mode) do
+    params = narrow_new_data(params, data_owned_keys(socket, @catalogue_extra_owned_data_keys))
+
     case Catalogue.create_catalogue(params, actor_opts(socket)) do
       {:ok, catalogue} ->
         _ = Attachments.maybe_rename_pending_folder(socket, catalogue)
@@ -305,7 +334,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   end
 
   defp save_catalogue(socket, :edit, params, mode) do
-    case Catalogue.update_catalogue(socket.assigns.catalogue, params, actor_opts(socket)) do
+    update_opts =
+      actor_opts(socket) ++
+        [data_owned_keys: data_owned_keys(socket, @catalogue_extra_owned_data_keys)]
+
+    case Catalogue.update_catalogue(socket.assigns.catalogue, params, update_opts) do
       {:ok, catalogue} ->
         socket =
           put_flash(

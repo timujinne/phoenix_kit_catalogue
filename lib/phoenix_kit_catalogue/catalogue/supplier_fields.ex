@@ -54,6 +54,8 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
 
   require Logger
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub}
 
   @owner "catalogue_supplier"
@@ -338,24 +340,62 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
 
     # Shape is validated BEFORE the blueprint is touched: provisioning is
     # a write, and a rejected request must not leave one behind as a side
-    # effect. Only the duplicate-key check needs the existing fields.
+    # effect. Only the duplicate-key check needs the existing fields,
+    # which are read under the row lock (see `with_locked_blueprint/2`).
     with :ok <- ensure_enabled(),
          :ok <- validate_shape(label, type, options),
-         {:ok, entity} <- ensure_blueprint(opts),
-         # Re-read is implicit: ensure_blueprint/1 always fetches fresh,
-         # so a field another session added meanwhile is in `existing`.
-         existing = entity.fields_definition || [],
-         :ok <- validate_unique_key(key, existing) do
+         {:ok, entity} <-
+           with_locked_blueprint(opts, &write_added_field(&1, key, type, label, options)) do
+      tap_log({:ok, entity}, "supplier_field.added", opts, %{"field" => key, "type" => type})
+    end
+  end
+
+  defp write_added_field(entity, key, type, label, options) do
+    existing = entity.fields_definition || []
+
+    with :ok <- validate_unique_key(key, existing) do
       definition = build_definition(type, key, label, options)
 
-      entity
-      |> PhoenixKitEntities.update_entity(
+      PhoenixKitEntities.update_entity(
+        entity,
         %{fields_definition: existing ++ [definition]},
         on_behalf_of: @owner
       )
-      |> tap_log("supplier_field.added", opts, %{"field" => key, "type" => type})
     end
   end
+
+  # Every definition write is a read-modify-write of ONE JSONB list on the
+  # blueprint row. Two admins editing fields at the same time used to
+  # race (2026-08-31 sweep: "the fresh re-read narrows but does not close
+  # the window"); the row is now locked for the read and the write, so
+  # the second writer sees the first's list. The activity row and the
+  # broadcast stay outside the transaction, after the commit.
+  #
+  # The get-or-create stays OUTSIDE the transaction: `provision/1` re-reads
+  # the winner when it loses the unique-name race, and that re-read must
+  # not run inside a transaction the failed INSERT has already aborted
+  # (grok, PR review 2026-09-13). The lock then re-reads the row fresh.
+  defp with_locked_blueprint(opts, fun) do
+    with {:ok, entity} <- ensure_blueprint(opts) do
+      repo().transaction(fn -> locked_write(entity, fun) end)
+    end
+  end
+
+  defp locked_write(entity, fun) do
+    case fun.(lock_blueprint(entity)) do
+      {:ok, written} -> written
+      {:error, reason} -> repo().rollback(reason)
+    end
+  end
+
+  defp lock_blueprint(%{uuid: uuid} = entity) when is_binary(uuid) do
+    repo().one(from(e in PhoenixKitEntities, where: e.uuid == ^uuid, lock: "FOR UPDATE")) ||
+      entity
+  end
+
+  defp lock_blueprint(entity), do: entity
+
+  defp repo, do: PhoenixKit.RepoHelper.repo()
 
   @doc """
   Updates a field: `:label` renames the display text, `:options`
@@ -365,16 +405,21 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
   @spec update_field(String.t(), map(), keyword()) :: {:ok, struct()} | {:error, term()}
   def update_field(key, attrs, opts \\ []) when is_binary(key) do
     with :ok <- ensure_enabled(),
-         {:ok, entity} <- ensure_blueprint(opts),
-         existing = entity.fields_definition || [],
-         %{} = current <- Enum.find(existing, &(&1["key"] == key)) || {:error, :unknown_field},
+         {:ok, entity} <- with_locked_blueprint(opts, &write_updated_field(&1, key, attrs)) do
+      tap_log({:ok, entity}, "supplier_field.updated", opts, %{"field" => key})
+    end
+  end
+
+  defp write_updated_field(entity, key, attrs) do
+    existing = entity.fields_definition || []
+
+    with %{} = current <- Enum.find(existing, &(&1["key"] == key)) || {:error, :unknown_field},
          {:ok, updated} <- apply_update(current, attrs) do
-      entity
-      |> PhoenixKitEntities.update_entity(
+      PhoenixKitEntities.update_entity(
+        entity,
         %{fields_definition: replace_field(existing, key, updated)},
         on_behalf_of: @owner
       )
-      |> tap_log("supplier_field.updated", opts, %{"field" => key})
     end
   end
 
@@ -390,15 +435,17 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
   @spec remove_field(String.t(), keyword()) :: {:ok, struct()} | {:error, term()}
   def remove_field(key, opts \\ []) when is_binary(key) do
     with :ok <- ensure_enabled(),
-         {:ok, entity} <- ensure_blueprint(opts) do
-      fields = Enum.reject(entity.fields_definition || [], &(&1["key"] == key))
+         {:ok, entity} <-
+           with_locked_blueprint(opts, fn entity ->
+             fields = Enum.reject(entity.fields_definition || [], &(&1["key"] == key))
 
-      entity
-      |> PhoenixKitEntities.update_entity(
-        %{fields_definition: fields},
-        on_behalf_of: @owner
-      )
-      |> tap_log("supplier_field.removed", opts, %{"field" => key})
+             PhoenixKitEntities.update_entity(
+               entity,
+               %{fields_definition: fields},
+               on_behalf_of: @owner
+             )
+           end) do
+      tap_log({:ok, entity}, "supplier_field.removed", opts, %{"field" => key})
     end
   end
 
@@ -570,8 +617,6 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierFields do
     PubSub.broadcast(:supplier_field, entity.uuid)
     result
   end
-
-  defp tap_log(other, _action, _opts, _metadata), do: other
 
   defp log(action, opts, resource_uuid, metadata) do
     ActivityLog.log(%{

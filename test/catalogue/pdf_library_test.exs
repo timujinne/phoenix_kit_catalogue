@@ -231,6 +231,39 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
       # File row is still present; cascading delete didn't fire.
       assert Repo.get(PhoenixKit.Modules.Storage.File, file) != nil
     end
+
+    test "hands a root-level file to the trash when the last row goes" do
+      file = insert_file!()
+      pdf = insert_pdf!(file)
+
+      {:ok, _} = Catalogue.permanently_delete_pdf(pdf, actor_uuid: ensure_user_uuid())
+
+      assert %{status: "trashed"} = Repo.get(PhoenixKit.Modules.Storage.File, file)
+    end
+
+    test "leaves a file that is a product's attachment alone (content de-dup shares the row)" do
+      # Storage de-duplicates by content store-wide: a library PDF can point
+      # at the very file attached to a product. Deleting the library entry
+      # must not trash the product's document (review sweep, 2026-09-12).
+      file = insert_file!()
+      catalogue = PhoenixKitCatalogue.LiveCase.fixture_catalogue(%{name: "Docs Cat"})
+
+      item =
+        PhoenixKitCatalogue.LiveCase.fixture_item(%{
+          name: "Board",
+          catalogue_uuid: catalogue.uuid
+        })
+
+      {:ok, _} = PhoenixKitCatalogue.Attachments.attach_files(item, [file], featured: nil)
+      pdf = insert_pdf!(file)
+
+      {:ok, _} = Catalogue.permanently_delete_pdf(pdf, actor_uuid: ensure_user_uuid())
+
+      assert %{status: "active", folder_uuid: folder} =
+               Repo.get(PhoenixKit.Modules.Storage.File, file)
+
+      assert is_binary(folder)
+    end
   end
 
   # ── worker callbacks ───────────────────────────────────────────────

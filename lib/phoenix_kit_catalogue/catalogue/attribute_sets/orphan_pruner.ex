@@ -16,6 +16,14 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets.OrphanPruner do
   the residue is invisible rows (`resolve_for_items/2` skips
   unresolvable sets), recoverable by calling
   `AttributeSets.prune_orphan_attachments/1` with the deleted uuid.
+
+  Also subscribes to entities' data-lifecycle topic (§3b, 2026-09-11
+  direction): `{:data_deleted, entity_uuid, _data_uuid}` fires
+  `AttributeSets.prune_orphan_value_slugs/1`, the backstop for a value
+  record HARD-deleted some way that skipped `delete_value/3`'s own
+  synchronous slug sweep (e.g. a direct `EntityData.delete/2` or a
+  repo-level delete). Archived/trashed values are NOT orphans — that is
+  `resolve_set/2`'s `hidden_values` job, not this sweep's.
   """
 
   use GenServer
@@ -33,6 +41,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets.OrphanPruner do
   def init(_opts) do
     if Code.ensure_loaded?(PhoenixKitEntities.Events) do
       PhoenixKitEntities.Events.subscribe_to_entities()
+      PhoenixKitEntities.Events.subscribe_to_all_data()
     end
 
     {:ok, %{}}
@@ -53,6 +62,21 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets.OrphanPruner do
     {:noreply, state}
   end
 
-  # Other lifecycle events (:entity_created/:entity_updated) share the topic.
+  def handle_info({:data_deleted, entity_uuid, _data_uuid}, state) when is_binary(entity_uuid) do
+    case AttributeSets.prune_orphan_value_slugs(entity_uuid) do
+      0 ->
+        :ok
+
+      count ->
+        Logger.info(
+          "AttributeSets.OrphanPruner: pruned #{count} selection(s) referencing hard-deleted value(s) in set #{entity_uuid}"
+        )
+    end
+
+    {:noreply, state}
+  end
+
+  # Other lifecycle events (:entity_created/:entity_updated,
+  # :data_created/:data_updated/:data_reordered) share these topics.
   def handle_info(_msg, state), do: {:noreply, state}
 end

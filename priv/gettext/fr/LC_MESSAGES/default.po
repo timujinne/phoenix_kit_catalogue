@@ -1423,6 +1423,18 @@ msgstr ""
 msgid "Failed to update the set."
 msgstr ""
 
+msgid "Attribute set archived."
+msgstr ""
+
+msgid "Failed to archive attribute set."
+msgstr ""
+
+msgid "Attribute set restored."
+msgstr ""
+
+msgid "Failed to restore attribute set."
+msgstr ""
+
 msgid "A set is one dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr ""
 
@@ -1489,6 +1501,9 @@ msgstr ""
 msgid "Attribute sets"
 msgstr ""
 
+msgid "Show archived"
+msgstr ""
+
 msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr ""
 
@@ -1532,6 +1547,9 @@ msgid "unavailable"
 msgstr ""
 
 msgid "Detach set"
+msgstr ""
+
+msgid "Selected, but archived — no longer offered for new picks"
 msgstr ""
 
 msgid "Attach a set..."
@@ -3076,6 +3094,9 @@ msgid "None yet — add them in Entities."
 msgstr ""
 
 msgid "No items attached."
+msgstr ""
+
+msgid "Archived value"
 msgstr ""
 
 msgid "New attribute set"

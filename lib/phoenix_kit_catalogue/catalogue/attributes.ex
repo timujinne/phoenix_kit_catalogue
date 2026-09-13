@@ -798,6 +798,24 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
     |> Map.new()
   end
 
+  @doc """
+  Batch map of `%{attribute_group_uuid => name}` for the given group
+  UUIDs — one indexed query, paired with `item_attribute_group_map/1` to
+  turn item→group assignments into item→display-name without a per-row
+  lookup.
+  """
+  @spec attribute_group_names([Ecto.UUID.t()]) :: %{Ecto.UUID.t() => String.t()}
+  def attribute_group_names([]), do: %{}
+
+  def attribute_group_names(group_uuids) when is_list(group_uuids) do
+    from(g in AttributeGroup,
+      where: g.uuid in ^group_uuids,
+      select: {g.uuid, g.name}
+    )
+    |> repo().all()
+    |> Map.new()
+  end
+
   # ── Resolution (translated read models) ────────────────────────────
 
   @doc """

@@ -1422,6 +1422,18 @@ msgstr "Atribuudikomplekt uuendatud."
 msgid "Failed to update the set."
 msgstr "Komplekti uuendamine ebaõnnestus."
 
+msgid "Attribute set archived."
+msgstr "Atribuudikomplekt arhiveeritud."
+
+msgid "Failed to archive attribute set."
+msgstr "Atribuudikomplekti arhiveerimine ebaõnnestus."
+
+msgid "Attribute set restored."
+msgstr "Atribuudikomplekt taastatud."
+
+msgid "Failed to restore attribute set."
+msgstr "Atribuudikomplekti taastamine ebaõnnestus."
+
 msgid "A set is one dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Komplekt on üks mõõde ühelt tarnijalt — Ikea värvid, HomeDepot liistud. Toote külge saab siduda mistahes arvu komplekte."
 
@@ -1488,6 +1500,9 @@ msgstr "Migreerimine ebaõnnestus — midagi ei läinud kaduma; vaata logisid ja
 msgid "Attribute sets"
 msgstr "Atribuudikomplektid"
 
+msgid "Show archived"
+msgstr "Näita arhiveeritud"
+
 msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Üks mõõde ühelt tarnijalt — Ikea värvid, HomeDepot liistud. Toote külge saab siduda mistahes arvu komplekte."
 
@@ -1532,6 +1547,9 @@ msgstr "pole saadaval"
 
 msgid "Detach set"
 msgstr "Eemalda komplekt"
+
+msgid "Selected, but archived — no longer offered for new picks"
+msgstr "Valitud, kuid arhiveeritud — uuteks valikuteks enam ei pakuta"
 
 msgid "Attach a set..."
 msgstr "Seo komplekt..."
@@ -3077,6 +3095,9 @@ msgstr "Pole veel — lisa need Entities moodulis."
 
 msgid "No items attached."
 msgstr "Ühtegi toodet pole lisatud."
+
+msgid "Archived value"
+msgstr "Arhiveeritud väärtus"
 
 msgid "New attribute set"
 msgstr "Uus atribuutide komplekt"

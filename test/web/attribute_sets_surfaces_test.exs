@@ -267,6 +267,89 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       end
     end
 
+    describe "CataloguesLive attributes tab: archive/restore (2026-09-11 direction)" do
+      test "the kebab archives an active set and restores an archived one", %{conn: conn} do
+        {:ok, set} = Catalogue.create_attribute_set(%{name: "Lifecycle colors"})
+
+        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        assert has_element?(view, "#attr-set-menu-t-#{set.uuid} button", "Archive")
+        refute html =~ "restore_attribute_set"
+
+        html = render_click(view, "archive_attribute_set", %{"uuid" => set.uuid})
+        # The full flash text — "archived" alone also matches the
+        # "Archived" row badge AND the ever-present
+        # `toggle_attr_sets_show_archived` phx-click attribute.
+        assert html =~ "Attribute set archived."
+        assert Catalogue.get_attribute_set(set.uuid).status == "archived"
+        # Archived, so it drops off the default (non-archived) listing.
+        refute html =~ "Lifecycle colors"
+
+        # Toggle "Show archived" back on to reach the Restore action.
+        html = render_click(view, "toggle_attr_sets_show_archived", %{})
+        assert html =~ "Lifecycle colors"
+        assert has_element?(view, "#attr-set-menu-t-#{set.uuid} button", "Restore")
+
+        html = render_click(view, "restore_attribute_set", %{"uuid" => set.uuid})
+        assert Catalogue.get_attribute_set(set.uuid).status == "published"
+        assert html =~ "Attribute set restored."
+      end
+
+      test "archive_attribute_set flashes an error for a uuid that doesn't resolve", %{
+        conn: conn
+      } do
+        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+
+        html = render_click(view, "archive_attribute_set", %{"uuid" => Ecto.UUID.generate()})
+
+        assert html =~ "Failed to archive attribute set."
+      end
+
+      test "restore_attribute_set flashes an error for a uuid that doesn't resolve", %{
+        conn: conn
+      } do
+        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+
+        html = render_click(view, "restore_attribute_set", %{"uuid" => Ecto.UUID.generate()})
+
+        assert html =~ "Failed to restore attribute set."
+      end
+
+      test "archiving is offered even while the set is attached to items", %{conn: conn} do
+        {:ok, set} = Catalogue.create_attribute_set(%{name: "Attached lifecycle"})
+        item = fixture_item(%{name: "LifecycleItem"})
+        {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+
+        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        render_click(view, "archive_attribute_set", %{"uuid" => set.uuid})
+
+        assert Catalogue.get_attribute_set(set.uuid).status == "archived"
+        # The tie survives — soft-delete, not delete_set's hard refusal.
+        assert length(Catalogue.list_attribute_set_attachments(item.uuid)) == 1
+      end
+
+      test "\"Show archived\" toggle: off by default, archived rows badged when on", %{
+        conn: conn
+      } do
+        {:ok, active} = Catalogue.create_attribute_set(%{name: "Still active"})
+        {:ok, archived} = Catalogue.create_attribute_set(%{name: "Long retired"})
+        {:ok, _} = Catalogue.archive_attribute_set(archived)
+
+        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        assert html =~ "Still active"
+        refute html =~ "Long retired"
+
+        html = render_click(view, "toggle_attr_sets_show_archived", %{})
+        assert html =~ "Still active"
+        assert html =~ "Long retired"
+        assert html =~ "Archived"
+
+        # The toggle is a display filter, not a mutation — it must not
+        # touch either set's status.
+        assert Catalogue.get_attribute_set(active.uuid).status == "published"
+        assert Catalogue.get_attribute_set(archived.uuid).status == "archived"
+      end
+    end
+
     describe "AttributeGroupFormLive with sets live" do
       test "redirects to the attributes listing instead of rendering", %{conn: conn} do
         assert {:error, {:live_redirect, %{to: to, flash: flash}}} =
@@ -312,6 +395,26 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         # One tick → this exact object.
         :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [red.slug])
         assert {"Card colors", "Red"} in ProductCard.build_fields(item, "en")
+      end
+
+      test "a selection archived after being picked keeps its label (3c, 2026-09-11)" do
+        {:ok, set} = Catalogue.create_attribute_set(%{name: "Retired colors"})
+        {:ok, red} = Catalogue.create_attribute_set_value(set, %{label: "Retired Red"})
+        {:ok, _} = Catalogue.create_attribute_set_value(set, %{label: "Blue"})
+
+        item = fixture_item(%{name: "RetiredItem"})
+        {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+        :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [red.slug])
+
+        {:ok, _} =
+          PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
+
+        item = Catalogue.get_item(item.uuid)
+
+        # The bug this replaces: filtering the label only against active
+        # `values` found nothing for a hidden selection, so the WHOLE row
+        # ("Retired colors") silently disappeared from the card.
+        assert {"Retired colors", "Retired Red"} in ProductCard.build_fields(item, "en")
       end
     end
 

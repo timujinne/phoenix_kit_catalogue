@@ -1431,6 +1431,18 @@ msgstr "Набор атрибутов обновлён."
 msgid "Failed to update the set."
 msgstr "Не удалось обновить набор."
 
+msgid "Attribute set archived."
+msgstr "Набор атрибутов архивирован."
+
+msgid "Failed to archive attribute set."
+msgstr "Не удалось архивировать набор атрибутов."
+
+msgid "Attribute set restored."
+msgstr "Набор атрибутов восстановлен."
+
+msgid "Failed to restore attribute set."
+msgstr "Не удалось восстановить набор атрибутов."
+
 msgid "A set is one dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Набор — одно измерение от одного поставщика: цвета Ikea, планки HomeDepot. К товару можно прикрепить любое число наборов."
 
@@ -1497,6 +1509,9 @@ msgstr "Миграция не удалась — ничего не потеря�
 msgid "Attribute sets"
 msgstr "Наборы атрибутов"
 
+msgid "Show archived"
+msgstr "Показать архивные"
+
 msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Одно измерение от одного поставщика: цвета Ikea, планки HomeDepot. К товару можно прикрепить любое число наборов."
 
@@ -1541,6 +1556,9 @@ msgstr "недоступен"
 
 msgid "Detach set"
 msgstr "Открепить набор"
+
+msgid "Selected, but archived — no longer offered for new picks"
+msgstr "Выбрано, но архивировано — больше не предлагается для нового выбора"
 
 msgid "Attach a set..."
 msgstr "Прикрепить набор..."
@@ -3086,6 +3104,9 @@ msgstr "Пока нет — добавьте их в Entities."
 
 msgid "No items attached."
 msgstr "Нет привязанных товаров."
+
+msgid "Archived value"
+msgstr "Архивное значение"
 
 msgid "New attribute set"
 msgstr "Новый набор атрибутов"

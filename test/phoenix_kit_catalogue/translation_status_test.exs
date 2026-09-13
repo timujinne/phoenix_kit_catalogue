@@ -635,6 +635,41 @@ defmodule PhoenixKitCatalogue.TranslationStatusTest do
         assert value_a.uuid in uuids
         assert value_b.uuid in uuids
       end
+
+      test "an archived set's label row survives — still a live string needing translation" do
+        set = create_set!("Ikea archived colors")
+        {:ok, archived} = AttributeSets.archive_set(set)
+
+        uuids = TranslationStatus.list(:set_label, langs: ["fr-FR"]) |> Enum.map(& &1.uuid)
+        assert archived.uuid in uuids
+      end
+
+      test "an archived set's value rows survive too — not just the set's own label" do
+        set = create_set!("Ikea archived sizes")
+        value = create_value!(set, "Large")
+        {:ok, _archived} = AttributeSets.archive_set(set)
+
+        uuids = TranslationStatus.list(:set_value, langs: ["fr-FR"]) |> Enum.map(& &1.uuid)
+        assert value.uuid in uuids
+      end
+
+      test "an ARCHIVED VALUE (set itself still active) still shows up for translation" do
+        # The row above only archives the SET, whose still-active value
+        # was already found by `list_values_for/2` regardless of this
+        # fix. Archive the VALUE itself instead — `list_values_for/2`
+        # excludes it, so `resources_for(:set_value, _)` must also pull
+        # `list_hidden_values_for/2` or this label, still rendered
+        # wherever `hidden_values` resolves it (product card, item
+        # form, Items popup, §3c), would drop off the dashboard.
+        set = create_set!("Ikea hidden value labels")
+        value = create_value!(set, "Retired teal")
+
+        {:ok, _} =
+          PhoenixKitEntities.EntityData.update(value, %{status: "archived"}, activity_log: false)
+
+        uuids = TranslationStatus.list(:set_value, langs: ["fr-FR"]) |> Enum.map(& &1.uuid)
+        assert value.uuid in uuids
+      end
     end
   end
 

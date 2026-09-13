@@ -80,13 +80,37 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
     set = socket.assigns.set
     locale = socket.assigns.locale
 
-    # The FULL value list in one query: item selections reference value
-    # slugs anywhere in the set, so label resolution needs the whole
-    # slug → title map (the chip strip on the listing stays capped).
-    label_map =
-      set.uuid
-      |> Catalogue.list_attribute_set_values(lang: locale)
-      |> Map.new(&{&1.slug, &1.title})
+    # The FULL value list (active AND hidden), normally in ONE resolve:
+    # item selections reference value slugs anywhere in the set, and an
+    # archived/trashed value stays a real selection (§3c, 2026-09-11
+    # direction) — dropping it from the label map here would silently
+    # blank its chip, the exact bug hidden_values exists to fix.
+    #
+    # A broken set contract makes `resolve_attribute_set/2` return nil,
+    # though — and an empty label map here would blank EVERY item's
+    # chips for this set, not just the unresolvable one. Degrade to the
+    # plain value listing instead, active AND hidden, fetched
+    # separately (`list_attribute_set_values/2` excludes archived) —
+    # dropping hidden values here would be the exact §3c bug this
+    # fallback exists not to reintroduce, just on the broken-contract
+    # path instead of the happy one.
+    {values, hidden_values} =
+      case Catalogue.resolve_attribute_set(set.uuid, lang: locale) do
+        %{values: v, hidden_values: h} ->
+          {v, h}
+
+        _ ->
+          v = fallback_values(set.uuid, locale)
+          h = fallback_hidden_values(set.uuid, locale)
+          # Two independent listings, so the same dedup rule
+          # `resolve_set/2` applies centrally must be applied here too —
+          # otherwise a trashed duplicate sharing a live value's slug
+          # would overwrite the live label below ("last wins").
+          {v, Catalogue.drop_hidden_attribute_set_value_duplicates(h, v)}
+      end
+
+    label_map = Map.new(values ++ hidden_values, &{&1.key, &1.label})
+    hidden_keys = MapSet.new(hidden_values, & &1.key)
 
     search = socket.assigns.search
     total = Catalogue.count_attribute_set_attached_items(set.uuid, search: search)
@@ -107,9 +131,14 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
         Map.merge(entry, %{
           status: item.status,
           catalogue_name: catalogue_name(item, locale),
-          # Ghost rule: slugs whose value no longer exists are dropped,
-          # exactly like every other selection reader.
-          selected: slugs |> Enum.filter(&Map.has_key?(label_map, &1)) |> Enum.map(&label_map[&1])
+          # Ghost rule: slugs whose value is gone FOR GOOD are dropped,
+          # exactly like every other selection reader. A hidden
+          # (archived/trashed) value's slug is not a ghost — it renders,
+          # marked so the chip below can badge it.
+          selected:
+            slugs
+            |> Enum.filter(&Map.has_key?(label_map, &1))
+            |> Enum.map(&%{label: label_map[&1], hidden?: MapSet.member?(hidden_keys, &1)})
         })
       end)
 
@@ -120,6 +149,25 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
       page: page,
       max_page: max_page
     )
+  end
+
+  # `Catalogue.list_attribute_set_values/2` returns raw entity-data
+  # records (`.slug`/`.title`); reshaped to match the `%{key, label}`
+  # v2 shape the label map above expects, so both branches feed it the
+  # same thing.
+  defp fallback_values(set_uuid, locale) do
+    set_uuid
+    |> Catalogue.list_attribute_set_values(lang: locale)
+    |> Enum.map(&%{key: &1.slug, label: &1.title})
+  end
+
+  # The hidden half of the fallback above — same reshape, batched form
+  # (`list_attribute_set_hidden_values_for/2` takes a list of uuids).
+  defp fallback_hidden_values(set_uuid, locale) do
+    [set_uuid]
+    |> Catalogue.list_attribute_set_hidden_values_for(lang: locale)
+    |> Map.get(set_uuid, [])
+    |> Enum.map(&%{key: &1.slug, label: &1.title})
   end
 
   defp catalogue_name(%{catalogue: %{name: _} = catalogue}, locale) do
@@ -221,8 +269,15 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
                   }> / </span><span :if={row.category}>{row.category}</span>
                 </div>
                 <div :if={row.selected != []} class="flex flex-wrap gap-1 mt-1">
-                  <span :for={label <- row.selected} class="badge badge-outline badge-xs">
-                    {label}
+                  <span
+                    :for={v <- row.selected}
+                    class={["badge badge-xs", if(v.hidden?, do: "badge-ghost", else: "badge-outline")]}
+                    title={
+                      if v.hidden?,
+                        do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived value")
+                    }
+                  >
+                    {v.label}
                   </span>
                 </div>
               </div>

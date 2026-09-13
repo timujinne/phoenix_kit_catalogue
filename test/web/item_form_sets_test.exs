@@ -57,6 +57,27 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
       assert attached == set.uuid
     end
 
+    test "a forged attach_set for an archived set's uuid is refused", %{
+      conn: conn,
+      item: item,
+      set: set
+    } do
+      # The picker only offers `available_sets` (`list_attribute_sets/1`,
+      # active-only by default), so an archived set never appears as an
+      # option — but the event handler itself is the real gate: a
+      # forged client payload naming an archived set's uuid directly
+      # must not ride the same code path a legit pick would.
+      {:ok, _} = Catalogue.archive_attribute_set(set)
+
+      {:ok, view, _html} = open(conn, item)
+
+      render_change(view, "attach_set", %{"attach_set_uuid" => set.uuid})
+      assert assigns(view).staged_set_uuids == []
+
+      save(view)
+      assert Catalogue.list_attribute_set_attachments(item.uuid) == []
+    end
+
     test "toggle_value_selection stages ticks and save writes them", %{
       conn: conn,
       item: item,
@@ -119,6 +140,132 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
       {:ok, _view, html} = open(conn, item)
       assert html =~ "Form colors"
       refute html =~ "phx-change=\"select_attribute_group\""
+    end
+
+    test "an archived set is not offered for new attachments", %{conn: conn, item: item} do
+      {:ok, archived} = Catalogue.create_attribute_set(%{name: "Retired trims"})
+      {:ok, _} = Catalogue.archive_attribute_set(archived)
+
+      {:ok, view, html} = open(conn, item)
+
+      refute assigns(view).available_sets |> Enum.any?(&(&1.uuid == archived.uuid))
+      refute html =~ "Retired trims"
+    end
+
+    test "an already-attached set that gets archived keeps showing (badged) and stays detachable",
+         %{conn: conn, item: item, set: set} do
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+      {:ok, _} = Catalogue.archive_attribute_set(set)
+
+      {:ok, view, html} = open(conn, item)
+
+      assert html =~ "Form colors"
+      assert html =~ "Archived"
+      assert assigns(view).staged_set_uuids == [set.uuid]
+
+      render_click(view, "detach_set", %{"uuid" => set.uuid})
+      assert assigns(view).staged_set_uuids == []
+
+      save(view)
+      assert Catalogue.list_attribute_set_attachments(item.uuid) == []
+    end
+
+    test "a selected value archived after being picked stays selected and renders as archived",
+         %{conn: conn, item: item, set: set, red: red, blue: blue} do
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+      :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [red.slug, blue.slug])
+
+      {:ok, _} =
+        PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
+
+      {:ok, view, html} = open(conn, item)
+
+      # Both slugs survive hydration — archiving Red must not silently
+      # drop it from the item's staged selection.
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([red.slug, blue.slug])
+      # Rendered read-only and marked archived, not as a live checkbox.
+      assert html =~ "Red"
+      assert html =~ "Selected, but archived"
+
+      save(view)
+
+      assert %{sets: [%{selected: selected}]} =
+               Catalogue.resolve_attribute_sets_for_item(item.uuid)
+
+      assert Enum.sort(selected) == Enum.sort([red.slug, blue.slug])
+    end
+
+    test "a forged toggle cannot select an unselected archived value", %{
+      conn: conn,
+      item: item,
+      set: set,
+      red: red,
+      blue: blue
+    } do
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+      :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [blue.slug])
+
+      {:ok, _} =
+        PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
+
+      {:ok, view, _html} = open(conn, item)
+
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([blue.slug])
+
+      # `known_value_key?/2` widens the gate to `values ++ hidden_values`
+      # so the hidden chip's × button can remove an already-selected
+      # archived value. A forged click on an UNselected archived value
+      # must not ride that same gate into adding it — invariant 2 says
+      # an archived value is never offered for a NEW pick, and the
+      # checkboxes already honor that; the write path must too.
+      render_click(view, "toggle_value_selection", %{"set" => set.uuid, "key" => red.slug})
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([blue.slug])
+
+      save(view)
+
+      assert %{sets: [%{selected: selected}]} =
+               Catalogue.resolve_attribute_sets_for_item(item.uuid)
+
+      assert selected == [blue.slug]
+    end
+
+    test "a hidden selected value can be un-selected, and keeps its swatch thumb", %{
+      conn: conn,
+      item: item,
+      set: set,
+      red: red,
+      blue: blue
+    } do
+      {:ok, _} = AttributeSets.add_extra_field(set, %{label: "Swatch", type: "image"})
+      set = AttributeSets.get_set(set.uuid)
+      media_uuid = Ecto.UUID.generate()
+      {:ok, _} = AttributeSets.update_value(set, red, %{extras: %{"swatch" => media_uuid}})
+
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+      :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [red.slug, blue.slug])
+
+      {:ok, _} =
+        PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
+
+      {:ok, view, _html} = open(conn, item)
+
+      # The swatch survives archiving too — the same loss family as the
+      # label put_thumbs/1 already keeps (put_thumbs used to build the
+      # thumb map from `values` alone, so a hidden value's swatch
+      # silently disappeared even though its chip still rendered).
+      assert assigns(view).set_previews[set.uuid].thumbs[red.slug] == media_uuid
+
+      # The × on the hidden chip un-selects it — detaching the WHOLE
+      # set was, until now, the only way to drop a hidden pick.
+      render_click(view, "toggle_value_selection", %{"set" => set.uuid, "key" => red.slug})
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([blue.slug])
+
+      save(view)
+
+      assert %{sets: [%{selected: selected}]} =
+               Catalogue.resolve_attribute_sets_for_item(item.uuid)
+
+      assert selected == [blue.slug]
     end
   else
     @tag :skip

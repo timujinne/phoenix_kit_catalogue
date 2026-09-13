@@ -1178,20 +1178,53 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # checkbox submits "on"), which would clobber the param.
   def handle_event("toggle_value_selection", %{"set" => set_uuid, "key" => key}, socket) do
     with true <- set_uuid in socket.assigns.staged_set_uuids,
-         %{values: values} <- socket.assigns.set_previews[set_uuid],
-         true <- Enum.any?(values, &(&1.key == key)) do
+         %{} = preview <- socket.assigns.set_previews[set_uuid],
+         true <- known_value_key?(preview, key) do
       selections = socket.assigns.staged_selections
       current = Map.get(selections, set_uuid, MapSet.new())
 
-      current =
-        if MapSet.member?(current, key),
-          do: MapSet.delete(current, key),
-          else: MapSet.put(current, key)
+      cond do
+        # Un-ticking — the hidden chip's × button relies on this: a
+        # value already selected may always be dropped, active or not.
+        MapSet.member?(current, key) ->
+          new_current = MapSet.delete(current, key)
 
-      {:noreply, assign(socket, :staged_selections, Map.put(selections, set_uuid, current))}
+          {:noreply,
+           assign(socket, :staged_selections, Map.put(selections, set_uuid, new_current))}
+
+        # Ticking a NEW value — must be active. A hidden (archived)
+        # key reaching here is a forged payload: the checkboxes never
+        # offer it, and invariant 2 says archived values aren't
+        # offered for a new pick (§3c). `known_value_key?/2` above
+        # widens the gate to active-or-hidden only so the × button
+        # above can fire; ticking on must not ride that same gate.
+        active_value_key?(preview, key) ->
+          new_current = MapSet.put(current, key)
+
+          {:noreply,
+           assign(socket, :staged_selections, Map.put(selections, set_uuid, new_current))}
+
+        true ->
+          {:noreply, socket}
+      end
     else
       _ -> {:noreply, socket}
     end
+  end
+
+  # A togglable key must be a REAL value of the set — active (offered
+  # by the checkboxes) or hidden (a selected-but-archived chip, §3c).
+  # Active-only would make the hidden chip's remove control a no-op:
+  # the click event would land here and be silently refused. Whether
+  # a hidden key may actually flip the selection ON is decided above,
+  # per current membership — this gate only screens out junk keys.
+  defp known_value_key?(preview, key) do
+    Enum.any?(preview.values, &(&1.key == key)) or
+      Enum.any?(preview.hidden_values, &(&1.key == key))
+  end
+
+  defp active_value_key?(preview, key) do
+    Enum.any?(preview.values, &(&1.key == key))
   end
 
   defp parse_tab("metadata"), do: :metadata
@@ -2395,11 +2428,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   # Precomputed once per preview build: the chip loop reads the thumb
   # twice per value (`:if` + `src`), and value_thumb/2 walks the
-  # field list each call.
+  # field list each call. Covers hidden_values too — a selected-but-
+  # archived value keeps rendering as a chip (§3c) and must keep its
+  # swatch, not just its label.
   defp put_thumbs(nil), do: nil
 
   defp put_thumbs(preview) do
-    Map.put(preview, :thumbs, Map.new(preview.values, &{&1.key, value_thumb(preview, &1)}))
+    all_values = preview.values ++ preview.hidden_values
+    Map.put(preview, :thumbs, Map.new(all_values, &{&1.key, value_thumb(preview, &1)}))
   end
 
   # Ghost intersection lives in ONE place — the context's
@@ -2413,6 +2449,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   defp selection_for(assigns, set_uuid) do
     Map.get(assigns.staged_selections, set_uuid, MapSet.new())
+  end
+
+  # Hidden (archived/trashed) values that are part of the CURRENT
+  # selection — §3c: a value hidden after being picked stays selected,
+  # but preview.values (the checkbox list above) no longer offers it.
+  defp hidden_selected_values(preview, selection) do
+    Enum.filter(preview.hidden_values, &MapSet.member?(selection, &1.key))
   end
 
   # First image-type extra with a value — the chip's swatch thumbnail.
@@ -3161,6 +3204,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                         do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Fixed value"),
                         else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Multiple values")}
                     </span>
+                    <span
+                      :if={preview && preview.status == "archived"}
+                      class="badge badge-sm badge-ghost shrink-0"
+                    >
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")}
+                    </span>
                     <span :if={is_nil(preview)} class="badge badge-sm badge-warning shrink-0">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "unavailable")}
                     </span>
@@ -3216,8 +3265,49 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                         />
                         <span class="text-sm">{value.label}</span>
                       </label>
-                      <span :if={preview.values == []} class="text-xs text-base-content/40">
+                      <span
+                        :if={preview.values == [] and preview.hidden_values == []}
+                        class="text-xs text-base-content/40"
+                      >
                         {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No values defined yet.")}
+                      </span>
+                    </div>
+                    <%!-- A value archived/trashed after being picked stays
+                         selected (§3c) but drops out of preview.values, so
+                         it gets no checkbox above — render it read-only,
+                         marked archived, instead of letting it vanish.
+                         Still removable (the ×) — detaching the whole set
+                         would otherwise be the only way out. --%>
+                    <% hidden_selected = hidden_selected_values(preview, selection_for(assigns, uuid)) %>
+                    <div :if={hidden_selected != []} class="flex flex-wrap items-center gap-1.5">
+                      <span
+                        :for={value <- hidden_selected}
+                        class="flex items-center gap-1.5 rounded-full border border-dashed border-base-content/30 bg-base-200/60 pl-1.5 pr-1 py-0.5 text-base-content/60"
+                        title={
+                          Gettext.gettext(
+                            PhoenixKitCatalogue.Gettext,
+                            "Selected, but archived — no longer offered for new picks"
+                          )
+                        }
+                      >
+                        <.icon name="hero-archive-box" class="w-3.5 h-3.5" />
+                        <img
+                          :if={preview.thumbs[value.key]}
+                          src={URLSigner.signed_url(preview.thumbs[value.key], "thumbnail")}
+                          alt=""
+                          class="w-5 h-5 rounded object-cover"
+                        />
+                        <span class="text-sm">{value.label}</span>
+                        <button
+                          type="button"
+                          phx-click="toggle_value_selection"
+                          phx-value-set={uuid}
+                          phx-value-key={value.key}
+                          class="btn btn-ghost btn-circle btn-xs px-0 text-base-content/40 hover:text-error"
+                          aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
+                        >
+                          <.icon name="hero-x-mark" class="w-3 h-3" />
+                        </button>
                       </span>
                     </div>
                   </div>

@@ -509,6 +509,30 @@ defmodule PhoenixKitCatalogue.GettextTest do
       end
     end
 
+    test "attribute set soft-lifecycle strings" do
+      for {msgid, et, ru} <- [
+            {"Attribute set archived.", "Atribuudikomplekt arhiveeritud.",
+             "Набор атрибутов архивирован."},
+            {"Failed to archive attribute set.", "Atribuudikomplekti arhiveerimine ebaõnnestus.",
+             "Не удалось архивировать набор атрибутов."},
+            {"Attribute set restored.", "Atribuudikomplekt taastatud.",
+             "Набор атрибутов восстановлен."},
+            {"Failed to restore attribute set.", "Atribuudikomplekti taastamine ebaõnnestus.",
+             "Не удалось восстановить набор атрибутов."},
+            {"Show archived", "Näita arhiveeritud", "Показать архивные"},
+            {"Selected, but archived — no longer offered for new picks",
+             "Valitud, kuid arhiveeritud — uuteks valikuteks enam ei pakuta",
+             "Выбрано, но архивировано — больше не предлагается для нового выбора"},
+            {"Archived value", "Arhiveeritud väärtus", "Архивное значение"}
+          ] do
+        # en.po may leave msgstr "" (gettext falls back to the msgid) —
+        # the pin is that the entry exists, not that it's filled in.
+        refute is_nil(po_msgstr("en", msgid))
+        assert gettext_in("et", msgid) == et
+        assert gettext_in("ru", msgid) == ru
+      end
+    end
+
     test "View old values interpolates the count" do
       assert po_msgstr("en", "View old values (%{count})") == "View old values (%{count})"
 

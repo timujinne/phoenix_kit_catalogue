@@ -444,8 +444,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
 
   defp attribute_fields(_, _), do: []
 
-  defp selected_values(%{selected: [_ | _] = selected, values: values}),
-    do: Enum.filter(values, &(&1.key in selected))
+  # A selected value archived/trashed after being picked stays in
+  # `:selected` (§3c, 2026-09-11 direction) but drops out of `:values` —
+  # look it up in `:hidden_values` too, or its chip silently disappears
+  # from the card exactly like the bug this exists to fix.
+  defp selected_values(%{selected: [_ | _] = selected} = resolved) do
+    pool = resolved.values ++ Map.get(resolved, :hidden_values, [])
+    Enum.filter(pool, &(&1.key in selected))
+  end
 
   defp selected_values(%{values: values}), do: values
 

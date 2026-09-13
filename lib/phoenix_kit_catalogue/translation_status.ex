@@ -604,16 +604,33 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
   defp resources_for(:category, catalogue_uuid),
     do: Catalogue.list_categories_for_catalogue(catalogue_uuid)
 
-  defp resources_for(:set_label, _catalogue_uuid), do: AttributeSets.list_sets()
+  # `status: :all` — an archived set's name and its values' labels stay
+  # live user strings (rendered on the product card and item form via
+  # `hidden_values`, §3c) and must stay reachable for translation;
+  # `list_sets/1`'s default excludes archived sets.
+  defp resources_for(:set_label, _catalogue_uuid), do: AttributeSets.list_sets(status: :all)
 
-  # One batched query for every set's values (`list_values_for/2`, the
-  # same call the Attributes tab's preview already uses to avoid N+1),
-  # not `list_values/1` per set — this runs on every page render, every
-  # translation-completed broadcast, and every sweep tick.
+  # Two batched queries for every set's values — active
+  # (`list_values_for/2`, the same call the Attributes tab's preview
+  # already uses to avoid N+1) AND hidden (`list_hidden_values_for/2`)
+  # — not `list_values/1` per set: this runs on every page render,
+  # every translation-completed broadcast, and every sweep tick.
+  #
+  # An archived/trashed value's label is still a real user string
+  # rendered wherever `hidden_values` resolves it (product card, item
+  # form, Items popup, §3c) — dropping it here would let that label
+  # drift untranslated forever. The two listings are disjoint by
+  # status (active vs. archived/trashed), so no dedup is needed between
+  # them.
   defp resources_for(:set_value, _catalogue_uuid) do
-    sets = AttributeSets.list_sets()
-    values_by_set = sets |> Enum.map(& &1.uuid) |> AttributeSets.list_values_for()
-    sets |> Enum.flat_map(&Map.get(values_by_set, &1.uuid, []))
+    sets = AttributeSets.list_sets(status: :all)
+    set_uuids = Enum.map(sets, & &1.uuid)
+    values_by_set = AttributeSets.list_values_for(set_uuids)
+    hidden_by_set = AttributeSets.list_hidden_values_for(set_uuids)
+
+    Enum.flat_map(sets, fn set ->
+      Map.get(values_by_set, set.uuid, []) ++ Map.get(hidden_by_set, set.uuid, [])
+    end)
   end
 
   defp rows_for(type, resource, langs) do

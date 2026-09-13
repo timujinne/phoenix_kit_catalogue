@@ -92,6 +92,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        attr_sets_search: "",
        attr_sets_page: 1,
        attr_sets_total: 0,
+       attr_sets_show_archived: false,
        show_new_set_modal: false,
        attribute_filter_options: [],
        attribute_value_counts: %{},
@@ -857,6 +858,21 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         icon="hero-cog-6-tooth"
         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set settings")}
       />
+      <.table_row_menu_divider />
+      <.table_row_menu_button
+        :if={@set.status != "archived"}
+        icon="hero-archive-box"
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archive")}
+        phx-click="archive_attribute_set"
+        phx-value-uuid={@set.uuid}
+      />
+      <.table_row_menu_button
+        :if={@set.status == "archived"}
+        icon="hero-arrow-uturn-left"
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
+        phx-click="restore_attribute_set"
+        phx-value-uuid={@set.uuid}
+      />
     </.table_row_menu>
     """
   end
@@ -873,18 +889,29 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     if Catalogue.attribute_sets_enabled?() do
       socket = maybe_auto_migrate_legacy(socket)
 
+      # "Show archived" ON pulls EVERY status (archived rows render with
+      # a badge, per row below); OFF leaves :status unset, which
+      # `list_attribute_sets/1` now defaults to non-archived-only.
+      list_opts = [lang: socket.assigns[:current_locale]]
+
+      list_opts =
+        if socket.assigns[:attr_sets_show_archived],
+          do: Keyword.put(list_opts, :status, :all),
+          else: list_opts
+
       # One lean in-memory list (blueprints are entities-module rows we
       # don't own, so no SQL paging) — search/page/derive below, and all
       # counts/previews are fetched for the VISIBLE PAGE only. At a
       # thousand sets the old shape (full values + full attachments per
       # set) was both an N+1 and an unbounded DOM.
       all =
-        Catalogue.list_attribute_sets(lang: socket.assigns[:current_locale])
+        Catalogue.list_attribute_sets(list_opts)
         |> Enum.map(fn s ->
           %{
             uuid: s.uuid,
             name: s.display_name,
-            key: s.name
+            key: s.name,
+            status: s.status
           }
         end)
 
@@ -2408,6 +2435,56 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # Forged/stale payloads: ignore rather than crash.
   def handle_event("set_attribute_group_status", _params, socket), do: {:noreply, socket}
 
+  def handle_event("archive_attribute_set", %{"uuid" => uuid}, socket) do
+    with %{} = set <- Catalogue.get_attribute_set(uuid),
+         {:ok, _} <- Catalogue.archive_attribute_set(set, actor_opts(socket)) do
+      {:noreply,
+       socket
+       |> put_flash(
+         :info,
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute set archived.")
+       )
+       |> load_data(:attribute_groups)}
+    else
+      _ ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to archive attribute set.")
+         )}
+    end
+  end
+
+  def handle_event("restore_attribute_set", %{"uuid" => uuid}, socket) do
+    with %{} = set <- Catalogue.get_attribute_set(uuid),
+         {:ok, _} <- Catalogue.restore_attribute_set(set, actor_opts(socket)) do
+      {:noreply,
+       socket
+       |> put_flash(
+         :info,
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute set restored.")
+       )
+       |> load_data(:attribute_groups)}
+    else
+      _ ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to restore attribute set.")
+         )}
+    end
+  end
+
+  def handle_event("toggle_attr_sets_show_archived", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:attr_sets_show_archived, !socket.assigns.attr_sets_show_archived)
+     |> assign(:attr_sets_page, 1)
+     |> load_attribute_sets()}
+  end
+
   def handle_event("cancel_delete", _params, socket) do
     {:noreply, assign(socket, :confirm_delete, nil)}
   end
@@ -3261,6 +3338,15 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 />
               </label>
             </form>
+            <label class="label cursor-pointer gap-2 text-sm shrink-0">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                checked={@attr_sets_show_archived}
+                phx-click="toggle_attr_sets_show_archived"
+              />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Show archived")}
+            </label>
             <.view_toggle_instant view={@view_mode} id="attributes-view-pref" />
           </div>
 
@@ -3309,6 +3395,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   >
                     {s.name}
                   </.link>
+                  <span :if={s.status == "archived"} class="badge badge-ghost badge-xs ml-1">
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")}
+                  </span>
                 </.table_default_cell>
                 <.table_default_cell class="align-top">
                   <.attr_set_values_cell
@@ -3336,6 +3425,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 >
                   {s.name}
                 </.link>
+                <span :if={s.status == "archived"} class="badge badge-ghost badge-xs ml-1">
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")}
+                </span>
               </div>
               <div class="mt-2">
                 <.attr_set_values_cell

@@ -5741,6 +5741,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate get_attribute_set(uuid, opts \\ []), to: AttributeSets, as: :get_set
   defdelegate update_attribute_set(set, attrs, opts \\ []), to: AttributeSets, as: :update_set
   defdelegate delete_attribute_set(set, opts \\ []), to: AttributeSets, as: :delete_set
+  defdelegate archive_attribute_set(set, opts \\ []), to: AttributeSets, as: :archive_set
+  defdelegate restore_attribute_set(set, opts \\ []), to: AttributeSets, as: :restore_set
 
   defdelegate attribute_value_match_counts(opts \\ []),
     to: AttributeSets,
@@ -5771,6 +5773,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate list_attribute_set_values_for(set_uuids, opts \\ []),
     to: AttributeSets,
     as: :list_values_for
+
+  defdelegate list_attribute_set_hidden_values_for(set_uuids, opts \\ []),
+    to: AttributeSets,
+    as: :list_hidden_values_for
+
+  defdelegate drop_hidden_attribute_set_value_duplicates(hidden_values, values),
+    to: AttributeSets,
+    as: :drop_hidden_duplicates
 
   defdelegate get_attribute_set_value(set, value_uuid), to: AttributeSets, as: :get_value
 
@@ -5849,6 +5859,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
     to: AttributeSets,
     as: :resolve_for_items
 
+  defdelegate attribute_set_presence(item_uuids), to: AttributeSets, as: :attached_item_uuids
+
   defdelegate resolve_attribute_sets_for_item(item_uuid, opts \\ []),
     to: AttributeSets,
     as: :resolve_for_item
@@ -5868,6 +5880,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
     to: AttributeSets,
     as: :prune_orphan_attachments
 
+  defdelegate prune_orphan_attribute_set_value_slugs(set_uuid),
+    to: AttributeSets,
+    as: :prune_orphan_value_slugs
+
   defdelegate attribute_set_value_counts(set_uuids), to: AttributeSets, as: :value_counts
 
   defdelegate attribute_set_attachment_counts(set_uuids),
@@ -5883,5 +5899,6 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate set_item_attribute_group(item, group_uuid, opts \\ []), to: Attributes
   defdelegate get_item_attribute_group_uuid(item_uuid), to: Attributes
   defdelegate item_attribute_group_map(item_uuids), to: Attributes
+  defdelegate attribute_group_names(group_uuids), to: Attributes
   defdelegate resolved_group(group_uuid, lang), to: Attributes
 end

@@ -1,3 +1,70 @@
+## 0.31.1 - 2026-09-13
+
+### Fixed
+
+- **Detaching an attribute set that the legacy migration attached now
+  sticks** (the 0.31.0 known issue). The migration re-runs on every
+  Attributes tab visit and the legacy assignment rows are never deleted,
+  so it used to re-attach the set each time. Each migrated set now
+  records when its assignments were migrated
+  (`settings.catalogue.assignments_migrated_at`), and later runs attach
+  only assignments made or changed since. A set whose attach failed stays
+  unmarked, so a partial run still heals. Sets migrated by 0.31.0 or
+  earlier carry no marker yet: the first run after upgrading re-attaches
+  their detached items one last time, then marks them.
+
+## 0.31.0 - 2026-09-13
+
+Attribute sets get a soft lifecycle (#108), and two attribute-surface bugs
+are fixed (#109). Reviews: `dev_docs/pull_requests/2026/108-*/` and
+`109-*/`.
+
+### Added
+
+- **Archive and restore attribute sets.** `Catalogue.archive_attribute_set/2`
+  and `restore_attribute_set/2` flip the blueprint's status (allowed while
+  items are attached; hard delete stays refused). The Attributes tab has
+  Archive/Restore row actions, a "Show archived" toggle and badges; the
+  item form no longer offers an archived set for a new attachment, while
+  an attached one keeps rendering, badged. `list_attribute_sets/1` takes
+  `:status` (`nil` — the default, non-archived — `:archived` or `:all`).
+- **Hidden values stay resolvable.** A resolved set carries
+  `hidden_values` (archived and trashed values) next to active-only
+  `values`, and a selection that points at a hidden value survives. The
+  product card, the set's Items popup and the item form keep rendering it;
+  the popup and form mark it and the form can remove it.
+  `list_attribute_set_hidden_values_for/2` is the batched read.
+- `Catalogue.prune_orphan_attribute_set_value_slugs/1`, run by
+  `OrphanPruner` on entities' data-deletion event, removes selections that
+  point at a value deleted for good.
+- New set blueprints carry `settings["managed_path"]` so the entities admin
+  can link back here; a one-time boot backfill stamps existing sets.
+- `Catalogue.attribute_set_presence/1` and `attribute_group_names/1`.
+
+### Fixed
+
+- **A trashed or archived attribute value no longer comes back published.**
+  The legacy migration's value top-up, which re-runs on every Attributes
+  tab visit, checked existence with a read that hides archived and trashed
+  rows (#109).
+- **The item list's "Attributes" column shows the attached sets' selected
+  values** (or the set's name when nothing is selected) instead of a dash —
+  it was reading the legacy attribute-group table (#109). A selected value
+  that was later archived or trashed keeps its label there too, rather
+  than reading as "whole set applies" (post-merge).
+- `set_attribute_set_selection/4` keeps a hidden value an attachment
+  already holds but refuses to add one, in the context rather than only in
+  the item form (post-merge).
+- Slug collisions between a live value and trashed or archived copies no
+  longer let a stale label overwrite the live one.
+- The Translations page includes archived sets and hidden values.
+
+### Known issue
+
+- Detaching a set that the legacy migration attached from an
+  attribute-group assignment does not stick: the next Attributes tab visit
+  re-attaches it while the legacy assignment row exists.
+
 ## 0.30.1 - 2026-09-13
 
 Follow-ups from the week review (`dev_docs/WEEK_REVIEW_2026-09-07_13.md`):

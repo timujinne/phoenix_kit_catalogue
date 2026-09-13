@@ -1821,7 +1821,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       end
 
     assigns_key = if scope == :detail_items, do: :items_columns, else: :categories_columns
-    assign(socket, assigns_key, ids)
+    socket = assign(socket, assigns_key, ids)
+
+    # Toggling "attributes" in/out of the Items columns changes which shape
+    # `build_attribute_map/3` should be filling — refresh it now rather than
+    # waiting for the next scroll/reload to pick it up.
+    if scope == :detail_items, do: refresh_attribute_map(socket), else: socket
   end
 
   defp detail_column_section_title(:detail_categories),
@@ -2596,10 +2601,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # (`attribute_map`) entries for the rows just loaded. Both maps
   # accumulate across pages — a deep scroll keeps its earlier rows'
   # entries — but the source queries omit zero rows, so a plain merge
-  # could never CLEAR an entry: an item whose last document was removed
-  # or whose group was cleared kept its indicator until reload. Dropping
-  # the reloaded rows' keys first makes the merge authoritative for
-  # exactly those rows and leaves every other page's entries alone.
+  # could never CLEAR an entry: an item whose last document was removed,
+  # or whose only attached set was detached, kept its indicator until
+  # reload. Dropping the reloaded rows' keys first makes the merge
+  # authoritative for exactly those rows and leaves every other page's
+  # entries alone.
   defp merge_row_indicators(socket, items, categories \\ []) do
     item_uuids = Enum.map(items, & &1.uuid)
     row_uuids = item_uuids ++ Enum.map(categories, & &1.uuid)
@@ -2613,12 +2619,110 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       attribute_map:
         socket.assigns.attribute_map
         |> Map.drop(item_uuids)
-        |> Map.merge(Catalogue.item_attribute_group_map(item_uuids)),
+        |> Map.merge(build_attribute_map(item_uuids, loc(socket), socket.assigns.items_columns)),
       supplier_costs:
         socket.assigns.supplier_costs
         |> Map.drop(item_uuids)
         |> Map.merge(Catalogue.supplier_cost_ranges(item_uuids))
     )
+  end
+
+  # `attribute_map` primarily comes from the entities-backed attribute
+  # SETS. The "Attributes" list column needs each attached set's display
+  # name plus its currently SELECTED values' labels (empty selection =
+  # "whole set applies", the label list is left empty and
+  # `Components.attribute_cell_text/1` falls back to the set's name) —
+  # that costs a `resolve_attribute_sets/2` read per distinct set, so it
+  # only runs when the column is actually configured to show. Otherwise
+  # the swatch indicator beside the name only needs presence, which
+  # `Catalogue.attribute_set_presence/1` answers with one query and no
+  # resolve; those entries carry `true` rather than a label list, and the
+  # "attributes" column render branch never runs for them so
+  # `attribute_cell_text/1` is never called on the marker.
+  #
+  # The legacy `item_attribute_group_map/1` (`phoenix_kit_cat_item_
+  # attribute_groups`) is NOT entities-gated — `attribute_group_form_live`
+  # still lets a deployment with entities off attach a group via
+  # `set_item_attribute_group/2` — so it's folded in too, for every item
+  # that has no resolved/present set. One batched query per branch, no
+  # per-row lookups; an entities set wins over a legacy group when an
+  # item somehow carries both.
+  defp build_attribute_map(item_uuids, locale, columns) do
+    if "attributes" in columns do
+      from_sets =
+        item_uuids
+        |> Catalogue.resolve_attribute_sets(lang: locale)
+        |> Map.new(fn {item_uuid, %{sets: sets}} -> {item_uuid, attribute_map_sets(sets)} end)
+        |> Map.reject(fn {_item_uuid, sets} -> sets == [] end)
+
+      (item_uuids -- Map.keys(from_sets))
+      |> legacy_attribute_map_labels()
+      |> Map.merge(from_sets)
+    else
+      from_sets =
+        item_uuids
+        |> Catalogue.attribute_set_presence()
+        |> Map.new(&{&1, true})
+
+      legacy =
+        (item_uuids -- Map.keys(from_sets))
+        |> Catalogue.item_attribute_group_map()
+        |> Map.new(fn {item_uuid, _group_uuid} -> {item_uuid, true} end)
+
+      Map.merge(legacy, from_sets)
+    end
+  end
+
+  defp legacy_attribute_map_labels([]), do: %{}
+
+  defp legacy_attribute_map_labels(item_uuids) do
+    item_group_uuids = Catalogue.item_attribute_group_map(item_uuids)
+    group_names = Catalogue.attribute_group_names(Map.values(item_group_uuids) |> Enum.uniq())
+
+    item_group_uuids
+    |> Map.new(fn {item_uuid, group_uuid} ->
+      {item_uuid, [%{name: Map.get(group_names, group_uuid), labels: []}]}
+    end)
+    |> Map.reject(fn {_item_uuid, [%{name: name}]} -> is_nil(name) end)
+  end
+
+  # Rebuilds JUST the attribute-swatch/-column map for the rows currently on
+  # screen (level items and any active search results) after the "attributes"
+  # column is toggled — `live_update_detail_columns/3` changes
+  # `items_columns` but doesn't reload rows, so without this the map would
+  # keep whichever shape (`true` or a full label list) it had before the
+  # toggle until the next scroll/reload.
+  defp refresh_attribute_map(socket) do
+    item_uuids =
+      Enum.map(socket.assigns.items, & &1.uuid) ++
+        Enum.map(socket.assigns[:search_results] || [], & &1.uuid)
+
+    assign(
+      socket,
+      :attribute_map,
+      socket.assigns.attribute_map
+      |> Map.drop(item_uuids)
+      |> Map.merge(build_attribute_map(item_uuids, loc(socket), socket.assigns.items_columns))
+    )
+  end
+
+  # Labels come from `values ++ hidden_values`: `:selected` keeps a value
+  # archived/trashed after it was picked (§3c), and an active-only lookup
+  # would drop its label — a fully hidden selection would then render the
+  # set's name, reading as "whole set applies", a mode flip the resolve
+  # itself refuses. Only a value deleted for good ghosts out of `:selected`.
+  defp attribute_map_sets(sets) do
+    Enum.map(sets, fn set ->
+      labels_by_key =
+        Map.new(set.values ++ Map.get(set, :hidden_values, []), &{&1.key, &1.label})
+
+      labels =
+        set.selected
+        |> Enum.map(&Map.get(labels_by_key, &1))
+        |> Enum.reject(&is_nil/1)
+
+      %{name: set.name, labels: labels}
+    end)
   end
 
   # A supplier row changed somewhere (the item form's Suppliers tab, an
@@ -5491,14 +5595,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                     <div><.status_badge status={item.status || "unknown"} size={:xs} /></div>
                   <% "attributes" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attributes")}</div>
-                    <div>
-                      <.icon
-                        :if={Map.has_key?(@attribute_map, item.uuid)}
-                        name="hero-swatch"
-                        class="w-4 h-4 text-primary/60"
-                      />
-                      <span :if={!Map.has_key?(@attribute_map, item.uuid)}>—</span>
-                    </div>
+                    <div>{attribute_cell_text(Map.get(@attribute_map, item.uuid)) || "—"}</div>
                   <% "files" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Files")}</div>
                     <div class="tabular-nums">{Map.get(@file_counts, item.uuid, 0)}</div>
@@ -5623,6 +5720,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 item={item}
                 edit_path={@edit_path_fn}
                 has_attributes={Map.has_key?(@attribute_map, item.uuid)}
+                attribute_text={
+                  if "attributes" in @items_columns,
+                    do: attribute_cell_text(Map.get(@attribute_map, item.uuid))
+                }
                 file_count={Map.get(@file_counts, item.uuid, 0)}
                 columns={@items_columns}
                 extension_columns={@extension_columns}

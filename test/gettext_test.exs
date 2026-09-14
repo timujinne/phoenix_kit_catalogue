@@ -68,7 +68,17 @@ defmodule PhoenixKitCatalogue.GettextTest do
            "See kategooria kuulub teise kataloogi."},
           {"Drag-reorder needs the Manual sort — choose it in the sort selector.",
            "Для перетаскивания выберите ручную сортировку в списке сортировки.",
-           "Lohistades järjestamiseks vali sortimise valikust käsitsi järjestus."}
+           "Lohistades järjestamiseks vali sortimise valikust käsitsi järjestus."},
+          # The delete-confirmation strings for the attribute-value delete
+          # (2026-09-13: boss asked for a confirm popup on every permanent
+          # delete; the value delete was the one that had none).
+          {"Delete value", "Удалить значение", "Kustuta väärtus"},
+          {"This permanently removes the value. It cannot be undone.",
+           "Это навсегда удалит значение. Отменить нельзя.",
+           "See eemaldab väärtuse jäädavalt. Seda ei saa tagasi võtta."},
+          # The flash when that confirmed delete is refused (PR #113 review).
+          {"Failed to delete value.", "Не удалось удалить значение.",
+           "Väärtuse kustutamine ebaõnnestus."}
         ] do
       Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
       assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru

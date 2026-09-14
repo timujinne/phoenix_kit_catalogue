@@ -206,15 +206,53 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
       assert Catalogue.get_attribute(attribute.uuid) == nil
     end
 
+    test "deleting a value goes through the confirm modal, and cancel keeps it",
+         %{conn: conn} do
+      group = create_group()
+      {:ok, attribute} = Catalogue.create_attribute(group, %{"name" => "Color"})
+      {:ok, value} = Catalogue.create_attribute_value(attribute, %{"value" => "White"})
+
+      {:ok, view, html} = live(conn, "#{@base}/attributes/#{group.uuid}/edit")
+      refute html =~ "This permanently removes the value"
+
+      # Clicking the chip's own remove button (not a bare event push, so a
+      # template still wired to the old handler fails here) only opens the
+      # confirm — the value is still there.
+      remove_button =
+        "button[phx-click='request_delete_value'][phx-value-uuid='#{value.uuid}']"
+
+      html = view |> element(remove_button) |> render_click()
+      assert html =~ "This permanently removes the value"
+      assert Catalogue.get_attribute_value(value.uuid)
+
+      # Cancelling closes it and leaves the value; confirming deletes it.
+      html = view |> render_click("cancel_delete_value", %{})
+      refute html =~ "This permanently removes the value"
+      assert Catalogue.get_attribute_value(value.uuid)
+
+      view |> element(remove_button) |> render_click()
+      html = view |> render_click("confirm_delete_value", %{})
+      refute Catalogue.get_attribute_value(value.uuid)
+      refute html =~ "This permanently removes the value"
+      refute has_element?(view, remove_button)
+    end
+
     test "foreign uuids are ignored (event forgery guard)", %{conn: conn} do
       group = create_group()
       other = create_group(%{name: "Other"})
       {:ok, foreign} = Catalogue.create_attribute(other, %{"name" => "Sneak"})
+      {:ok, foreign_value} = Catalogue.create_attribute_value(foreign, %{"value" => "Keep"})
 
       {:ok, view, _html} = live(conn, "#{@base}/attributes/#{group.uuid}/edit")
 
       view |> render_hook("rename_attribute", %{"uuid" => foreign.uuid, "value" => "Hacked"})
       assert Catalogue.get_attribute(foreign.uuid).name == "Sneak"
+
+      # The value delete resolves its uuid at confirm time, so a forged
+      # request must still leave another group's value alone.
+      view |> render_click("request_delete_value", %{"uuid" => foreign_value.uuid})
+      view |> render_click("confirm_delete_value", %{})
+      assert Catalogue.get_attribute_value(foreign_value.uuid)
     end
 
     test "unknown group redirects out with a flash", %{conn: conn} do

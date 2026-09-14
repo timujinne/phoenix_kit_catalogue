@@ -3428,3 +3428,12 @@ msgstr[1] "%{count} traductions mises en file d'attente."
 #, elixir-autogen, elixir-format
 msgid "sets"
 msgstr "ensembles"
+
+msgid "Delete value"
+msgstr ""
+
+msgid "This permanently removes the value. It cannot be undone."
+msgstr ""
+
+msgid "Failed to delete value."
+msgstr ""

@@ -3440,3 +3440,12 @@ msgstr[2] "В очередь поставлено %{count} переводов."
 #, elixir-autogen, elixir-format
 msgid "sets"
 msgstr "наборов"
+
+msgid "Delete value"
+msgstr "Удалить значение"
+
+msgid "This permanently removes the value. It cannot be undone."
+msgstr "Это навсегда удалит значение. Отменить нельзя."
+
+msgid "Failed to delete value."
+msgstr "Не удалось удалить значение."

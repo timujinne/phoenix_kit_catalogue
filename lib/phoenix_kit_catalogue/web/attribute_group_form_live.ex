@@ -124,6 +124,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
          action: action,
          group: group,
          confirm_delete_attribute: nil,
+         confirm_delete_value: nil,
          draft_generation: %{},
          refocus_key: nil,
          return_to: safe_return_to(params["return_to"])
@@ -321,12 +322,34 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
     end
   end
 
-  def handle_event("delete_value", %{"uuid" => uuid}, socket) do
-    with %{} = value <- owned_value(socket, uuid),
+  def handle_event("request_delete_value", %{"uuid" => uuid}, socket) do
+    {:noreply, assign(socket, :confirm_delete_value, uuid)}
+  end
+
+  def handle_event("cancel_delete_value", _params, socket) do
+    {:noreply, assign(socket, :confirm_delete_value, nil)}
+  end
+
+  def handle_event("confirm_delete_value", _params, socket) do
+    with uuid when is_binary(uuid) <- socket.assigns.confirm_delete_value,
+         %{} = value <- owned_value(socket, uuid),
          {:ok, _} <- Catalogue.delete_attribute_value(value, actor_opts(socket)) do
-      {:noreply, reload_group(socket)}
+      {:noreply, socket |> assign(:confirm_delete_value, nil) |> reload_group()}
     else
-      _ -> {:noreply, socket}
+      # Confirmed but refused (a concurrent default flip trips the unique
+      # index): say so, rather than close the modal on a value still there.
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:confirm_delete_value, nil)
+         |> put_flash(
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete value.")
+         )
+         |> reload_group()}
+
+      _ ->
+        {:noreply, assign(socket, :confirm_delete_value, nil)}
     end
   end
 
@@ -892,7 +915,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
                       </.button>
                       <.button
                         type="button"
-                        phx-click="delete_value"
+                        phx-click="request_delete_value"
                         phx-value-uuid={value.uuid}
                         variant="ghost"
                         size="xs"
@@ -1028,6 +1051,23 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
           title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete attribute")}
           title_icon="hero-trash"
           messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This removes the attribute and all its values from the group.")}]}
+          confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
+          danger={true}
+        />
+
+        <.confirm_modal
+          show={@confirm_delete_value != nil}
+          on_confirm="confirm_delete_value"
+          on_cancel="cancel_delete_value"
+          title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete value")}
+          title_icon="hero-trash"
+          messages={[
+            {:warning,
+             Gettext.gettext(
+               PhoenixKitCatalogue.Gettext,
+               "This permanently removes the value. It cannot be undone."
+             )}
+          ]}
           confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
           danger={true}
         />

@@ -3428,3 +3428,12 @@ msgstr[1] "Queued %{count} translations."
 #, elixir-autogen, elixir-format
 msgid "sets"
 msgstr "sets"
+
+msgid "Delete value"
+msgstr "Delete value"
+
+msgid "This permanently removes the value. It cannot be undone."
+msgstr "This permanently removes the value. It cannot be undone."
+
+msgid "Failed to delete value."
+msgstr "Failed to delete value."

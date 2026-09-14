@@ -3434,3 +3434,12 @@ msgstr[1] ""
 #, elixir-autogen, elixir-format
 msgid "sets"
 msgstr ""
+
+msgid "Delete value"
+msgstr ""
+
+msgid "This permanently removes the value. It cannot be undone."
+msgstr ""
+
+msgid "Failed to delete value."
+msgstr ""

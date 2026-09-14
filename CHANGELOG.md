@@ -1,3 +1,16 @@
+## 0.31.2 - 2026-09-13
+
+Review: `dev_docs/pull_requests/2026/113-confirm-attribute-value-delete/`.
+
+### Changed
+
+- **Deleting an attribute value asks first** (#113). The value chip's
+  remove button in the attribute-group editor opens a confirm modal
+  instead of deleting on the first click; cancel keeps the value.
+- A confirmed value delete that the database refuses (a concurrent
+  default change) now shows "Failed to delete value." instead of closing
+  the modal silently on a value that is still there.
+
 ## 0.31.1 - 2026-09-13
 
 ### Fixed

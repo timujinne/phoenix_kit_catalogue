@@ -1356,6 +1356,9 @@ msgstr "в архиве"
 msgid "No values defined yet."
 msgstr "Значения ещё не заданы."
 
+msgid "This value has no slug and cannot be selected"
+msgstr "У этого значения нет слага, выбрать его нельзя."
+
 msgid "This group has no attributes yet."
 msgstr "У этой группы пока нет атрибутов."
 

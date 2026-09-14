@@ -1347,6 +1347,9 @@ msgstr "archived"
 msgid "No values defined yet."
 msgstr "No values defined yet."
 
+msgid "This value has no slug and cannot be selected"
+msgstr "This value has no slug and cannot be selected"
+
 msgid "This group has no attributes yet."
 msgstr "This group has no attributes yet."
 

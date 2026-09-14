@@ -78,7 +78,14 @@ defmodule PhoenixKitCatalogue.GettextTest do
            "See eemaldab väärtuse jäädavalt. Seda ei saa tagasi võtta."},
           # The flash when that confirmed delete is refused (PR #113 review).
           {"Failed to delete value.", "Не удалось удалить значение.",
-           "Väärtuse kustutamine ebaõnnestus."}
+           "Väärtuse kustutamine ebaõnnestus."},
+          # A value row with a NULL slug (seen in live data) renders its
+          # chip disabled instead of a
+          # clickable checkbox — see `toggle_value_selection`'s fallback
+          # clause in item_form_live.ex.
+          {"This value has no slug and cannot be selected",
+           "У этого значения нет слага, выбрать его нельзя.",
+           "Sellel väärtusel pole silti ja seda ei saa valida."}
         ] do
       Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
       assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru

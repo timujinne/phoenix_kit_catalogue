@@ -1212,6 +1212,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     end
   end
 
+  # A value with a NULL slug (seen in live data — the catalogue's own
+  # create/update paths never produce one, so it arrives from outside,
+  # e.g. a row written through the generic entities admin) has no
+  # `key`, so its checkbox renders without `phx-value-key` (see the
+  # template) and a click sends just `%{"set" => uuid, "value" =>
+  # "on"}`. Without this clause that payload falls through every match
+  # above and raises FunctionClauseError, crashing and remounting the
+  # LiveView — which discards every unsaved staged tick.
+  def handle_event("toggle_value_selection", _params, socket), do: {:noreply, socket}
+
   # A togglable key must be a REAL value of the set — active (offered
   # by the checkboxes) or hidden (a selected-but-archived chip, §3c).
   # Active-only would make the hidden chip's remove control a no-op:
@@ -2435,8 +2445,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   defp put_thumbs(preview) do
     all_values = preview.values ++ preview.hidden_values
-    Map.put(preview, :thumbs, Map.new(all_values, &{&1.key, value_thumb(preview, &1)}))
+
+    thumbs =
+      for value <- all_values, value.key, into: %{}, do: {value.key, value_thumb(preview, value)}
+
+    Map.put(preview, :thumbs, thumbs)
   end
+
+  # A slugless value (nil key, NULL slug column) stays out of the thumbs
+  # map: every such value would share the one `thumbs[nil]` entry, and
+  # each chip would show whichever swatch was written last. Its chip
+  # computes its own instead.
+  defp chip_thumb(preview, %{key: nil} = value), do: value_thumb(preview, value)
+  defp chip_thumb(preview, value), do: preview.thumbs[value.key]
 
   # Ghost intersection lives in ONE place — the context's
   # `valid_attribute_set_selection/2` — this just MapSets the result
@@ -3245,10 +3266,32 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                            so a rejected toggle snaps back. --%>
                       <label
                         :for={value <- preview.values}
-                        class="flex items-center gap-1.5 rounded-full border border-base-content/20 bg-base-100 hover:border-base-content/40 has-[:checked]:border-primary has-[:checked]:bg-primary/10 pl-1.5 pr-2.5 py-0.5 cursor-pointer select-none transition-colors"
-                        title={value_extras_summary(preview, value)}
+                        class={[
+                          "flex items-center gap-1.5 rounded-full border border-base-content/20 bg-base-100 pl-1.5 pr-2.5 py-0.5 select-none transition-colors",
+                          if(value.key,
+                            do:
+                              "hover:border-base-content/40 has-[:checked]:border-primary has-[:checked]:bg-primary/10 cursor-pointer",
+                            else: "opacity-60 cursor-not-allowed"
+                          )
+                        ]}
+                        title={
+                          if value.key,
+                            do: value_extras_summary(preview, value),
+                            else:
+                              Gettext.gettext(
+                                PhoenixKitCatalogue.Gettext,
+                                "This value has no slug and cannot be selected"
+                              )
+                        }
                       >
+                        <%!-- A value with a nil `key` (a NULL slug column,
+                             seen in live data) has nothing to send as
+                             `phx-value-key`; rendering it clickable anyway
+                             is what used to crash `toggle_value_selection`
+                             (see the handler's fallback clause). Render it
+                             disabled instead, with no click handler at all. --%>
                         <input
+                          :if={value.key}
                           type="checkbox"
                           form="__detached-from-item-form__"
                           checked={MapSet.member?(selection_for(assigns, uuid), value.key)}
@@ -3257,9 +3300,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                           phx-value-key={value.key}
                           class="checkbox checkbox-xs"
                         />
+                        <input
+                          :if={is_nil(value.key)}
+                          type="checkbox"
+                          disabled
+                          class="checkbox checkbox-xs"
+                        />
+                        <% thumb = chip_thumb(preview, value) %>
                         <img
-                          :if={preview.thumbs[value.key]}
-                          src={URLSigner.signed_url(preview.thumbs[value.key], "thumbnail")}
+                          :if={thumb}
+                          src={URLSigner.signed_url(thumb, "thumbnail")}
                           alt=""
                           class="w-5 h-5 rounded object-cover"
                         />

@@ -1347,6 +1347,9 @@ msgstr "arhiveeritud"
 msgid "No values defined yet."
 msgstr "Väärtusi pole veel määratud."
 
+msgid "This value has no slug and cannot be selected"
+msgstr "Sellel väärtusel pole silti ja seda ei saa valida."
+
 msgid "This group has no attributes yet."
 msgstr "Sellel rühmal pole veel atribuute."
 

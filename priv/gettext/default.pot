@@ -1353,6 +1353,9 @@ msgstr ""
 msgid "No values defined yet."
 msgstr ""
 
+msgid "This value has no slug and cannot be selected"
+msgstr ""
+
 msgid "This group has no attributes yet."
 msgstr ""
 

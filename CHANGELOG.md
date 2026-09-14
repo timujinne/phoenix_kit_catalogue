@@ -1,3 +1,22 @@
+## 0.31.3 - 2026-09-14
+
+Review: `dev_docs/pull_requests/2026/114-value-without-slug-crash/`.
+
+### Fixed
+
+- **A value without a slug no longer crashes the item form** (#114). An
+  attribute set value whose `slug` column is NULL (seen in live data;
+  the catalogue's own value paths never produce one) used to render its
+  checkbox with no `phx-value-key`; clicking it sent a
+  `toggle_value_selection` payload the handler had no clause for,
+  crashing and remounting the LiveView and discarding every unsaved
+  staged selection with it. The chip now renders disabled instead, and
+  the handler ignores a malformed payload rather than crashing.
+- With two or more slugless values in one set, each chip shows its own
+  swatch thumbnail. They used to share one thumbnail slot, so a chip
+  could lose its swatch or show another value's. The disabled chip also
+  drops the pointer cursor and hover highlight of a clickable one.
+
 ## 0.31.2 - 2026-09-13
 
 Review: `dev_docs/pull_requests/2026/113-confirm-attribute-value-delete/`.

@@ -9,6 +9,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
+  import Ecto.Query
+
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
 
@@ -266,6 +268,100 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
                Catalogue.resolve_attribute_sets_for_item(item.uuid)
 
       assert selected == [blue.slug]
+    end
+
+    test "a toggle_value_selection payload without a key does not crash the view and leaves staged selections untouched",
+         %{conn: conn, item: item, set: set, blue: blue} do
+      {:ok, view, _html} = open(conn, item)
+      render_change(view, "attach_set", %{"attach_set_uuid" => set.uuid})
+      render_click(view, "toggle_value_selection", %{"set" => set.uuid, "key" => blue.slug})
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([blue.slug])
+
+      # A value row with a NULL slug (seen in live data; the catalogue's
+      # own create/update paths never produce one) has no
+      # `phx-value-key` on its checkbox, so a click sends just `"set"`
+      # and a bare `"value" => "on"` — no `"key"` at all. The lone
+      # clause pattern-matches `%{"set" => _, "key" => _}` and used to
+      # raise FunctionClauseError, killing the LiveView and rolling
+      # back every unsaved tick with it.
+      render_click(view, "toggle_value_selection", %{"set" => set.uuid, "value" => "on"})
+
+      assert Process.alive?(view.pid)
+      assert assigns(view).staged_selections[set.uuid] == MapSet.new([blue.slug])
+    end
+
+    test "a value with a nil slug renders disabled, without phx-click or phx-value-key", %{
+      conn: conn,
+      item: item,
+      set: set,
+      red: red,
+      blue: blue
+    } do
+      # `create_attribute_set_value/2` always generates a slug; force
+      # the real-world state (a NULL slug column, seen in live data —
+      # entities' changeset accepts one) directly through the repo.
+      {1, nil} =
+        PhoenixKit.RepoHelper.repo().update_all(
+          from(e in PhoenixKitEntities.EntityData, where: e.uuid == ^red.uuid),
+          set: [slug: nil]
+        )
+
+      {:ok, view, _html} = open(conn, item)
+      render_change(view, "attach_set", %{"attach_set_uuid" => set.uuid})
+      html = render(view)
+
+      assert html =~ "This value has no slug and cannot be selected"
+      # Blue (a normal value) still gets a live, clickable checkbox.
+      assert html =~ ~s(phx-value-key="#{blue.slug}")
+
+      [red_label] =
+        Regex.run(~r/<label[^>]*>(?:(?!<\/?label).)*Red(?:(?!<\/?label).)*<\/label>/s, html)
+
+      assert red_label =~ "disabled"
+      refute red_label =~ "phx-click"
+      refute red_label =~ "phx-value-key"
+    end
+
+    test "two slugless values each keep their own swatch", %{
+      conn: conn,
+      item: item,
+      set: set,
+      red: red,
+      blue: blue
+    } do
+      {:ok, _} = AttributeSets.add_extra_field(set, %{label: "Swatch", type: "image"})
+      set = AttributeSets.get_set(set.uuid)
+
+      {:ok, _} =
+        AttributeSets.update_value(set, red, %{extras: %{"swatch" => Ecto.UUID.generate()}})
+
+      {2, nil} =
+        PhoenixKit.RepoHelper.repo().update_all(
+          from(e in PhoenixKitEntities.EntityData, where: e.uuid in ^[red.uuid, blue.uuid]),
+          set: [slug: nil]
+        )
+
+      {:ok, view, _html} = open(conn, item)
+      render_change(view, "attach_set", %{"attach_set_uuid" => set.uuid})
+      html = render(view)
+
+      # Both values carry key nil. A thumbs map keyed on the value key
+      # held ONE `nil` entry — Blue's (no swatch, written last) — so
+      # Red's chip lost its swatch. Slugless chips compute their own.
+      refute Map.has_key?(assigns(view).set_previews[set.uuid].thumbs, nil)
+
+      label_for = fn name ->
+        [label] =
+          Regex.run(
+            ~r/<label[^>]*>(?:(?!<\/?label).)*#{name}(?:(?!<\/?label).)*<\/label>/s,
+            html
+          )
+
+        label
+      end
+
+      assert label_for.("Red") =~ "<img"
+      refute label_for.("Blue") =~ "<img"
     end
   else
     @tag :skip

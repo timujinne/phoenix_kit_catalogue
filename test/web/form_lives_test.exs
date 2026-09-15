@@ -244,16 +244,20 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
       assert to == "#{@base}/categories/#{category.uuid}/edit?" <> URI.encode_query(return_to: rt)
     end
 
-    test "Save & Exit on :new honors return_to instead of the catalogue root", %{conn: conn} do
+    test "Save & Exit on :new opens the created category; Cancel keeps return_to",
+         %{conn: conn} do
       catalogue = fixture_catalogue()
       parent = fixture_category(catalogue, %{name: "Parent"})
       rt = "#{@base}/#{catalogue.uuid}?category=#{parent.uuid}"
 
-      {:ok, view, _html} =
+      {:ok, view, html} =
         live(
           conn,
           "#{@base}/#{catalogue.uuid}/categories/new?" <> URI.encode_query(return_to: rt)
         )
+
+      # Cancel goes back to where the form was opened.
+      assert html =~ ~s(href="#{rt}")
 
       {:error, {:live_redirect, %{to: to}}} =
         view
@@ -263,7 +267,36 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
         |> put_submitter(~s(button[name=save_action][value=exit]))
         |> render_submit()
 
-      assert to == rt
+      [category] =
+        Catalogue.list_categories_metadata_for_catalogue(catalogue.uuid)
+        |> Enum.filter(&(&1.name == "Exited"))
+
+      # Save & Exit opens the saved category, as the catalogue form opens
+      # the saved catalogue.
+      assert to == "#{@base}/#{catalogue.uuid}?category=#{category.uuid}"
+    end
+
+    test "Save & Exit on :edit opens the category", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      category = fixture_category(catalogue, %{name: "Before"})
+      rt = "#{@base}/#{catalogue.uuid}"
+
+      {:ok, view, _html} =
+        live(
+          conn,
+          "#{@base}/categories/#{category.uuid}/edit?" <> URI.encode_query(return_to: rt)
+        )
+
+      {:error, {:live_redirect, %{to: to}}} =
+        view
+        |> form(form_selector(), %{
+          "category" => %{"name" => "After", "description" => ""}
+        })
+        |> put_submitter(~s(button[name=save_action][value=exit]))
+        |> render_submit()
+
+      assert to == "#{@base}/#{catalogue.uuid}?category=#{category.uuid}"
+      assert Catalogue.get_category(category.uuid).name == "After"
     end
 
     test "Save on :edit stays on the form with the saved values", %{conn: conn} do

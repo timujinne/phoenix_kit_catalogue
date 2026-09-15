@@ -224,9 +224,34 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
                size_bytes: byte_size,
                user_uuid: actor_uuid
              ) do
-          {:ok, %{} = file} -> {:ok, file, :new}
+          {:ok, %{} = file} -> {:ok, attach_to_pdf_library_folder(file, actor_uuid), :new}
           {:error, reason} -> {:error, {:storage_failed, reason}}
         end
+    end
+  end
+
+  # A freshly-stored file joins the host's PDF library folder when one is
+  # configured (see `PhoenixKitCatalogue.Attachments` moduledoc "Parent
+  # folder"); an `:existing` (content-deduped) file is left where the
+  # reorganizer's legacy-adoption pass will find it. Non-fatal: a failed
+  # attach logs and keeps the upload.
+  defp attach_to_pdf_library_folder(file, actor_uuid) do
+    case PhoenixKitCatalogue.Attachments.parent_folder_uuid(:pdf, actor_uuid) do
+      folder_uuid when is_binary(folder_uuid) ->
+        case Storage.attach_file_to_folder(file, folder_uuid) do
+          {:ok, attached} ->
+            attached
+
+          {:error, reason} ->
+            Logger.warning(
+              "PDF library: attaching #{file.uuid} to folder #{folder_uuid} failed: #{inspect(reason)}"
+            )
+
+            file
+        end
+
+      _ ->
+        file
     end
   end
 

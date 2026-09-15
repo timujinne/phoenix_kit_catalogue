@@ -76,6 +76,16 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
                "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
     end
 
+    test "catalogue_moved" do
+      assert Errors.message(:catalogue_moved) ==
+               "The catalogue changed while this was running. Please try again."
+    end
+
+    test "not_in_trash" do
+      assert Errors.message(:not_in_trash) ==
+               "It was restored in the meantime, so it was not deleted."
+    end
+
     test "cycle" do
       assert Errors.message(:cycle) ==
                "Can't move a folder into itself or one of its subfolders."

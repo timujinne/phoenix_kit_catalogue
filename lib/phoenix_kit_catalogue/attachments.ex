@@ -55,6 +55,34 @@ defmodule PhoenixKitCatalogue.Attachments do
   The module pattern-matches on the resource struct to derive the
   folder name prefix. Add a new clause to `folder_name_for/1` to
   support additional resource types.
+
+  ## Parent folder
+
+  By default resource folders are created at the storage root. A host can
+  group them under per-type containers:
+
+      config :phoenix_kit_catalogue, :attachments_parent_folder, {MyApp.Media, :for_catalogue}
+
+  Called as `for_catalogue(:item | :category | :catalogue | :pdf, actor_uuid, resource)`
+  (3-arity, receiving the resource struct itself) when exported, else as
+  `for_catalogue(kind, actor_uuid)` (2-arity, the original contract).
+  Either arity returns `{:ok, parent_folder_uuid}` or `nil` (root). Lookups
+  by name check the parent first and the root second, so folders that
+  predate the setting are still found.
+
+  ## Host-named folders
+
+  A host that wants people-facing folder names (following the resource's
+  own name, not `catalogue-item-<uuid>`) configures:
+
+      config :phoenix_kit_catalogue, :attachments_folder_name, {MyApp.Media, :name_for}
+
+  called as `name_for(resource, actor_uuid) :: {:ok, name} | nil` — `nil`
+  (e.g. for an unsaved resource) falls back to the deterministic name.
+  `find_resource_folder/2` looks a resource's folder up in that order: the
+  host name under the resolved parent, then the deterministic name under
+  the parent, then the deterministic name at the root — so a folder the
+  host has renamed is still found without a stored pointer.
   """
 
   require Logger
@@ -74,7 +102,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   alias PhoenixKit.Modules.Storage.{File, FolderLink}
   alias PhoenixKit.Users.Auth, as: UsersAuth
   alias PhoenixKitCatalogue.Catalogue.PubSub
-  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item}
+  alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item, Pdf}
   alias PhoenixKitCatalogue.Web.Helpers, as: WebHelpers
 
   @upload_name :attachment_files
@@ -570,10 +598,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   end
 
   defp assign_resolved_folder(socket) do
-    with {:ok, name} <- folder_name_for(socket.assigns[:attachments_resource]),
-         %{uuid: uuid} <- find_folder_by_name(name) do
-      assign(socket, :files_folder_uuid, uuid)
-    else
+    case find_resource_folder(socket.assigns[:attachments_resource], current_user_uuid(socket)) do
+      %{uuid: uuid} -> assign(socket, :files_folder_uuid, uuid)
       _ -> socket
     end
   end
@@ -859,24 +885,28 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   defp ensure_item_folder(%Item{} = item) do
     case read_string(resource_data(item), "files_folder_uuid") do
-      folder_uuid when is_binary(folder_uuid) ->
-        {:ok, folder_uuid}
-
-      _ ->
-        case folder_name_for(item) do
-          {:ok, name} -> find_or_create_named_folder(name)
-          :pending -> {:error, :item_not_persisted}
-        end
+      folder_uuid when is_binary(folder_uuid) -> {:ok, folder_uuid}
+      _ -> resolve_item_folder(item)
     end
   end
 
-  defp find_or_create_named_folder(name) do
-    case find_folder_by_name(name) do
+  defp resolve_item_folder(item) do
+    case folder_name_for(item) do
+      :pending -> {:error, :item_not_persisted}
+      {:ok, _} -> find_or_create_item_folder(item)
+    end
+  end
+
+  defp find_or_create_item_folder(item) do
+    case find_resource_folder(item, nil) do
       %{uuid: uuid} ->
         {:ok, uuid}
 
       nil ->
-        case Storage.create_folder(%{name: name}) do
+        case Storage.create_folder(%{
+               name: folder_name(item, nil),
+               parent_uuid: parent_folder_uuid(item, nil)
+             }) do
           {:ok, folder} -> {:ok, folder.uuid}
           {:error, reason} -> {:error, reason}
         end
@@ -902,10 +932,15 @@ defmodule PhoenixKitCatalogue.Attachments do
   rename failures log and return `:ok` so the save flow isn't blocked.
   """
   def maybe_rename_pending_folder(socket, resource) do
+    actor = current_user_uuid(socket)
+
     with folder_uuid when is_binary(folder_uuid) <- socket.assigns[:files_folder_uuid],
-         {:ok, target_name} <- folder_name_for(resource),
+         {:ok, _} <- folder_name_for(resource),
          %{} = folder <- Storage.get_folder(folder_uuid) do
-      case Storage.update_folder(folder, %{name: target_name}) do
+      case Storage.update_folder(folder, %{
+             name: folder_name(resource, actor),
+             parent_uuid: parent_folder_uuid(resource, actor)
+           }) do
         {:ok, _} ->
           :ok
 
@@ -977,58 +1012,163 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   defp folder_name_for(_), do: :pending
 
+  @doc false
+  # Host-configured parent folder for a resource, see moduledoc "Parent
+  # folder". `nil` means the storage root (the default). Prefers the
+  # 3-arity hook (receives the resource itself) and falls back to the
+  # original 2-arity contract.
+  def parent_folder_uuid(resource, actor_uuid) do
+    case Application.get_env(:phoenix_kit_catalogue, :attachments_parent_folder) do
+      {mod, fun} when is_atom(mod) and is_atom(fun) ->
+        mod
+        |> call_parent_hook(fun, resource_kind(resource), actor_uuid, resource)
+        |> normalize_folder_uuid()
+
+      _ ->
+        nil
+    end
+  end
+
+  defp call_parent_hook(mod, fun, kind, actor_uuid, resource) do
+    cond do
+      Code.ensure_loaded?(mod) and function_exported?(mod, fun, 3) ->
+        apply(mod, fun, [kind, actor_uuid, resource])
+
+      Code.ensure_loaded?(mod) and function_exported?(mod, fun, 2) ->
+        apply(mod, fun, [kind, actor_uuid])
+
+      true ->
+        nil
+    end
+  end
+
+  defp normalize_folder_uuid({:ok, uuid}) when is_binary(uuid), do: uuid
+  defp normalize_folder_uuid(_), do: nil
+
+  defp resource_kind(%Item{}), do: :item
+  defp resource_kind(%Category{}), do: :category
+  defp resource_kind(%Catalogue{}), do: :catalogue
+  defp resource_kind(:pdf), do: :pdf
+  defp resource_kind(%Pdf{}), do: :pdf
+  defp resource_kind(_), do: :unknown
+
+  @doc false
+  # Folder name for a resource: the host's (`:attachments_folder_name`) or
+  # the deterministic `catalogue-<kind>-<uuid>` (see `folder_name_for/1`).
+  def folder_name(resource, actor_uuid) do
+    with {mod, fun} when is_atom(mod) and is_atom(fun) <-
+           Application.get_env(:phoenix_kit_catalogue, :attachments_folder_name),
+         true <- Code.ensure_loaded?(mod) and function_exported?(mod, fun, 2),
+         {:ok, name} when is_binary(name) and name != "" <-
+           apply(mod, fun, [resource, actor_uuid]) do
+      name
+    else
+      _ ->
+        case folder_name_for(resource) do
+          {:ok, name} -> name
+          :pending -> "catalogue-attachment-pending-#{Ecto.UUID.generate()}"
+        end
+    end
+  end
+
+  @doc false
+  # A resource's folder, without creating one: host name under parent →
+  # deterministic name under parent → deterministic name at root. See
+  # moduledoc "Host-named folders".
+  def find_resource_folder(resource, actor_uuid) do
+    parent = parent_folder_uuid(resource, actor_uuid)
+    host_name = folder_name(resource, actor_uuid)
+    deterministic = deterministic_name(resource)
+
+    [
+      fn -> parent && find_folder_by_name_under(host_name, parent) end,
+      fn -> parent && deterministic && find_folder_by_name_under(deterministic, parent) end,
+      fn -> deterministic && find_folder_by_name_under(deterministic, nil) end
+    ]
+    |> Enum.find_value(& &1.())
+  end
+
+  defp deterministic_name(resource) do
+    case folder_name_for(resource) do
+      {:ok, name} -> name
+      :pending -> nil
+    end
+  end
+
   # Lazy-creates (or finds) the owning folder. For persisted resources
   # the name is deterministic; for `:new` resources we create a pending
   # random-named folder that `maybe_rename_pending_folder/2` renames
   # once the resource has a UUID.
   defp ensure_folder(socket) do
     case socket.assigns[:files_folder_uuid] do
-      uuid when is_binary(uuid) ->
-        {:ok, uuid, socket}
-
-      _ ->
-        resource = socket.assigns[:attachments_resource]
-
-        case folder_name_for(resource) do
-          {:ok, name} -> find_or_create_folder(socket, name)
-          :pending -> create_pending_folder(socket)
-        end
+      uuid when is_binary(uuid) -> {:ok, uuid, socket}
+      _ -> resolve_or_create_folder(socket)
     end
   end
 
-  defp find_or_create_folder(socket, folder_name) do
-    case find_folder_by_name(folder_name) do
-      %{uuid: uuid} ->
-        {:ok, uuid, assign(socket, :files_folder_uuid, uuid)}
+  defp resolve_or_create_folder(socket) do
+    resource = socket.assigns[:attachments_resource]
+    actor = current_user_uuid(socket)
+    parent_uuid = parent_folder_uuid(resource, actor)
 
-      nil ->
-        create_folder(socket, folder_name)
+    case find_resource_folder(resource, actor) do
+      %{uuid: uuid} -> {:ok, uuid, assign(socket, :files_folder_uuid, uuid)}
+      nil -> create_missing_folder(socket, resource, actor, parent_uuid)
     end
   end
 
-  defp create_pending_folder(socket) do
-    create_folder(socket, "catalogue-attachment-pending-#{Ecto.UUID.generate()}")
+  defp create_missing_folder(socket, resource, actor, parent_uuid) do
+    case folder_name_for(resource) do
+      {:ok, _} -> create_folder(socket, folder_name(resource, actor), parent_uuid)
+      :pending -> create_pending_folder(socket, parent_uuid)
+    end
   end
 
-  defp create_folder(socket, folder_name) do
+  defp create_pending_folder(socket, parent_uuid) do
+    create_folder(socket, "catalogue-attachment-pending-#{Ecto.UUID.generate()}", parent_uuid)
+  end
+
+  defp create_folder(socket, folder_name, parent_uuid) do
     user_uuid = current_user_uuid(socket)
 
-    case Storage.create_folder(%{name: folder_name, user_uuid: user_uuid}) do
+    case Storage.create_folder(%{
+           name: folder_name,
+           user_uuid: user_uuid,
+           parent_uuid: parent_uuid
+         }) do
       {:ok, folder} -> {:ok, folder.uuid, assign(socket, :files_folder_uuid, folder.uuid)}
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp find_folder_by_name(name) when is_binary(name) do
+  @doc false
+  # Deterministic-name lookup: under `parent_uuid` first, then at the root
+  # (folders created before the host configured a parent still live there).
+  def find_folder_by_name(name, parent_uuid \\ nil) when is_binary(name) do
+    case parent_uuid && find_folder_by_name_under(name, parent_uuid) do
+      %{} = folder -> folder
+      _ -> find_folder_by_name_under(name, nil)
+    end
+  rescue
+    error ->
+      Logger.warning("find_folder_by_name failed for #{name}: #{inspect(error)}")
+      nil
+  end
+
+  defp find_folder_by_name_under(name, nil) do
     from(f in PhoenixKit.Modules.Storage.Folder,
       where: f.name == ^name and is_nil(f.parent_uuid),
       limit: 1
     )
     |> PhoenixKit.RepoHelper.repo().one()
-  rescue
-    error ->
-      Logger.warning("find_folder_by_name failed for #{name}: #{inspect(error)}")
-      nil
+  end
+
+  defp find_folder_by_name_under(name, parent_uuid) do
+    from(f in PhoenixKit.Modules.Storage.Folder,
+      where: f.name == ^name and f.parent_uuid == ^parent_uuid,
+      limit: 1
+    )
+    |> PhoenixKit.RepoHelper.repo().one()
   end
 
   # Upload cap is 20 files per submit; the inline grid is not paginated

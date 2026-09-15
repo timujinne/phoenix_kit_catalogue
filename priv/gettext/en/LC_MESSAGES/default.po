@@ -1886,16 +1886,16 @@ msgstr ""
 msgid "Default Value"
 msgstr ""
 
-msgid "Delete category and items"
+msgid "Move category and items to Deleted"
 msgstr ""
 
-msgid "Delete category — what about the items?"
+msgid "Move category to Deleted — what about its items?"
 msgstr ""
 
 msgid "Delete forever"
 msgstr ""
 
-msgid "Delete items along with the category"
+msgid "Move items to Deleted with the category"
 msgstr ""
 
 msgid "Delete selected items?"
@@ -2021,13 +2021,13 @@ msgstr ""
 msgid "Items keep their catalogue but lose their category."
 msgstr ""
 
-msgid "Items move to the Deleted view alongside the category. Both can be restored later."
+msgid "Restoring the category brings them back with it."
 msgstr ""
 
 msgid "Items reordered."
 msgstr ""
 
-msgid "Items stay in this catalogue but are no longer attached to any category."
+msgid "Items stay in this catalogue without a category. Restoring the category later does not put them back."
 msgstr ""
 
 msgid "Leave blank to inherit the catalogue's discount. Set (including 0) to override just this item."
@@ -2090,7 +2090,7 @@ msgstr ""
 msgid "Move items"
 msgstr ""
 
-msgid "Move items and delete category"
+msgid "Move category to Deleted"
 msgstr ""
 
 msgid "Move items to another category"
@@ -2229,7 +2229,7 @@ msgstr ""
 msgid "Pick a strategy before applying."
 msgstr ""
 
-msgid "Pick a target category in this catalogue. The category being deleted and its subtree are excluded."
+msgid "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
 msgstr ""
 
 msgid "Pick where %{count} items should go."
@@ -2625,7 +2625,7 @@ msgstr ""
 msgid "all categories"
 msgstr ""
 
-msgid "and its subtree contain %{count} active items. Choose where they should go before the category is deleted."
+msgid "and its subtree contain %{count} active items. The category moves to the Deleted view, where it can be restored. Choose what happens to its items."
 msgstr ""
 
 msgid "columns"
@@ -3440,3 +3440,21 @@ msgstr "This permanently removes the value. It cannot be undone."
 
 msgid "Failed to delete value."
 msgstr "Failed to delete value."
+
+msgid "Permanently delete selected categories?"
+msgstr ""
+
+msgid "%{count} categories and everything in them will be permanently deleted. This cannot be undone."
+msgstr ""
+
+msgid "Permanently deleted %{count} categories."
+msgstr ""
+
+msgid "The catalogue changed while this was running. Please try again."
+msgstr ""
+
+msgid "It was restored in the meantime, so it was not deleted."
+msgstr ""
+
+msgid "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+msgstr ""

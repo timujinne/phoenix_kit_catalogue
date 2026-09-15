@@ -1886,17 +1886,17 @@ msgstr "Vaikeühik"
 msgid "Default Value"
 msgstr "Vaikeväärtus"
 
-msgid "Delete category and items"
-msgstr "Kustuta kategooria ja tooted"
+msgid "Move category and items to Deleted"
+msgstr "Teisalda kategooria ja tooted kustutatute hulka"
 
-msgid "Delete category — what about the items?"
-msgstr "Kustuta kategooria — mis saab toodetest?"
+msgid "Move category to Deleted — what about its items?"
+msgstr "Teisalda kategooria kustutatute hulka — mis saab toodetest?"
 
 msgid "Delete forever"
 msgstr "Kustuta jäädavalt"
 
-msgid "Delete items along with the category"
-msgstr "Kustuta tooted koos kategooriaga"
+msgid "Move items to Deleted with the category"
+msgstr "Teisalda tooted koos kategooriaga kustutatute hulka"
 
 msgid "Delete selected items?"
 msgstr "Kustutada valitud tooted?"
@@ -2021,14 +2021,14 @@ msgstr "Tooteid saab liigutada ainult selle kataloogi sees."
 msgid "Items keep their catalogue but lose their category."
 msgstr "Tooted jäävad kataloogi, kuid kaotavad kategooria."
 
-msgid "Items move to the Deleted view alongside the category. Both can be restored later."
-msgstr "Tooted liiguvad koos kategooriaga vaatesse Kustutatud. Mõlemad saab hiljem taastada."
+msgid "Restoring the category brings them back with it."
+msgstr "Kategooria taastamisel tulevad ka tooted tagasi."
 
 msgid "Items reordered."
 msgstr "Tooted ümber järjestatud."
 
-msgid "Items stay in this catalogue but are no longer attached to any category."
-msgstr "Tooted jäävad sellesse kataloogi, kuid pole enam üheski kategoorias."
+msgid "Items stay in this catalogue without a category. Restoring the category later does not put them back."
+msgstr "Tooted jäävad sellesse kataloogi ilma kategooriata. Kategooria hilisem taastamine neid tagasi ei pane."
 
 msgid "Leave blank to inherit the catalogue's discount. Set (including 0) to override just this item."
 msgstr "Jäta tühjaks, et pärida kataloogi allahindlus. Määra (ka 0), et üle kirjutada ainult see toode."
@@ -2090,8 +2090,8 @@ msgstr "Sobita kõigis keeltes"
 msgid "Move items"
 msgstr "Liiguta tooted"
 
-msgid "Move items and delete category"
-msgstr "Liiguta tooted ja kustuta kategooria"
+msgid "Move category to Deleted"
+msgstr "Teisalda kategooria kustutatute hulka"
 
 msgid "Move items to another category"
 msgstr "Liiguta tooted teise kategooriasse"
@@ -2229,8 +2229,8 @@ msgstr "Vali ülemkategooria, mille alla see paigutada, või jäta tühjaks, et 
 msgid "Pick a strategy before applying."
 msgstr "Vali enne rakendamist strateegia."
 
-msgid "Pick a target category in this catalogue. The category being deleted and its subtree are excluded."
-msgstr "Vali sihtkategooria selles kataloogis. Kustutatav kategooria ja selle alampuu on välistatud."
+msgid "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
+msgstr "Vali sihtkategooria selles kataloogis; kustutatute hulka liikuv kategooria ja selle alampuu on välistatud. Kategooria hilisem taastamine neid tagasi ei liiguta."
 
 msgid "Pick where %{count} items should go."
 msgstr "Vali, kuhu %{count} toodet liiguvad."
@@ -2625,8 +2625,8 @@ msgstr "kõik kataloogid"
 msgid "all categories"
 msgstr "kõik kategooriad"
 
-msgid "and its subtree contain %{count} active items. Choose where they should go before the category is deleted."
-msgstr "ja selle alampuu sisaldavad %{count} aktiivset toodet. Vali enne kategooria kustutamist, kuhu need liiguvad."
+msgid "and its subtree contain %{count} active items. The category moves to the Deleted view, where it can be restored. Choose what happens to its items."
+msgstr "ja selle alampuu sisaldavad %{count} aktiivset toodet. Kategooria liigub vaatesse Kustutatud, kust selle saab taastada. Vali, mis saab toodetest."
 
 msgid "columns"
 msgstr "veergu"
@@ -3440,3 +3440,21 @@ msgstr "See eemaldab väärtuse jäädavalt. Seda ei saa tagasi võtta."
 
 msgid "Failed to delete value."
 msgstr "Väärtuse kustutamine ebaõnnestus."
+
+msgid "Permanently delete selected categories?"
+msgstr "Kustuta valitud kategooriad jäädavalt?"
+
+msgid "%{count} categories and everything in them will be permanently deleted. This cannot be undone."
+msgstr "%{count} kategooriat ja kogu nende sisu kustutatakse jäädavalt. Seda ei saa tagasi võtta."
+
+msgid "Permanently deleted %{count} categories."
+msgstr "%{count} kategooriat kustutati jäädavalt."
+
+msgid "The catalogue changed while this was running. Please try again."
+msgstr "Kataloog muutus toimingu ajal. Palun proovige uuesti."
+
+msgid "It was restored in the meantime, so it was not deleted."
+msgstr "See taastati vahepeal, seega seda ei kustutatud."
+
+msgid "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+msgstr "See kategooria, %{subcategories} alamkategooriat ja %{items} toodet selle sees kustutatakse jäädavalt. Seda ei saa tagasi võtta."

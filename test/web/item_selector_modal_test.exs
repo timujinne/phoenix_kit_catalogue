@@ -9,8 +9,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
+  import Ecto.Query, only: [from: 2]
+
   alias PhoenixKit.Users.Auth
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
+  alias PhoenixKitCatalogue.Test.Repo
   alias PhoenixKitCatalogue.Web.ViewConfig
 
   defp seed(_ctx) do
@@ -789,7 +793,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       # The search joins exclude items under deleted parents; hydration
       # must judge the same way or the tray blesses a row the browse could
       # never return.
-      {:ok, _} = Catalogue.update_catalogue(cat, %{status: "deleted"})
+      # A catalogue marked deleted WITHOUT the cascade (the item stays live) —
+      # the shape a trash that predates the cascade left on long-lived
+      # installs. Written on the row: `update_catalogue/3` never moves a row
+      # into "deleted", and `trash_catalogue/2` would trash the item too.
+      from(c in CatalogueSchema, where: c.uuid == ^cat.uuid)
+      |> Repo.update_all(set: [status: "deleted"])
 
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&pre=#{screw.uuid}:2&sel=click")
 

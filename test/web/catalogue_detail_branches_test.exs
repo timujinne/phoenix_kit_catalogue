@@ -161,20 +161,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
   # ─────────────────────────────────────────────────────────────────
 
   describe "bulk item selection + actions" do
-    test "toggle_select_item flips an item in/out of the selection set",
-         %{conn: conn, catalogue: cat} do
-      category = fixture_category(cat)
-      item = fixture_item(%{name: "I", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-
-      render_click(view, "toggle_select_item", %{"uuid" => item.uuid})
-      assert MapSet.member?(:sys.get_state(view.pid).socket.assigns.selected_items, item.uuid)
-
-      render_click(view, "toggle_select_item", %{"uuid" => item.uuid})
-      refute MapSet.member?(:sys.get_state(view.pid).socket.assigns.selected_items, item.uuid)
-    end
-
     test "request_bulk_delete_items + confirm_bulk_action soft-deletes the selection",
          %{conn: conn, catalogue: cat} do
       category = fixture_category(cat)
@@ -182,10 +168,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       b = fixture_item(%{name: "B", category_uuid: category.uuid})
 
       {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-      render_click(view, "toggle_select_item", %{"uuid" => a.uuid})
-      render_click(view, "toggle_select_item", %{"uuid" => b.uuid})
-
-      render_click(view, "request_bulk_delete_items", %{})
+      render_click(view, "request_bulk_delete_items", %{"uuids" => [a.uuid, b.uuid]})
 
       confirm = :sys.get_state(view.pid).socket.assigns.bulk_confirm
       assert confirm.kind == :items
@@ -199,7 +182,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       assert Catalogue.get_item(a.uuid).status == "deleted"
       assert Catalogue.get_item(b.uuid).status == "deleted"
-      assert MapSet.size(:sys.get_state(view.pid).socket.assigns.selected_items) == 0
+      assert_push_event(view, "bulk_select:clear", %{})
     end
 
     test "request_bulk_move_items opens the move modal with same-catalogue targets",
@@ -209,9 +192,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       item = fixture_item(%{name: "I", category_uuid: cat_a.uuid})
 
       {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-      render_click(view, "toggle_select_item", %{"uuid" => item.uuid})
-
-      render_click(view, "request_bulk_move_items", %{})
+      render_click(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
 
       modal = :sys.get_state(view.pid).socket.assigns.bulk_move_modal
       assert modal.count == 1
@@ -226,29 +207,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       a = fixture_item(%{name: "A", category_uuid: category.uuid})
 
       {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-      render_click(view, "toggle_select_item", %{"uuid" => a.uuid})
-      render_click(view, "request_bulk_move_items", %{})
+      render_click(view, "request_bulk_move_items", %{"uuids" => [a.uuid]})
       render_click(view, "confirm_bulk_move_items", %{})
 
       assert Catalogue.get_item(a.uuid).category_uuid == nil
-    end
-
-    test "clear_selection drops both selection sets",
-         %{conn: conn, catalogue: cat} do
-      category = fixture_category(cat)
-      item = fixture_item(%{name: "I", category_uuid: category.uuid})
-
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
-      render_click(view, "toggle_select_item", %{"uuid" => item.uuid})
-      # Category selection is client-side; the server sees it with the action.
-      render_click(view, "request_bulk_delete_categories", %{"uuids" => [category.uuid]})
-      assert MapSet.size(:sys.get_state(view.pid).socket.assigns.selected_categories) == 1
-
-      render_click(view, "clear_selection", %{})
-
-      assigns = :sys.get_state(view.pid).socket.assigns
-      assert MapSet.size(assigns.selected_items) == 0
-      assert MapSet.size(assigns.selected_categories) == 0
     end
   end
 

@@ -120,17 +120,36 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       assert html =~ "1"
     end
 
-    test "deleted catalogues don't show the Items column", %{conn: conn} do
-      cat = fixture_catalogue(%{name: "Trashed"})
-      Catalogue.trash_catalogue(cat)
+    test "the Deleted tab counts what a trashed catalogue's Restore brings back", %{conn: conn} do
+      # Regression (Max, 2026-09-14, tim-dev): a freshly trashed catalogue
+      # read "Items 0" in the Deleted tab because the tab reused the
+      # active-only count, and the trash cascade had just turned every
+      # item "deleted". Then (Max, 2026-09-15) counting every item added
+      # one trashed on its own before the catalogue, which Restore leaves
+      # in the trash. The number the operator needs is what Restore brings
+      # back.
+      cat = fixture_catalogue(%{name: "Trashed with contents"})
+      category = fixture_category(cat, %{name: "Trashed category"})
+      fixture_item(%{name: "In category", category_uuid: category.uuid})
+      fixture_item(%{name: "Loose", catalogue_uuid: cat.uuid})
+      early = fixture_item(%{name: "Already binned", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.trash_item(early)
+      {:ok, _} = Catalogue.trash_catalogue(cat)
+
+      # An active sibling with one item keeps its own count.
+      other = fixture_catalogue(%{name: "Still active"})
+      fixture_item(%{name: "Only one", catalogue_uuid: other.uuid})
 
       {:ok, view, _html} = live(conn, @base)
       deleted_html = render_click(view, "switch_catalogue_view", %{"mode" => "deleted"})
 
-      # The Items header only appears in active mode.
-      assert deleted_html =~ "Trashed"
-      # Column headers in deleted view: Name / Status / Updated / Actions.
-      # Just verify "Trashed" is present and the page didn't crash.
+      assert deleted_html =~ "Trashed with contents"
+      refute deleted_html =~ "Still active"
+      assert deleted_row_item_count(deleted_html, "Trashed with contents") == "2"
+
+      # Switching back, the active tab still shows the active-only number.
+      active_html = render_click(view, "switch_catalogue_view", %{"mode" => "active"})
+      assert deleted_row_item_count(active_html, "Still active") == "1"
     end
   end
 
@@ -1059,5 +1078,16 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
 
       assert ViewConfig.load_global_sort(:catalogues) == {"position", :asc}
     end
+  end
+
+  # The Items cell of the table row whose name cell contains `name`.
+  defp deleted_row_item_count(html, name) do
+    html
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("tr")
+    |> Enum.find(fn tr -> LazyHTML.text(tr) =~ name end)
+    |> LazyHTML.query("span.tabular-nums")
+    |> LazyHTML.text()
+    |> String.trim()
   end
 end

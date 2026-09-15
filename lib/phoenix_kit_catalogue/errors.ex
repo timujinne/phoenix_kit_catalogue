@@ -58,6 +58,8 @@ defmodule PhoenixKitCatalogue.Errors do
           | :file_too_large
           | :too_many_rows
           | :parent_catalogue_deleted
+          | :catalogue_moved
+          | :not_in_trash
           | :cycle
           | :folder_not_found
           | :folder_trashed
@@ -173,6 +175,20 @@ defmodule PhoenixKitCatalogue.Errors do
       Gettext.gettext(
         PhoenixKitCatalogue.Gettext,
         "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+      )
+
+  def message(:catalogue_moved),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "The catalogue changed while this was running. Please try again."
+      )
+
+  def message(:not_in_trash),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "It was restored in the meantime, so it was not deleted."
       )
 
   def message(:cycle),

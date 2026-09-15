@@ -440,6 +440,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       assert html =~ "Clickable item"
     end
 
+    test "a category's Edit and New Subcategory links carry the level they were clicked from",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      level = fixture_category(catalogue, %{name: "Level"})
+      child = fixture_category(catalogue, %{name: "Child", parent_uuid: level.uuid})
+
+      {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, level.uuid))
+
+      encoded_level =
+        URI.encode_www_form("/en/admin/catalogue/#{catalogue.uuid}?category=#{level.uuid}")
+
+      assert html =~ ~s(/categories/#{child.uuid}/edit?return_to=#{encoded_level})
+      assert html =~ "parent_uuid=#{child.uuid}&amp;return_to=#{encoded_level}"
+    end
+
     test "Add Item from a category level carries the category and return path", %{conn: conn} do
       catalogue = fixture_catalogue()
       category = fixture_category(catalogue)

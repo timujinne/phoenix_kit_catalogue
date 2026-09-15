@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkDuplicateTest do
 
     assert has_element?(
              view,
-             "[id^=categories-bulk-root] [data-bulk-action=request_bulk_duplicate_categories]"
+             "#categories-bulk [data-bulk-action=request_bulk_duplicate_categories]"
            )
 
     {:ok, view, _} = live(conn, "#{@base}/#{cat.uuid}?category=#{alpha.uuid}&mode=items")
@@ -39,13 +39,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkDuplicateTest do
     assert html =~ "Duplicate selected items"
     assert assigns(view).bulk_duplicate_modal == %{kind: :items, count: 1, uuids: [item.uuid]}
 
-    before = assigns(view).bulk_epoch
     html = render_click(view, "confirm_bulk_duplicate", %{})
     assert html =~ "Duplicated 1 items."
     refute assigns(view).bulk_duplicate_modal
-    # The selection scope remounts (new id) so the originals lose their ticks.
-    assert assigns(view).bulk_epoch == before + 1
-    assert has_element?(view, "#items-bulk-#{alpha.uuid}-#{before + 1}")
+    # The originals lose their ticks through the clear push; the scope keeps
+    # its id, since a remount would leave the surviving rows' checkboxes wired
+    # to the dead hook.
+    assert_push_event(view, "bulk_select:clear", %{})
+    assert has_element?(view, "#items-bulk[phx-hook=BulkSelectScope]")
 
     assert Catalogue.list_items_for_category(alpha.uuid) |> Enum.map(& &1.name) ==
              ["Pipe", "Pipe (copy)"]

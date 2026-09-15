@@ -29,7 +29,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
 
   alias Ecto.Adapters.SQL
   alias PhoenixKit.Modules.Storage
-  alias PhoenixKit.Modules.Storage.{Folder, FolderLink}
+  alias PhoenixKit.Modules.Storage.FolderLink
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub, SupplierComments}
 
   alias PhoenixKitCatalogue.Schemas.{
@@ -72,7 +72,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
 
   # The folder pointer belongs to exactly one resource; the copy gets its
   # own folder (see `copy_files_folder/3`) or none.
-  @data_keys_not_copied ["files_folder_uuid"]
+  # `_trash` is trash provenance — a copy is a new row nothing trashed.
+  @data_keys_not_copied ["files_folder_uuid", "_trash"]
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 
@@ -283,7 +284,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     copy_attribute_group(source, item)
     copy_supplier_rows(source, item)
     copy_rules(source, item)
-    item = copy_files_folder(source, item, "catalogue-item-#{item.uuid}", opts)
+    item = copy_files_folder(source, item, opts)
 
     unless keep_position?, do: place_item_after(source, item)
 
@@ -314,6 +315,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     |> repo().one()
     |> case do
       nil -> repo().rollback(:category_not_found)
+      # A live copy in a trashed category would be hidden from the tree.
+      %Category{status: "deleted"} -> repo().rollback(:category_not_found)
       %Category{catalogue_uuid: uuid} -> uuid || fallback
     end
   end
@@ -463,9 +466,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
   # one lazily on first upload). With files → a new folder holding a
   # FolderLink to each, so the copy shows the same files without owning
   # them.
-  defp copy_files_folder(source, record, folder_name, opts) do
+  defp copy_files_folder(source, record, opts) do
     files =
-      case source_folder_uuid(source) do
+      case source_folder_uuid(source, opts) do
         nil -> []
         folder_uuid -> list_files(folder_uuid)
       end
@@ -473,7 +476,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     if files == [] do
       record
     else
-      folder = create_folder!(folder_name, opts)
+      folder = create_folder!(record, opts)
       Enum.each(files, &link_file!(folder, &1))
       put_folder_pointer!(record, folder)
     end
@@ -501,24 +504,18 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     end
   end
 
-  defp source_folder_uuid(%{data: data} = source) do
+  # Pointer FIRST (the host may have renamed the folder, so a name-only lookup would miss it),
+  # then the module's name-based resolution.
+  defp source_folder_uuid(%{data: data} = source, opts) do
     case data && data["files_folder_uuid"] do
       uuid when is_binary(uuid) ->
         uuid
 
       _ ->
-        name =
-          case source do
-            %Item{uuid: uuid} -> "catalogue-item-#{uuid}"
-            %Category{uuid: uuid} -> "catalogue-category-#{uuid}"
-          end
-
-        from(f in Folder,
-          where: f.name == ^name and is_nil(f.parent_uuid),
-          select: f.uuid,
-          limit: 1
-        )
-        |> repo().one()
+        case PhoenixKitCatalogue.Attachments.find_resource_folder(source, opts[:actor_uuid]) do
+          %{uuid: uuid} -> uuid
+          nil -> nil
+        end
     end
   end
 
@@ -531,8 +528,12 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     |> repo().all()
   end
 
-  defp create_folder!(name, opts) do
-    attrs = %{name: name}
+  defp create_folder!(record, opts) do
+    attrs = %{
+      name: PhoenixKitCatalogue.Attachments.folder_name(record, opts[:actor_uuid]),
+      parent_uuid: PhoenixKitCatalogue.Attachments.parent_folder_uuid(record, opts[:actor_uuid])
+    }
+
     attrs = if opts[:actor_uuid], do: Map.put(attrs, :user_uuid, opts[:actor_uuid]), else: attrs
 
     case Storage.create_folder(attrs) do
@@ -559,7 +560,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     }
 
     category = insert!(%Category{} |> Category.changeset(attrs))
-    category = copy_files_folder(source, category, "catalogue-category-#{category.uuid}", opts)
+    category = copy_files_folder(source, category, opts)
 
     nested = [
       suffix: false,

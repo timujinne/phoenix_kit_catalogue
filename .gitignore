@@ -2,6 +2,7 @@
 /cover/
 /deps/
 /doc/
+/priv/media/
 erl_crash.dump
 *.ez
 phoenix_kit_catalogue-*.tar

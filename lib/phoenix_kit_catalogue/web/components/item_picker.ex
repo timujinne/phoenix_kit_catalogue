@@ -119,6 +119,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     * `:photo_size` — Tailwind size classes (e.g. `"w-8 h-8"`) applied to
       the thumbnail/placeholder image. Defaults to `"w-8 h-8"`, the
       previously hardcoded size, so existing consumers render unchanged.
+    * `:row_photo_size` — Tailwind size classes applied to the dropdown
+      option's own thumbnail, independently of `:photo_size` (which only
+      governs the selected-item preview). Defaults to `"w-8 h-8"`, the
+      previously hardcoded size, so existing consumers render unchanged.
     * `:photo_asset_type` — the Storage variant name passed to
       `URLSigner.signed_url/2` for the thumbnail/placeholder image (e.g.
       `"thumbnail"`, `"medium"`). Defaults to `"thumbnail"`, the
@@ -172,6 +176,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   @default_empty_query_limit 10
   @default_page_size 20
   @default_photo_size "w-8 h-8"
+  @default_row_photo_size "w-8 h-8"
   @default_photo_asset_type "thumbnail"
 
   @impl true
@@ -205,6 +210,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
        photo_clickable: false,
        photo_placeholder: false,
        photo_size: @default_photo_size,
+       row_photo_size: @default_row_photo_size,
        photo_asset_type: @default_photo_asset_type,
        show_photo: true,
        card_open: false,
@@ -581,10 +587,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   # Display helpers
   # ─────────────────────────────────────────────────────────────────
 
-  # The selected item's featured photo UUID (from the JSONB `data` map)
-  # or nil. Drives the optional thumbnail rendered to the left of the
-  # input; a blank or missing pointer renders no thumbnail, leaving the
-  # layout unchanged for items without a photo.
+  # An item's featured photo UUID (from the JSONB `data` map) or nil.
+  # Drives the optional thumbnail left of the input for the selected item,
+  # and, since A040 part 2, the same per-row thumbnail in the dropdown
+  # list — any `%Item{}` works, not just the selected one. A blank or
+  # missing pointer renders no thumbnail, leaving the layout unchanged for
+  # items without a photo.
   defp selected_photo_uuid(%Item{data: data}) when is_map(data) do
     # Canonical uuid form only: the value goes into a URL path (see
     # `Components.featured_image_uuid/1`).
@@ -856,15 +864,25 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
               <% price = format_price_display(item, @price_fun) %>
               <% unit = if @show_unit, do: @unit_fun.(item.unit), else: "" %>
               <% sku = if @show_sku, do: item.sku || "—", else: nil %>
-              <div class="min-w-0 flex-1">
-                <div class="font-medium text-sm truncate">
-                  {item_display_name(item, @locale)}
-                </div>
-                <div
-                  :if={item_breadcrumb(item, @locale, @category_paths) != ""}
-                  class="text-xs text-base-content/50 truncate"
-                >
-                  {item_breadcrumb(item, @locale, @category_paths)}
+              <% li_photo_uuid = effective_photo_uuid(item, @show_photo) %>
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <img
+                  :if={li_photo_uuid}
+                  src={URLSigner.signed_url(li_photo_uuid, @photo_asset_type)}
+                  alt={item_display_name(item, @locale) || ""}
+                  onerror="this.style.display='none'"
+                  class={[@row_photo_size, "shrink-0 rounded object-cover bg-base-200 border border-base-300"]}
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="font-medium text-sm truncate">
+                    {item_display_name(item, @locale)}
+                  </div>
+                  <div
+                    :if={item_breadcrumb(item, @locale, @category_paths) != ""}
+                    class="text-xs text-base-content/50 truncate"
+                  >
+                    {item_breadcrumb(item, @locale, @category_paths)}
+                  </div>
                 </div>
               </div>
               <div

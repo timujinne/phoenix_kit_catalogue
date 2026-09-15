@@ -4,6 +4,7 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
   alias Ecto.Adapters.SQL
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
+  alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
 
   # ── Helpers ──────────────────────────────────────────────────────
 
@@ -3199,6 +3200,49 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
       counts = Catalogue.item_counts_by_catalogue()
       assert counts[cat.uuid] == 2
     end
+
+    test "mode: :restorable counts what a trashed catalogue's Restore brings back" do
+      cat = create_catalogue()
+      category = create_category(cat)
+      create_item(%{name: "In Category", category_uuid: category.uuid})
+      create_item(%{name: "Uncategorized", catalogue_uuid: cat.uuid})
+      early = create_item(%{name: "Trashed first", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.trash_item(early)
+      side = create_category(cat, %{name: "Trashed first too"})
+      create_item(%{name: "Went with it", category_uuid: side.uuid})
+      {:ok, _} = Catalogue.trash_category(side, items: :cascade)
+      {:ok, _} = Catalogue.trash_catalogue(cat)
+
+      refute Map.has_key?(Catalogue.item_counts_by_catalogue(), cat.uuid)
+      # The two items the catalogue's own trash took; the ones trashed on
+      # their own (or with their category) before it stay in the trash.
+      assert Catalogue.item_counts_by_catalogue(mode: :restorable)[cat.uuid] == 2
+
+      {:ok, _} = Catalogue.restore_catalogue(Catalogue.get_catalogue(cat.uuid))
+      assert Catalogue.item_counts_by_catalogue()[cat.uuid] == 2
+    end
+
+    test "mode: :restorable counts live and unstamped items under a legacy half-swept trash" do
+      cat = create_catalogue()
+      live = create_item(%{name: "Never cascaded", catalogue_uuid: cat.uuid})
+      legacy = create_item(%{name: "Trashed before stamps", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.trash_item(legacy)
+
+      from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^legacy.uuid)
+      |> Repo.update_all(set: [data: %{}])
+
+      on_its_own = create_item(%{name: "Trashed on its own", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.trash_item(on_its_own)
+
+      # A catalogue marked deleted without the cascade (rows like this exist
+      # on long-lived installs): Restore brings back the unstamped item, the
+      # live one is already there, the self-trashed one stays in the trash.
+      from(c in CatalogueSchema, where: c.uuid == ^cat.uuid)
+      |> Repo.update_all(set: [status: "deleted"])
+
+      assert live.status == "active"
+      assert Catalogue.item_counts_by_catalogue(mode: :restorable)[cat.uuid] == 2
+    end
   end
 
   # ═══════════════════════════════════════════════════════════════════
@@ -4858,6 +4902,34 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
 
       assert [kept] = Catalogue.list_manufacturers_for_supplier(s.uuid)
       assert kept.uuid == other.uuid
+    end
+  end
+
+  describe "an item's catalogue stays in step with its category" do
+    test "a skip_derive write into a category of another catalogue is refused" do
+      # What an import writes when its target category was moved to another
+      # catalogue while the import ran.
+      a = create_catalogue(%{name: "Import target"})
+      b = create_catalogue(%{name: "Where the category went"})
+      moved = create_category(b, %{name: "Moved away"})
+
+      assert {:error, %Ecto.Changeset{} = changeset} =
+               Catalogue.create_item(
+                 %{name: "Drift", catalogue_uuid: a.uuid, category_uuid: moved.uuid},
+                 skip_derive: true
+               )
+
+      assert %{category_uuid: ["belongs to another catalogue"]} = errors_on(changeset)
+
+      # Without skip_derive the catalogue follows the category, as before.
+      {:ok, derived} =
+        Catalogue.create_item(%{
+          name: "Derived",
+          catalogue_uuid: a.uuid,
+          category_uuid: moved.uuid
+        })
+
+      assert derived.catalogue_uuid == b.uuid
     end
   end
 end

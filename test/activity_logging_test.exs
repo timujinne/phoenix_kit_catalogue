@@ -269,6 +269,140 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
     end
   end
 
+  describe "trash / restore / permanent delete actions" do
+    test "trash_category logs category.trashed with the items' disposition", %{catalogue: cat} do
+      {:ok, category} = Catalogue.create_category(%{name: "Gone", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.create_item(%{name: "Inside", category_uuid: category.uuid})
+      {:ok, _} = Catalogue.trash_category(category, [items: :cascade] ++ actor_opts())
+
+      assert_activity_logged("category.trashed",
+        resource_uuid: category.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "items_disposition" => "cascade",
+          "items_handled" => 1,
+          "subtree_size" => 1
+        }
+      )
+    end
+
+    test "restore_category logs category.restored with what came back", %{catalogue: cat} do
+      {:ok, parent} = Catalogue.create_category(%{name: "Parent", catalogue_uuid: cat.uuid})
+
+      {:ok, child} =
+        Catalogue.create_category(%{
+          name: "Child",
+          catalogue_uuid: cat.uuid,
+          parent_uuid: parent.uuid
+        })
+
+      {:ok, _} = Catalogue.create_item(%{name: "Deep", category_uuid: child.uuid})
+      {:ok, _} = Catalogue.trash_category(parent, items: :cascade)
+      {:ok, _} = Catalogue.restore_category(Catalogue.get_category(parent.uuid), actor_opts())
+
+      assert_activity_logged("category.restored",
+        resource_uuid: parent.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"descendants_restored" => 1, "items_restored" => 1}
+      )
+    end
+
+    test "permanently_delete_category logs what it removed and what it kept", %{catalogue: cat} do
+      {:ok, parent} = Catalogue.create_category(%{name: "Parent", catalogue_uuid: cat.uuid})
+
+      {:ok, child} =
+        Catalogue.create_category(%{
+          name: "Child",
+          catalogue_uuid: cat.uuid,
+          parent_uuid: parent.uuid
+        })
+
+      {:ok, _} = Catalogue.create_item(%{name: "In parent", category_uuid: parent.uuid})
+      {:ok, _} = Catalogue.trash_category(parent, items: :cascade)
+      {:ok, _} = Catalogue.restore_category(Catalogue.get_category(child.uuid))
+
+      {:ok, _} =
+        Catalogue.permanently_delete_category(Catalogue.get_category(parent.uuid), actor_opts())
+
+      assert_activity_logged("category.permanently_deleted",
+        resource_uuid: parent.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "subtree_size" => 1,
+          "items_cascaded" => 1,
+          "kept_live_subcategories" => 1
+        }
+      )
+    end
+
+    test "restore_catalogue logs how many categories and items came back", %{catalogue: cat} do
+      {:ok, category} = Catalogue.create_category(%{name: "Shelf", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.create_item(%{name: "On shelf", category_uuid: category.uuid})
+      {:ok, _} = Catalogue.create_item(%{name: "Loose", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.trash_catalogue(cat)
+      {:ok, _} = Catalogue.restore_catalogue(cat, actor_opts())
+
+      assert_activity_logged("catalogue.restored",
+        resource_uuid: cat.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"categories_restored" => 1, "items_restored" => 2}
+      )
+    end
+
+    test "permanently_delete_catalogue logs catalogue.permanently_deleted", %{catalogue: cat} do
+      {:ok, _} = Catalogue.trash_catalogue(cat)
+      {:ok, _} = Catalogue.permanently_delete_catalogue(cat, actor_opts())
+
+      assert_activity_logged("catalogue.permanently_deleted",
+        resource_uuid: cat.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"name" => cat.name}
+      )
+    end
+
+    test "restore_item logs item.restored, marking an item taken out of its trashed category",
+         %{catalogue: cat} do
+      {:ok, category} = Catalogue.create_category(%{name: "Shelf", catalogue_uuid: cat.uuid})
+      {:ok, item} = Catalogue.create_item(%{name: "On shelf", category_uuid: category.uuid})
+      {:ok, _} = Catalogue.trash_category(category, items: :cascade)
+      {:ok, _} = Catalogue.restore_item(Catalogue.get_item(item.uuid), actor_opts())
+
+      assert_activity_logged("item.restored",
+        resource_uuid: item.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"detached_from_category" => true}
+      )
+    end
+
+    test "bulk trash, restore and permanent delete log their item.bulk_* actions",
+         %{catalogue: cat} do
+      {:ok, a} = Catalogue.create_item(%{name: "A", catalogue_uuid: cat.uuid})
+      {:ok, b} = Catalogue.create_item(%{name: "B", catalogue_uuid: cat.uuid})
+      opts = [catalogue_uuid: cat.uuid] ++ actor_opts()
+
+      assert {2, nil} = Catalogue.bulk_trash_items([a.uuid, b.uuid], opts)
+
+      assert_activity_logged("item.bulk_trashed",
+        actor_uuid: @actor,
+        metadata_has: %{"count" => 2}
+      )
+
+      assert {1, nil} = Catalogue.bulk_restore_items([a.uuid], opts)
+
+      assert_activity_logged("item.bulk_restored",
+        actor_uuid: @actor,
+        metadata_has: %{"count" => 1}
+      )
+
+      assert {1, nil} = Catalogue.bulk_permanently_delete_items([b.uuid], opts)
+
+      assert_activity_logged("item.bulk_permanently_deleted",
+        actor_uuid: @actor,
+        metadata_has: %{"count" => 1}
+      )
+    end
+  end
+
   describe "manufacturer / supplier actions" do
     test "create_manufacturer logs manufacturer.created with actor" do
       {:ok, m} = Catalogue.create_manufacturer(%{name: "M"}, actor_opts())

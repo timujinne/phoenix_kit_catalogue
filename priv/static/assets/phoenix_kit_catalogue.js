@@ -257,4 +257,16 @@
           }
         }
       };
+      // The catalogue page pushes `bulk_select:clear` after a bulk op so
+      // rows that survive it (the originals after Duplicate) lose their
+      // ticks. Core's BulkSelectScope hook has no handler for that push,
+      // and its selection lives inside the hook, so the one public way
+      // to reset it is the scope's own Clear button (`data-bulk-clear`).
+      // Registered once, at load, on window: LiveView dispatches every
+      // pushed event there as `phx:<name>` after applying the patch.
+      window.addEventListener("phx:bulk_select:clear", function() {
+        document
+          .querySelectorAll('[phx-hook="BulkSelectScope"] [data-bulk-clear]')
+          .forEach(function(btn) { btn.click(); });
+      });
 })();

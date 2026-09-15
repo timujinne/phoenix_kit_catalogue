@@ -400,7 +400,15 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
       active_tree = Catalogue.list_folder_tree(mode: :active)
       folder_lookup = Map.new(active_tree, fn {f, _depth} -> {f.uuid, f} end)
-      item_counts = Catalogue.item_counts_by_catalogue()
+
+      # A trashed catalogue's row counts what its Restore brings back: an
+      # active-only count reads 0 for every correctly trashed catalogue (Max,
+      # 2026-09-14), and counting every item added the ones trashed on their
+      # own before it, which stay in the trash (Max, 2026-09-15).
+      item_counts =
+        Catalogue.item_counts_by_catalogue(
+          mode: if(mode == "deleted", do: :restorable, else: :active)
+        )
 
       catalogues =
         if mode == "deleted" do

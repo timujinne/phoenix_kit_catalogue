@@ -558,14 +558,15 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         category = PhoenixKitCatalogue.TranslationStatus.stamp_all_translated(category)
         _ = Attachments.maybe_rename_pending_folder(socket, category)
 
-        # "Save" (stay) continues on the new category's edit form; the
-        # original return_to rides along so the eventual exit still goes
-        # home. Exit honors return_to too (it used to fall straight back
-        # to the catalogue root even when the form was opened deeper).
+        # "Save" (stay) continues on the new category's edit form, with the
+        # original return_to riding along for its Cancel. "Save & Exit"
+        # opens the saved category, as the catalogue form opens the saved
+        # catalogue (Max, 2026-09-14); Cancel is what returns to where the
+        # form was opened.
         target =
           case mode do
             :stay -> Paths.category_edit(category.uuid) <> return_to_suffix(socket)
-            :exit -> exit_target(socket)
+            :exit -> Paths.category_browse(category.catalogue_uuid, category.uuid)
           end
 
         {:noreply,
@@ -593,8 +594,14 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           )
 
         case mode do
-          :stay -> {:noreply, refresh_after_edit(socket, category)}
-          :exit -> {:noreply, push_navigate(socket, to: exit_target(socket))}
+          :stay ->
+            {:noreply, refresh_after_edit(socket, category)}
+
+          :exit ->
+            {:noreply,
+             push_navigate(socket,
+               to: Paths.category_browse(category.catalogue_uuid, category.uuid)
+             )}
         end
 
       {:error, changeset} ->
@@ -610,10 +617,6 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
 
   defp save_mode(%{"save_action" => "stay"}), do: :stay
   defp save_mode(_params), do: :exit
-
-  defp exit_target(socket) do
-    socket.assigns[:return_to] || Paths.catalogue_detail(socket.assigns.catalogue_uuid)
-  end
 
   defp return_to_suffix(socket) do
     case socket.assigns[:return_to] do
@@ -848,8 +851,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
              tab; disabled while uploads are mid-flight so the save
              can't race the post-upload write. "Save" keeps you on the
              form (also the Enter-key submitter, being first in the
-             DOM); "Save & Exit" returns to where the form was opened
-             from. "Save" keeps `class="btn-outline"` — a style modifier
+             DOM); "Save & Exit" opens the saved category; Cancel returns to
+             where the form was opened from. "Save" keeps `class="btn-outline"` — a style modifier
              that composes with the component's default btn-primary,
              where `variant="outline"` would replace the colour. --%>
         <div class="flex justify-end gap-3 pt-6">

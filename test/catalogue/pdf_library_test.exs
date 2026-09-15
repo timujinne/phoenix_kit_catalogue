@@ -17,6 +17,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
   import ExUnit.CaptureLog
 
   alias Ecto.Adapters.SQL
+  alias PhoenixKit.Modules.Storage
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PdfLibrary
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction, PdfPage, PdfPageContent}
@@ -658,6 +659,69 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
       capture_log(fn ->
         assert {:error, :not_found} = PdfLibrary.mark_failed(Ecto.UUID.generate(), "x")
       end)
+    end
+  end
+
+  describe "create_pdf_from_upload/3 — new files join the host's PDF library parent folder" do
+    defmodule ParentHook do
+      def parent(:pdf, _actor, _subject), do: {:ok, Process.get(:pdf_library_folder)}
+      def parent(_, _, _), do: nil
+    end
+
+    setup do
+      on_exit(fn ->
+        Application.delete_env(:phoenix_kit_catalogue, :attachments_parent_folder)
+      end)
+
+      :ok
+    end
+
+    test "a newly stored file is attached to the configured parent folder" do
+      {:ok, folder} = Storage.create_folder(%{name: "PDF library"})
+      Process.put(:pdf_library_folder, folder.uuid)
+
+      Application.put_env(
+        :phoenix_kit_catalogue,
+        :attachments_parent_folder,
+        {ParentHook, :parent}
+      )
+
+      user_uuid = ensure_user_uuid()
+      tmp = Path.join(System.tmp_dir!(), "attach-probe-#{System.unique_integer([:positive])}.pdf")
+      File.write!(tmp, "not a real pdf, just unique bytes #{System.unique_integer([:positive])}")
+
+      assert {:ok, pdf} =
+               PdfLibrary.create_pdf_from_upload(tmp, "attach-probe.pdf", actor_uuid: user_uuid)
+
+      assert Storage.get_file(pdf.file_uuid).folder_uuid == folder.uuid
+    end
+
+    test "a content-deduped (:existing) file is left where it already lives" do
+      {:ok, elsewhere} = Storage.create_folder(%{name: "Elsewhere"})
+      {:ok, pdf_folder} = Storage.create_folder(%{name: "PDF library"})
+      Process.put(:pdf_library_folder, pdf_folder.uuid)
+
+      Application.put_env(
+        :phoenix_kit_catalogue,
+        :attachments_parent_folder,
+        {ParentHook, :parent}
+      )
+
+      user_uuid = ensure_user_uuid()
+      content = "dup content #{System.unique_integer([:positive])}"
+      checksum = :crypto.hash(:sha256, content) |> Base.encode16(case: :lower)
+
+      existing_uuid = insert_file!(user_uuid: user_uuid, file_checksum: checksum)
+      Storage.attach_file_to_folder(Storage.get_file(existing_uuid), elsewhere.uuid)
+
+      tmp = Path.join(System.tmp_dir!(), "attach-dup-#{System.unique_integer([:positive])}.pdf")
+      File.write!(tmp, content)
+
+      assert {:ok, pdf} =
+               PdfLibrary.create_pdf_from_upload(tmp, "attach-dup.pdf", actor_uuid: user_uuid)
+
+      assert pdf.file_uuid == existing_uuid
+      assert Storage.get_file(existing_uuid).folder_uuid == elsewhere.uuid
     end
   end
 

@@ -34,4 +34,16 @@ defmodule PhoenixKitCatalogue.JsSourcesTest do
              "#{name} is not registered in js_sources"
     end
   end
+
+  test "the module JS answers the page's bulk_select:clear push by pressing each scope's Clear" do
+    # Core's BulkSelectScope has no handler for the push, and the page no
+    # longer clears a selection by changing the scope's id (2026-09-15).
+    js =
+      Enum.map_join(PhoenixKitCatalogue.js_sources(), "\n", fn %{app: app, file: rel} ->
+        app |> :code.priv_dir() |> Path.join(rel) |> File.read!()
+      end)
+
+    assert js =~ ~s|window.addEventListener("phx:bulk_select:clear"|
+    assert js =~ ~s|[phx-hook="BulkSelectScope"] [data-bulk-clear]|
+  end
 end

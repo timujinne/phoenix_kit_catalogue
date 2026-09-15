@@ -216,6 +216,47 @@ defmodule PhoenixKitCatalogue.GettextTest do
              "Atribuudikomplektide moodul ei ole lubatud."
   end
 
+  test "the category trash popup strings are translated (pin for the 2026-09-14 wording)" do
+    msgids = [
+      "Move category to Deleted — what about its items?",
+      "Move category and items to Deleted",
+      "Move category to Deleted",
+      "and its subtree contain %{count} active items. The category moves to the Deleted view, where it can be restored. Choose what happens to its items.",
+      "Move items to Deleted with the category",
+      "Restoring the category brings them back with it.",
+      "Items stay in this catalogue without a category. Restoring the category later does not put them back.",
+      "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
+    ]
+
+    untranslated =
+      for locale <- ["et", "ru"],
+          msgid <- msgids,
+          Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+            Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, count: 1)
+          end) == String.replace(msgid, "%{count}", "1"),
+          do: {locale, msgid}
+
+    assert untranslated == []
+  end
+
+  test "the Deleted tab's bulk category strings are translated (pin for the 2026-09-15 rebuild)" do
+    msgids = [
+      "Permanently delete selected categories?",
+      "%{count} categories and everything in them will be permanently deleted. This cannot be undone.",
+      "Permanently deleted %{count} categories."
+    ]
+
+    untranslated =
+      for locale <- ["et", "ru"],
+          msgid <- msgids,
+          Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+            Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, count: 1)
+          end) == String.replace(msgid, "%{count}", "1"),
+          do: {locale, msgid}
+
+    assert untranslated == []
+  end
+
   test "Tab.localized_label/1 returns Russian translation for Catalogue" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
 
@@ -797,6 +838,40 @@ defmodule PhoenixKitCatalogue.GettextTest do
 
     assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, bindings) ==
              "b.pdf on identne juba manustatud failiga a.pdf — midagi ei lisatud."
+  after
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
+
+  test "the permanent-delete scope and race strings are translated in ru and et" do
+    # Added by hand to the .pot and every locale (2026-09-15 review).
+    scope =
+      "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+
+    bindings = [subcategories: 1, items: 2]
+    restored = "It was restored in the meantime, so it was not deleted."
+    moved = "The catalogue changed while this was running. Please try again."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, scope, bindings) ==
+             "Эта категория, 1 подкатегорий и 2 позиций внутри неё будут удалены навсегда. Это действие необратимо."
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, restored) ==
+             "Тем временем это было восстановлено, поэтому не удалено."
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, moved) ==
+             "Каталог изменился во время операции. Попробуйте ещё раз."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, scope, bindings) ==
+             "See kategooria, 1 alamkategooriat ja 2 toodet selle sees kustutatakse jäädavalt. Seda ei saa tagasi võtta."
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, restored) ==
+             "See taastati vahepeal, seega seda ei kustutatud."
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, moved) ==
+             "Kataloog muutus toimingu ajal. Palun proovige uuesti."
   after
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
   end

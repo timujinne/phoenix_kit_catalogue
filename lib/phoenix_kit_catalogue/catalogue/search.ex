@@ -40,6 +40,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
       `"inactive"`, `"discontinued"`). `nil` or `[]` = all non-deleted
       (the historical default). Soft-deleted rows stay excluded even if
       `"deleted"` is listed. Atoms are accepted and stringified.
+    * `:trashed` — when `true`, matches the catalogue's soft-deleted items
+      instead (the admin's Deleted tab): `status = "deleted"` whatever
+      their category's status, still only in live catalogues. `:statuses`
+      has no effect then. Default `false`.
     * `:order` — `:position` (default: the admin's Manual document
       order — catalogue position, category position, item position,
       name; `{:position, dir}` is accepted and the direction ignored,
@@ -316,17 +320,29 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
       on: i.catalogue_uuid == cat.uuid,
       left_join: c in Category,
       on: i.category_uuid == c.uuid,
-      where: i.status != "deleted" and cat.status != "deleted",
-      where: is_nil(c.uuid) or c.status != "deleted"
+      where: cat.status != "deleted"
     )
+    |> scope_trash(Keyword.get(opts, :trashed, false))
     |> match_item_text(pattern)
     |> maybe_scope_catalogues(catalogue_uuids)
     |> maybe_scope_categories(category_uuids)
     |> maybe_scope_only(only)
-    |> maybe_scope_statuses(statuses)
+    |> maybe_scope_statuses(if(Keyword.get(opts, :trashed, false), do: nil, else: statuses))
     # Same `value_slugs:` the level listings take, so a search inside an
     # attribute filter stays inside it.
     |> PhoenixKitCatalogue.Catalogue.filter_by_attribute_values(opts)
+  end
+
+  # Live items outside trashed categories, or — for the admin's Deleted tab —
+  # the trashed items themselves, wherever their category is.
+  defp scope_trash(query, true), do: where(query, [i], i.status == "deleted")
+
+  defp scope_trash(query, _live) do
+    where(
+      query,
+      [i, _cat, c],
+      i.status != "deleted" and (is_nil(c.uuid) or c.status != "deleted")
+    )
   end
 
   # Catches two foot-guns up front so callers see a loud error instead

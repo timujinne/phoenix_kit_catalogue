@@ -1895,17 +1895,17 @@ msgstr "Единица по умолчанию"
 msgid "Default Value"
 msgstr "Значение по умолчанию"
 
-msgid "Delete category and items"
-msgstr "Удалить категорию и позиции"
+msgid "Move category and items to Deleted"
+msgstr "Переместить категорию и позиции в удалённые"
 
-msgid "Delete category — what about the items?"
-msgstr "Удаление категории — что делать с позициями?"
+msgid "Move category to Deleted — what about its items?"
+msgstr "Перемещение категории в удалённые — что делать с позициями?"
 
 msgid "Delete forever"
 msgstr "Удалить навсегда"
 
-msgid "Delete items along with the category"
-msgstr "Удалить позиции вместе с категорией"
+msgid "Move items to Deleted with the category"
+msgstr "Переместить позиции в удалённые вместе с категорией"
 
 msgid "Delete selected items?"
 msgstr "Удалить выбранные позиции?"
@@ -2030,14 +2030,14 @@ msgstr "Позиции можно перемещать только внутри
 msgid "Items keep their catalogue but lose their category."
 msgstr "Позиции остаются в каталоге, но теряют категорию."
 
-msgid "Items move to the Deleted view alongside the category. Both can be restored later."
-msgstr "Позиции перемещаются в раздел «Удалённые» вместе с категорией. И то и другое можно восстановить позже."
+msgid "Restoring the category brings them back with it."
+msgstr "При восстановлении категории позиции вернутся вместе с ней."
 
 msgid "Items reordered."
 msgstr "Порядок позиций изменён."
 
-msgid "Items stay in this catalogue but are no longer attached to any category."
-msgstr "Позиции остаются в этом каталоге, но больше не привязаны ни к одной категории."
+msgid "Items stay in this catalogue without a category. Restoring the category later does not put them back."
+msgstr "Позиции остаются в этом каталоге без категории. При восстановлении категории они в неё не вернутся."
 
 msgid "Leave blank to inherit the catalogue's discount. Set (including 0) to override just this item."
 msgstr "Оставьте пустым, чтобы наследовать скидку каталога. Задайте (в т.ч. 0), чтобы переопределить только эту позицию."
@@ -2099,8 +2099,8 @@ msgstr "Сопоставлять по всем языкам"
 msgid "Move items"
 msgstr "Переместить позиции"
 
-msgid "Move items and delete category"
-msgstr "Переместить позиции и удалить категорию"
+msgid "Move category to Deleted"
+msgstr "Переместить категорию в удалённые"
 
 msgid "Move items to another category"
 msgstr "Переместить позиции в другую категорию"
@@ -2238,8 +2238,8 @@ msgstr "Выберите родителя, внутрь которого вло�
 msgid "Pick a strategy before applying."
 msgstr "Выберите стратегию перед применением."
 
-msgid "Pick a target category in this catalogue. The category being deleted and its subtree are excluded."
-msgstr "Выберите целевую категорию в этом каталоге. Удаляемая категория и её поддерево исключены."
+msgid "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
+msgstr "Выберите целевую категорию в этом каталоге; перемещаемая в удалённые категория и её поддерево исключены. При восстановлении категории они обратно не переместятся."
 
 msgid "Pick where %{count} items should go."
 msgstr "Выберите, куда переместить позиции: %{count}."
@@ -2634,8 +2634,8 @@ msgstr "все каталоги"
 msgid "all categories"
 msgstr "все категории"
 
-msgid "and its subtree contain %{count} active items. Choose where they should go before the category is deleted."
-msgstr "и её поддерево содержат активных позиций: %{count}. Выберите, куда они попадут, прежде чем категория будет удалена."
+msgid "and its subtree contain %{count} active items. The category moves to the Deleted view, where it can be restored. Choose what happens to its items."
+msgstr "и её поддерево содержат активных позиций: %{count}. Категория перемещается в раздел «Удалённые», откуда её можно восстановить. Выберите, что делать с позициями."
 
 msgid "columns"
 msgstr "столбцов"
@@ -3452,3 +3452,21 @@ msgstr "Это навсегда удалит значение. Отменить 
 
 msgid "Failed to delete value."
 msgstr "Не удалось удалить значение."
+
+msgid "Permanently delete selected categories?"
+msgstr "Удалить выбранные категории навсегда?"
+
+msgid "%{count} categories and everything in them will be permanently deleted. This cannot be undone."
+msgstr "Категории (%{count}) и всё их содержимое будут удалены навсегда. Это нельзя отменить."
+
+msgid "Permanently deleted %{count} categories."
+msgstr "Навсегда удалено категорий: %{count}."
+
+msgid "The catalogue changed while this was running. Please try again."
+msgstr "Каталог изменился во время операции. Попробуйте ещё раз."
+
+msgid "It was restored in the meantime, so it was not deleted."
+msgstr "Тем временем это было восстановлено, поэтому не удалено."
+
+msgid "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+msgstr "Эта категория, %{subcategories} подкатегорий и %{items} позиций внутри неё будут удалены навсегда. Это действие необратимо."

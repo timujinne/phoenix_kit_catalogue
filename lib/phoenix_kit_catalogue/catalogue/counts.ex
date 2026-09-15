@@ -39,21 +39,76 @@ defmodule PhoenixKitCatalogue.Catalogue.Counts do
   end
 
   @doc """
-  Returns a map of `%{catalogue_uuid => non_deleted_item_count}` for all catalogues.
+  Returns a map of `%{catalogue_uuid => item_count}` for all catalogues.
 
   Single-query batch version of `item_count_for_catalogue/1` — avoids N+1 when
   displaying item counts alongside a catalogue list. Includes items both in
   categories and directly attached to a catalogue (uncategorized).
+
+  ## Options
+
+    * `:mode` — `:active` (default) counts only non-deleted items, the
+      number an active catalogue row shows. `:restorable` counts what a
+      TRASHED catalogue row must show: the items `restore_catalogue/2`
+      brings back (deleted items stamped with the catalogue, or carrying
+      no stamp, outside a category that stays trashed) plus any live
+      items a legacy trash never swept. Items trashed on their own before
+      the catalogue stay in the trash on restore and are not counted; an
+      active-only count would read 0 for every correctly trashed catalogue.
   """
-  @spec item_counts_by_catalogue() :: %{Ecto.UUID.t() => non_neg_integer()}
-  def item_counts_by_catalogue do
-    from(i in Item,
-      where: i.status != "deleted" and not is_nil(i.catalogue_uuid),
-      group_by: i.catalogue_uuid,
-      select: {i.catalogue_uuid, count(i.uuid)}
-    )
+  @spec item_counts_by_catalogue(keyword()) :: %{Ecto.UUID.t() => non_neg_integer()}
+  def item_counts_by_catalogue(opts \\ []) do
+    query =
+      from(i in Item,
+        where: not is_nil(i.catalogue_uuid),
+        group_by: i.catalogue_uuid,
+        select: {i.catalogue_uuid, count(i.uuid)}
+      )
+
+    query =
+      case Keyword.get(opts, :mode, :active) do
+        :active -> where(query, [i], i.status != "deleted")
+        :restorable -> restorable_with_catalogue(query)
+      end
+
+    query
     |> repo().all()
     |> Map.new()
+  end
+
+  # Mirrors `restore_catalogue/2`'s filters: a deleted item comes back when
+  # its stamp names its catalogue or it has none, and its category is not
+  # one that stays trashed (a category comes back on the same terms).
+  defp restorable_with_catalogue(query) do
+    query
+    |> join(:left, [i], c in Category, on: c.uuid == i.category_uuid)
+    |> where(
+      [i, c],
+      (i.status != "deleted" or fragment("(? -> '_trash') IS NULL", i.data) or
+         fragment("(? #>> '{_trash,root}') = ?::text", i.data, i.catalogue_uuid)) and
+        (is_nil(i.category_uuid) or c.status != "deleted" or
+           fragment("(? -> '_trash') IS NULL", c.data) or
+           fragment("(? #>> '{_trash,root}') = ?::text", c.data, i.catalogue_uuid))
+    )
+  end
+
+  @doc """
+  `%{{category_uuid, root_uuid} => count}` of a catalogue's deleted items,
+  keyed by the category each sits in and the root its trash stamp names
+  (`nil` when unstamped). A trashed category card counts the entries whose
+  root is that category: the items its Restore brings back.
+  """
+  @spec trashed_item_counts_by_root(Ecto.UUID.t()) :: %{
+          {Ecto.UUID.t() | nil, String.t() | nil} => non_neg_integer()
+        }
+  def trashed_item_counts_by_root(catalogue_uuid) do
+    from(i in Item,
+      where: i.catalogue_uuid == ^catalogue_uuid and i.status == "deleted",
+      group_by: [i.category_uuid, fragment("? #>> '{_trash,root}'", i.data)],
+      select: {i.category_uuid, fragment("? #>> '{_trash,root}'", i.data), count(i.uuid)}
+    )
+    |> repo().all()
+    |> Map.new(fn {category_uuid, root, n} -> {{category_uuid, root}, n} end)
   end
 
   @doc "Counts non-deleted categories for a catalogue."

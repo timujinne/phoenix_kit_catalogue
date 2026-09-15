@@ -26,17 +26,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
        %{conn: conn, catalogue: cat, a: a} do
     {:ok, view, html} = live(conn, "#{@base}/#{cat.uuid}")
 
-    assert has_element?(view, "[id^=categories-bulk-root][phx-hook=BulkSelectScope]")
+    assert has_element?(view, "#categories-bulk[phx-hook=BulkSelectScope]")
     assert html =~ ~s(data-bulk-role="row" data-uuid="#{a.uuid}")
 
     assert has_element?(
              view,
-             "[id^=categories-bulk-root] [data-bulk-action=request_bulk_delete_categories]"
+             "#categories-bulk [data-bulk-action=request_bulk_delete_categories]"
            )
 
     assert has_element?(
              view,
-             "[id^=categories-bulk-root] [data-bulk-action=open_categories_reorder_modal]"
+             "#categories-bulk [data-bulk-action=open_categories_reorder_modal]"
            )
 
     assert has_element?(view, "#categories-select-all")

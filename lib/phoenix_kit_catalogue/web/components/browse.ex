@@ -1092,7 +1092,10 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   Integer mode is `precision: 0` (the default; step 1); a decimal item is
   the same control with `precision > 0` (step 0.1 / 0.01 / …) and a `unit`
-  suffix. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
+  suffix. `precision: :any` is free text (`type="text"`,
+  `inputmode="decimal"`, no spinner, no step/min/max): the browser's
+  locale rules for number controls never get to reject a dot or a comma,
+  and the server takes the value unrounded. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
   form is `novalidate`, so they never gate the submit (a browser
   validation failure would leave Enter silently dead), and every limit
   is re-enforced server-side, exactly as before.
@@ -1101,7 +1104,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   attr(:uuid, :string, required: true)
   attr(:qty, :string, required: true, doc: "display string, already formatted")
   attr(:unit, :string, default: nil)
-  attr(:precision, :integer, default: 0)
+  attr(:precision, :any, default: 0, doc: "0, a positive integer, or :any (free decimals)")
   attr(:min, :string, default: nil, doc: "min attr for the control (arrows stop here)")
   attr(:max, :string, default: nil)
 
@@ -1169,12 +1172,18 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       <script :type={Phoenix.LiveView.ColocatedHook} name=".QtySignal">
         export default {
           mounted() {
-            this.input = this.el.querySelector('input[type="number"]')
+            this.input = this.el.querySelector('input[name="value"]')
             this.holder = this.el.closest("[data-selected]")
             if (!this.input || !this.holder) return
             this._onInput = () => {
-              const v = parseFloat(this.input.value.replace(",", "."))
-              if (Number.isNaN(v)) return
+              // Same shape the server parses: plain digits with one
+              // decimal point (a sign only for the zero/deselect path).
+              // parseFloat alone would read "2.5.1", "2abc" or "1e9" as a
+              // number and flip a row the server then refuses — a
+              // rejection sends no diff, so the highlight would stick.
+              const raw = this.input.value.trim().replace(/,/g, ".")
+              if (!/^-?\d+(\.\d+)?$/.test(raw)) return
+              const v = parseFloat(raw)
               const floor = parseFloat(this.el.dataset.selectFloor || this.input.min)
               let sel = null
               if (v <= 0) {
@@ -1203,13 +1212,13 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       <div class="join" role="group" aria-label={gettext("Quantity")}>
         <input
           id={"#{@id}-input"}
-          type="number"
+          type={if @precision == :any, do: "text", else: "number"}
           name="value"
           value={@qty}
-          min={@min}
-          max={@max}
+          min={@precision != :any && @min}
+          max={@precision != :any && @max}
           step={qty_step(@precision)}
-          inputmode={if @precision > 0, do: "decimal", else: "numeric"}
+          inputmode={if decimal_precision?(@precision), do: "decimal", else: "numeric"}
           class={["input join-item text-center pl-1 pr-2", qty_width(@size), input_size(@size)]}
           phx-debounce="400"
           phx-blur="qty_commit"
@@ -1237,7 +1246,12 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   defp qty_step(precision) when is_integer(precision) and precision > 0,
     do: "0." <> String.duplicate("0", precision - 1) <> "1"
 
+  # A text control has no step; `nil` drops the attribute.
+  defp qty_step(:any), do: nil
   defp qty_step(_), do: "1"
+
+  defp decimal_precision?(:any), do: true
+  defp decimal_precision?(precision), do: precision > 0
 
   # The native control renders its own spinner arrows inside the field,
   # so it needs more room than the old bare text input.

@@ -9,6 +9,8 @@ defmodule PhoenixKitCatalogue.Catalogue.DeleteGuardsTest do
 
   alias PhoenixKitCatalogue.Catalogue.DeleteGuards
 
+  @owners ["catalogue", "catalogue_supplier"]
+
   setup do
     PhoenixKit.Settings.update_setting("entities_enabled", "true")
     on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
@@ -36,21 +38,42 @@ defmodule PhoenixKitCatalogue.Catalogue.DeleteGuardsTest do
   # entities was enabled, so a host that turned entities on after boot could
   # not delete that blueprint until a restart.
   test "register/0 registers both guards while entities is disabled" do
-    guards_key = {PhoenixKitEntities.Managed, :delete_guards}
-    saved = :persistent_term.get(guards_key, %{})
-    on_exit(fn -> :persistent_term.put(guards_key, saved) end)
+    # Entities keeps guards in :persistent_term: one shared map up to 0.4.14,
+    # one key per owner since 0.4.15. Clear either form, then check through
+    # the public `validate_delete/2` so the test doesn't pin the storage.
+    saved = Enum.filter(:persistent_term.get(), fn {key, _} -> guard_term?(key) end)
+    on_exit(fn -> Enum.each(saved, fn {key, value} -> :persistent_term.put(key, value) end) end)
+    Enum.each(saved, fn {key, _} -> :persistent_term.erase(key) end)
 
-    :persistent_term.erase(guards_key)
+    for owner <- @owners, do: assert(validate_delete(owner) == {:error, :no_delete_guard})
+
     PhoenixKit.Settings.update_setting("entities_enabled", "false")
-
     assert DeleteGuards.register() == :ok
 
-    assert :persistent_term.get(guards_key, %{}) |> Map.keys() |> Enum.sort() ==
-             ["catalogue", "catalogue_supplier"]
+    for owner <- @owners do
+      refute validate_delete(owner) == {:error, :no_delete_guard},
+             "no delete guard registered for #{owner}"
+    end
   end
 
   test "the boot task is a one-shot child" do
     assert %{restart: :temporary, start: {Task, :start_link, [_fun]}} =
              DeleteGuards.child_spec([])
+  end
+
+  defp guard_term?({PhoenixKitEntities.Managed, :delete_guards}), do: true
+  defp guard_term?({PhoenixKitEntities.Managed, :delete_guard, _owner}), do: true
+  defp guard_term?(_key), do: false
+
+  defp validate_delete(owner) do
+    PhoenixKitEntities.Managed.validate_delete(
+      %{
+        uuid: Ecto.UUID.generate(),
+        name: "guard-check",
+        status: "published",
+        settings: %{"managed_by" => owner}
+      },
+      on_behalf_of: owner
+    )
   end
 end

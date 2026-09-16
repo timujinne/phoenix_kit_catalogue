@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
     * `pre`       — preselection, `uuid:qty[,uuid:qty…]`
     * `mode`      — "single" for `mode: :single`
     * `immediate` — "true" with single mode
-    * `precision` — qty_precision (default 0)
+    * `precision` — qty_precision (default 0; "any" = free decimals)
     * `min`       — qty_min
     * `max`       — qty_max
     * `view`      — starting view, "table" | "card" (nil = component default)
@@ -62,7 +62,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
        selected: selected,
        mode: if(params["mode"] == "single", do: :single, else: :multiple),
        immediate: params["immediate"] == "true",
-       precision: String.to_integer(params["precision"] || "0"),
+       precision: parse_precision(params["precision"]),
        min: params["min"] && String.to_integer(params["min"]),
        max: params["max"] && String.to_integer(params["max"]),
        view: params["view"],
@@ -86,6 +86,11 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
        closed: false
      )}
   end
+
+  # `precision=any` is the free-decimal mode (no rounding, text control).
+  defp parse_precision(nil), do: 0
+  defp parse_precision("any"), do: :any
+  defp parse_precision(raw), do: String.to_integer(raw)
 
   defp build_scope(params) do
     %{}

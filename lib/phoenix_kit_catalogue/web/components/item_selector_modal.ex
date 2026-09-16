@@ -262,6 +262,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   `qty_change`, which never resets in-progress text); blur/Enter is the
   authoritative commit that discards garbage. Decimal commas are accepted
   ("2,5" — ru/et keyboards); all limits re-clamped server-side.
+
+  `qty_precision: :any` is the free-decimal mode for hosts whose own
+  quantity fields take whatever the keyboard produces (an order sheet's
+  rows): nothing is rounded — "1,2345" stays 1.2345 — and the control is
+  a plain `<input type="text" inputmode="decimal">` with no spinner, so
+  the browser's locale rules for number inputs never eat a dot or a
+  comma. Only the guards remain: digits with one decimal point (up to 12
+  places), non-negative, below the safety ceiling, and the host's
+  `qty_min`/`qty_max` (both taken as given, unrounded).
   """
 
   use Phoenix.LiveComponent
@@ -525,10 +534,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # both stay inside the host's stated bound — and bounds that INVERT after
   # rounding raise: every quantity would silently collapse to the max.
   defp resolve_limits!(assigns, qty_precision) do
+    validate_qty_precision!(qty_precision)
+
     limits = %{
-      qty_min: Decimal.round(to_decimal(assigns[:qty_min] || 1), qty_precision, :ceiling),
+      qty_min: round_limit(to_decimal(assigns[:qty_min] || 1), qty_precision, :ceiling),
       qty_max:
-        assigns[:qty_max] && Decimal.round(to_decimal(assigns[:qty_max]), qty_precision, :floor),
+        assigns[:qty_max] && round_limit(to_decimal(assigns[:qty_max]), qty_precision, :floor),
       qty_precision: qty_precision
     }
 
@@ -548,6 +559,24 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
     limits
   end
+
+  # Anything else used to surface as a FunctionClauseError deep inside
+  # Decimal.round (or as `:any > 0` silently comparing true for a
+  # misspelled atom) — fail at init instead.
+  defp validate_qty_precision!(:any), do: :ok
+  defp validate_qty_precision!(p) when is_integer(p) and p >= 0, do: :ok
+
+  defp validate_qty_precision!(other) do
+    raise ArgumentError,
+          "ItemSelectorModal qty_precision must be a non-negative integer or :any, " <>
+            "got: #{inspect(other)}"
+  end
+
+  # Free-decimal mode takes the host's limits as given; a numeric
+  # precision snaps them onto its grid (min up, max down) so a limit can
+  # never sit between two representable quantities.
+  defp round_limit(limit, :any, _mode), do: limit
+  defp round_limit(limit, precision, mode), do: Decimal.round(limit, precision, mode)
 
   # The default derives from the columns (2026-08-31 — "it's either or"):
   # a visible :qty column IS the amount flavour — every row shows its
@@ -2145,11 +2174,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # plus button walks past any softer bound one event at a time.
   defp clamp(qty, %{qty_min: min, qty_max: max, qty_precision: precision}) do
     qty
-    |> Decimal.round(precision)
+    |> round_qty(precision)
     |> Decimal.max(min)
     |> Decimal.min(@qty_ceiling)
     |> then(fn q -> if max, do: Decimal.min(q, max), else: q end)
   end
+
+  # Free-decimal mode never rounds — the host's own fields don't either.
+  defp round_qty(qty, :any), do: qty
+  defp round_qty(qty, precision), do: Decimal.round(qty, precision)
 
   defp parse_qty(raw, assigns) when is_binary(raw) do
     # ru/et keyboards produce a decimal comma; Decimal.parse wants a dot.
@@ -2159,7 +2192,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     # which the stepper's minus button could already reach.
     normalized = raw |> String.trim() |> String.replace(",", ".")
 
-    with true <- Regex.match?(~r/^\d{1,12}(\.\d{1,6})?$/, normalized),
+    with true <- Regex.match?(qty_pattern(assigns.qty_precision), normalized),
          {qty, ""} <- Decimal.parse(normalized),
          false <- Decimal.lt?(qty, assigns.qty_min) do
       {:ok, clamp(qty, assigns)}
@@ -2169,6 +2202,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   end
 
   defp parse_qty(_, _), do: :error
+
+  # Six decimal places cover every numeric precision the stepper can show;
+  # free mode admits twelve — enough for any unit in practice while the
+  # digit cap still keeps `Decimal.parse` away from absurd exponents.
+  defp qty_pattern(:any), do: ~r/^\d{1,12}(\.\d{1,12})?$/
+  defp qty_pattern(_precision), do: ~r/^\d{1,12}(\.\d{1,6})?$/
 
   defp to_decimal(%Decimal{} = d), do: d
   defp to_decimal(n) when is_integer(n), do: Decimal.new(n)
@@ -2297,6 +2336,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   end
 
   defp format_qty(%Decimal{} = qty), do: Decimal.to_string(Decimal.normalize(qty), :normal)
+
+  # Whether quantities may carry a fraction — the unit suffix reads
+  # naturally next to "2.5" and is noise next to a bare count.
+  defp decimal_qty?(:any), do: true
+  defp decimal_qty?(precision), do: precision > 0
 
   defp selection_count(selection), do: map_size(selection)
 
@@ -2669,7 +2713,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(@qty_precision > 0, do: item.unit)}
+                        unit={if(decimal_qty?(@qty_precision), do: item.unit)}
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}
@@ -2738,7 +2782,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(@qty_precision > 0, do: item.unit)}
+                        unit={if(decimal_qty?(@qty_precision), do: item.unit)}
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}
@@ -2873,7 +2917,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                 id={"#{@id}-detail-qty-#{@detail.uuid}-r#{qty_rev(assigns, @detail.uuid)}"}
                 uuid={@detail.uuid}
                 qty={qty_display_or_zero(assigns, @detail.uuid)}
-                unit={if(@qty_precision > 0, do: detail_unit(assigns))}
+                unit={if(decimal_qty?(@qty_precision), do: detail_unit(assigns))}
                 precision={@qty_precision}
                 min={@qmin}
                 max={@qmax}
@@ -2992,7 +3036,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                   id={"#{@id}-tray-qty-#{uuid}-r#{qty_rev(assigns, uuid)}"}
                   uuid={uuid}
                   qty={qty_display(assigns, uuid)}
-                  unit={if(@qty_precision > 0, do: entry.item.unit)}
+                  unit={if(decimal_qty?(@qty_precision), do: entry.item.unit)}
                   precision={@qty_precision}
                   min={@qmin}
                   max={@qmax}

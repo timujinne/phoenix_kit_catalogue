@@ -809,6 +809,72 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       refute render(view) =~ ~s(id="picked")
     end
 
+    # `qty_precision: :any` — the host's own quantity fields (an order
+    # sheet) take any decimal a keyboard produces and never round; the
+    # popup must match them, or a typed 2,5 silently lands as 3 (Andi,
+    # 2026-09-16).
+    test "qty_precision: :any keeps a typed 2,5 / 0.125 / 1,2345 exactly", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      # Quantity-first with `min=0`: every row carries the control, and the
+      # host's own floor is "anything above zero".
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&precision=any&min=0")
+
+      for {raw, expected} <- [{"2,5", "2.5"}, {"0.125", "0.125"}, {"1,2345", "1.2345"}] do
+        view |> picker() |> render_click("qty_commit", %{"uuid" => screw.uuid, "value" => raw})
+        assert render(view) =~ ~s(value="#{expected}"), "typed #{raw}"
+      end
+
+      view |> picker() |> render_click("confirm", %{})
+      assert render(view) =~ "qty=1.2345"
+    end
+
+    test "qty_precision: :any renders a text control, not a number spinner", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&precision=any&min=0")
+
+      view |> picker() |> render_click("qty_commit", %{"uuid" => screw.uuid, "value" => "2,5"})
+
+      [input] =
+        Regex.run(~r/<input id="picker-qty-#{screw.uuid}-r1-input"[^>]*>/, render(view))
+
+      assert input =~ ~s(type="text")
+      assert input =~ ~s(inputmode="decimal")
+      refute input =~ "step="
+      refute input =~ "min="
+      refute input =~ "max="
+    end
+
+    test "qty_precision: :any still refuses garbage and clamps absurd magnitudes", %{
+      conn: conn,
+      cat: cat,
+      screw: screw
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&precision=any&min=0&max=99")
+
+      view |> picker() |> render_click("qty_commit", %{"uuid" => screw.uuid, "value" => "2.5"})
+
+      # Garbage and exponent forms keep the committed value (a negative is
+      # quantity mode's deselect, covered elsewhere); an absurd magnitude is
+      # clamped to qty_max exactly as in numeric mode.
+      for raw <- ["abc", "1e9", "NaN", "Infinity", "1.2.3", "2.5.1"] do
+        view |> picker() |> render_click("qty_commit", %{"uuid" => screw.uuid, "value" => raw})
+        assert render(view) =~ ~s(value="2.5"), "after #{raw}"
+      end
+
+      view
+      |> picker()
+      |> render_click("qty_commit", %{"uuid" => screw.uuid, "value" => "1000000000"})
+
+      view |> picker() |> render_click("confirm", %{})
+      assert render(view) =~ "qty=99"
+    end
+
     test "with qty_min: 0 a typed \"0\" commits instead of reverting", %{
       conn: conn,
       cat: cat,
@@ -1249,6 +1315,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       # would silently collapse to 0. Config fails loud instead.
       exit_value = catch_exit(open(conn, "c=#{cat.uuid}&max=0&min=1&sel=click"))
       assert inspect(exit_value) =~ "rounds below"
+    end
+
+    test "a qty_precision that is neither a non-negative integer nor :any raises at init", %{
+      conn: conn,
+      cat: cat
+    } do
+      exit_value = catch_exit(open(conn, "c=#{cat.uuid}&precision=-1"))
+      assert inspect(exit_value) =~ "qty_precision must be a non-negative integer or :any"
     end
 
     test "quantity + single + immediate delivers the TYPED quantity", %{

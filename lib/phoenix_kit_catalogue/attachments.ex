@@ -1095,6 +1095,13 @@ defmodule PhoenixKitCatalogue.Attachments do
     end
   end
 
+  @doc false
+  # The deterministic legacy name for a resource ("catalogue-item-<uuid>",
+  # "catalogue-category-<uuid>", "catalogue-<uuid>") — `nil` for an unsaved
+  # (`:new`) resource. Public so `PhoenixKitCatalogue.MediaReorganizer` can
+  # locate pre-hook-config folders without depending on `folder_name_for/1`.
+  def legacy_folder_name(resource), do: deterministic_name(resource)
+
   # Lazy-creates (or finds) the owning folder. For persisted resources
   # the name is deterministic; for `:new` resources we create a pending
   # random-named folder that `maybe_rename_pending_folder/2` renames

@@ -418,6 +418,29 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ "novalidate"
     end
 
+    test "precision :any is a text control: no spinner, step, min or max; unit still shown" do
+      html =
+        render_component(&Browse.qty_stepper/1,
+          id: "q1",
+          uuid: "u-1",
+          qty: "2.5",
+          precision: :any,
+          unit: "kg",
+          min: "0",
+          max: "99"
+        )
+
+      [input] = Regex.run(~r/<input[^>]*name="value"[^>]*>/, html)
+
+      assert input =~ ~s(type="text")
+      assert input =~ ~s(inputmode="decimal")
+      assert input =~ ~s(value="2.5")
+      refute input =~ "step="
+      refute input =~ "min="
+      refute input =~ "max="
+      assert html =~ "kg"
+    end
+
     test "min and max shape the arrows when given, and are absent otherwise" do
       bounded =
         render_component(&Browse.qty_stepper/1,

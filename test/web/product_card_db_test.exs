@@ -11,6 +11,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardDBTest do
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Modules.Storage.File, as: StorageFile
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Catalogue.AttributeSets
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components.ProductCard
 
@@ -253,6 +254,40 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardDBTest do
 
       fields = ProductCard.build_fields(item, "en")
       assert {"Color", "White, Oak"} in fields
+    end
+
+    test "a selected value archived after being picked is marked archived" do
+      PhoenixKit.Settings.update_setting("entities_enabled", "true")
+      on_exit(fn -> PhoenixKit.Settings.update_setting("entities_enabled", "false") end)
+
+      {:ok, cat} =
+        Catalogue.create_catalogue(%{name: "Cat #{System.unique_integer([:positive])}"})
+
+      {:ok, item} = Catalogue.create_item(%{name: "Door", catalogue_uuid: cat.uuid})
+
+      {:ok, set} =
+        Catalogue.create_attribute_set(%{name: "Finish #{System.unique_integer([:positive])}"})
+
+      {:ok, gold} = Catalogue.create_attribute_set_value(set, %{label: "Gold"})
+      {:ok, silver} = Catalogue.create_attribute_set_value(set, %{label: "Silver"})
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+
+      :ok =
+        AttributeSets.set_attachment_selection(
+          item.uuid,
+          set.uuid,
+          [gold.slug, silver.slug]
+        )
+
+      {:ok, _} =
+        PhoenixKitEntities.EntityData.update(gold, %{status: "archived"}, activity_log: false)
+
+      {_label, value} =
+        item
+        |> ProductCard.build_fields("en")
+        |> Enum.find(fn {_label, value} -> is_binary(value) and value =~ "Gold" end)
+
+      assert value |> String.split(", ") |> Enum.sort() == ["Gold (archived)", "Silver"]
     end
 
     test "no assignment, no attribute rows" do

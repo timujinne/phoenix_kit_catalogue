@@ -206,6 +206,21 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
       assert Catalogue.get_attribute(attribute.uuid) == nil
     end
 
+    test "confirming the delete of an attribute another session already removed keeps the page alive",
+         %{conn: conn} do
+      group = create_group()
+      {:ok, attribute} = Catalogue.create_attribute(group, %{"name" => "Color"})
+
+      {:ok, view, _html} = live(conn, "#{@base}/attributes/#{group.uuid}/edit")
+
+      view |> render_click("request_delete_attribute", %{"uuid" => attribute.uuid})
+      {:ok, _} = Catalogue.delete_attribute(attribute)
+      view |> render_click("confirm_delete_attribute", %{})
+
+      assert Process.alive?(view.pid)
+      assert Catalogue.get_attribute(attribute.uuid) == nil
+    end
+
     test "deleting a value goes through the confirm modal, and cancel keeps it",
          %{conn: conn} do
       group = create_group()

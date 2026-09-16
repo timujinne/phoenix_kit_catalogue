@@ -92,6 +92,55 @@ it was acted on. A fifth seat (Mistral's vibe) was asked and gave no answer in
   process onto one connection; the races were reproduced and re-checked in max-dev's
   live node before and after the fixes.
 
+## Fixed (Batch 3 — 2026-09-15, commit c651dcc; ecommerce b5abf0b)
+
+Max asked for the open items to be fixed.
+
+- ~~Performance (Claude #3).~~ A drilled level reads its child-category counts once for both
+  modes and its listing reuses them; the root's Deleted tab skips the level listing and the
+  count maps it never used; an item write passes the category its derive step read `FOR SHARE` to the
+  category check instead of reading it again; `ancestors_first/1` orders by depth from one
+  query, under the catalogue lock, instead of one recursive query per selected uuid.
+  Covered by the existing tab, tree, trash-card and bulk-trash tests.
+- ~~Behaviour change for ecommerce (Claude #4).~~ `phoenix_kit_ecommerce`'s Shopify
+  collection sync now leaves an item whose target category the catalogue refuses where it
+  is, with a warning, instead of halting the run (commit `b5abf0b` in that repo, with a
+  test that trashes the category mid-run and fails without the fix).
+- ~~Untested: the Status column forced onto the Deleted tab.~~ Pinned: "the Deleted tab
+  shows the Status column even when the user's columns leave it out"
+  (`test/web/catalogue_deleted_tab_test.exs`).
+
+## Fixed (Release review — 2026-09-15, release 0.32.0)
+
+From the release-review section of `CLAUDE_REVIEW.md`.
+
+- ~~IMPROVEMENT - MEDIUM — Delete Forever left stamps pointing at a removed root.~~
+  `permanently_delete_category/2` re-stamps, in the same transaction, the
+  trashed rows under a kept subcategory whose root is one of the removed
+  categories:
+  - a trashed category takes the root its trashed parent now has, and the
+    topmost one becomes `via: self`;
+  - an item in a live category becomes `via: self`;
+  - `from_status` is kept.
+
+  The rule is written into `dev_docs/guides/trash-and-restore.md`. Pinned: "rows
+  under a kept subcategory get a trash root that still exists"
+  (`test/catalogue/trash_edges_test.exs`).
+- ~~IMPROVEMENT - MEDIUM — the Active tab's `delete_item` was unscoped.~~ It now
+  uses `item_in_catalogue/2`. Pinned in "single-row actions ignore a uuid from
+  another catalogue".
+- ~~NITPICK — a kept subcategory kept its old position.~~ Kept subcategories go
+  to the end of the top level (`next_category_position/2`), in their old order.
+  Pinned in the same trash-edges test.
+
+### Skipped (release review)
+
+- **The bulk confirmation does not mention kept subcategories.** It needs new
+  msgids in six catalogues. The single-category confirmation already counts
+  only what is removed.
+- **`drop_from_search` can discard an in-flight page reply.** It heals itself on
+  the restore's broadcast, which re-runs the search.
+
 ## Files touched
 
 | File | Batch | Change |
@@ -105,6 +154,8 @@ it was acted on. A fifth seat (Mistral's vibe) was asked and gave no answer in
 | `test/web/catalogue_deleted_tab_test.exs` | 1, 2 | new LiveView tests |
 | `test/web/catalogue_detail_branches_test.exs`, `test/web/catalogue_detail_empty_category_test.exs` | 1 | follow the removed selection and the new tab rule |
 
+Batch 3: `lib/phoenix_kit_catalogue/catalogue.ex`, `lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex`, `test/web/catalogue_deleted_tab_test.exs`; ecommerce `lib/phoenix_kit_ecommerce/shopify/collection_sync.ex` and its test.
+
 ## Verification
 
 - Before the fixes: the full suite ten times back to back, 10 × 2800 tests + 2 doctests, 0 failures.
@@ -112,10 +163,9 @@ it was acted on. A fifth seat (Mistral's vibe) was asked and gave no answer in
 - After Batch 2: full suite 2827 tests + 2 doctests, 0 failures; `mix precommit` clean (compile, format, credo --strict, dialyzer).
 - Browser on max-dev: a trashed shelf card read Items 2 / Subcategories 1 while its confirmation said 3 items; confirming kept the subcategory restored on its own; Batch 2's trash view fixes checked on a seeded catalogue.
 
+- Batch fixing the open items (2026-09-15, commit c651dcc): full suite 2850 tests + 2 doctests, 0 failures; `mix precommit` clean; checked on the dev server.
+- Release review batch (2026-09-15, release 0.32.0): full suite 2881 tests + 2 doctests, 0 failures; `mix precommit` clean. The re-stamp and the kept-subcategory position are covered by the randomized run in `trash_restore_test.exs` as well as the new trash-edges pin.
+
 ## Open
 
-For the maintainer to decide (not deferred by this follow-up):
-
-- **Performance (Claude #3):** some queries repeat per level load, a category row is read twice per item write, and `ancestors_first/1` runs one query per selected uuid. Correct, and cheap at current volumes.
-- **Behaviour change for ecommerce (Claude #4):** the Shopify collection sync now gets a changeset error if a target category is trashed mid-sync.
-- **Untested:** the Status column forced onto the Deleted tab when a user's column set leaves it out.
+None.

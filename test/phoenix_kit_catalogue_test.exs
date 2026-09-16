@@ -232,9 +232,9 @@ defmodule PhoenixKitCatalogueTest do
 
     test "children/0 supervises the guard registrations and pruner" do
       assert PhoenixKitCatalogue.children() == [
+               PhoenixKitCatalogue.Catalogue.DeleteGuards,
                PhoenixKitCatalogue.Catalogue.AttributeSets,
                PhoenixKitCatalogue.Catalogue.AttributeSets.OrphanPruner,
-               PhoenixKitCatalogue.Catalogue.SupplierFields,
                PhoenixKitCatalogue.Workers.TranslationSweepWorker
              ]
     end

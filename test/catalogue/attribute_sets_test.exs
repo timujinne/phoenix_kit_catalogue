@@ -134,6 +134,18 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
         assert {:ok, %{default: nil}} = AttributeSets.contract(AttributeSets.get_set(set.uuid))
       end
 
+      test "a new value never reuses the slug of an archived value" do
+        set = create_set!("Slug reuse #{System.unique_integer([:positive])}", "fixed")
+        {:ok, red} = AttributeSets.create_value(set, %{label: "Red"})
+
+        {:ok, _} =
+          PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
+
+        {:ok, again} = AttributeSets.create_value(set, %{label: "Red"})
+
+        refute again.slug == red.slug
+      end
+
       test "update_set still accepts an ARCHIVED default — a hidden value is still real (§3c)" do
         set = create_set!("Ikea trims archived default", "fixed")
 
@@ -1274,10 +1286,10 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
       end
 
       test "a live value's slug wins over a trashed duplicate sharing the same key" do
-        # A trashed value's slug isn't checked for uniqueness against new
-        # values (`value_slug/3` only compares against active ones), so
-        # the same slug can end up on more than one row: a live value
-        # plus one or more stale trashed copies underneath it. Every
+        # `value_slug/3` now keeps a new value off a hidden value's slug,
+        # but legacy rows and writes that bypass this module can still put
+        # the same slug on more than one row: a live value plus one or
+        # more stale trashed copies underneath it. Every
         # consumer builds its lookup pool as `values ++ hidden_values`
         # (product card, attribute-set items modal, item form) — a
         # duplicate key there means "last wins", and the stale trashed
@@ -1289,8 +1301,16 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
 
         {:ok, _} = PhoenixKitEntities.EntityData.trash(old)
 
-        {:ok, live} =
-          AttributeSets.create_value(set, %{label: "New Red", slug: "punane"})
+        {:ok, live} = AttributeSets.create_value(set, %{label: "New Red"})
+
+        # The slug is a locked key for generic entity writes, so the legacy
+        # duplicate is written straight to the row.
+        Repo.query!(
+          "UPDATE phoenix_kit_entity_data SET slug = $1 WHERE uuid = $2::text::uuid",
+          ["punane", live.uuid]
+        )
+
+        live = %{live | slug: "punane"}
 
         assert old.slug == live.slug
 
@@ -1317,11 +1337,15 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
 
         {:ok, _} = PhoenixKitEntities.EntityData.trash(old)
 
-        {:ok, newer} =
-          AttributeSets.create_value(set, %{label: "Newer Teal", slug: "roheline"})
+        {:ok, newer} = AttributeSets.create_value(set, %{label: "Newer Teal"})
 
         {:ok, _} =
           PhoenixKitEntities.EntityData.update(newer, %{status: "archived"}, activity_log: false)
+
+        Repo.query!(
+          "UPDATE phoenix_kit_entity_data SET slug = $1 WHERE uuid = $2::text::uuid",
+          ["roheline", newer.uuid]
+        )
 
         resolved = AttributeSets.resolve_set(set.uuid)
 

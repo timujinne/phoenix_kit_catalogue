@@ -138,6 +138,19 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowseTest do
     assert html =~ ~s(id="surface-grid")
   end
 
+  # PR #117 review: `Browse.resolve_view!/2` is shared with the modal and
+  # started accepting "comfy", which this surface then rendered as nothing
+  # — neither the grid nor the table.
+  test "comfy renders the table with the pk-comfy marker", %{conn: conn, cat: cat} do
+    {:ok, view, _html} = live(conn, "/test/selector-host?browse=true&c=#{cat.uuid}")
+
+    html = view |> with_target("#surface") |> render_click("set_view", %{"mode" => "comfy"})
+    assert html =~ ~s(id="surface-table")
+    assert html =~ ~s(class="pk-comfy")
+    assert html =~ "Widget"
+    refute html =~ ~s(id="surface-grid")
+  end
+
   # 2026-08-31 sweep pins.
   test "a decorative embed (on_item_click false, the default) sends nothing", %{
     conn: conn,

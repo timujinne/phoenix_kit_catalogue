@@ -24,18 +24,27 @@ Decided in the post-merge review, recorded there.
   branches for an item attached only to a broken-contract set. Rare (a tampered
   blueprint), and neither state is wrong enough for a second query.
 
+## Fixed (Batch 2 — 2026-09-15, commit c651dcc)
+
+Max asked for the open items to be fixed.
+
+- ~~The swatch tooltip still says "Has attribute group".~~ It says "Has attribute set" in
+  its four call sites; the msgid was renamed in the `.pot` and every locale (et/ru
+  retranslated). Pinned in `test/web/live_surfaces_test.exs`,
+  `test/web/catalogue_detail_attributes_column_test.exs` and `test/gettext_test.exs`.
+
 ## Files touched
 
 None in this pass (documentation only).
+
+Batch 2: `lib/phoenix_kit_catalogue/web/components.ex`, `lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex`, `priv/gettext/*`, and the tests above.
 
 ## Verification
 
 Each fix above was located in current code by name, with its pinning test present.
 
+- Batch fixing the open items (2026-09-15, commit c651dcc): full suite 2850 tests + 2 doctests, 0 failures; `mix precommit` clean; checked on the dev server.
+
 ## Open
 
-For Max to decide (not deferred by this triage):
-
-- **The swatch tooltip still says "Has attribute group"** where it now means an
-  attribute set (four call sites). The review suggested folding the msgid change into
-  the next gettext pass.
+None.

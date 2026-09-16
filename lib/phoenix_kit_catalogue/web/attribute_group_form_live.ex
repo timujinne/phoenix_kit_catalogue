@@ -248,6 +248,22 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
          {:ok, _} <- Catalogue.delete_attribute(attribute, actor_opts(socket)) do
       {:noreply, socket |> assign(:confirm_delete_attribute, nil) |> reload_group()}
     else
+      # Deleted in another session meanwhile: it is gone either way.
+      {:error, :not_found} ->
+        {:noreply, socket |> assign(:confirm_delete_attribute, nil) |> reload_group()}
+
+      # The user just confirmed a step that cannot be undone; a refusal must
+      # say so rather than close the modal on an attribute still there.
+      {:error, _reason} ->
+        {:noreply,
+         socket
+         |> assign(:confirm_delete_attribute, nil)
+         |> put_flash(
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete attribute.")
+         )
+         |> reload_group()}
+
       _ ->
         {:noreply, assign(socket, :confirm_delete_attribute, nil)}
     end

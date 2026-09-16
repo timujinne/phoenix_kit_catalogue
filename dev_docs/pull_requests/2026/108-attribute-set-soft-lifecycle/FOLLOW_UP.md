@@ -30,21 +30,37 @@ Decided in the post-merge review, recorded there; re-verified still as described
 - Recorded — the pruner hears every entity's data events. Only `:data_deleted` does
   work; fine at admin write volumes.
 
+## Fixed (Batch 2 — 2026-09-15, commit c651dcc)
+
+Max asked for the open items to be fixed.
+
+- ~~An archived set still offers browse facets.~~ `filter_options/2` leaves archived sets
+  out. Pinned: "an archived set is not offered as a filter"
+  (`test/catalogue/attribute_filter_test.exs`).
+- ~~Hidden values are only marked by a tooltip in the Items popup, and not at all on the
+  product card.~~ Both say "(archived)" after the label. Pinned in
+  `test/web/product_card_db_test.exs`, `test/web/attribute_sets_surfaces_test.exs` and
+  `test/web/attribute_set_items_modal_test.exs`.
+- ~~Slug uniqueness inside a set is not enforced.~~ The gap was the catalogue's own
+  `value_slug/3`, which compared a new value's slug against live values only, so it could
+  reuse an archived or trashed value's slug. It now checks those too. Entities' own editor
+  already checks candidate slugs across trashed rows (`get_by_slug/2`). No database index
+  was added: legacy rows may already share a slug, and the dedup rule still contains them.
+  Pinned: "a new value never reuses the slug of an archived value"
+  (`test/catalogue/attribute_sets_test.exs`).
+
 ## Files touched
 
 None in this pass (documentation only).
+
+Batch 2: `lib/phoenix_kit_catalogue/catalogue/attribute_sets.ex`, `lib/phoenix_kit_catalogue/web/components/product_card.ex`, `lib/phoenix_kit_catalogue/web/components/attribute_set_items_modal.ex`, `priv/gettext/*` ("%{value} (archived)", et/ru), and the tests above.
 
 ## Verification
 
 Each fix above was located in current code by name, with its pinning test present.
 
+- Batch fixing the open items (2026-09-15, commit c651dcc): full suite 2850 tests + 2 doctests, 0 failures; `mix precommit` clean; checked on the dev server.
+
 ## Open
 
-For Max to decide (not deferred by this triage):
-
-- **An archived set still offers browse facets.** `filter_options/2` reads attachments
-  without looking at the set's status. The review called this a product decision.
-- **Hidden values are only marked by a tooltip in the Items popup, and not at all on the
-  product card.** Cosmetic.
-- **Slug uniqueness inside a set is not enforced.** The dedup rule contains the damage;
-  a unique index would belong in `phoenix_kit_entities`.
+None.

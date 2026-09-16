@@ -350,6 +350,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Attributes do
             end)
           rescue
             _e in [Ecto.ConstraintError, Postgrex.Error] -> {:error, :in_use}
+            # Deleted in another session since the caller loaded it.
+            Ecto.StaleEntryError -> {:error, :not_found}
           end
         end,
         fn _ ->

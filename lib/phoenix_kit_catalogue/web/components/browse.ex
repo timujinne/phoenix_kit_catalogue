@@ -740,17 +740,19 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   def default_table_columns, do: @default_table_columns
 
   @doc """
-  Validates a host-supplied view attr — `"table" | "card"` (atoms accepted),
-  raising on anything else. Both browse surfaces call this at init; each
+  Validates a host-supplied view attr — `"table" | "comfy" | "card"` (atoms
+  accepted), raising on anything else. `"comfy"` is the item selector's own
+  third mode (the same table, larger thumbnails) — a host that doesn't offer
+  it just never passes it. Both browse surfaces call this at init; each
   passes its own default for nil.
   """
   @spec resolve_view!(term(), String.t()) :: String.t()
   def resolve_view!(nil, default), do: default
-  def resolve_view!(view, _default) when view in ["table", "card"], do: view
-  def resolve_view!(view, _default) when view in [:table, :card], do: to_string(view)
+  def resolve_view!(view, _default) when view in ["table", "comfy", "card"], do: view
+  def resolve_view!(view, _default) when view in [:table, :comfy, :card], do: to_string(view)
 
   def resolve_view!(other, _default),
-    do: raise(ArgumentError, ~s(view must be "table" or "card", got: #{inspect(other)}))
+    do: raise(ArgumentError, ~s(view must be "table", "comfy" or "card", got: #{inspect(other)}))
 
   @doc """
   Resolves the granted column list — the host contract both browse
@@ -856,6 +858,12 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   views — while the `:qty` cell (the `:qty` slot, typically a
   `qty_stepper`) is deliberately not click-bound so stepping a quantity
   can never toggle the row underneath it.
+
+  The `:thumb` cell honors a `pk-comfy` class on an ANCESTOR element (the
+  same density-toggle idiom `components.ex`'s admin tables use): wrap the
+  table in a container with that class to switch its thumbnail — and only
+  its thumbnail — to a larger size. No prop on this component itself; it's
+  a pure CSS hook, off by default.
   """
   attr(:id, :string, required: true)
   attr(:item, :map, required: true, doc: "a presented item (see present_items/2)")
@@ -943,11 +951,11 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               :if={@item.thumb_url}
               src={@item.thumb_url}
               alt=""
-              class="w-8 h-8 rounded object-cover bg-base-200"
+              class="w-8 h-8 [.pk-comfy_&]:w-16 [.pk-comfy_&]:h-16 rounded object-cover bg-base-200"
             />
             <div
               :if={!@item.thumb_url}
-              class="w-8 h-8 rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
+              class="w-8 h-8 [.pk-comfy_&]:w-16 [.pk-comfy_&]:h-16 rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
             >
               {String.first(@item.sku || @item.name || "?")}
             </div>
@@ -1025,7 +1033,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   defp cell_event(_col, %{clickable: true}), do: "card_click"
   defp cell_event(_col, _assigns), do: nil
 
-  defp row_cell_class(:thumb), do: "w-10"
+  defp row_cell_class(:thumb), do: "w-10 [.pk-comfy_&]:w-20"
   defp row_cell_class(:name), do: "w-full"
   defp row_cell_class(:breadcrumb), do: "text-right whitespace-nowrap pr-0"
   defp row_cell_class(:price), do: "text-right whitespace-nowrap"

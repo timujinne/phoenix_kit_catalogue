@@ -203,6 +203,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDeletedTabTest do
       render_click(view, "show_delete_confirm", %{"uuid" => foreign_item.uuid, "type" => "item"})
       render_click(view, "permanently_delete_item", %{})
       assert Catalogue.get_item(foreign_item.uuid)
+
+      # PR #118 release review: the Active tab's trash was still unscoped.
+      live_foreign = fixture_item(%{name: "Foreign live", catalogue_uuid: foreign.catalogue_uuid})
+      render_click(view, "delete_item", %{"uuid" => live_foreign.uuid})
+      assert Catalogue.get_item(live_foreign.uuid).status != "deleted"
     end
 
     test "bulk Delete forever leaves a live category of this catalogue alone", %{conn: conn} do
@@ -288,6 +293,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDeletedTabTest do
       assigns = :sys.get_state(view.pid).socket.assigns
       assert Enum.map(assigns.child_categories, & &1.uuid) == [shelf.uuid]
       assert assigns.child_counts[shelf.uuid] == 1
+    end
+
+    test "the Deleted tab shows the Status column even when the user's columns leave it out",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      fixture_item(%{name: "Still here", catalogue_uuid: catalogue.uuid})
+      gone = fixture_item(%{name: "Gone here", catalogue_uuid: catalogue.uuid})
+      {:ok, _} = Catalogue.trash_item(gone)
+
+      {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}")
+      render_click(view, "remove_column", %{"column_id" => "status", "scope" => "detail_items"})
+      refute has_element?(view, "#level-items-active th", "Status")
+
+      render_click(view, "switch_view", %{"mode" => "deleted"})
+      assert has_element?(view, "#level-items-active th", "Status")
     end
 
     test "a trashed item's name does not link to its edit form", %{conn: conn} do

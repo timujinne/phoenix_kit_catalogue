@@ -705,6 +705,16 @@ msgstr "Table view"
 msgid "Card view"
 msgstr "Card view"
 
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2561
+#, elixir-autogen, elixir-format
+msgid "Comfy list view"
+msgstr "Comfy list view"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2562
+#, elixir-autogen, elixir-format
+msgid "Compact list view"
+msgstr "Compact list view"
+
 #: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2385
 #: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2386
 #, elixir-autogen
@@ -1359,8 +1369,8 @@ msgstr "View old values (%{count})"
 msgid "Hand-typed metadata from before attribute groups. Kept so nothing is lost — move what matters into a group, then clear these."
 msgstr "Hand-typed metadata from before attribute groups. Kept so nothing is lost — move what matters into a group, then clear these."
 
-msgid "Has attribute group"
-msgstr "Has attribute group"
+msgid "Has attribute set"
+msgstr "Has attribute set"
 
 msgid "AI translate names & values"
 msgstr "AI translate names & values"
@@ -3061,7 +3071,6 @@ msgid "Supplier price"
 msgstr ""
 
 #: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:244
-#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2443
 #, elixir-autogen, elixir-format
 msgid "List view"
 msgstr "List view"
@@ -3457,4 +3466,10 @@ msgid "It was restored in the meantime, so it was not deleted."
 msgstr ""
 
 msgid "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+msgstr ""
+
+msgid "Failed to delete attribute."
+msgstr ""
+
+msgid "%{value} (archived)"
 msgstr ""

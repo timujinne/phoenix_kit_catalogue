@@ -70,7 +70,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
       refute without_set_row =~ "Door color"
 
       # The name-adjacent swatch indicator (presence only) is untouched.
-      assert has_element?(view, ~s|[title="Has attribute group"]|)
+      assert has_element?(view, ~s|[title="Has attribute set"]|)
     end
 
     test "an item with an attached set but no selection shows the set's name", %{conn: conn} do

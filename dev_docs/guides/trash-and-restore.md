@@ -46,6 +46,14 @@ as taken by its ancestor.
 Each restore sets the whitelisted `from_status` and removes the stamp in one
 statement.
 
+Delete Forever on a trashed category removes only the trashed part of its
+subtree and keeps a live subcategory it stops at (moved to the end of the top
+level). Rows under that subcategory which the removed categories' trash took
+would name a root that no longer exists, so they are re-stamped in the same
+transaction: a trashed category takes the root its trashed parent has (the
+topmost one becomes `via: self`), and an item in a live category becomes
+`via: self`. `from_status` is kept.
+
 ### Why a key in `data` is safe
 
 The stamp is read only on deleted rows. Every trash writes it and every restore

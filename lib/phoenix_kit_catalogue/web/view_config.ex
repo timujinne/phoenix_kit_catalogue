@@ -163,10 +163,10 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   def save_view(_user, _view), do: {:error, :no_user}
 
   @doc """
-  The user's saved item-selector choices: `%{view: "table" | "card" |
-  nil, hidden: [String.t()] | nil}`. `nil` halves mean "never chosen" —
-  the selector then uses its host attrs/defaults. Hidden entries come
-  back as the raw stored strings; the selector validates them against
+  The user's saved item-selector choices: `%{view: "table" | "comfy" |
+  "card" | nil, hidden: [String.t()] | nil}`. `nil` halves mean "never
+  chosen" — the selector then uses its host attrs/defaults. Hidden entries
+  come back as the raw stored strings; the selector validates them against
   its granted columns (a stale column name is simply ignored).
   """
   @spec load_selector(map() | nil) :: %{view: String.t() | nil, hidden: [String.t()] | nil}
@@ -181,7 +181,7 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
     hidden = stored["hidden"]
 
     %{
-      view: if(view in ["table", "card"], do: view),
+      view: if(view in ["table", "comfy", "card"], do: view),
       hidden: if(is_list(hidden) and Enum.all?(hidden, &is_binary/1), do: hidden)
     }
   end

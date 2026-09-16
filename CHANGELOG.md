@@ -1,4 +1,47 @@
-## Unreleased
+## 0.32.0 - 2026-09-15
+
+Reviews: `dev_docs/pull_requests/2026/117-item-selector-comfy-view/`,
+`118-trash-restore-deleted-tab/`, `120-open-follow-up-items/`.
+
+### Changed
+
+- **Trash and restore undo exactly what they did** (#118). Every trash
+  records in the row's `data["_trash"]` what took it; a catalogue or
+  category restore brings back only the rows its own trash took, each to
+  its earlier status, so rows trashed on their own stay trashed. Every
+  trash, restore and permanent delete runs under a per-catalogue lock.
+  Details: `dev_docs/guides/trash-and-restore.md`.
+- **The Deleted tab behaves as a trash** (#118). A trashed category is one
+  closed card that counts what its Restore brings back; Delete Forever's
+  confirmation names what is really removed; the tab searches and sorts
+  like the others; a level with nothing live opens on Deleted and still
+  offers Active.
+- A category delete says what it does and trashes its items with it by
+  default (#118).
+- Two sessions creating the same attribute value at once no longer both
+  take its slug: `create_value/3` locks the set (#120).
+
+### Fixed
+
+- **Attribute-set and supplier-field blueprints can be deleted again**
+  (#120). Their two delete guards registered from separate boot tasks and
+  one went missing, so every delete failed with `:no_delete_guard`; one
+  boot task now registers both, and the supplier-fields guard also
+  registers while entities is disabled at boot.
+- Delete Forever on a trashed category removes only its trashed part: a
+  subcategory restored on its own is kept, moves to the end of the top
+  level, and the trashed rows under it are re-stamped so its Restore
+  brings them back together (#118).
+- The catalogue page's row actions (restore, Delete Forever, trash) act
+  only on rows of that catalogue (#118).
+- An importer update that moves an item's catalogue away from its
+  category is refused (#120).
+- `CatalogueBrowse` renders `view: "comfy"` as the table instead of
+  rendering nothing (#117 review).
+- The product card marks only hidden values "(archived)", not a live value
+  that shares a hidden value's key (#120).
+- Save & Exit on the category form opens the saved category, and Cancel
+  returns to its level (#118).
 
 ### Added
 
@@ -18,6 +61,11 @@
   featured-image thumbnail next to its name, the same way the picker's
   own selected-item slot already does; an item without a photo renders
   unchanged, with no layout gap.
+- **Item selector: a third "comfy" view mode.** Alongside the compact
+  table and the photo-forward card grid, the item selector's view toggle
+  now offers "comfy" — the same table and columns, just a larger
+  thumbnail, for browsing by photo without the card grid's layout cost.
+  The choice persists per user the same way "table"/"card" already did.
 
 ## 0.31.3 - 2026-09-14
 

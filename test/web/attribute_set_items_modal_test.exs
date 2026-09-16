@@ -10,6 +10,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
+  alias PhoenixKitCatalogue.Test.Repo
 
   if Code.ensure_loaded?(PhoenixKitEntities.Managed) do
     setup %{conn: conn, scope: scope} do
@@ -158,6 +159,13 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
                "##{modal_id(set)}-item-#{item.uuid} .badge-outline",
                "Retired Red"
              )
+
+      # And it says so in words, not only by the badge's style.
+      assert has_element?(
+               view,
+               "##{modal_id(set)}-item-#{item.uuid} .badge-ghost",
+               "Retired Red (archived)"
+             )
     end
 
     test "a broken set contract degrades labels instead of blanking every chip", %{conn: conn} do
@@ -236,8 +244,16 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       {:ok, _} = PhoenixKitEntities.EntityData.trash(old)
 
-      {:ok, live_value} =
-        Catalogue.create_attribute_set_value(set, %{label: "New Red", slug: "punane"})
+      {:ok, live_value} = Catalogue.create_attribute_set_value(set, %{label: "New Red"})
+
+      # New values no longer reuse a hidden value's slug; legacy rows and
+      # writes that bypass this module still can, so force the collision.
+      Repo.query!(
+        "UPDATE phoenix_kit_entity_data SET slug = $1 WHERE uuid = $2::text::uuid",
+        ["punane", live_value.uuid]
+      )
+
+      live_value = %{live_value | slug: "punane"}
 
       assert old.slug == live_value.slug
 

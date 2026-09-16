@@ -328,4 +328,16 @@ defmodule PhoenixKitCatalogue.AttributesTest do
       assert Catalogue.attribute_counts([]) == %{}
     end
   end
+
+  test "delete_attribute on an attribute another session already removed returns :not_found" do
+    # The attribute editor confirms against the group it loaded; a stale
+    # struct used to raise Ecto.StaleEntryError and crash the page.
+    {:ok, group} =
+      Catalogue.create_attribute_group(%{name: "Stale #{System.unique_integer([:positive])}"})
+
+    {:ok, attribute} = Catalogue.create_attribute(group, %{"name" => "Color"})
+    {:ok, _} = Catalogue.delete_attribute(attribute)
+
+    assert {:error, :not_found} = Catalogue.delete_attribute(attribute)
+  end
 end

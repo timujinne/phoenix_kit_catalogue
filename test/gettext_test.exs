@@ -775,6 +775,28 @@ defmodule PhoenixKitCatalogue.GettextTest do
     end
   end
 
+  describe "item selector comfy-mode view toggle strings are present in every locale" do
+    # The third view_toggle mode (PR #117, comfy density) replaced the old
+    # "List view" label on this toggle with two new ones. item_selector_modal.ex
+    # already uses the macro gettext form, so `mix gettext.extract` alone could
+    # see these two — but a project-wide extract/merge is still off limits (see
+    # AGENTS.md: almost every other string here uses the runtime form, which a
+    # merge would wipe), so these were added by hand like the rest.
+    test "Comfy list view" do
+      msgid = "Comfy list view"
+      assert po_msgstr("en", msgid) == msgid
+      assert gettext_in("et", msgid) == "Mugav loend"
+      assert gettext_in("ru", msgid) == "Комфортный список"
+    end
+
+    test "Compact list view" do
+      msgid = "Compact list view"
+      assert po_msgstr("en", msgid) == msgid
+      assert gettext_in("et", msgid) == "Kompaktne loend"
+      assert gettext_in("ru", msgid) == "Компактный список"
+    end
+  end
+
   # Block 1, Task 3: the item/category forms' per-language slug input and
   # translatable seo_title/seo_description labels/placeholder.
   describe "slug + SEO form strings are present in every locale" do
@@ -872,6 +894,36 @@ defmodule PhoenixKitCatalogue.GettextTest do
 
     assert Gettext.gettext(PhoenixKitCatalogue.Gettext, moved) ==
              "Kataloog muutus toimingu ajal. Palun proovige uuesti."
+  after
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
+
+  test "the attribute-set follow-up strings are translated in ru and et" do
+    # Added by hand to the .pot and every locale (2026-09-15 follow-ups of
+    # PRs #108, #109 and #113).
+    archived = "%{value} (archived)"
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, archived, value: "Gold") ==
+             "Gold (в архиве)"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute set") ==
+             "Есть набор атрибутов"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete attribute.") ==
+             "Не удалось удалить атрибут."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, archived, value: "Gold") ==
+             "Gold (arhiveeritud)"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute set") ==
+             "Atribuudikomplektiga"
+
+    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete attribute.") ==
+             "Atribuudi kustutamine ebaõnnestus."
   after
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
   end

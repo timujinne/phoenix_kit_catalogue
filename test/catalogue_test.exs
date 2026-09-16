@@ -4906,6 +4906,24 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
   end
 
   describe "an item's catalogue stays in step with its category" do
+    test "a skip_derive update that moves an item's catalogue away from its category is refused" do
+      # The category is unchanged, so only the catalogue change can catch it
+      # (codex review, 2026-09-15).
+      {:ok, home} = Catalogue.create_catalogue(%{name: "Drift home"})
+      {:ok, away} = Catalogue.create_catalogue(%{name: "Drift away"})
+
+      {:ok, category} =
+        Catalogue.create_category(%{name: "Home shelf", catalogue_uuid: home.uuid})
+
+      {:ok, item} = Catalogue.create_item(%{name: "Stays put", category_uuid: category.uuid})
+
+      assert {:error, changeset} =
+               Catalogue.update_item(item, %{catalogue_uuid: away.uuid}, skip_derive: true)
+
+      assert {"belongs to another catalogue", _} = changeset.errors[:category_uuid]
+      assert Catalogue.get_item(item.uuid).catalogue_uuid == home.uuid
+    end
+
     test "a skip_derive write into a category of another catalogue is refused" do
       # What an import writes when its target category was moved to another
       # catalogue while the import ran.

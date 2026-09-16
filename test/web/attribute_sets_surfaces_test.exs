@@ -414,7 +414,11 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         # The bug this replaces: filtering the label only against active
         # `values` found nothing for a hidden selection, so the WHOLE row
         # ("Retired colors") silently disappeared from the card.
-        assert {"Retired colors", "Retired Red"} in ProductCard.build_fields(item, "en")
+        # Kept, and marked: the card says the value is archived (2026-09-15).
+        assert {"Retired colors", "Retired Red (archived)"} in ProductCard.build_fields(
+                 item,
+                 "en"
+               )
       end
     end
 

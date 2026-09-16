@@ -36,3 +36,17 @@
 - No broken boundary. Weakly tested: the JS clear listener (LiveView tests stop at the push), the `outside_trashed_categories` option at the context level, and ecommerce's Shopify sync, which now gets a changeset error if a target category is trashed mid-sync.
 - The listener cannot affect other modules' pages in practice: no other module or core pushes or handles `bulk_select:clear`, and core's clear is client-only.
 - `item_counts_by_catalogue/1` had no options upstream, so no sibling loses a mode; no sibling calls the changed restore/trash functions or `search_items(trashed: true)`.
+
+## Release review (2026-09-15) — the fix batches
+
+One agent reviewed what Batches 1–3 (`bbd0aed`, `12cdb8c`, `c651dcc`, with `b6b3d82`'s later changes) added to `lib/`; each finding was re-checked against HEAD.
+
+- **IMPROVEMENT - MEDIUM** — Delete Forever on a trashed category left trash stamps pointing at a root that no longer exists.
+  - Scenario: trash A, which stamps child B, grandchild C and their items with root A. Restore only B. Delete Forever A keeps live B and its subtree, but C and the items under B stay stamped root A.
+  - Result: C's card counted 0, C's Restore brought back C without its items, and a catalogue restore skipped them too, because of the foreign stamp.
+  - Before Batch 1 these rows were destroyed along with A.
+- **IMPROVEMENT - MEDIUM** — the Active tab's `delete_item` event still looked the item up by the client's uuid alone. Batch 1 scoped only restore and Delete Forever. A forged event could trash an item of another catalogue (reversible, but the same class as Agent #1's finding).
+- **NITPICK** — a kept live subcategory moved to the top level kept its old position, which can tie with the existing top-level rows.
+- **NITPICK** — the bulk Delete Forever confirmation still says "everything in them will be permanently deleted"; neither confirmation mentions that a live subcategory is kept and moved.
+- **NITPICK** — `drop_from_search` lowers `search_offset`, so an in-flight `:search_page` reply is discarded with `search_loading` still true. It heals on the restore's own broadcast, which re-runs the search.
+- Checked and fine: `only_trashed` re-checked under the lock, the trashed-part walk reads statuses after `lock_categories!`, `permanent_delete_scope/1` matches the delete, `card_restore_counts` mirrors `do_restore_category`, the tab rule, trash search and sort, the item write's reused `FOR SHARE` facts, and `ancestors_first/1` under the lock.

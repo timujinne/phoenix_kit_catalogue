@@ -2404,7 +2404,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           <span
             :if={Map.has_key?(@attribute_map, item.uuid)}
             class="shrink-0"
-            title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute group")}
+            title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute set")}
           >
             <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
           </span>
@@ -2646,7 +2646,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <span
         :if={assigns[:has_attributes]}
         class="inline-block ml-1.5 align-[-2px]"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute group")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute set")}
       >
         <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
       </span>
@@ -2938,7 +2938,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <span
         :if={assigns[:has_attributes]}
         class="inline-block ml-1.5 align-[-2px]"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute group")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Has attribute set")}
       >
         <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
       </span>

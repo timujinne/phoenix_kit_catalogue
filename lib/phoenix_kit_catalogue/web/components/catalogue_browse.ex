@@ -17,7 +17,10 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
   Two presentations over the same fetch, exactly like the modal:
   `view: "card"` (the default here — existing embeds keep their grid) and
   `view: "table"`, the admin-look list. A toggle beside the search box
-  switches them; the attr only sets the starting view.
+  switches them; the attr only sets the starting view. `view: "comfy"`
+  (the modal's third mode — the same table with larger thumbnails) is
+  accepted and rendered too, since `Browse.resolve_view!/2` lets it
+  through; this surface's toggle just doesn't offer it.
 
   `columns` is the same host contract the modal enforces
   (`Browse.table_columns/0`, unknown entries raise) and it is a GRANT:
@@ -183,7 +186,8 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
     {:noreply, socket |> assign(browse: browse) |> run_fetch(effect)}
   end
 
-  def handle_event("set_view", %{"mode" => mode}, socket) when mode in ["table", "card"] do
+  def handle_event("set_view", %{"mode" => mode}, socket)
+      when mode in ["table", "comfy", "card"] do
     {:noreply, assign(socket, :view, mode)}
   end
 
@@ -277,26 +281,30 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
         <% end %>
       </.item_grid>
 
-      <.item_table
-        :if={@view == "table" and (@browse.items != [] or @browse.loading?)}
-        id={"#{@id}-table"}
-        columns={@visible_columns}
-      >
-        <%= if @browse.loading? and @browse.items == [] do %>
-          <tr :for={i <- 1..5} id={"#{@id}-row-skeleton-#{i}"}>
-            <td colspan={length(@visible_columns)}><div class="skeleton h-8 w-full"></div></td>
-          </tr>
-        <% end %>
-        <%= for item <- @browse.items do %>
-          <.item_row
-            id={"#{@id}-row-#{item.uuid}"}
-            item={item}
-            columns={@visible_columns}
-            clickable={@on_item_click}
-            target={@myself}
-          />
-        <% end %>
-      </.item_table>
+      <%!-- "comfy" is the table with `pk-comfy` on an ancestor, which
+      `Browse.item_row/1`'s thumb reacts to — the same as the modal. --%>
+      <div :if={@view in ["table", "comfy"]} class={@view == "comfy" && "pk-comfy"}>
+        <.item_table
+          :if={@browse.items != [] or @browse.loading?}
+          id={"#{@id}-table"}
+          columns={@visible_columns}
+        >
+          <%= if @browse.loading? and @browse.items == [] do %>
+            <tr :for={i <- 1..5} id={"#{@id}-row-skeleton-#{i}"}>
+              <td colspan={length(@visible_columns)}><div class="skeleton h-8 w-full"></div></td>
+            </tr>
+          <% end %>
+          <%= for item <- @browse.items do %>
+            <.item_row
+              id={"#{@id}-row-#{item.uuid}"}
+              item={item}
+              columns={@visible_columns}
+              clickable={@on_item_click}
+              target={@myself}
+            />
+          <% end %>
+        </.item_table>
+      </div>
 
       <div :if={@browse.items == [] and not @browse.loading?} class="text-center py-12">
         <div class="text-4xl mb-3 opacity-40">🔍</div>

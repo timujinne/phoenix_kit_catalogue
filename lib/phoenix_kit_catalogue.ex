@@ -133,22 +133,21 @@ defmodule PhoenixKitCatalogue do
 
   @impl PhoenixKit.Module
   def children do
-    # Registers the attribute-set deletion guard with entities at boot
-    # (a set with item attachments cannot be deleted; temporary task —
-    # runs once, exits), plus the PubSub subscriber that prunes item
-    # attachments when a set blueprint is deleted out-of-band.
-    #
-    # SupplierFields registers its own guard under its own owner key —
-    # its blueprint is NOT an attribute set and must not land in either
-    # of the set registries above.
+    # DeleteGuards registers both entities delete guards at boot — the
+    # attribute sets' (a set with item attachments cannot be deleted) and
+    # the supplier fields' under its own owner key — one after the other
+    # from one temporary task: registered from two tasks they raced, and
+    # one guard went missing. AttributeSets runs its legacy migration and
+    # backfill once per boot; OrphanPruner prunes item attachments when a
+    # set blueprint is deleted out-of-band.
     #
     # TranslationSweepWorker seeds its own self-rescheduling chain
     # (`ensure_scheduled/0`) the same way — a temporary boot task, not a
     # long-lived process.
     [
+      PhoenixKitCatalogue.Catalogue.DeleteGuards,
       PhoenixKitCatalogue.Catalogue.AttributeSets,
       PhoenixKitCatalogue.Catalogue.AttributeSets.OrphanPruner,
-      PhoenixKitCatalogue.Catalogue.SupplierFields,
       PhoenixKitCatalogue.Workers.TranslationSweepWorker
     ]
   end

@@ -217,10 +217,10 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
 
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
       assert Map.has_key?(assigns(view).attribute_map, item.uuid)
-      assert render(view) =~ "Has attribute group"
+      assert render(view) =~ "Has attribute set"
 
       {:ok, :cleared} = Catalogue.set_item_attribute_group(item, nil)
-      refute render(view) =~ "Has attribute group"
+      refute render(view) =~ "Has attribute set"
       refute Map.has_key?(assigns(view).attribute_map, item.uuid)
     end
 
@@ -237,10 +237,10 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
 
         {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?mode=items")
         assert Map.has_key?(assigns(view).attribute_map, item.uuid)
-        assert render(view) =~ "Has attribute group"
+        assert render(view) =~ "Has attribute set"
 
         :ok = Catalogue.detach_attribute_set(item.uuid, set.uuid)
-        refute render(view) =~ "Has attribute group"
+        refute render(view) =~ "Has attribute set"
         refute Map.has_key?(assigns(view).attribute_map, item.uuid)
       end
     else

@@ -45,6 +45,44 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashEdgesTest do
       assert Catalogue.get_item(in_child.uuid)
     end
 
+    # PR #118 release review: the rows under a kept subcategory that the
+    # removed category's trash took still named it as their root, so no
+    # Restore brought them back together.
+    test "rows under a kept subcategory get a trash root that still exists" do
+      cat = fixture_catalogue(%{name: "Restamp"})
+      sibling = fixture_category(cat, %{name: "Sibling"})
+      parent = fixture_category(cat, %{name: "Parent"})
+      child = fixture_category(cat, %{name: "Child", parent_uuid: parent.uuid})
+      grandchild = fixture_category(cat, %{name: "Grandchild", parent_uuid: child.uuid})
+      great = fixture_category(cat, %{name: "Great", parent_uuid: grandchild.uuid})
+      in_child = fixture_item(%{name: "In child", category_uuid: child.uuid})
+      in_grandchild = fixture_item(%{name: "In grandchild", category_uuid: grandchild.uuid})
+      in_great = fixture_item(%{name: "In great", category_uuid: great.uuid})
+
+      {:ok, _} = Catalogue.trash_category(parent, items: :cascade)
+      {:ok, _} = Catalogue.restore_category(fresh_category(child.uuid))
+      {:ok, _} = Catalogue.permanently_delete_category(fresh_category(parent.uuid))
+
+      assert fresh_category(child.uuid).position > fresh_category(sibling.uuid).position
+
+      # An item left in the live subcategory is trashed on its own now.
+      stamp = Repo.get!(Item, in_child.uuid).data["_trash"]
+      assert %{"via" => "self", "from_status" => _} = stamp
+      assert stamp["root"] == in_child.uuid
+
+      # The topmost trashed category below it owns what the trash took.
+      assert %{"via" => "self"} = fresh_category(grandchild.uuid).data["_trash"]
+      assert fresh_category(great.uuid).data["_trash"]["root"] == grandchild.uuid
+
+      {:ok, _} = Catalogue.restore_category(fresh_category(grandchild.uuid))
+
+      assert fresh_category(grandchild.uuid).status != "deleted"
+      assert fresh_category(great.uuid).status != "deleted"
+      assert Catalogue.get_item(in_grandchild.uuid).status != "deleted"
+      assert Catalogue.get_item(in_great.uuid).status != "deleted"
+      assert Catalogue.get_item(in_child.uuid).status == "deleted"
+    end
+
     test "a live category still takes its whole subtree" do
       cat = fixture_catalogue(%{name: "Whole"})
       parent = fixture_category(cat, %{name: "Parent"})

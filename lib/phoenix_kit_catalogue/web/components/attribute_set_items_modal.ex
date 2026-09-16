@@ -277,7 +277,12 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
                         do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived value")
                     }
                   >
-                    {v.label}
+                    {if v.hidden?,
+                      do:
+                        Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{value} (archived)",
+                          value: v.label
+                        ),
+                      else: v.label}
                   </span>
                 </div>
               </div>

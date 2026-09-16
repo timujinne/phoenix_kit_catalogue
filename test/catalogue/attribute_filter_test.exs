@@ -347,6 +347,19 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       assert Enum.sort(Enum.map(colour.values, & &1.title)) == ["Blue", "Red"]
     end
 
+    test "an archived set is not offered as a filter", ctx do
+      wood =
+        ctx.catalogue.uuid
+        |> Catalogue.attribute_filter_options()
+        |> Enum.find(&(&1.name == "Wood"))
+
+      {:ok, _} =
+        AttributeSets.archive_set(AttributeSets.get_set(wood.uuid))
+
+      assert ctx.catalogue.uuid |> Catalogue.attribute_filter_options() |> Enum.map(& &1.name) ==
+               ["Colour"]
+    end
+
     test "a categories-type search hides the item-level filter", ctx do
       # The filter narrows items; a categories-only result list cannot
       # show its effect, so offering it there is a control that lies.

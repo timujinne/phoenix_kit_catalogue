@@ -149,12 +149,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   ## Views and columns
 
-  Two presentations over the same fetch: `view: "table"` (the default — a
-  compact admin-look list) and `view: "card"` (the photo-forward grid). A
-  toggle beside the search box switches them; the host attr only sets the
-  STARTING view — like `scope`, it is read at init and not refreshed by
-  later parent renders — and a user's own toggle wins over it on the next
-  open when `current_user` is passed (see Per-user persistence).
+  Three presentations over the same fetch: `view: "table"` (the default —
+  a compact admin-look list), `view: "comfy"` (the same table with a
+  larger, more recognizable thumbnail column — same columns contract,
+  same rows, just roomier photos), and `view: "card"` (the photo-forward
+  grid). A toggle beside the search box switches them; the host attr only
+  sets the STARTING view — like `scope`, it is read at init and not
+  refreshed by later parent renders — and a user's own toggle wins over it
+  on the next open when `current_user` is passed (see Per-user
+  persistence).
 
   Table columns are a host contract, because the popup can be
   client-facing: pass `columns` as a non-empty list from
@@ -1233,11 +1236,18 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         </div>
         <%!-- The id lives on a wrapper: core's table_default drops :id
         in its classic (no items) mode. --%>
-        <div :if={@view == "table"} id={"#{@id}-table"}>
+        <div
+          :if={@view in ["table", "comfy"]}
+          id={"#{@id}-table"}
+          class={@view == "comfy" && "pk-comfy"}
+        >
           <.table_default size="sm" wrapper_class="overflow-x-auto shadow-none rounded-none">
             <.table_default_header>
               <.table_default_row>
-                <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1">
+                <.table_default_header_cell
+                  :if={@photo_col?}
+                  class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
+                >
                 </.table_default_header_cell>
                 <.table_default_header_cell>{gettext("Name")}</.table_default_header_cell>
                 <Shared.category_header_cells columns={@columns} />
@@ -1248,7 +1258,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                 <%!-- The image enters the level exactly like the name
                 (Max, 2026-08-31: "image and title... should be
                 clickable to enter them"). --%>
-                <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1">
+                <.table_default_cell
+                  :if={@photo_col?}
+                  class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
+                >
                   <button
                     type="button"
                     phx-click={@tile_event}
@@ -1287,7 +1300,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                 />
               </.table_default_row>
               <.table_default_row :if={@uncat?}>
-                <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1">
+                <.table_default_cell
+                  :if={@photo_col?}
+                  class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
+                >
                   <button
                     type="button"
                     phx-click="browse_category"
@@ -1683,7 +1699,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # ── Events: browsing ─────────────────────────────────────────────────
 
   @impl true
-  def handle_event("set_view", %{"mode" => mode}, socket) when mode in ["table", "card"] do
+  def handle_event("set_view", %{"mode" => mode}, socket)
+      when mode in ["table", "comfy", "card"] do
     {:noreply, socket |> assign(:view, mode) |> persist_selector(%{view: mode})}
   end
 
@@ -2531,7 +2548,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
               </button>
             </div>
             <.column_toggle
-              :if={@view == "table"}
+              :if={@view in ["table", "comfy"]}
               id={"#{@id}-column-toggle"}
               columns={@columns -- locked_columns(assigns)}
               visible={@visible_columns}
@@ -2540,8 +2557,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
             <.view_toggle
               id={"#{@id}-view-toggle"}
               modes={[
-                %{mode: "table", icon: "hero-bars-3", label: gettext("List view")},
-                %{mode: "card", icon: "hero-squares-2x2", label: gettext("Card view")}
+                %{mode: "card", icon: "hero-squares-2x2", label: gettext("Card view")},
+                %{mode: "comfy", icon: "hero-bars-3", label: gettext("Comfy list view")},
+                %{mode: "table", icon: "hero-bars-4", label: gettext("Compact list view")}
               ]}
               current={@view}
               target={@myself}
@@ -2680,62 +2698,72 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
               <% end %>
             </.item_grid>
 
-            <.item_table
-              :if={@view == "table" and (@browse.items != [] or @browse.loading?)}
-              id={"#{@id}-table"}
-              columns={@eff_columns}
-              checkbox={@cbx}
-            >
-              <%= if @browse.loading? and @browse.items == [] do %>
-                <tr :for={i <- 1..5} id={"#{@id}-row-skeleton-#{i}"}>
-                  <td colspan={length(@eff_columns) + if(@cbx, do: 1, else: 0)}>
-                    <div class="skeleton h-8 w-full"></div>
-                  </td>
-                </tr>
-              <% end %>
-              <%= for item <- @browse.items do %>
-                <.item_row
-                  id={"#{@id}-row-#{item.uuid}"}
-                  item={item}
-                  columns={@eff_columns}
-                  selected={Map.has_key?(@selection, item.uuid)}
-                  clickable={@selection_mode != "quantity"}
-                  checkbox={@cbx}
-                  selected_icon={@selection_mode != "quantity"}
-                  thumb_click={if(@show_item_details, do: "show_detail")}
-                  target={@myself}
-                >
-                  <:qty>
-                    <.qty_stepper
-                      :if={stepper?(assigns, item.uuid)}
-                      id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
-                      uuid={item.uuid}
-                      qty={qty_display_or_zero(assigns, item.uuid)}
-                      unit={if(@qty_precision > 0, do: item.unit)}
-                      precision={@qty_precision}
-                      min={@qmin}
-                      max={@qmax}
-                      select_floor={@qfloor}
-                      zero_deselects={@qzero_desel}
-                      target={@myself}
-                      size="xs"
-                    />
-                    <%!-- Click flavour, no inline_qty: the checkmark is the
-                    selected signal; the picked amount shows read-only and
-                    is edited in the tray or via the details popup. --%>
-                    <span
-                      :if={
-                        not stepper?(assigns, item.uuid) and
-                          Map.has_key?(@selection, item.uuid)
-                      }
-                      class="tabular-nums"
-                    >
-                      {qty_display(assigns, item.uuid)}
-                    </span>
-                  </:qty>
-                </.item_row>
-              <% end %>
-            </.item_table>
+            <%!--
+            "comfy" is the same table/rows as "table" — same columns
+            contract, same click/qty wiring — just a bigger thumbnail
+            column. `pk-comfy` on the wrapper is the same density-toggle
+            idiom the admin catalogue tables already use (`components.ex`
+            `[.pk-comfy_&]:…` classes): it needs no server-side branching
+            of its own here, only a class on an ancestor.
+            --%>
+            <div :if={@view in ["table", "comfy"]} class={@view == "comfy" && "pk-comfy"}>
+              <.item_table
+                :if={@browse.items != [] or @browse.loading?}
+                id={"#{@id}-table"}
+                columns={@eff_columns}
+                checkbox={@cbx}
+              >
+                <%= if @browse.loading? and @browse.items == [] do %>
+                  <tr :for={i <- 1..5} id={"#{@id}-row-skeleton-#{i}"}>
+                    <td colspan={length(@eff_columns) + if(@cbx, do: 1, else: 0)}>
+                      <div class="skeleton h-8 w-full"></div>
+                    </td>
+                  </tr>
+                <% end %>
+                <%= for item <- @browse.items do %>
+                  <.item_row
+                    id={"#{@id}-row-#{item.uuid}"}
+                    item={item}
+                    columns={@eff_columns}
+                    selected={Map.has_key?(@selection, item.uuid)}
+                    clickable={@selection_mode != "quantity"}
+                    checkbox={@cbx}
+                    selected_icon={@selection_mode != "quantity"}
+                    thumb_click={if(@show_item_details, do: "show_detail")}
+                    target={@myself}
+                  >
+                    <:qty>
+                      <.qty_stepper
+                        :if={stepper?(assigns, item.uuid)}
+                        id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
+                        uuid={item.uuid}
+                        qty={qty_display_or_zero(assigns, item.uuid)}
+                        unit={if(@qty_precision > 0, do: item.unit)}
+                        precision={@qty_precision}
+                        min={@qmin}
+                        max={@qmax}
+                        select_floor={@qfloor}
+                        zero_deselects={@qzero_desel}
+                        target={@myself}
+                        size="xs"
+                      />
+                      <%!-- Click flavour, no inline_qty: the checkmark is the
+                      selected signal; the picked amount shows read-only and
+                      is edited in the tray or via the details popup. --%>
+                      <span
+                        :if={
+                          not stepper?(assigns, item.uuid) and
+                            Map.has_key?(@selection, item.uuid)
+                        }
+                        class="tabular-nums"
+                      >
+                        {qty_display(assigns, item.uuid)}
+                      </span>
+                    </:qty>
+                  </.item_row>
+                <% end %>
+              </.item_table>
+            </div>
 
             <div
               :if={

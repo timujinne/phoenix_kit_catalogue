@@ -28,6 +28,7 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
 
   require Logger
 
+  alias PhoenixKit.Utils.Number
   alias PhoenixKitAI.Components.AITranslate.FormGlue
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Extensions
@@ -69,6 +70,30 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
   @spec trim_param(term()) :: String.t()
   def trim_param(value) when is_binary(value), do: String.trim(value)
   def trim_param(_), do: ""
+
+  @doc """
+  Rewrites the given keys of a `"validate"`/`"save"` params map from
+  free-decimal text ("2,5") to the normalized dot form ("2.5") that an
+  `Ecto.Changeset` `:decimal` field cast already understands — pairs
+  with `<.decimal_input>` fields whose changeset just does `cast/3` on
+  the raw param.
+
+  A key that is absent, blank, or fails to parse is left untouched, so
+  the changeset's own cast produces its usual `:empty`/invalid-value
+  behavior — this only widens what counts as valid text, it does not
+  change what blank or garbage does.
+  """
+  @spec normalize_decimal_params(map(), [String.t()]) :: map()
+  def normalize_decimal_params(params, keys) do
+    Enum.reduce(keys, params, fn key, acc ->
+      with {:ok, raw} <- Map.fetch(acc, key),
+           {:ok, decimal} <- Number.parse_decimal(raw) do
+        Map.put(acc, key, Number.format_decimal(decimal))
+      else
+        _ -> acc
+      end
+    end)
+  end
 
   @doc """
   On create there is no row to splice owned keys into, so the incoming

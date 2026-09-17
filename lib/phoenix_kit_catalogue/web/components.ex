@@ -86,6 +86,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   require Logger
 
+  import PhoenixKitWeb.Components.Core.DecimalInput, only: [decimal_input: 1]
   import PhoenixKitWeb.Components.Core.DraggableList, only: [draggable_list: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
@@ -2067,12 +2068,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <span :if={@kind_label} class="badge badge-outline badge-xs">{@kind_label}</span>
       </label>
       <div class="flex items-center gap-2 shrink-0">
-        <input
-          type="number"
-          class="input input-sm w-24"
+        <.decimal_input
+          class="input-sm w-24"
           value={@rule_value}
-          step="0.0001"
-          min="0"
           disabled={not @checked?}
           placeholder={@default_placeholder}
           phx-blur={@on_set_value}

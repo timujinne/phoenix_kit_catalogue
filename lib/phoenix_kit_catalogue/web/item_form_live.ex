@@ -8,6 +8,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   require Logger
 
   import PhoenixKitWeb.Components.MultilangForm
+  import PhoenixKitWeb.Components.Core.DecimalInput, only: [decimal_input: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
@@ -42,7 +43,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       actor_opts: 1,
       assign_ai_translation: 3,
       ai_translate_config: 1,
-      data_owned_keys: 2
+      data_owned_keys: 2,
+      normalize_decimal_params: 2
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -54,6 +56,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Users.Auth.User
   alias PhoenixKit.Utils.Multilang
+  alias PhoenixKit.Utils.Number
   alias PhoenixKit.Utils.Routes
   alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
@@ -110,6 +113,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   @compile {:no_warn_undefined, PhoenixKitCRM.Paths}
 
   @translatable_fields ["name", "description", "seo_title", "seo_description"]
+
+  # Free-decimal `<.decimal_input>` fields: "2,5" reaches the changeset's
+  # `:decimal` cast as "2.5" — see `Web.Helpers.normalize_decimal_params/2`.
+  @decimal_fields ~w(base_price markup_percentage discount_percentage default_value)
+
   @preserve_fields %{
     # Translatable primaries: submitted only on the primary tab, so a
     # secondary-tab validate/save must re-inject them or :new loses them.
@@ -658,7 +666,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       |> absorb_meta_params(params)
       |> absorb_attribute_selection(params)
 
-    item_params = Map.get(params, "item", %{})
+    item_params =
+      params
+      |> Map.get("item", %{})
+      |> normalize_decimal_params(@decimal_fields)
 
     item_params =
       merge_translatable_params(item_params, socket, @translatable_fields,
@@ -685,7 +696,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       |> absorb_meta_params(params)
       |> absorb_attribute_selection(params)
 
-    item_params = Map.get(params, "item", %{})
+    item_params =
+      params
+      |> Map.get("item", %{})
+      |> normalize_decimal_params(@decimal_fields)
 
     item_params =
       item_params
@@ -1637,6 +1651,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp require_supplier(_uuid), do: :ok
 
   defp supplier_column_attrs(draft) do
+    # `min_order_qty` is a free-decimal `<.decimal_input>`: normalize a
+    # typed "2,5" to "2.5" before it reaches the schema's `:decimal`
+    # cast. `lead_time_days` stays untouched — it's a whole-number field.
+    draft = normalize_decimal_params(draft, ["min_order_qty"])
+
     ~w(supplier_sku unit_cost currency lead_time_days min_order_qty)
     |> Map.new(&{&1, Map.get(draft, &1)})
     |> Map.update!("currency", &normalize_currency/1)
@@ -2220,14 +2239,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # Accepts the blur-event string, returns a Decimal or nil (for blank /
   # unparseable). Lets the user clear the field to revert to "inherit
   # from item default".
-  defp parse_decimal_or_nil(""), do: nil
-  defp parse_decimal_or_nil(nil), do: nil
-
-  defp parse_decimal_or_nil(s) when is_binary(s) do
-    case Decimal.parse(s) do
-      {decimal, ""} -> decimal
-      {decimal, _rest} -> decimal
-      :error -> nil
+  defp parse_decimal_or_nil(s) do
+    case Number.parse_decimal(s) do
+      {:ok, decimal} -> decimal
+      {:error, _reason} -> nil
     end
   end
 
@@ -2960,12 +2975,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., KF-001")}
                 />
                 <div class="fieldset">
-                  <.input
+                  <.decimal_input
                     field={@form[:base_price]}
-                    type="number"
                     label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base Price")}
-                    step="0.01"
-                    min="0"
                     placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "0.00")}
                   />
                   <span class="fieldset-label text-base-content/50 mt-1">
@@ -3001,12 +3013,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   />
                 </div>
                 <div class="fieldset">
-                  <.input
+                  <.decimal_input
                     field={@form[:markup_percentage]}
-                    type="number"
                     label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup Override (%)")}
-                    step="0.01"
-                    min="0"
                     placeholder={
                       if @catalogue_markup,
                         do:
@@ -3024,13 +3033,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   </span>
                 </div>
                 <div class="fieldset">
-                  <.input
+                  <.decimal_input
                     field={@form[:discount_percentage]}
-                    type="number"
                     label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discount Override (%)")}
-                    step="0.01"
-                    min="0"
-                    max="100"
                     placeholder={
                       if @catalogue_discount,
                         do:
@@ -3066,12 +3071,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="fieldset">
-                  <.input
+                  <.decimal_input
                     field={@form[:default_value]}
-                    type="number"
                     label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Default Value")}
-                    step="0.0001"
-                    min="0"
                     placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., 5")}
                   />
                   <span class="fieldset-label text-base-content/50 mt-1">
@@ -4003,13 +4005,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               <.label for="supplier-moq" class="block mb-2">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Min. Order Qty")}
               </.label>
-              <.input
-                type="number"
+              <.decimal_input
                 id="supplier-moq"
                 name="supplier_info[min_order_qty]"
                 value={@supplier_form.draft["min_order_qty"]}
-                step="0.0001"
-                min="0"
                 class="w-full"
               />
             </div>

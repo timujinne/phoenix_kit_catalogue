@@ -222,6 +222,111 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     end
   end
 
+  describe "pick order and unit labels (2026-09-16)" do
+    test "picks reach the host in the order they were selected, not by name", %{
+      conn: conn,
+      cat: cat,
+      screw: screw,
+      paint: paint
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      # "White Paint" first, "M8 Screw" second — alphabetical would flip them.
+      view |> picker() |> render_click("card_click", %{"uuid" => paint.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
+
+      tray = view |> picker() |> render_click("toggle_tray", %{})
+      {paint_at, _} = :binary.match(tray, "picker-tray-#{paint.uuid}")
+      {screw_at, _} = :binary.match(tray, "picker-tray-#{screw.uuid}")
+      assert paint_at < screw_at
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      {paint_at, _} = :binary.match(html, "pick-#{paint.uuid}")
+      {screw_at, _} = :binary.match(html, "pick-#{screw.uuid}")
+      assert paint_at < screw_at
+    end
+
+    test "a live refresh while two items are picked keeps the pick order", %{
+      conn: conn,
+      cat: cat,
+      screw: screw,
+      paint: paint
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      view |> picker() |> render_click("card_click", %{"uuid" => paint.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
+
+      # Someone else edits a picked item: the relay re-hydrates the
+      # selection from the catalogue — the order must survive that.
+      {:ok, _} = Catalogue.update_item(screw, %{name: "M8 Screw Renamed"})
+      eventually(fn -> render(view) =~ "M8 Screw Renamed" end)
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      {paint_at, _} = :binary.match(html, "pick-#{paint.uuid}")
+      {screw_at, _} = :binary.match(html, "pick-#{screw.uuid}")
+      assert paint_at < screw_at
+    end
+
+    test "preselects come first; a re-picked item goes last", %{
+      conn: conn,
+      cat: cat,
+      screw: screw,
+      paint: paint
+    } do
+      {:ok, glue} =
+        Catalogue.create_item(%{name: "Aaa Glue", sku: "GLUE-1", catalogue_uuid: cat.uuid})
+
+      # Paint is preselected by the host; Glue and Screw are clicked, then
+      # Glue is deselected and picked again — it must land last, as in a
+      # cart, not back in its original slot and not alphabetically first.
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&pre=#{paint.uuid}:2")
+
+      view |> picker() |> render_click("card_click", %{"uuid" => glue.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => glue.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => glue.uuid})
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      positions =
+        Enum.map([paint, screw, glue], fn item ->
+          {at, _} = :binary.match(html, "pick-#{item.uuid}")
+          at
+        end)
+
+      assert positions == Enum.sort(positions)
+    end
+
+    test "the unit column and the price suffix show the localized label", %{conn: conn, cat: cat} do
+      {:ok, _view, html} =
+        open(conn, "c=#{cat.uuid}&sel=click&cols=name,unit,price&clocale=ru")
+
+      assert html =~ ">шт</span>"
+      refute html =~ ">piece</span>"
+    end
+
+    test "with a granted :unit column the price cell shows the bare price", %{
+      conn: conn,
+      cat: cat
+    } do
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}&sel=click&cols=name,unit,price")
+
+      assert html =~ "2.50"
+      refute html =~ "/ pc"
+    end
+
+    test "without a :unit column the price keeps its inline unit", %{conn: conn, cat: cat} do
+      {:ok, _view, html} = open(conn, "c=#{cat.uuid}&sel=click&cols=name,price")
+
+      assert html =~ "/ pc"
+    end
+  end
+
   describe "selection and confirm — the host contract" do
     test "select, confirm: the host receives Decimal qty and the snapshot", %{
       conn: conn,

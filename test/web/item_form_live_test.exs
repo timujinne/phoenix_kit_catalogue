@@ -170,6 +170,65 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       assert item.catalogue_uuid == catalogue.uuid
     end
 
+    test "a comma or dot decimal in price/markup/discount lands unrounded", %{conn: conn} do
+      catalogue = fixture_catalogue(%{kind: "standard"})
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      {:error, {:live_redirect, _}} =
+        view
+        |> form("form[action=\"#\"][phx-submit=save]", %{
+          "item" =>
+            base_item_params(%{
+              "name" => "Comma Item",
+              "base_price" => "25,5",
+              # markup/discount_percentage are `numeric(7,2)` columns — two
+              # decimal places is the field's own ceiling, not something
+              # this migration changes; the comma is what's under test.
+              "markup_percentage" => "0,12",
+              "discount_percentage" => "3,25"
+            })
+        })
+        |> render_submit()
+
+      [item] = TestRepo.all(Item)
+      assert Decimal.equal?(item.base_price, Decimal.new("25.5"))
+      assert Decimal.equal?(item.markup_percentage, Decimal.new("0.12"))
+      assert Decimal.equal?(item.discount_percentage, Decimal.new("3.25"))
+    end
+
+    test "a comma or dot decimal in a smart catalogue's default value lands unrounded",
+         %{conn: conn} do
+      catalogue = fixture_catalogue(%{kind: "smart"})
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      {:error, {:live_redirect, _}} =
+        view
+        |> form("form[action=\"#\"][phx-submit=save]", %{
+          "item" => %{
+            "name" => "Smart Comma Item",
+            "status" => "active",
+            "default_value" => "1,5"
+          }
+        })
+        |> render_submit()
+
+      [item] = TestRepo.all(Item)
+      assert Decimal.equal?(item.default_value, Decimal.new("1.5"))
+    end
+
+    test "garbage in base_price is rejected exactly as before", %{conn: conn} do
+      catalogue = fixture_catalogue(%{kind: "standard"})
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      html =
+        render_submit(view, "save", %{
+          "item" => base_item_params(%{"name" => "Bad Price", "base_price" => "abc"})
+        })
+
+      assert html =~ "New Item"
+      assert TestRepo.all(Item) == []
+    end
+
     test "a forged catalogue_uuid cannot file the item under another catalogue",
          %{conn: conn} do
       catalogue = fixture_catalogue()
@@ -493,6 +552,53 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       assert Decimal.to_string(info.unit_cost, :normal) == "5.1234"
       # Currency is upcased on the way in — the input is uppercase by CSS only.
       assert info.currency == "EUR"
+    end
+
+    # `min_order_qty` renders behind `@supplier_terms_fields` (off by
+    # default), but the event path — and the comma normalization ahead of
+    # the schema's `:decimal` cast — is independent of what the DOM shows,
+    # exactly like the crafted-payload tests elsewhere in this module.
+    test "a comma or dot min_order_qty lands unrounded", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      supplier = fixture_supplier()
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "open_add_supplier", %{})
+
+      render_change(view, "supplier_info_field_change", %{
+        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "min_order_qty" => "2,5"}
+      })
+
+      render_click(view, "save_supplier_info", %{})
+
+      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert Decimal.equal?(info.min_order_qty, Decimal.new("2.5"))
+    end
+
+    test "garbage min_order_qty is refused exactly as before", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      supplier = fixture_supplier()
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "open_add_supplier", %{})
+
+      render_change(view, "supplier_info_field_change", %{
+        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "min_order_qty" => "abc"}
+      })
+
+      render_click(view, "save_supplier_info", %{})
+
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
     end
 
     test "a price that is not a number is refused inside the modal", %{conn: conn} do
@@ -853,6 +959,33 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       [rule] = Catalogue.list_catalogue_rules(item)
       assert rule.referenced_catalogue_uuid == kitchen.uuid
       assert Decimal.equal?(rule.value, Decimal.new("10"))
+    end
+
+    test "set_catalogue_rule_value accepts a comma or dot decimal, unrounded", %{
+      conn: conn,
+      item: item,
+      kitchen: kitchen
+    } do
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "toggle_catalogue_rule", %{"uuid" => kitchen.uuid})
+
+      render_change(view, "set_catalogue_rule_value", %{
+        "uuid" => kitchen.uuid,
+        "value" => "7,25"
+      })
+
+      view
+      |> form("form[action=\"#\"][phx-submit=save]",
+        item: %{
+          "name" => item.name,
+          "status" => "active"
+        }
+      )
+      |> render_submit()
+
+      [rule] = Catalogue.list_catalogue_rules(item)
+      assert Decimal.equal?(rule.value, Decimal.new("7.25"))
     end
 
     test "set_catalogue_rule_unit accepts only known units", %{

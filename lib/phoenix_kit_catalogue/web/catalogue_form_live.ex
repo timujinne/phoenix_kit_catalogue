@@ -8,9 +8,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   import PhoenixKitWeb.Components.MultilangForm
   import PhoenixKitWeb.Components.Core.Button, only: [button: 1]
+  import PhoenixKitWeb.Components.Core.DecimalInput, only: [decimal_input: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Modal, only: [confirm_modal: 1]
-  import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
   import PhoenixKitCatalogue.Web.Components,
@@ -22,7 +22,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
       actor_opts: 1,
       assign_ai_translation: 3,
       ai_translate_config: 1,
-      data_owned_keys: 2
+      data_owned_keys: 2,
+      normalize_decimal_params: 2
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -47,6 +48,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   # open form) keeps the row's freshest value instead of the snapshot
   # this form loaded.
   @catalogue_extra_owned_data_keys ~w(meta files_folder_uuid featured_image_uuid media_order)
+
+  # Free-decimal `<.decimal_input>` fields: "2,5" reaches the changeset's
+  # `:decimal` cast as "2.5" — see `Web.Helpers.normalize_decimal_params/2`.
+  @decimal_fields ~w(markup_percentage discount_percentage)
+
   @preserve_fields %{
     # Translatable primaries: submitted only on the primary tab, so a
     # secondary-tab validate/save must re-inject them or :new loses them.
@@ -180,7 +186,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   def handle_event("validate", params, socket) do
     socket = absorb_meta_params(socket, params)
-    catalogue_params = Map.get(params, "catalogue", %{})
+
+    catalogue_params =
+      params
+      |> Map.get("catalogue", %{})
+      |> normalize_decimal_params(@decimal_fields)
 
     catalogue_params =
       merge_translatable_params(catalogue_params, socket, @translatable_fields,
@@ -205,7 +215,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   def handle_event("save", params, socket) do
     socket = absorb_meta_params(socket, params)
-    catalogue_params = Map.get(params, "catalogue", %{})
+
+    catalogue_params =
+      params
+      |> Map.get("catalogue", %{})
+      |> normalize_decimal_params(@decimal_fields)
 
     catalogue_params =
       catalogue_params
@@ -543,12 +557,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
             </div>
 
             <div class="fieldset">
-              <.input
+              <.decimal_input
                 field={@form[:markup_percentage]}
-                type="number"
                 label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup Percentage")}
-                step="0.01"
-                min="0"
                 placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., 15.0")}
               />
               <span class="fieldset-label text-base-content/50 mt-1">
@@ -557,13 +568,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
             </div>
 
             <div class="fieldset">
-              <.input
+              <.decimal_input
                 field={@form[:discount_percentage]}
-                type="number"
                 label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discount Percentage")}
-                step="0.01"
-                min="0"
-                max="100"
                 placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., 10.0")}
               />
               <span class="fieldset-label text-base-content/50 mt-1">

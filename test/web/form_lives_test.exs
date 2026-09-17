@@ -82,6 +82,47 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
       assert Decimal.equal?(c.discount_percentage, Decimal.new("10"))
       assert Decimal.equal?(c.markup_percentage, Decimal.new("5"))
     end
+
+    test "accepts a comma or dot decimal in markup/discount percentage, unrounded", %{
+      conn: conn
+    } do
+      {:ok, view, _html} = live(conn, "#{@base}/new")
+
+      view
+      |> form(form_selector(), %{
+        "catalogue" => %{
+          "name" => "Comma Catalogue",
+          "markup_percentage" => "5,5",
+          # `numeric(7,2)` — two decimal places is the field's own ceiling;
+          # the comma is what's under test.
+          "discount_percentage" => "0.12",
+          "status" => "active"
+        }
+      })
+      |> render_submit()
+
+      assert [%{name: "Comma Catalogue"} = c] = Catalogue.list_catalogues()
+      assert Decimal.equal?(c.markup_percentage, Decimal.new("5.5"))
+      assert Decimal.equal?(c.discount_percentage, Decimal.new("0.12"))
+    end
+
+    test "rejects a garbage markup percentage the same as before", %{conn: conn} do
+      {:ok, view, _html} = live(conn, "#{@base}/new")
+
+      html =
+        view
+        |> form(form_selector(), %{
+          "catalogue" => %{
+            "name" => "Garbage Catalogue",
+            "markup_percentage" => "abc",
+            "status" => "active"
+          }
+        })
+        |> render_submit()
+
+      assert html =~ "New Catalogue"
+      assert Catalogue.list_catalogues() == []
+    end
   end
 
   describe "CatalogueFormLive save modes" do

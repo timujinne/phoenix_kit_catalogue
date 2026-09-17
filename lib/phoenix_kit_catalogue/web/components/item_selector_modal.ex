@@ -167,8 +167,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   column beside Name (granted and hidden by default, like `:sku`). Unknown entries raise. `:price` is the customer-facing selling
   price (markup and discounts applied) shown as "6.40 / piece" — the
   default set carries it and NOT `:base_price`, the raw internal number,
-  which an embed must ask for explicitly; `:unit` is the standalone
-  column for price-free lists.
+  which an embed must ask for explicitly; `:unit` is the standalone unit
+  column — grant it and the price cell shows the bare number, the unit
+  moving to its own column the viewer can hide (2026-09-16).
   Omitted, the full set applies minus what `show_sku: false` /
   `show_prices: false` already opt out of. Omitting `:qty` hides the
   inline stepper — quantities are then edited in the tray only (and the
@@ -291,6 +292,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   import PhoenixKitCatalogue.Web.Components.Browse
 
   alias PhoenixKit.Users.Auth
+  alias PhoenixKit.Utils.Number
   require Logger
 
   alias PhoenixKitCatalogue.Catalogue
@@ -481,9 +483,18 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
     quantities = Map.new(selection, fn {uuid, entry} -> {uuid, entry.qty} end)
 
-    assign(socket,
-      selection: hydrate_preselection(quantities, browse.scope, locale, limits, mode)
-    )
+    # Re-hydration rebuilds the entries from the catalogue; the pick
+    # order (`seq`) is the user's, not the catalogue's, so it rides over
+    # from the old entries — otherwise a live refresh with two items
+    # selected reshuffled the tray into map order (review, 2026-09-16).
+    rehydrated =
+      quantities
+      |> hydrate_preselection(browse.scope, locale, limits, mode)
+      |> Map.new(fn {uuid, entry} ->
+        {uuid, Map.put(entry, :seq, entry_seq({uuid, selection[uuid]}))}
+      end)
+
+    assign(socket, selection: rehydrated)
   end
 
   defp refresh_detail(%{assigns: %{detail: %{uuid: uuid}}} = socket),
@@ -1607,7 +1618,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                %{
                  qty: clamp(to_decimal(qty), limits),
                  item: presented,
-                 available: in_scope?(item, scope, expanded_categories)
+                 available: in_scope?(item, scope, expanded_categories),
+                 seq: next_seq()
                }}
             ]
         end
@@ -2062,7 +2074,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   end
 
   defp select_entry(socket, item) do
-    entry = %{qty: clamp(item.default_qty, socket.assigns), item: item, available: true}
+    entry = %{
+      qty: clamp(item.default_qty, socket.assigns),
+      item: item,
+      available: true,
+      seq: next_seq()
+    }
 
     case socket.assigns.mode do
       # Single mode replaces the previous pick — the map never grows.
@@ -2085,6 +2102,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       socket
     end
   end
+
+  # Pick order. The selection is a map, so without this the tray and the
+  # confirm payload fell back to sorting by name — and the host's rows came
+  # out alphabetical whatever order the user picked in (2026-09-16).
+  # Monotonic per node: re-selecting a deselected item puts it last, as a
+  # user would expect from a cart.
+  defp next_seq, do: System.unique_integer([:monotonic, :positive])
+
+  defp entry_seq({_uuid, entry}), do: Map.get(entry, :seq, 0)
 
   defp deselect(socket, uuid) do
     assign(socket,
@@ -2131,17 +2157,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # A lenient zero probe for the quantity-first paths: parse_qty compares
   # against qty_min, but in that mode zero is the UNSELECTED state and must
   # be recognisable whatever the minimum is. Only FINITE non-positives
-  # qualify: Decimal.parse accepts "NaN" and "Infinity" as full matches,
-  # and neither compares greater-than-zero — without the guards a crafted
-  # NaN would deselect a row, mutating state from garbage input (external
-  # review, 2026-08-31).
+  # qualify: `Number.parse_decimal/2` already rejects "NaN", "Infinity"
+  # and exponent forms outright — without that a crafted NaN would
+  # deselect a row, mutating state from garbage input (external review,
+  # 2026-08-31).
   defp zero_qty?(raw) when is_binary(raw) do
-    case Decimal.parse(String.trim(String.replace(raw, ",", "."))) do
-      {qty, ""} ->
-        not Decimal.nan?(qty) and not Decimal.inf?(qty) and not Decimal.gt?(qty, 0)
-
-      _ ->
-        false
+    case Number.parse_decimal(raw) do
+      {:ok, qty} -> not Decimal.gt?(qty, 0)
+      {:error, _reason} -> false
     end
   end
 
@@ -2185,16 +2208,19 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   defp round_qty(qty, precision), do: Decimal.round(qty, precision)
 
   defp parse_qty(raw, assigns) when is_binary(raw) do
-    # ru/et keyboards produce a decimal comma; Decimal.parse wants a dot.
-    # Plain digits only — exponent forms are rejected before parse.
-    # Below-minimum input is rejected (field reverts) rather than silently
-    # clamped up; with `qty_min: 0` that correctly admits a typed "0",
-    # which the stepper's minus button could already reach.
-    normalized = raw |> String.trim() |> String.replace(",", ".")
+    # The digit-cap guard accepts EITHER a comma or a dot as the decimal
+    # point (ru/et keyboards produce a comma) but, unlike
+    # `Number.parse_decimal/2`, requires a digit on both sides of it — a
+    # still-typing "2." or "2," must fail here so `qty_change` neither
+    # commits it nor resets the input mid-keystroke (see the moduledoc's
+    # "settled typing" note). Once the shape is confirmed,
+    # `Number.parse_decimal/2` does the real conversion and enforces
+    # `qty_min` (rejected, not clamped up — clamping is `clamp/2`'s job
+    # for the upper bound and the safety ceiling).
+    trimmed = String.trim(raw)
 
-    with true <- Regex.match?(qty_pattern(assigns.qty_precision), normalized),
-         {qty, ""} <- Decimal.parse(normalized),
-         false <- Decimal.lt?(qty, assigns.qty_min) do
+    with true <- Regex.match?(qty_pattern(assigns.qty_precision), trimmed),
+         {:ok, qty} <- Number.parse_decimal(trimmed, min: assigns.qty_min) do
       {:ok, clamp(qty, assigns)}
     else
       _ -> :error
@@ -2205,18 +2231,19 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   # Six decimal places cover every numeric precision the stepper can show;
   # free mode admits twelve — enough for any unit in practice while the
-  # digit cap still keeps `Decimal.parse` away from absurd exponents.
-  defp qty_pattern(:any), do: ~r/^\d{1,12}(\.\d{1,12})?$/
-  defp qty_pattern(_precision), do: ~r/^\d{1,12}(\.\d{1,6})?$/
+  # digit cap still keeps absurd exponents from ever reaching
+  # `Number.parse_decimal/2`.
+  defp qty_pattern(:any), do: ~r/^\d{1,12}([.,]\d{1,12})?$/
+  defp qty_pattern(_precision), do: ~r/^\d{1,12}([.,]\d{1,6})?$/
 
   defp to_decimal(%Decimal{} = d), do: d
   defp to_decimal(n) when is_integer(n), do: Decimal.new(n)
   defp to_decimal(n) when is_float(n), do: Decimal.from_float(n)
 
   defp to_decimal(n) when is_binary(n) do
-    case Decimal.parse(String.trim(n)) do
-      {d, ""} -> d
-      _ -> raise ArgumentError, "not a quantity: #{inspect(n)}"
+    case Number.parse_decimal(n) do
+      {:ok, d} -> d
+      {:error, _reason} -> raise ArgumentError, "not a quantity: #{inspect(n)}"
     end
   end
 
@@ -2238,7 +2265,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       # the tray but must never reach the host as a pick — the host's
       # scope said no.
       |> Enum.filter(fn {_uuid, entry} -> entry.available end)
-      |> Enum.sort_by(fn {_uuid, entry} -> entry.item.name || "" end)
+      |> Enum.sort_by(&entry_seq/1)
       |> Enum.map(fn {uuid, %{qty: qty, item: item}} ->
         %{
           uuid: uuid,
@@ -2318,7 +2345,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # current page).
   defp detail_unit(%{presented: presented, selection: selection, detail: %{uuid: uuid}}) do
     case presented[uuid] || (selection[uuid] && selection[uuid].item) do
-      %{unit: unit} -> unit
+      %{unit: unit} = item when is_binary(unit) -> Browse.unit_label(item)
       _ -> nil
     end
   end
@@ -2713,7 +2740,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(decimal_qty?(@qty_precision), do: item.unit)}
+                        unit={if(decimal_qty?(@qty_precision), do: Browse.unit_label(item))}
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}
@@ -2769,6 +2796,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     id={"#{@id}-row-#{item.uuid}"}
                     item={item}
                     columns={@eff_columns}
+                    inline_unit={:unit not in @columns}
                     selected={Map.has_key?(@selection, item.uuid)}
                     clickable={@selection_mode != "quantity"}
                     checkbox={@cbx}
@@ -2782,7 +2810,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(decimal_qty?(@qty_precision), do: item.unit)}
+                        unit={if(decimal_qty?(@qty_precision), do: Browse.unit_label(item))}
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}
@@ -3003,8 +3031,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
             >
               <div
                 :for={
-                  {uuid, entry} <-
-                    Enum.sort_by(@selection, fn {_u, e} -> e.item.name || "" end)
+                  {uuid, entry} <- Enum.sort_by(@selection, &entry_seq/1)
                 }
                 id={"#{@id}-tray-#{uuid}"}
                 class={[
@@ -3036,7 +3063,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                   id={"#{@id}-tray-qty-#{uuid}-r#{qty_rev(assigns, uuid)}"}
                   uuid={uuid}
                   qty={qty_display(assigns, uuid)}
-                  unit={if(decimal_qty?(@qty_precision), do: entry.item.unit)}
+                  unit={if(decimal_qty?(@qty_precision), do: Browse.unit_label(entry.item))}
                   precision={@qty_precision}
                   min={@qmin}
                   max={@qmax}

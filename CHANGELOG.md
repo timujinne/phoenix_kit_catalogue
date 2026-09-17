@@ -1,3 +1,38 @@
+## 0.35.0 - 2026-09-16
+
+**Requires phoenix_kit 2.26.0+** (`<.decimal_input>` and
+`PhoenixKit.Utils.Number.parse_decimal/2`). The `:phoenix_kit` requirement
+in `mix.exs` is unchanged, so hosts on an older core must upgrade core first
+or this release will not compile.
+
+Reviews: `dev_docs/pull_requests/2026/122-decimal-input/`,
+`123-picker-order-unit/`.
+
+### Changed
+
+- **Free-decimal form fields accept a comma or a dot** (#122). Base price,
+  markup, discount, smart default value, supplier min. order qty and the
+  smart-rule value use core's `<.decimal_input>` instead of a browser number
+  input, so "2,5" saves as 2.5 whatever the page locale is, and nothing is
+  rounded or blocked by `step`. The server-side bounds are unchanged. A
+  smart-rule value with trailing garbage ("5abc") now clears to "inherit"
+  instead of saving the numeric prefix.
+- **The item selector keeps the pick order** (#123). The tray and the
+  confirmed selection list items in the order they were picked, including
+  across a live refresh, instead of alphabetically.
+- **Unit labels in the item selector and browse views** (#123). Rows, cards,
+  the tray and the quantity suffix show the translated unit label ("шт",
+  "pc") in the popup's locale instead of the raw unit code. The pick payload
+  still carries the raw `unit`. When a host grants the `:unit` column, the
+  price cell shows only the number and the unit sits in its own hideable
+  column.
+- Dependencies: phoenix_kit 2.26.0, swoosh 1.28.1 (lock only).
+
+### Fixed
+
+- Unit labels for a dialect locale ("ru-RU") fell back to English. They now
+  use the base language's translation.
+
 ## 0.34.0 - 2026-09-16
 
 Review: `dev_docs/pull_requests/2026/121-item-selector-free-qty/`.

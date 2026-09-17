@@ -577,4 +577,65 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ ~s(id="sk-2")
     end
   end
+
+  describe "unit labels (2026-09-16: the picker showed raw unit codes)" do
+    test "present_items/2 carries a translated unit_label beside the raw unit" do
+      item = %Item{uuid: "u-1", name: "Widget", unit: "piece", data: %{}}
+
+      [ru] = Browse.present_items([item], "ru")
+      [en] = Browse.present_items([item], "en")
+
+      # The raw code stays for the host's pick payload; the label is what
+      # renders, in the popup's own locale rather than the process's.
+      assert ru.unit == "piece"
+      assert ru.unit_label == "шт"
+      assert en.unit_label == "pc"
+    end
+
+    test "a dialect locale resolves to its base language's unit label" do
+      item = %Item{uuid: "u-1", name: "Widget", unit: "piece", data: %{}}
+
+      # Content locales are dialect codes; the gettext backend only has
+      # "ru" — "ru-RU" used to miss and render the English "pc".
+      assert [%{unit_label: "шт"}] = Browse.present_items([item], "ru-RU")
+      assert [%{unit_label: "pc"}] = Browse.present_items([item], "en-US")
+      assert [%{unit_label: "pc"}] = Browse.present_items([item], "ja-JP")
+    end
+
+    test "the :unit cell and the price suffix render the label, not the code" do
+      item = Map.put(row_item(), :unit_label, "шт")
+
+      html =
+        render_component(&Browse.item_row/1,
+          id: "r1",
+          item: item,
+          columns: [:name, :unit, :price]
+        )
+
+      assert html =~ ">шт</span>"
+      assert html =~ "/ шт"
+      refute html =~ "piece"
+    end
+
+    test "a hand-built presented map without unit_label still renders a label" do
+      html =
+        render_component(&Browse.item_row/1, id: "r1", item: row_item(), columns: [:name, :unit])
+
+      assert html =~ ">pc</span>"
+      refute html =~ ">piece</span>"
+    end
+
+    test "inline_unit={false} drops the price suffix — the unit lives in its own column" do
+      html =
+        render_component(&Browse.item_row/1,
+          id: "r1",
+          item: row_item(),
+          columns: [:name, :price],
+          inline_unit: false
+        )
+
+      assert html =~ "2.50"
+      refute html =~ "/ pc"
+    end
+  end
 end

@@ -21,7 +21,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       actor_opts: 1,
       assign_ai_translation: 3,
       ai_translate_config: 1,
-      data_owned_keys: 2
+      data_owned_keys: 2,
+      log_operation_error: 3
     ]
 
   import PhoenixKitAI.Components.AITranslate,
@@ -37,6 +38,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Catalogue.Slugs
+  alias PhoenixKitCatalogue.Errors
   alias PhoenixKitCatalogue.Extensions
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Category
@@ -112,13 +114,12 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   end
 
   defp mount_category_form(socket, action, category, changeset, catalogue_uuid) do
+    parent_catalogue = catalogue_uuid && Catalogue.get_catalogue(catalogue_uuid)
+
     other_catalogues =
-      if action == :edit do
-        Catalogue.list_catalogues()
-        |> Enum.reject(&(&1.uuid == catalogue_uuid))
-      else
-        []
-      end
+      if action == :edit,
+        do: catalogue_move_options(parent_catalogue),
+        else: []
 
     parent_options = parent_options_for(action, category, catalogue_uuid)
 
@@ -133,8 +134,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
        action: action,
        category: category,
        catalogue_uuid: catalogue_uuid,
-       parent_catalogue_name:
-         catalogue_uuid && (Catalogue.get_catalogue(catalogue_uuid) || %{name: nil}).name,
+       parent_catalogue_name: parent_catalogue && parent_catalogue.name,
        confirm_delete_all: false,
        other_catalogues: other_catalogues,
        parent_options: parent_options,
@@ -158,6 +158,91 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   end
 
   defp safe_return_to(_), do: nil
+
+  # "catalogue:<uuid>" lands at that catalogue's top level;
+  # "category:<uuid>" under that category, in its catalogue.
+  defp move_to_other_catalogue(socket, target) do
+    {catalogue_uuid, opts} =
+      case target do
+        "catalogue:" <> uuid ->
+          {uuid, actor_opts(socket)}
+
+        "category:" <> uuid ->
+          parent = Catalogue.get_category(uuid)
+          {parent && parent.catalogue_uuid, Keyword.put(actor_opts(socket), :parent_uuid, uuid)}
+      end
+
+    with uuid when is_binary(uuid) <- catalogue_uuid,
+         {:ok, _} <-
+           Catalogue.move_category_to_catalogue(socket.assigns.category, uuid, opts) do
+      {:noreply,
+       socket
+       |> put_flash(
+         :info,
+         Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category moved to another catalogue.")
+       )
+       |> push_navigate(to: Paths.catalogue_detail(uuid))}
+    else
+      nil ->
+        {:noreply, move_failed(socket, "move_category_to_catalogue", :parent_not_found)}
+
+      {:error, reason} ->
+        {:noreply, move_failed(socket, "move_category_to_catalogue", reason)}
+    end
+  end
+
+  defp move_failed(socket, operation, reason) do
+    log_operation_error(socket, operation, %{
+      entity_type: "category",
+      entity_uuid: socket.assigns.category.uuid,
+      reason: reason
+    })
+
+    put_flash(socket, :error, move_error_message(reason))
+  end
+
+  defp move_error_message(reason)
+       when reason in [
+              :catalogue_not_found,
+              :kind_mismatch,
+              :not_found,
+              :parent_not_found,
+              :would_create_cycle,
+              :catalogue_moved
+            ],
+       do: Errors.message(reason)
+
+  defp move_error_message(_reason),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move category.")
+
+  # Every other live catalogue of this one's kind, as a `<select>` group:
+  # its top level, then its categories (a category can land under one).
+  # Values say what they are — `"catalogue:<uuid>"` / `"category:<uuid>"`.
+  defp catalogue_move_options(nil), do: []
+
+  defp catalogue_move_options(%{uuid: own_uuid, kind: kind}) do
+    categories = Enum.group_by(Catalogue.list_all_categories(), & &1.catalogue_uuid)
+
+    [kind: kind]
+    |> Catalogue.list_catalogues()
+    |> Enum.reject(&(&1.uuid == own_uuid))
+    |> Enum.map(fn catalogue ->
+      top =
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{catalogue} — top level",
+           catalogue: catalogue.name
+         ), "catalogue:" <> catalogue.uuid}
+
+      under =
+        for cat <- Map.get(categories, catalogue.uuid, []),
+            do: {cat.name, "category:" <> cat.uuid}
+
+      {catalogue.name, [top | under]}
+    end)
+  end
+
+  defp move_option_values(options) do
+    Enum.flat_map(options, fn {_group, entries} -> Enum.map(entries, &elem(&1, 1)) end)
+  end
 
   defp parent_options_for(:new, _category, catalogue_uuid) do
     Catalogue.list_category_tree(catalogue_uuid)
@@ -406,46 +491,33 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
     end
   end
 
-  def handle_event("select_move_target", %{"catalogue_uuid" => uuid}, socket) do
-    target = if uuid == "", do: nil, else: uuid
+  # Only a value the select offered is kept (see catalogue_move_options/1).
+  def handle_event("select_move_target", params, socket) do
+    value = params["move_target"]
+
+    target =
+      if is_binary(value) and value in move_option_values(socket.assigns.other_catalogues),
+        do: value
+
     {:noreply, assign(socket, :move_target, target)}
   end
 
   def handle_event("move_category", _params, socket) do
-    target = socket.assigns.move_target
-
-    if target do
-      case Catalogue.move_category_to_catalogue(
-             socket.assigns.category,
-             target,
-             actor_opts(socket)
-           ) do
-        {:ok, _} ->
-          {:noreply,
-           socket
-           |> put_flash(
-             :info,
-             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category moved to another catalogue.")
-           )
-           |> push_navigate(to: Paths.catalogue_detail(target))}
-
-        {:error, _} ->
-          {:noreply,
-           put_flash(
-             socket,
-             :error,
-             Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move category.")
-           )}
-      end
-    else
-      {:noreply, socket}
+    case socket.assigns.move_target do
+      nil -> {:noreply, socket}
+      target -> move_to_other_catalogue(socket, target)
     end
   end
 
-  def handle_event("select_parent_move_target", %{"parent_uuid" => uuid}, socket) do
+  def handle_event("select_parent_move_target", %{"parent_uuid" => uuid}, socket)
+      when is_binary(uuid) do
     target = Values.blank_to_nil(uuid)
     {:noreply, assign(socket, :parent_move_target, target)}
   end
+
+  # A forged non-string value would reach `move_category_under/3`, which
+  # has no clause for it.
+  def handle_event("select_parent_move_target", _params, socket), do: {:noreply, socket}
 
   def handle_event("move_under_parent", _params, socket) do
     target = socket.assigns.parent_move_target
@@ -480,13 +552,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
            )
          )}
 
-      {:error, _} ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move category.")
-         )}
+      {:error, reason} ->
+        {:noreply, move_failed(socket, "move_category_under", reason)}
     end
   end
 
@@ -883,8 +950,14 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
 
       <%!-- Move actions — collapsed by default to keep destructive +
            low-frequency actions out of the primary edit flow.
-           Native <details> handles toggle; no JS needed. --%>
-      <details :if={@action == :edit} class="card bg-base-100 shadow-lg">
+           Native <details> handles toggle; `open` is client-owned, or the
+           re-render a select change causes would fold the section shut. --%>
+      <details
+        :if={@action == :edit}
+        id="category-move-section"
+        phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
+        class="card bg-base-100 shadow-lg"
+      >
         <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
           <.icon name="hero-arrows-right-left" class="w-4 h-4 text-base-content/60" />
           <h3 class="font-semibold text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}</h3>
@@ -899,7 +972,11 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
               <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Reparent this category within its catalogue. Its subtree comes along.")}</p>
             </div>
             <div class="flex items-end gap-3">
-              <div class="fieldset flex-1">
+              <form
+                id="category-parent-move-form"
+                phx-change="select_parent_move_target"
+                class="fieldset flex-1"
+              >
                 <.select
                   name="parent_uuid"
                   id="category-parent-move-target"
@@ -907,9 +984,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
                   prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Top level (no parent) —")}
                   options={@parent_options}
                   class="select-sm transition-colors focus-within:select-primary"
-                  phx-change="select_parent_move_target"
                 />
-              </div>
+              </form>
               <.button
                 type="button"
                 phx-click="move_under_parent"
@@ -927,20 +1003,19 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <div :if={@other_catalogues != []} class="flex flex-col gap-3">
             <div>
               <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Catalogue")}</p>
-              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this category and all its items to a different catalogue.")}</p>
+              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this category and all its items to a different catalogue — at its top level or under one of its categories.")}</p>
             </div>
             <div class="flex items-end gap-3">
-              <div class="fieldset flex-1">
+              <form id="category-move-form" phx-change="select_move_target" class="fieldset flex-1">
                 <.select
-                  name="catalogue_uuid"
+                  name="move_target"
                   id="category-move-target"
                   value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select catalogue --")}
-                  options={Enum.map(@other_catalogues, &{&1.name, &1.uuid})}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select destination --")}
+                  options={@other_catalogues}
                   class="select-sm transition-colors focus-within:select-primary"
-                  phx-change="select_move_target"
                 />
-              </div>
+              </form>
               <.button
                 type="button"
                 phx-click="move_category"
@@ -959,7 +1034,12 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       <%!-- Danger zone — collapsed by default; matches the integrations
            page Danger Zone pattern (red border, exclamation-triangle,
            confirm modal on click). --%>
-      <details :if={@action == :edit} class="card bg-base-100 border-2 border-error/30">
+      <details
+        :if={@action == :edit}
+        id="category-danger-zone"
+        phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
+        class="card bg-base-100 border-2 border-error/30"
+      >
         <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error" />
           <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Danger Zone")}</h3>

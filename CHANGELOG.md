@@ -1,3 +1,53 @@
+## 0.36.0 - 2026-09-17
+
+Review: `dev_docs/pull_requests/2026/124-duplicate-and-move-anywhere/`.
+
+### Added
+
+- **Duplicate a whole catalogue** (#124). The catalogues page copies a
+  catalogue with its categories, items, supplier rows and attribute sets in
+  one transaction, under the source's lock. The copy is named
+  "(copy)", "(copy 2)", … in the content's primary language. Its slugs are
+  left empty, and references between copied rows are re-pointed at the copies.
+  The dialog can leave out SKUs, files or suppliers, and can start the copy
+  archived. Files are linked, not duplicated. A second Duplicate of the same
+  catalogue while one runs is refused.
+- **Move items and categories to any catalogue** (#124). The item form, the
+  category form and the detail page's bulk Move modals offer every live
+  catalogue of the same kind (standard or smart), and a category can land
+  under a parent there. Both catalogues are told about the move.
+- **`Extension.duplicate_data/2`** (#124), an optional callback. Every copy
+  passes each extension's `data` namespace through it, even while the
+  extension is disabled, so an external id (a Shopify product, say) never
+  ends up on two rows. A callback that raises, throws, exits or returns
+  something other than a map or `nil` drops its namespace from the copy.
+
+### Changed
+
+- Every move now takes both catalogues' locks in sorted order and
+  row-locks the moving subtree. A move into a trashed catalogue or
+  category, or into a catalogue of the other kind, is refused.
+- Creating a subcategory holds its parent `FOR SHARE`, so it cannot be left
+  behind by a concurrent move of the parent's tree.
+- The forms' collapsible sections stay open across a re-render.
+- Dependencies: phoenix_kit 2.28.0, phoenix_kit_entities 0.4.16, etcher
+  0.14.0, fresco 0.12.0, tessera 0.3.6 (lock only).
+
+### Fixed
+
+- Item photos no longer collapse to zero width in the picker's table views
+  (#124).
+- A restore that had to leave an item behind (its category still trashed
+  under another root) no longer leaves it stamped for the restored root, so
+  a second trash and restore cannot bring it back under a trashed category.
+- A category move now restamps the trashed rows it carries out from under
+  their trash root (a category restored on its own under a trashed parent,
+  then moved), so a Restore still reaches them.
+- A bulk category move re-checks its catalogue scope under the row lock.
+- A forged uuid no longer crashes the catalogues page (Duplicate, trash), the
+  detail page's bulk item move or the category form's parent picker.
+- An extension whose `key/0` throws or exits no longer aborts a copy.
+
 ## 0.35.0 - 2026-09-16
 
 **Requires phoenix_kit 2.26.0+** (`<.decimal_input>` and

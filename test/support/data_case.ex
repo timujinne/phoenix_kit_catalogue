@@ -23,8 +23,11 @@ defmodule PhoenixKitCatalogue.DataCase do
   alias Ecto.Adapters.SQL.Sandbox
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
+  # A test tagged with a longer timeout keeps its connection that long
+  # too; the sandbox's own limit is two minutes.
   setup tags do
-    pid = Sandbox.start_owner!(TestRepo, shared: not tags[:async])
+    ownership = if is_integer(tags[:timeout]), do: [ownership_timeout: tags[:timeout]], else: []
+    pid = Sandbox.start_owner!(TestRepo, [shared: not tags[:async]] ++ ownership)
     on_exit(fn -> Sandbox.stop_owner(pid) end)
     :ok
   end

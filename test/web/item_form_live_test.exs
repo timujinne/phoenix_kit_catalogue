@@ -505,15 +505,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _page} = live(conn, edit_item_url(item.uuid))
       html = render_click(view, "open_add_supplier", %{})
 
-      # The control's step is whatever entities derives from the built-in
-      # definition — asserted as delegation, not a literal, so this holds
-      # at every entities version: pre-"step" releases derive 0.0001 from
-      # the scale, 0.4.9+ honours the declared "any" (arrows walk by 1;
-      # every 4-place typed value stays saveable — `step` IS a browser
-      # validation constraint that gates the submit event, which is why
+      # Since entities 0.4.16 the decimal renderer is core's text control
+      # with `inputmode="decimal"`: no `type="number"` and no `step`, so
+      # the browser can never block a 4-place value on submit (the reason
       # the original cent step was wrong; entities 0.4.9 review).
+      [control] = Regex.run(~r/<input[^>]*id="supplier-unit-cost"[^>]*>/, html)
+      assert control =~ ~s(inputmode="decimal")
+      assert control =~ ~s(name="supplier_info[unit_cost]")
+      refute control =~ ~s(type="number")
+      refute control =~ "step="
+
       builtin = Catalogue.supplier_builtin_field("unit_cost")
-      assert html =~ ~s(step="#{PhoenixKitEntities.FieldTypes.decimal_step(builtin)}")
 
       # Catalogue's side of the contract: sane arrows, 4-place storage,
       # nothing typed ever blocked — the boss's "too precise" report,
@@ -878,7 +880,10 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
 
       # The form's move dropdown picks a target category.
-      render_change(view, "select_move_target", %{"category_uuid" => target.uuid})
+      view
+      |> form("#item-move-form", %{"move_target" => "category:" <> target.uuid})
+      |> render_change()
+
       render_click(view, "move_item", %{})
 
       reloaded = Catalogue.get_item(item.uuid)

@@ -370,6 +370,14 @@ Pointers, not docs — the moduledocs are the contract.
   trashed card counts what its Restore brings back), and how to add a path
   without breaking the randomized combination test:
   `dev_docs/guides/trash-and-restore.md`.
+- **Moves and copies** — a move lands only in a live catalogue (and
+  live category) of the same kind — standard and smart items price
+  differently — and tells both catalogues. Duplicate (`Catalogue.Duplication`:
+  an item, a category subtree or a whole catalogue) passes every
+  extension namespace through that extension's optional
+  `duplicate_data/2`, asked even while it is disabled, so an external id
+  never ends up on two rows. Copies get no slug: slugs are unique
+  across the whole table.
 - **Pricing** — chain is `base → markup → discount`.
   `Catalogue.item_pricing/1` is the one-stop API for UIs; pure helpers live on
   `Item`.

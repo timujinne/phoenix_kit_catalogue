@@ -2034,8 +2034,8 @@ msgstr "Внутренние заметки об этом поставщике..
 msgid "Item Name"
 msgstr "Название позиции"
 
-msgid "Items can only be moved within this catalogue."
-msgstr "Позиции можно перемещать только внутри этого каталога."
+msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
+msgstr "Некоторых выбранных товаров больше нет в этом каталоге. Обновите страницу и попробуйте снова."
 
 msgid "Items keep their catalogue but lose their category."
 msgstr "Позиции остаются в каталоге, но теряют категорию."
@@ -2121,8 +2121,8 @@ msgstr "Переместить выбранные позиции"
 msgid "Move this PDF to trash?"
 msgstr "Переместить этот PDF в корзину?"
 
-msgid "Move this category and all its items to a different catalogue."
-msgstr "Переместите эту категорию и все её позиции в другой каталог."
+msgid "Move this category and all its items to a different catalogue — at its top level or under one of its categories."
+msgstr "Переместите эту категорию и все её позиции в другой каталог — на его верхний уровень или внутрь одной из его категорий."
 
 msgid "Move this item into a different smart catalogue. Its catalogue rules stay attached."
 msgstr "Переместите эту позицию в другой умный каталог. Её правила каталогов остаются прикреплёнными."
@@ -3485,3 +3485,69 @@ msgstr "Не удалось удалить атрибут."
 
 msgid "%{value} (archived)"
 msgstr "%{value} (в архиве)"
+
+msgid "Standard and smart catalogues can't exchange items or categories."
+msgstr "Обычные и умные каталоги не могут обмениваться позициями или категориями."
+
+msgid "Items go to the chosen catalogue without a category."
+msgstr "Позиции попадут в выбранный каталог без категории."
+
+msgid "Put items in a category there"
+msgstr "Поместить позиции в категорию этого каталога"
+
+msgid "They sit at the root of the chosen catalogue."
+msgstr "Они окажутся на верхнем уровне выбранного каталога."
+
+msgid "%{name} (this catalogue)"
+msgstr "%{name} (этот каталог)"
+
+msgid "%{catalogue} — no category"
+msgstr "%{catalogue} — без категории"
+
+msgid "%{catalogue} — top level"
+msgstr "%{catalogue} — верхний уровень"
+
+msgid "-- Select destination --"
+msgstr "-- Выберите, куда переместить --"
+
+msgid "%{name} (copy %{number})"
+msgstr "%{name} (копия %{number})"
+
+msgid "This catalogue is already being duplicated."
+msgstr "Этот каталог уже дублируется."
+
+msgid "Duplicate catalogue"
+msgstr "Дублировать каталог"
+
+msgid "Creates a copy of “%{name}” with all its categories (%{categories}) and items (%{items}), in the same folder and with “(copy)” after its name."
+msgstr "Создаёт копию каталога «%{name}» со всеми категориями (%{categories}) и товарами (%{items}) в той же папке, с «(копия)» после названия."
+
+msgid "Not copied: items in Deleted, comments, history and links to other systems (such as a shop's product ids)."
+msgstr "Не копируются: удалённые товары, комментарии, история и связи с другими системами (например, идентификаторы товаров в магазине)."
+
+msgid "Shared with the original, not duplicated. Removing one from either catalogue leaves the other untouched."
+msgstr "Общие с оригиналом, не дублируются. Удаление из одного каталога не затрагивает другой."
+
+msgid "Duplicating “%{name}”…"
+msgstr "Дублирование «%{name}»…"
+
+msgid "Created “%{name}” (categories: %{categories}, items: %{items})."
+msgstr "Создан «%{name}» (категорий: %{categories}, товаров: %{items})."
+
+msgid "Failed to duplicate the catalogue."
+msgstr "Не удалось дублировать каталог."
+
+msgid "Copy SKUs"
+msgstr "Копировать артикулы"
+
+msgid "Copy images and files"
+msgstr "Копировать изображения и файлы"
+
+msgid "Copy suppliers and purchase prices"
+msgstr "Копировать поставщиков и закупочные цены"
+
+msgid "Start the copy archived"
+msgstr "Создать копию в архиве"
+
+msgid "Otherwise it gets the original's status."
+msgstr "Иначе у копии будет статус оригинала."

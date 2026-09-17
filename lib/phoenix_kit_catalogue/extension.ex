@@ -93,10 +93,23 @@ defmodule PhoenixKitCatalogue.Extension do
   @doc "Same as `item_columns/0`, for the catalogue category table (`:detail_categories`)."
   @callback category_columns() :: [column()]
 
+  @doc """
+  The namespace a copied item or category should carry (Duplicate,
+  including a whole catalogue's copy). `data` is this extension's current
+  `data[key()]`; return the map the copy stores, or `nil` for none. Drop
+  anything that must stay unique to the original — an external system's
+  id for the product is the case this exists for. Without the callback
+  the namespace is copied unchanged. Called even while the extension is
+  disabled; a raise, throw or exit, or a return that is neither a map
+  nor `nil`, drops the namespace from the copy.
+  """
+  @callback duplicate_data(kind :: :item | :category, data :: map()) :: map() | nil
+
   @optional_callbacks item_section: 1,
                       category_section: 1,
                       cast_item: 2,
                       cast_category: 2,
                       item_columns: 0,
-                      category_columns: 0
+                      category_columns: 0,
+                      duplicate_data: 2
 end

@@ -328,6 +328,24 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ ~s(phx-click="card_click")
     end
 
+    test "the row photo opts out of max-width so the rubber name column cannot collapse it" do
+      html =
+        render_component(&Browse.item_row/1,
+          id: "r1",
+          item: Map.put(row_item(), :thumb_url, "/file/x/thumbnail/sig"),
+          columns: [:thumb, :name]
+        )
+
+      # With the name cell at w-full, an img capped at max-width: 100%
+      # has a zero minimum width and the table gives it none: the photo
+      # rendered 0px wide in the table and comfy views (tim-dev,
+      # 2026-09-17). A browser is the only place that shows the width, so
+      # the class that prevents it is pinned here.
+      [img] = Regex.run(~r/<img[^>]*>/, html)
+      assert img =~ "max-w-none"
+      assert html =~ "w-full"
+    end
+
     test "item_table renders the checkbox header cell in lockstep" do
       with_box =
         render_component(&Browse.item_table/1,

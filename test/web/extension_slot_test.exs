@@ -39,6 +39,9 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
       "UUID"
     )
     |> String.replace(~r/(?<=")phx-[A-Za-z0-9_-]{6,}(?=")/, "phx-ID")
+    # Core's "[dev]" header tag follows the machine's hostname, so the
+    # snapshot would pass or fail by whose computer runs it.
+    |> String.replace(~r{<span class="[^"]*">\s*\[dev\]\s*</span>}, "")
   end
 
   describe "no extension registered" do
@@ -56,7 +59,7 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
       refute has_element?(view, "#ext-fake-section")
 
       fixture_path = Path.expand("../fixtures/item_form_no_ext.html", __DIR__)
-      assert normalize(html) == File.read!(fixture_path)
+      assert normalize(html) == normalize(File.read!(fixture_path))
     end
   end
 

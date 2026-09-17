@@ -927,4 +927,83 @@ defmodule PhoenixKitCatalogue.GettextTest do
   after
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
   end
+
+  test "the cross-catalogue move strings are translated in ru and et" do
+    # Added by hand to the .pot and every locale (2026-09-17, moves
+    # across catalogues).
+    for {msgid, ru, et} <- [
+          {"Move this category and all its items to a different catalogue — at its top level or under one of its categories.",
+           "Переместите эту категорию и все её позиции в другой каталог — на его верхний уровень или внутрь одной из его категорий.",
+           "Liiguta see kategooria ja kõik selle tooted teise kataloogi — selle ülatasemele või mõne selle kategooria alla."},
+          {"Standard and smart catalogues can't exchange items or categories.",
+           "Обычные и умные каталоги не могут обмениваться позициями или категориями.",
+           "Tava- ja nutikataloogid ei saa tooteid ega kategooriaid omavahel vahetada."},
+          {"Items go to the chosen catalogue without a category.",
+           "Позиции попадут в выбранный каталог без категории.",
+           "Tooted lähevad valitud kataloogi ilma kategooriata."},
+          {"Put items in a category there", "Поместить позиции в категорию этого каталога",
+           "Pane tooted sealsesse kategooriasse"},
+          {"They sit at the root of the chosen catalogue.",
+           "Они окажутся на верхнем уровне выбранного каталога.",
+           "Need jäävad valitud kataloogi ülatasemele."},
+          {"%{name} (this catalogue)", "%{name} (этот каталог)", "%{name} (see kataloog)"},
+          {"%{catalogue} — no category", "%{catalogue} — без категории",
+           "%{catalogue} — ilma kategooriata"},
+          {"%{catalogue} — top level", "%{catalogue} — верхний уровень",
+           "%{catalogue} — ülatase"},
+          {"-- Select destination --", "-- Выберите, куда переместить --", "-- Vali sihtkoht --"},
+          {"Some selected items are no longer in this catalogue. Reload the page and try again.",
+           "Некоторых выбранных товаров больше нет в этом каталоге. Обновите страницу и попробуйте снова.",
+           "Mõni valitud toode ei ole enam selles kataloogis. Laadi leht uuesti ja proovi uuesti."}
+        ] do
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru
+
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == et
+    end
+  after
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
+
+  test "the duplicate-catalogue strings are translated in ru and et" do
+    # Added by hand to the .pot and every locale (2026-09-17, Duplicate
+    # on the catalogues page).
+    for {msgid, ru, et} <- [
+          {"%{name} (copy %{number})", "%{name} (копия %{number})", "%{name} (koopia %{number})"},
+          {"This catalogue is already being duplicated.", "Этот каталог уже дублируется.",
+           "Seda kataloogi juba dubleeritakse."},
+          {"Duplicate catalogue", "Дублировать каталог", "Dubleeri kataloog"},
+          {"Creates a copy of “%{name}” with all its categories (%{categories}) and items (%{items}), in the same folder and with “(copy)” after its name.",
+           "Создаёт копию каталога «%{name}» со всеми категориями (%{categories}) и товарами (%{items}) в той же папке, с «(копия)» после названия.",
+           "Loob kataloogist „%{name}“ koopia koos kõigi selle kategooriate (%{categories}) ja toodetega (%{items}) samasse kausta, nime järel „(koopia)“."},
+          {"Not copied: items in Deleted, comments, history and links to other systems (such as a shop's product ids).",
+           "Не копируются: удалённые товары, комментарии, история и связи с другими системами (например, идентификаторы товаров в магазине).",
+           "Ei kopeerita: kustutatud tooteid, kommentaare, ajalugu ega seoseid teiste süsteemidega (näiteks poe tootetunnuseid)."},
+          {"Shared with the original, not duplicated. Removing one from either catalogue leaves the other untouched.",
+           "Общие с оригиналом, не дублируются. Удаление из одного каталога не затрагивает другой.",
+           "Jagatakse originaaliga, neid ei dubleerita. Ühest kataloogist eemaldamine teist ei mõjuta."},
+          {"Duplicating “%{name}”…", "Дублирование «%{name}»…", "Dubleerin kataloogi „%{name}“…"},
+          {"Created “%{name}” (categories: %{categories}, items: %{items}).",
+           "Создан «%{name}» (категорий: %{categories}, товаров: %{items}).",
+           "Loodud „%{name}“ (kategooriaid: %{categories}, tooteid: %{items})."},
+          {"Failed to duplicate the catalogue.", "Не удалось дублировать каталог.",
+           "Kataloogi dubleerimine ebaõnnestus."},
+          {"Copy SKUs", "Копировать артикулы", "Kopeeri artiklid"},
+          {"Copy images and files", "Копировать изображения и файлы", "Kopeeri pildid ja failid"},
+          {"Copy suppliers and purchase prices", "Копировать поставщиков и закупочные цены",
+           "Kopeeri tarnijad ja ostuhinnad"},
+          {"Start the copy archived", "Создать копию в архиве", "Loo koopia arhiveerituna"},
+          {"Otherwise it gets the original's status.", "Иначе у копии будет статус оригинала.",
+           "Muidu saab koopia originaali oleku."}
+        ] do
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru
+
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+      assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == et
+    end
+  after
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
 end

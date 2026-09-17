@@ -65,6 +65,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Catalogue.Slugs
   alias PhoenixKitCatalogue.Catalogue.Suppliers
+  alias PhoenixKitCatalogue.Errors
   alias PhoenixKitCatalogue.Extensions
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
@@ -252,18 +253,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         do: Catalogue.list_categories_for_catalogue(catalogue_uuid),
         else: Catalogue.list_all_categories()
 
-    all_categories = if action == :edit, do: Catalogue.list_all_categories(), else: []
     parent_catalogue = load_parent_catalogue(catalogue_uuid)
     kind = catalogue_kind(parent_catalogue)
-
-    # Smart items move between smart catalogues (no category concept);
-    # standard items use the existing "pick a category anywhere" flow.
-    smart_move_targets =
-      if action == :edit and kind == "smart" do
-        Catalogue.list_catalogues(kind: :smart) |> Enum.reject(&(&1.uuid == catalogue_uuid))
-      else
-        []
-      end
+    move_options = if action == :edit, do: item_move_options(item, kind), else: []
 
     socket
     |> assign(
@@ -305,8 +297,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       # `{item_uuid, supplier_uuid}` of the open history modal, so a price
       # revision landing from another session can re-read its rows.
       supplier_history_pair: nil,
-      all_categories: all_categories,
-      smart_move_targets: smart_move_targets,
+      move_options: move_options,
       move_target: nil,
       current_tab: :details,
       meta_state: Metadata.build_state(:item, item),
@@ -798,11 +789,15 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     {:noreply, assign(socket, :rule_candidate_order, incoming ++ rest)}
   end
 
+  # Only a value the select offered is kept; anything else (a blank
+  # prompt, a stale or forged value) leaves nothing to move to.
   def handle_event("select_move_target", params, socket) do
-    # Accept the UUID under either key depending on which select fired —
-    # standard forms use `category_uuid`, smart forms use `catalogue_uuid`.
-    uuid = params["category_uuid"] || params["catalogue_uuid"]
-    target = if uuid in [nil, ""], do: nil, else: uuid
+    value = params["move_target"]
+
+    target =
+      if is_binary(value) and value in move_option_values(socket.assigns.move_options),
+        do: value
+
     {:noreply, assign(socket, :move_target, target)}
   end
 
@@ -1369,11 +1364,63 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         do: Catalogue.list_categories_for_catalogue(catalogue_uuid),
         else: Catalogue.list_all_categories()
 
-    all_categories =
-      if socket.assigns.action == :edit, do: Catalogue.list_all_categories(), else: []
+    move_options =
+      if socket.assigns.action == :edit,
+        do: item_move_options(socket.assigns.item, socket.assigns.catalogue_kind),
+        else: []
 
-    assign(socket, categories: categories, all_categories: all_categories)
+    assign(socket, categories: categories, move_options: move_options)
   end
+
+  # Every place the item can move to, as `<select>` options whose values
+  # say what they are: `"category:<uuid>"` or `"catalogue:<uuid>"` (no
+  # category there). Standard items get one group per live standard
+  # catalogue — its no-category slot, then its categories; smart items,
+  # which have no categories, the other smart catalogues. Kinds never
+  # mix: the two price differently. The item's own place is left out.
+  defp item_move_options(item, "smart") do
+    [kind: :smart]
+    |> Catalogue.list_catalogues()
+    |> Enum.reject(&(&1.uuid == item.catalogue_uuid))
+    |> Enum.map(&{&1.name, "catalogue:" <> &1.uuid})
+  end
+
+  defp item_move_options(item, kind) do
+    categories = Enum.group_by(Catalogue.list_all_categories(), & &1.catalogue_uuid)
+
+    [kind: kind]
+    |> Catalogue.list_catalogues()
+    |> Enum.map(fn catalogue ->
+      home? = catalogue.uuid == item.catalogue_uuid
+
+      no_category =
+        if home? and is_nil(item.category_uuid),
+          do: [],
+          else: [
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{catalogue} — no category",
+               catalogue: catalogue.name
+             ), "catalogue:" <> catalogue.uuid}
+          ]
+
+      in_categories =
+        for cat <- Map.get(categories, catalogue.uuid, []),
+            cat.uuid != item.category_uuid,
+            do: {cat.name, "category:" <> cat.uuid}
+
+      {catalogue.name, no_category ++ in_categories}
+    end)
+    |> Enum.reject(fn {_name, options} -> options == [] end)
+  end
+
+  defp move_option_values(options) do
+    Enum.flat_map(options, fn
+      {_group, entries} when is_list(entries) -> Enum.map(entries, &elem(&1, 1))
+      {_label, value} -> [value]
+    end)
+  end
+
+  defp parse_move_target("category:" <> uuid), do: {:category, uuid}
+  defp parse_move_target("catalogue:" <> uuid), do: {:catalogue, uuid}
 
   # Re-reads the previews against the threads already resolved — a comment
   # changes no supplier row, so there is nothing else to reload.
@@ -1991,17 +2038,23 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     {:noreply, socket}
   end
 
-  # Routes on the parent catalogue's kind: smart items move across
-  # catalogues (categories don't apply), standard items move between
-  # categories (the catalogue is derived from the target category).
+  # A category carries its catalogue along; a bare catalogue files the
+  # item there without a category (its own catalogue: just uncategorize).
   defp perform_move(socket, target) do
-    result =
-      case socket.assigns.catalogue_kind do
-        "smart" ->
-          Catalogue.move_item_to_catalogue(socket.assigns.item, target, actor_opts(socket))
+    # The row as it is now: another tab may have moved it since mount, and
+    # "its own catalogue" must mean where it is, not where it was.
+    item = Catalogue.get_item(socket.assigns.item.uuid) || socket.assigns.item
 
-        _ ->
-          Catalogue.move_item_to_category(socket.assigns.item, target, actor_opts(socket))
+    result =
+      case parse_move_target(target) do
+        {:category, uuid} ->
+          Catalogue.move_item_to_category(item, uuid, actor_opts(socket))
+
+        {:catalogue, uuid} when uuid == item.catalogue_uuid ->
+          Catalogue.move_item_to_category(item, nil, actor_opts(socket))
+
+        {:catalogue, uuid} ->
+          Catalogue.move_item_to_catalogue(item, uuid, actor_opts(socket))
       end
 
     case result do
@@ -2018,14 +2071,25 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           reason: reason
         })
 
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move item.")
-         )}
+        {:noreply, put_flash(socket, :error, move_error_message(reason))}
     end
   end
+
+  # A refusal the context names gets its own words; anything else (a
+  # changeset) the generic one.
+  defp move_error_message(reason)
+       when reason in [
+              :category_not_found,
+              :catalogue_not_found,
+              :kind_mismatch,
+              :not_found,
+              :same_catalogue,
+              :catalogue_moved
+            ],
+       do: Errors.message(reason)
+
+  defp move_error_message(_reason),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move item.")
 
   # actor_opts/1 imported from PhoenixKitCatalogue.Web.Helpers
 
@@ -3475,7 +3539,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                `item.data["meta"]`. Collapsed and only rendered when old
                values exist; the inputs stay inside the main form so
                editing and clearing them still works exactly as before. --%>
-          <details :if={@meta_state.attached != []} class="card bg-base-100 shadow-lg">
+          <details
+            :if={@meta_state.attached != []}
+            id="item-meta-section"
+            phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
+            class="card bg-base-100 shadow-lg"
+          >
             <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
               <.icon name="hero-tag" class="w-4 h-4 text-base-content/60" />
               <h3 class="font-semibold text-base">
@@ -4347,18 +4416,16 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         </:actions>
       </.modal>
 
-      <%!-- Move — collapsed by default. Standard items move to a
-           category anywhere; smart items move across smart catalogues
-           (no category). Each block only renders when its own target
-           list is non-empty so we never show an empty-dropdown dead
-           end; the outer <details> only renders when at least one
-           branch is available. --%>
+      <%!-- Move — collapsed by default. Standard items move to a category
+           or the no-category slot of any standard catalogue; smart items
+           move across smart catalogues (no category). Hidden when there is
+           nowhere to go. The select sits in its own <form>: LiveView sends
+           phx-change only from inside one. `open` is client-owned, or the
+           re-render that change causes would fold the section shut. --%>
       <details
-        :if={
-          @action == :edit &&
-            ((@catalogue_kind != "smart" && @all_categories != []) ||
-               (@catalogue_kind == "smart" && @smart_move_targets != []))
-        }
+        :if={@action == :edit && @move_options != []}
+        id="item-move-section"
+        phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
         class="card bg-base-100 shadow-lg"
       >
         <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
@@ -4367,74 +4434,47 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
         </summary>
 
-        <div class="card-body pt-0 space-y-6">
-          <%!-- Standard items: move to any category --%>
-          <div :if={@catalogue_kind != "smart" && @all_categories != []} class="flex flex-col gap-3">
-            <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Category")}</p>
-              <p class="text-xs text-base-content/60">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this item to a category in any catalogue.")}
-              </p>
-            </div>
-            <div class="flex items-end gap-3">
-              <div class="fieldset flex-1">
-                <.select
-                  name="category_uuid"
-                  id="item-move-category"
-                  value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select category --")}
-                  options={Enum.map(@all_categories, &{&1.name, &1.uuid})}
-                  class="select-sm transition-colors focus-within:select-primary"
-                  phx-change="select_move_target"
-                />
-              </div>
-              <.button
-                type="button"
-                phx-click="move_item"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
-                disabled={is_nil(@move_target)}
-                variant="outline"
-                size="sm"
-              >
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
-              </.button>
-            </div>
+        <div class="card-body pt-0 flex flex-col gap-3">
+          <div :if={@catalogue_kind != "smart"}>
+            <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Category")}</p>
+            <p class="text-xs text-base-content/60">
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this item to a category in any catalogue.")}
+            </p>
           </div>
-
-          <%!-- Smart items: move to a different smart catalogue --%>
-          <div :if={@catalogue_kind == "smart" && @smart_move_targets != []} class="flex flex-col gap-3">
-            <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Smart Catalogue")}</p>
-              <p class="text-xs text-base-content/60">
-                {Gettext.gettext(
-                  PhoenixKitCatalogue.Gettext,
-                  "Move this item into a different smart catalogue. Its catalogue rules stay attached."
-                )}
-              </p>
-            </div>
-            <div class="flex items-end gap-3">
-              <div class="fieldset flex-1">
-                <.select
-                  name="catalogue_uuid"
-                  id="item-move-smart-catalogue"
-                  value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select catalogue --")}
-                  options={Enum.map(@smart_move_targets, &{&1.name, &1.uuid})}
-                  class="select-sm transition-colors focus-within:select-primary"
-                  phx-change="select_move_target"
-                />
-              </div>
-              <.button
-                type="button"
-                phx-click="move_item"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
-                disabled={is_nil(@move_target)}
-                variant="outline"
-                size="sm"
-              >
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
-              </.button>
-            </div>
+          <div :if={@catalogue_kind == "smart"}>
+            <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Smart Catalogue")}</p>
+            <p class="text-xs text-base-content/60">
+              {Gettext.gettext(
+                PhoenixKitCatalogue.Gettext,
+                "Move this item into a different smart catalogue. Its catalogue rules stay attached."
+              )}
+            </p>
+          </div>
+          <div class="flex items-end gap-3">
+            <form id="item-move-form" phx-change="select_move_target" class="fieldset flex-1">
+              <.select
+                name="move_target"
+                id="item-move-target"
+                value={@move_target}
+                prompt={
+                  if @catalogue_kind == "smart",
+                    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select catalogue --"),
+                    else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select category --")
+                }
+                options={@move_options}
+                class="select-sm transition-colors focus-within:select-primary"
+              />
+            </form>
+            <.button
+              type="button"
+              phx-click="move_item"
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
+              disabled={is_nil(@move_target)}
+              variant="outline"
+              size="sm"
+            >
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
+            </.button>
           </div>
         </div>
       </details>

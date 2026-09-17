@@ -394,6 +394,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # ── Duplication (see `Catalogue.Duplication`) ────────────────────
   defdelegate duplicate_item(item, opts \\ []), to: Duplication
   defdelegate duplicate_category(category, opts \\ []), to: Duplication
+  defdelegate duplicate_catalogue(catalogue, opts \\ []), to: Duplication
+  defdelegate catalogue_copy_counts(catalogue_uuid), to: Duplication
   defdelegate bulk_duplicate_items(uuids, opts \\ []), to: Duplication
   defdelegate bulk_duplicate_categories(uuids, opts \\ []), to: Duplication
 
@@ -880,12 +882,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> restore_trashed(:category, now)
       |> repo().update_all([])
 
-    {items_restored, _} =
+    stamped_items =
       from(i in Item, as: :item, where: i.catalogue_uuid == ^root and i.status == "deleted")
       |> trashed_by_or_unstamped(root)
+
+    {items_restored, _} =
+      stamped_items
       |> outside_trashed_categories()
       |> restore_trashed(:item, now)
       |> repo().update_all([])
+
+    restamp_left_behind!(stamped_items)
 
     # Restore to where it came from — unless that home is gone. A
     # hard-deleted folder already SET NULLed the reference (root); a
@@ -1628,13 +1635,24 @@ defmodule PhoenixKitCatalogue.Catalogue do
   @spec create_category(map(), keyword()) ::
           {:ok, Category.t()} | {:error, Ecto.Changeset.t(Category.t())}
   def create_category(attrs, opts \\ []) do
-    changeset =
-      %Category{}
-      |> Category.changeset(put_default_category_position(attrs))
-      |> validate_parent_in_same_catalogue()
-      |> stamp_created_deleted()
+    # One transaction, so the parent read `FOR SHARE` in the catalogue
+    # check holds until the insert commits: a move of the parent's tree
+    # to another catalogue either lands first (and the check sees the new
+    # catalogue) or waits and then carries the new child along.
+    result =
+      repo().transaction(fn ->
+        %Category{}
+        |> Category.changeset(put_default_category_position(attrs))
+        |> validate_parent_in_same_catalogue()
+        |> stamp_created_deleted()
+        |> repo().insert()
+        |> case do
+          {:ok, category} -> category
+          {:error, changeset} -> repo().rollback(changeset)
+        end
+      end)
 
-    case repo().insert(changeset) do
+    case result do
       {:ok, category} = ok ->
         log_activity(
           %{
@@ -1806,8 +1824,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
     end
   end
 
+  # `FOR SHARE`: callers run inside a transaction, so the parent cannot
+  # change catalogue between this check and their write.
   defp check_parent_catalogue(changeset, parent_uuid, catalogue_uuid) do
-    case repo().get(Category, parent_uuid) do
+    case repo().one(from(c in Category, where: c.uuid == ^parent_uuid, lock: "FOR SHARE")) do
       nil ->
         Ecto.Changeset.add_error(changeset, :parent_uuid, "does not exist")
 
@@ -2108,12 +2128,17 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> restore_trashed(:category, now)
       |> repo().update_all([])
 
-    {items_restored, _} =
+    stamped_items =
       from(i in Item, as: :item, where: i.category_uuid in ^subtree and i.status == "deleted")
       |> trashed_by(root)
+
+    {items_restored, _} =
+      stamped_items
       |> outside_trashed_categories()
       |> restore_trashed(:item, now)
       |> repo().update_all([])
+
+    restamp_left_behind!(stamped_items)
 
     {repo().get!(Category, root), categories_restored, items_restored}
   end
@@ -2279,7 +2304,44 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # item in a live category becomes trashed on its own. `from_status` stays.
   defp restamp_orphaned_trash(_catalogue_uuid, _subtree, _doomed, []), do: :ok
 
-  defp restamp_orphaned_trash(catalogue_uuid, subtree, doomed, _kept) do
+  defp restamp_orphaned_trash(catalogue_uuid, subtree, doomed, _kept),
+    do: restamp_trash_roots(catalogue_uuid, subtree, doomed)
+
+  # A moved subtree can carry trashed rows stamped with a root the move
+  # takes them out from under — a category restored on its own while its
+  # trashed ancestor stays in the bin, then moved. That root's Restore
+  # walks its current subtree and would never reach them again, so they
+  # are restamped the way Delete Forever restamps what it leaves behind.
+  # `covering` are the roots still above the landing spot (its catalogue
+  # and ancestors); a stamp naming one of them, or a row of the subtree
+  # itself, still works and is left alone. Call it after the move.
+  defp restamp_moved_trash!(catalogue_uuid, subtree, covering) do
+    subtree = Enum.map(subtree, &uuid_string/1)
+    keep = MapSet.new(subtree ++ Enum.map(covering, &uuid_string/1))
+
+    category_roots =
+      from(c in Category,
+        where: c.uuid in ^subtree and c.status == "deleted",
+        select: fragment("? #>> '{_trash,root}'", c.data)
+      )
+
+    item_roots =
+      from(i in Item,
+        where: i.category_uuid in ^subtree and i.status == "deleted",
+        select: fragment("? #>> '{_trash,root}'", i.data)
+      )
+
+    doomed =
+      category_roots
+      |> union(^item_roots)
+      |> repo().all()
+      |> Enum.reject(&(is_nil(&1) or MapSet.member?(keep, &1)))
+
+    if doomed != [], do: restamp_trash_roots(catalogue_uuid, subtree, doomed)
+    :ok
+  end
+
+  defp restamp_trash_roots(catalogue_uuid, subtree, doomed) do
     doomed_set = MapSet.new(doomed)
     remaining = Enum.reject(subtree, &MapSet.member?(doomed_set, &1))
 
@@ -2385,19 +2447,39 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   The moved category's `parent_uuid` is cleared (it detaches from its
   former parent, which stays in the source catalogue) and it takes the
-  next available root-level position in the target. Internal parent
-  links inside the moved subtree are preserved.
+  next available root-level position in the target — or, with
+  `parent_uuid:`, the next position under that category of the target
+  catalogue. Internal parent links inside the moved subtree are
+  preserved.
 
-  Automatically assigns the next available root position in the target
-  catalogue.
+  Refuses a trashed category (`:not_found`), a missing or trashed
+  target catalogue (`:catalogue_not_found`), a target of the other kind
+  (`:kind_mismatch` — standard and smart items price differently), and
+  a `parent_uuid:` that is missing, trashed or in another catalogue
+  (`:parent_not_found`) or inside the moved subtree
+  (`:would_create_cycle`). Both catalogues are told about the move.
+
+  With `catalogue_uuid:`, a category that is no longer in that catalogue
+  when its row is locked is refused (`:wrong_catalogue_scope`).
 
   ## Examples
 
       {:ok, moved} = Catalogue.move_category_to_catalogue(category, target_catalogue_uuid)
+      {:ok, moved} = Catalogue.move_category_to_catalogue(category, target, parent_uuid: parent)
   """
   @spec move_category_to_catalogue(Category.t(), Ecto.UUID.t(), keyword()) ::
           {:ok, Category.t()} | {:error, term()}
   def move_category_to_catalogue(%Category{} = category, target_catalogue_uuid, opts \\ []) do
+    parent_uuid = opts[:parent_uuid]
+
+    cond do
+      not valid_uuid?(target_catalogue_uuid) -> {:error, :catalogue_not_found}
+      not (is_nil(parent_uuid) or valid_uuid?(parent_uuid)) -> {:error, :parent_not_found}
+      true -> do_move_category_to_catalogue(category, target_catalogue_uuid, parent_uuid, opts)
+    end
+  end
+
+  defp do_move_category_to_catalogue(category, target_catalogue_uuid, parent_uuid, opts) do
     result =
       locked_transaction(fn ->
         # Both catalogues' trash/restore locks first, in sorted order: a
@@ -2421,9 +2503,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
         locked =
           repo().one!(from(c in Category, where: c.uuid == ^category.uuid, lock: "FOR UPDATE"))
 
-        if locked.catalogue_uuid != source_catalogue_uuid, do: repo().rollback(:catalogue_moved)
+        check_move_source!(locked, source_catalogue_uuid, opts[:catalogue_uuid])
 
-        subtree = Tree.subtree_uuids(category.uuid)
+        # Read under both locks, so a trash of the target cannot land
+        # between this check and the commit.
+        check_move_destination!(source_catalogue_uuid, target_catalogue_uuid)
+
+        subtree = lock_subtree!(category.uuid)
+        if parent_uuid, do: check_move_parent!(parent_uuid, target_catalogue_uuid, subtree)
         now = DateTime.utc_now()
 
         {items_updated, _} =
@@ -2437,45 +2524,123 @@ defmodule PhoenixKitCatalogue.Catalogue do
           from(c in Category, where: c.uuid in ^subtree)
           |> repo().update_all(set: [catalogue_uuid: target_catalogue_uuid, updated_at: now])
 
+        restamp_moved_trash!(
+          target_catalogue_uuid,
+          subtree,
+          [target_catalogue_uuid | parent_and_ancestors(parent_uuid)]
+        )
+
         # Position is computed inside the transaction (after the
         # subtree has moved) to avoid the same-`max_position` race
         # called out in prior PR reviews.
-        next_pos = next_category_position(target_catalogue_uuid, nil)
+        next_pos = next_category_position(target_catalogue_uuid, parent_uuid)
 
         moved =
-          category
+          locked
           |> Category.changeset(%{
             catalogue_uuid: target_catalogue_uuid,
-            parent_uuid: nil,
+            parent_uuid: parent_uuid,
             position: next_pos
           })
           |> repo().update!()
 
-        {moved, categories_updated, items_updated, source_catalogue_uuid}
+        {moved, categories_updated, items_updated, source_catalogue_uuid, locked.parent_uuid}
       end)
 
     case result do
-      {:ok, {moved, categories_updated, items_updated, source_catalogue_uuid}} ->
-        log_activity(%{
-          action: "category.moved",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          resource_uuid: moved.uuid,
-          parent_catalogue_uuid: target_catalogue_uuid,
-          metadata: %{
-            "name" => moved.name,
-            "from_catalogue_uuid" => source_catalogue_uuid,
-            "to_catalogue_uuid" => target_catalogue_uuid,
-            "subtree_size" => categories_updated,
-            "items_cascaded" => items_updated
-          }
-        })
+      {:ok, {moved, categories_updated, items_updated, source_catalogue_uuid, from_parent_uuid}} ->
+        log_activity(
+          %{
+            action: "category.moved",
+            mode: "manual",
+            actor_uuid: opts[:actor_uuid],
+            resource_type: "category",
+            resource_uuid: moved.uuid,
+            parent_catalogue_uuid: target_catalogue_uuid,
+            metadata: %{
+              "name" => moved.name,
+              "from_catalogue_uuid" => source_catalogue_uuid,
+              "to_catalogue_uuid" => target_catalogue_uuid,
+              "from_parent_uuid" => from_parent_uuid,
+              "to_parent_uuid" => parent_uuid,
+              "subtree_size" => categories_updated,
+              "items_cascaded" => items_updated
+            }
+          },
+          Keyword.take(opts, [:broadcast, :mode])
+        )
+
+        # The activity broadcast names the target; pages open on the
+        # source lost a subtree and its items and must reload too.
+        if source_catalogue_uuid != target_catalogue_uuid and Keyword.get(opts, :broadcast, true),
+          do: broadcast_moved_out(source_catalogue_uuid)
 
         {:ok, moved}
 
       error ->
         error
+    end
+  end
+
+  # Every category of the moving subtree, row-locked before any item is
+  # touched. Creating, updating or moving an item reads its category
+  # `FOR SHARE`, so it either finishes first — and the item update below
+  # then carries it along — or waits and reads the new catalogue. With
+  # only the root locked, an item could land in a subcategory under the
+  # old catalogue, or deadlock against the item update (review finding).
+  # Re-read until the subtree stops changing under the locks.
+  defp lock_subtree!(root_uuid, attempts \\ 3) do
+    subtree = Tree.subtree_uuids(root_uuid)
+    lock_categories!(subtree)
+
+    cond do
+      Enum.sort(Tree.subtree_uuids(root_uuid)) == Enum.sort(subtree) -> subtree
+      attempts > 1 -> lock_subtree!(root_uuid, attempts - 1)
+      true -> repo().rollback(:catalogue_moved)
+    end
+  end
+
+  defp broadcast_moved_out(catalogue_uuid) do
+    PubSub.broadcast(:category, nil, catalogue_uuid)
+    PubSub.broadcast(:item, nil, catalogue_uuid)
+  end
+
+  # The canonical string form only: `Ecto.UUID.cast/1` also accepts any
+  # 16-byte binary, which later dumps and lock keys would mishandle.
+  defp valid_uuid?(value), do: is_binary(value) and Ecto.UUID.cast(value) == {:ok, value}
+
+  # A move destination must be a live catalogue of the source's kind:
+  # standard items price from base price + markup, smart items from
+  # their rules, so a row carried across kinds would lose its meaning.
+  # Runs under the destination's catalogue lock (the callers take it).
+  defp check_move_destination!(source_catalogue_uuid, target_catalogue_uuid) do
+    kinds =
+      from(c in Catalogue,
+        where: c.uuid in ^Enum.uniq([source_catalogue_uuid, target_catalogue_uuid]),
+        where: c.status != "deleted" or c.uuid == ^source_catalogue_uuid,
+        select: {c.uuid, c.kind}
+      )
+      |> repo().all()
+      |> Map.new()
+
+    case {Map.get(kinds, source_catalogue_uuid), Map.get(kinds, target_catalogue_uuid)} do
+      {_, nil} -> repo().rollback(:catalogue_not_found)
+      {kind, kind} -> :ok
+      _ -> repo().rollback(:kind_mismatch)
+    end
+  end
+
+  # A parent in the destination: live, in that catalogue, and not a
+  # member of the subtree being moved (the subtree carries raw uuids).
+  # `FOR SHARE` holds it against a concurrent trash until commit.
+  defp check_move_parent!(parent_uuid, catalogue_uuid, subtree) do
+    case repo().one(from(c in Category, where: c.uuid == ^parent_uuid, lock: "FOR SHARE")) do
+      %Category{status: status, catalogue_uuid: ^catalogue_uuid} when status != "deleted" ->
+        {:ok, raw} = Ecto.UUID.dump(parent_uuid)
+        if raw in subtree, do: repo().rollback(:would_create_cycle), else: :ok
+
+      _ ->
+        repo().rollback(:parent_not_found)
     end
   end
 
@@ -2489,7 +2654,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
     * cross a catalogue boundary — returns `{:error, :cross_catalogue}`.
       Callers who want that should run `move_category_to_catalogue/3`
       first, then reparent.
-    * target a missing parent — returns `{:error, :parent_not_found}`
+    * target a missing or trashed parent — returns `{:error, :parent_not_found}`
+    * move a trashed category — returns `{:error, :not_found}`
 
   The moved category takes the next-available position among its new
   siblings. Its subtree comes along untouched (parent links inside the
@@ -2509,6 +2675,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
              :would_create_cycle
              | :cross_catalogue
              | :parent_not_found
+             | :not_found
+             | :catalogue_moved
              | Ecto.Changeset.t(Category.t())}
   def move_category_under(category, new_parent_uuid, opts \\ [])
 
@@ -2516,60 +2684,58 @@ defmodule PhoenixKitCatalogue.Catalogue do
       when is_binary(same) or is_nil(same),
       do: {:ok, category}
 
-  def move_category_under(%Category{} = category, nil, opts) do
-    from_parent_uuid = category.parent_uuid
-    next_pos = next_category_position(category.catalogue_uuid, nil)
-
-    with {:ok, moved} <-
-           category
-           |> Category.changeset(%{parent_uuid: nil, position: next_pos})
-           |> repo().update() do
-      log_activity(
-        %{
-          action: "category.moved",
-          mode: "manual",
-          actor_uuid: opts[:actor_uuid],
-          resource_type: "category",
-          resource_uuid: moved.uuid,
-          parent_catalogue_uuid: moved.catalogue_uuid,
-          metadata: %{
-            "name" => moved.name,
-            "from_parent_uuid" => from_parent_uuid,
-            "to_parent_uuid" => nil,
-            "catalogue_uuid" => moved.catalogue_uuid
-          }
-        },
-        Keyword.take(opts, [:broadcast, :mode])
-      )
-
-      {:ok, moved}
-    end
-  end
+  def move_category_under(%Category{} = category, nil, opts),
+    do: do_move_category_under(category, nil, opts)
 
   def move_category_under(%Category{} = category, new_parent_uuid, opts)
       when is_binary(new_parent_uuid) do
-    if new_parent_uuid == category.uuid do
-      {:error, :would_create_cycle}
-    else
-      do_move_category_under(category, new_parent_uuid, opts)
+    cond do
+      new_parent_uuid == category.uuid -> {:error, :would_create_cycle}
+      not valid_uuid?(new_parent_uuid) -> {:error, :parent_not_found}
+      true -> do_move_category_under(category, new_parent_uuid, opts)
     end
   end
 
-  # Runs the cycle check + parent validation + position calc + update
-  # inside a single transaction with `FOR UPDATE` on the moved row.
-  # Two concurrent reparents on different nodes that would jointly
-  # create a cycle now serialise: the second one re-runs `Tree.subtree_uuids/1`
-  # against the post-commit tree and gets `:would_create_cycle` instead
-  # of silently shipping a corrupting structure.
+  # Runs the checks, the position calc and the update in one transaction
+  # under the catalogue lock plus `FOR UPDATE` on the moved row, so it
+  # serialises with every trash/restore path (a category trashed a moment
+  # ago is refused, not revived as a live child of a live parent) and
+  # with a concurrent reparent: two reparents that would jointly create a
+  # cycle — the second one re-runs `Tree.subtree_uuids/1` against the
+  # post-commit tree and gets `:would_create_cycle`.
   defp do_move_category_under(category, new_parent_uuid, opts) do
     result =
-      repo().transaction(fn ->
-        repo().one!(from(c in Category, where: c.uuid == ^category.uuid, lock: "FOR UPDATE"))
+      locked_transaction(fn ->
+        catalogue_uuid =
+          repo().one(
+            from(c in Category, where: c.uuid == ^category.uuid, select: c.catalogue_uuid)
+          ) || repo().rollback(:not_found)
 
-        if cycle?(new_parent_uuid, category.uuid) do
-          repo().rollback(:would_create_cycle)
-        else
-          run_locked_reparent(category, new_parent_uuid)
+        lock_catalogue!(catalogue_uuid)
+
+        locked =
+          repo().one!(from(c in Category, where: c.uuid == ^category.uuid, lock: "FOR UPDATE"))
+
+        cond do
+          locked.catalogue_uuid != catalogue_uuid ->
+            repo().rollback(:catalogue_moved)
+
+          locked.status == "deleted" ->
+            repo().rollback(:not_found)
+
+          new_parent_uuid && cycle?(new_parent_uuid, locked.uuid) ->
+            repo().rollback(:would_create_cycle)
+
+          true ->
+            moved = run_locked_reparent(locked, new_parent_uuid)
+
+            restamp_moved_trash!(
+              catalogue_uuid,
+              Tree.subtree_uuids(locked.uuid),
+              [catalogue_uuid | parent_and_ancestors(new_parent_uuid)]
+            )
+
+            moved
         end
       end)
 
@@ -2651,6 +2817,25 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # it isn't a valid UUID. Used by `list_category_tree/2`'s
   # `:exclude_subtree_of` membership test (loaded `Category` rows carry
   # textual UUIDs).
+  defp check_move_source!(locked, source_catalogue_uuid, scope) do
+    cond do
+      locked.catalogue_uuid != source_catalogue_uuid -> repo().rollback(:catalogue_moved)
+      locked.status == "deleted" -> repo().rollback(:not_found)
+      # A client-captured selection is checked where the row is locked:
+      # moved to another catalogue since the page read it, it is not this
+      # page's to move any more.
+      scope && scope != source_catalogue_uuid -> repo().rollback(:wrong_catalogue_scope)
+      true -> :ok
+    end
+  end
+
+  # `Tree` returns raw 16-byte uuids; stamps hold the string form.
+  defp uuid_string(<<_::128>> = raw), do: Ecto.UUID.load!(raw)
+  defp uuid_string(uuid), do: uuid
+
+  defp parent_and_ancestors(nil), do: []
+  defp parent_and_ancestors(uuid), do: [uuid | Tree.ancestor_uuids(uuid)]
+
   defp load_uuid(raw) do
     case Ecto.UUID.load(raw) do
       {:ok, str} -> str
@@ -2658,24 +2843,35 @@ defmodule PhoenixKitCatalogue.Catalogue do
     end
   end
 
+  defp run_locked_reparent(category, nil), do: reparent!(category, nil)
+
+  # `FOR SHARE` holds the parent against a concurrent trash until commit;
+  # a trashed parent would hide the moved subtree from every tree.
   defp run_locked_reparent(category, new_parent_uuid) do
-    case repo().get(Category, new_parent_uuid) do
+    case repo().one(from(c in Category, where: c.uuid == ^new_parent_uuid, lock: "FOR SHARE")) do
       nil ->
+        repo().rollback(:parent_not_found)
+
+      %Category{status: "deleted"} ->
         repo().rollback(:parent_not_found)
 
       %Category{catalogue_uuid: other} when other != category.catalogue_uuid ->
         repo().rollback(:cross_catalogue)
 
       %Category{} ->
-        from_parent_uuid = category.parent_uuid
-        next_pos = next_category_position(category.catalogue_uuid, new_parent_uuid)
+        reparent!(category, new_parent_uuid)
+    end
+  end
 
-        case category
-             |> Category.changeset(%{parent_uuid: new_parent_uuid, position: next_pos})
-             |> repo().update() do
-          {:ok, moved} -> {moved, from_parent_uuid}
-          {:error, changeset} -> repo().rollback(changeset)
-        end
+  defp reparent!(category, new_parent_uuid) do
+    from_parent_uuid = category.parent_uuid
+    next_pos = next_category_position(category.catalogue_uuid, new_parent_uuid)
+
+    case category
+         |> Category.changeset(%{parent_uuid: new_parent_uuid, position: next_pos})
+         |> repo().update() do
+      {:ok, moved} -> {moved, from_parent_uuid}
+      {:error, changeset} -> repo().rollback(changeset)
     end
   end
 
@@ -4201,9 +4397,13 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   @catalogue_lock_class 727_401_120
 
-  defp lock_catalogue!(nil), do: :ok
+  # Public only for `Catalogue.Duplication`, which holds a source's lock
+  # while copying it.
+  @doc false
+  @spec lock_catalogue!(Ecto.UUID.t() | nil) :: :ok
+  def lock_catalogue!(nil), do: :ok
 
-  defp lock_catalogue!(catalogue_uuid) do
+  def lock_catalogue!(catalogue_uuid) do
     repo().query!("SELECT pg_advisory_xact_lock($1::int, hashtext($2::text))", [
       @catalogue_lock_class,
       to_string(catalogue_uuid)
@@ -4416,6 +4616,41 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   # For an item query bound `as: :item`: skips items whose category is in
   # the trash, so a restore never leaves a live item in a trashed category.
+  # Items a restore had to leave in the trash because their category is
+  # still trashed under another root. Their stamp named the root being
+  # restored, so a later trash and restore of that root would have revived
+  # them from under the trashed category (randomized test, seed 423352).
+  # They join that category's unit instead: its stamp root (restoring the
+  # category, or what trashed it, brings them back with it), or their own
+  # when the category carries no stamp. `from_status` is kept. The same
+  # rule Delete Forever applies to rows it leaves behind.
+  defp restamp_left_behind!(stamped_items) do
+    from(i in stamped_items,
+      join: c in Category,
+      on: c.uuid == i.category_uuid,
+      where: c.status == "deleted",
+      update: [
+        set: [
+          data:
+            fragment(
+              """
+              COALESCE(?, '{}'::jsonb) || jsonb_build_object('_trash',
+                COALESCE(? -> '_trash', '{}'::jsonb) || jsonb_build_object(
+                  'root', COALESCE(? #>> '{_trash,root}', ?::text),
+                  'via', CASE WHEN ? #>> '{_trash,root}' IS NULL THEN 'self' ELSE 'category' END))
+              """,
+              i.data,
+              i.data,
+              c.data,
+              i.uuid,
+              c.data
+            )
+        ]
+      ]
+    )
+    |> repo().update_all([])
+  end
+
   defp outside_trashed_categories(query) do
     where(
       query,
@@ -6012,17 +6247,298 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def bulk_move_items_to_category([], _target, _opts), do: {:ok, 0}
 
   def bulk_move_items_to_category(uuids, target_uuid, opts) when is_list(uuids) do
-    case Keyword.fetch(opts, :catalogue_uuid) do
-      :error ->
-        {:error, :missing_catalogue_scope}
-
-      {:ok, catalogue_uuid} when is_binary(catalogue_uuid) ->
-        with :ok <- ensure_items_in_catalogue(uuids, catalogue_uuid),
-             {:ok, {target, count}} <- move_items_locked(uuids, target_uuid, catalogue_uuid) do
-          log_bulk_move(count, target, catalogue_uuid, opts)
-          {:ok, count}
-        end
+    with {:ok, scope} <- fetch_bulk_scope(opts),
+         :ok <- ensure_items_in_catalogue(uuids, scope),
+         :ok <- target_in_scope(target_uuid, scope) do
+      destination = if target_uuid, do: {:category, target_uuid}, else: {:catalogue, scope}
+      bulk_move_items(uuids, destination, opts)
     end
+  end
+
+  # The same-catalogue flavour's one extra rule: the target category is
+  # this catalogue's. `bulk_move_items/3` re-reads it under the locks.
+  defp target_in_scope(nil, _scope), do: :ok
+
+  defp target_in_scope(target_uuid, scope) do
+    query =
+      from(c in Category, where: c.uuid == ^target_uuid, select: {c.catalogue_uuid, c.status})
+
+    case valid_uuid?(target_uuid) && repo().one(query) do
+      {^scope, status} when status != "deleted" -> :ok
+      {_other, status} when status != "deleted" -> {:error, :wrong_catalogue_scope}
+      _ -> {:error, :category_not_found}
+    end
+  end
+
+  @doc """
+  Bulk-moves items from one catalogue to a destination anywhere:
+  `{:category, uuid}` (the item takes that category's catalogue) or
+  `{:catalogue, uuid}` (uncategorized in that catalogue — the current one
+  included).
+
+  `opts[:catalogue_uuid]` is required and is the SOURCE scope: every
+  uuid must be an item of that catalogue, or nothing moves
+  (`:wrong_catalogue_scope`) — the selection is client-captured. Both
+  catalogues' locks are held for the move, so a trash of either cannot
+  interleave. Refuses a missing/trashed destination
+  (`:category_not_found` / `:catalogue_not_found`) and one of the other
+  catalogue kind (`:kind_mismatch`). Trashed items in the list are
+  skipped.
+
+  Logs one `item.bulk_moved` activity and tells both catalogues.
+  Returns `{:ok, count}`.
+  """
+  @spec bulk_move_items(
+          [Ecto.UUID.t()],
+          {:category, Ecto.UUID.t()} | {:catalogue, Ecto.UUID.t()},
+          keyword()
+        ) :: {:ok, non_neg_integer()} | {:error, atom()}
+  def bulk_move_items(uuids, destination, opts) when is_list(uuids) do
+    with {:ok, scope} <- fetch_bulk_scope(opts),
+         {:ok, uuids} <- cast_uuids(uuids),
+         :ok <- valid_destination(destination) do
+      case uuids do
+        [] -> {:ok, 0}
+        uuids -> run_bulk_move_items(uuids, destination, scope, opts)
+      end
+    end
+  end
+
+  defp fetch_bulk_scope(opts) do
+    case Keyword.fetch(opts, :catalogue_uuid) do
+      {:ok, scope} when is_binary(scope) -> {:ok, scope}
+      _ -> {:error, :missing_catalogue_scope}
+    end
+  end
+
+  defp cast_uuids(uuids) do
+    if Enum.all?(uuids, &valid_uuid?/1),
+      do: {:ok, Enum.uniq(uuids)},
+      else: {:error, :invalid_uuid}
+  end
+
+  defp valid_destination({kind, uuid}) when kind in [:category, :catalogue] do
+    cond do
+      valid_uuid?(uuid) -> :ok
+      kind == :category -> {:error, :category_not_found}
+      true -> {:error, :catalogue_not_found}
+    end
+  end
+
+  defp valid_destination(_), do: {:error, :invalid_entry}
+
+  defp run_bulk_move_items(uuids, destination, scope, opts) do
+    result =
+      locked_transaction(fn ->
+        target_catalogue = destination_catalogue(destination)
+        lock_catalogues!([scope, target_catalogue])
+
+        if ensure_items_in_catalogue(uuids, scope) != :ok,
+          do: repo().rollback(:wrong_catalogue_scope)
+
+        target_category = lock_destination_category(destination, target_catalogue)
+        check_move_destination!(scope, target_catalogue)
+
+        {count, _} =
+          from(i in Item,
+            where: i.uuid in ^uuids and i.catalogue_uuid == ^scope and i.status != "deleted"
+          )
+          |> repo().update_all(
+            set: [
+              catalogue_uuid: target_catalogue,
+              category_uuid: target_category,
+              updated_at: DateTime.utc_now()
+            ]
+          )
+
+        {count, target_catalogue, target_category}
+      end)
+
+    with {:ok, {count, target_catalogue, target_category}} <- result do
+      if count > 0,
+        do: log_bulk_item_move(uuids, count, scope, target_catalogue, target_category, opts)
+
+      {:ok, count}
+    end
+  end
+
+  defp log_bulk_item_move(uuids, count, scope, target_catalogue, target_category, opts) do
+    log_activity(
+      %{
+        action: "item.bulk_moved",
+        mode: "manual",
+        actor_uuid: opts[:actor_uuid],
+        resource_type: "item",
+        parent_catalogue_uuid: target_catalogue,
+        metadata: %{
+          "count" => count,
+          "uuids" => uuids,
+          "from_catalogue_uuid" => scope,
+          "to_catalogue_uuid" => target_catalogue,
+          "to_category_uuid" => target_category
+        }
+      },
+      opts
+    )
+
+    if scope != target_catalogue and Keyword.get(opts, :broadcast, true),
+      do: PubSub.broadcast(:item, nil, scope)
+  end
+
+  # The catalogue a destination lives in, read before the locks; the
+  # locked re-read in `lock_destination_category/2` retries the whole
+  # transaction when a concurrent move changed it in between.
+  defp destination_catalogue({:catalogue, uuid}), do: uuid
+
+  defp destination_catalogue({:category, uuid}) do
+    repo().one(from(c in Category, where: c.uuid == ^uuid, select: c.catalogue_uuid)) ||
+      repo().rollback(:category_not_found)
+  end
+
+  defp lock_destination_category({:catalogue, _}, _catalogue_uuid), do: nil
+
+  defp lock_destination_category({:category, uuid}, catalogue_uuid) do
+    case repo().one(from(c in Category, where: c.uuid == ^uuid, lock: "FOR SHARE")) do
+      %Category{status: "deleted"} -> repo().rollback(:category_not_found)
+      %Category{catalogue_uuid: ^catalogue_uuid} -> uuid
+      %Category{} -> repo().rollback(:catalogue_moved)
+      nil -> repo().rollback(:category_not_found)
+    end
+  end
+
+  @doc """
+  Moves several categories, each with its subtree and items, to another
+  catalogue — at its top level, or under `parent_uuid` there. Each move
+  is `move_category_to_catalogue/3` with its own guards; one refusal
+  does not stop the others.
+
+  A selected category whose ancestor is also selected travels inside
+  that ancestor instead of being detached from it; if the ancestor does
+  not move, it moves on its own. With the target equal
+  to the scope catalogue this is `bulk_move_categories_under/3`.
+
+  `opts[:catalogue_uuid]` is the source scope; categories outside it are
+  refused (`:wrong_catalogue_scope`). Per-move broadcasts are muted and
+  both catalogues get one batch event each.
+
+  Returns `{:ok, %{moved: n, errors: [{uuid, reason}]}}`.
+  """
+  @spec bulk_move_categories_to_catalogue(
+          [Ecto.UUID.t()],
+          Ecto.UUID.t(),
+          Ecto.UUID.t() | nil,
+          keyword()
+        ) :: {:ok, %{moved: non_neg_integer(), errors: [{Ecto.UUID.t(), term()}]}}
+  def bulk_move_categories_to_catalogue(uuids, target_catalogue_uuid, parent_uuid, opts \\ [])
+      when is_list(uuids) do
+    if target_catalogue_uuid == opts[:catalogue_uuid] do
+      bulk_move_categories_under(uuids, parent_uuid, opts)
+    else
+      do_bulk_move_categories_to_catalogue(uuids, target_catalogue_uuid, parent_uuid, opts)
+    end
+  end
+
+  defp do_bulk_move_categories_to_catalogue(uuids, target, parent_uuid, opts) do
+    uuids = Enum.uniq(uuids)
+
+    case opts[:catalogue_uuid] do
+      scope when is_binary(scope) ->
+        run_bulk_category_move(uuids, target, parent_uuid, scope, opts)
+
+      _ ->
+        {:ok, %{moved: 0, errors: Enum.map(uuids, &{&1, :missing_catalogue_scope})}}
+    end
+  end
+
+  defp run_bulk_category_move(uuids, target, parent_uuid, scope, opts) do
+    muted = opts |> Keyword.put(:broadcast, false) |> Keyword.put(:parent_uuid, parent_uuid)
+    {valid, invalid} = Enum.split_with(uuids, &valid_uuid?/1)
+    rows = from(c in Category, where: c.uuid in ^valid) |> repo().all() |> Map.new(&{&1.uuid, &1})
+
+    # The scope is checked for every entry before anything moves, so an
+    # entry that later arrives inside a moved ancestor was this page's.
+    {in_scope, refused} =
+      Enum.split_with(valid, &match?(%Category{catalogue_uuid: ^scope}, rows[&1]))
+
+    depth = selected_ancestor_counts(in_scope)
+
+    # Outer categories first, then inner ones shallowest first: each inner
+    # one either arrived inside its moved ancestor, or — the ancestor
+    # refused, or it was lifted out meanwhile — moves on its own.
+    {moved, errors, catalogues} =
+      in_scope
+      |> Enum.sort_by(&Map.get(depth, &1, 0))
+      |> Enum.reduce({0, [], MapSet.new()}, fn uuid, {moved, errors, cats} ->
+        case move_selected_category(uuid, target, Map.has_key?(depth, uuid), muted) do
+          {:ok, :carried} ->
+            {moved + 1, errors, cats}
+
+          {:ok, {m, from}} ->
+            {moved + 1, errors, cats |> MapSet.put(m.catalogue_uuid) |> MapSet.put(from)}
+
+          {:error, reason} ->
+            {moved, [{uuid, bulk_reason(reason)} | errors], cats}
+        end
+      end)
+
+    if moved > 0 and Keyword.get(opts, :broadcast, true),
+      do: Enum.each(catalogues, &broadcast_moved_out/1)
+
+    errors =
+      Enum.reverse(errors) ++
+        Enum.map(refused, &{&1, if(rows[&1], do: :wrong_catalogue_scope, else: :not_found)}) ++
+        Enum.map(invalid, &{&1, :invalid_uuid})
+
+    {:ok, %{moved: moved, errors: errors}}
+  end
+
+  # One shape per error entry; a changeset would drag a whole row into
+  # the page's error log.
+  defp bulk_reason(%Ecto.Changeset{}), do: :invalid
+  defp bulk_reason(reason), do: reason
+
+  defp move_selected_category(uuid, target, true = _inner?, opts) do
+    case get_category(uuid) do
+      %Category{catalogue_uuid: ^target, status: status} when status != "deleted" ->
+        {:ok, :carried}
+
+      _ ->
+        move_one_category_to_catalogue(uuid, target, opts)
+    end
+  end
+
+  defp move_selected_category(uuid, target, false, opts),
+    do: move_one_category_to_catalogue(uuid, target, opts)
+
+  defp move_one_category_to_catalogue(uuid, target, opts) do
+    scope = opts[:catalogue_uuid]
+
+    case get_category(uuid) do
+      nil ->
+        {:error, :not_found}
+
+      %Category{catalogue_uuid: c} when c != scope ->
+        {:error, :wrong_catalogue_scope}
+
+      category ->
+        # The scope is re-checked under the lock, so it is the source.
+        with {:ok, moved} <- move_category_to_catalogue(category, target, opts),
+             do: {:ok, {moved, scope}}
+    end
+  end
+
+  # For each selected uuid below another selected one: how many selected
+  # ancestors it has (its depth within the selection). Top ones are absent.
+  defp selected_ancestor_counts(uuids) do
+    selected = MapSet.new(uuids)
+
+    Enum.reduce(uuids, %{}, fn uuid, acc ->
+      uuid
+      |> Tree.subtree_uuids()
+      |> Enum.map(&load_uuid/1)
+      |> Enum.filter(&(&1 != uuid and MapSet.member?(selected, &1)))
+      |> Enum.reduce(acc, fn below, acc -> Map.update(acc, below, 1, &(&1 + 1)) end)
+    end)
   end
 
   # `opts[:catalogue_uuid]` on the bulk item ops is a scope: uuids that
@@ -6050,85 +6566,6 @@ defmodule PhoenixKitCatalogue.Catalogue do
       |> repo().exists?()
 
     if foreign?, do: {:error, :wrong_catalogue_scope}, else: :ok
-  end
-
-  defp resolve_move_target(nil, _catalogue_uuid), do: {:ok, nil}
-
-  defp resolve_move_target(target_uuid, catalogue_uuid) do
-    case repo().one(from(c in Category, where: c.uuid == ^target_uuid, lock: "FOR SHARE")) do
-      nil ->
-        {:error, :category_not_found}
-
-      %Category{status: "deleted"} ->
-        {:error, :category_not_found}
-
-      %Category{catalogue_uuid: ^catalogue_uuid} = cat ->
-        {:ok, cat}
-
-      %Category{} ->
-        {:error, :wrong_catalogue_scope}
-    end
-  end
-
-  # One transaction, so the FOR SHARE lock `resolve_move_target/2` takes on
-  # the target holds until the move commits: a concurrent category trash
-  # either lands first (and the move refuses) or waits for it. Logged by
-  # the caller after the commit, so no subscriber reloads early.
-  defp move_items_locked(uuids, target_uuid, catalogue_uuid) do
-    repo().transaction(fn ->
-      case resolve_move_target(target_uuid, catalogue_uuid) do
-        {:ok, target} -> {target, move_item_rows(uuids, target)}
-        {:error, reason} -> repo().rollback(reason)
-      end
-    end)
-  end
-
-  # Status guard mirrors the other bulk fns (`bulk_trash_items`,
-  # `bulk_restore_items`) so a stale tab can't move a soft-deleted row by
-  # submitting its UUID. The selection is built from rendered active
-  # cards, so the LV's happy path is unaffected.
-  defp move_item_rows(uuids, target) do
-    target_uuid = if target, do: target.uuid
-
-    {count, _} =
-      from(i in Item, where: i.uuid in ^uuids and i.status != "deleted")
-      |> repo().update_all(set: [category_uuid: target_uuid, updated_at: DateTime.utc_now()])
-
-    count
-  end
-
-  defp log_bulk_move(0, _target, _catalogue_uuid, _opts), do: :ok
-
-  defp log_bulk_move(count, nil, catalogue_uuid, opts) do
-    log_activity(
-      %{
-        action: "item.bulk_moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        parent_catalogue_uuid: catalogue_uuid,
-        metadata: %{"count" => count, "to_category_uuid" => nil}
-      },
-      opts
-    )
-  end
-
-  defp log_bulk_move(count, %Category{} = target, _catalogue_uuid, opts) do
-    log_activity(
-      %{
-        action: "item.bulk_moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        parent_catalogue_uuid: target.catalogue_uuid,
-        metadata: %{
-          "count" => count,
-          "to_category_uuid" => target.uuid,
-          "to_catalogue_uuid" => target.catalogue_uuid
-        }
-      },
-      opts
-    )
   end
 
   @doc """
@@ -6268,45 +6705,95 @@ defmodule PhoenixKitCatalogue.Catalogue do
   detaches the item from any category while keeping it in its current
   catalogue.
 
+  Refuses a trashed item (`:not_found`), a missing or trashed category
+  (`:category_not_found`) and a category in a catalogue of the other
+  kind (`:kind_mismatch`). A move across catalogues tells both.
+
   ## Examples
 
       {:ok, item} = Catalogue.move_item_to_category(item, new_category_uuid)
       {:ok, item} = Catalogue.move_item_to_category(item, nil)  # make uncategorized
   """
   @spec move_item_to_category(Item.t(), Ecto.UUID.t() | nil, keyword()) ::
-          {:ok, Item.t()} | {:error, :category_not_found | Ecto.Changeset.t(Item.t())}
-  def move_item_to_category(%Item{} = item, category_uuid, opts \\ []) do
-    from_category_uuid = item.category_uuid
+          {:ok, Item.t()}
+          | {:error,
+             :category_not_found | :not_found | :kind_mismatch | Ecto.Changeset.t(Item.t())}
+  def move_item_to_category(item, category_uuid, opts \\ [])
 
+  def move_item_to_category(%Item{} = item, category_uuid, opts)
+      when is_nil(category_uuid) or is_binary(category_uuid) do
+    if is_nil(category_uuid) or valid_uuid?(category_uuid),
+      do: do_move_item_to_category(item, category_uuid, opts),
+      else: {:error, :category_not_found}
+  end
+
+  defp do_move_item_to_category(item, category_uuid, opts) do
     # One transaction, so the FOR SHARE lock `resolve_move_attrs/1` takes on
     # the target is held until the move commits: a concurrent category
-    # trash either lands first (and the move refuses) or waits.
+    # trash either lands first (and the move refuses) or waits. The target
+    # is locked BEFORE the item: a category trash holds the category and
+    # then updates its items, so the other order could deadlock with it.
     result =
       repo().transaction(fn ->
         with {:ok, attrs} <- resolve_move_attrs(category_uuid),
-             {:ok, moved} <- item |> Item.changeset(attrs) |> repo().update() do
-          moved
+             {:ok, current} <- lock_live_item(item),
+             :ok <- same_kind(current.catalogue_uuid, attrs[:catalogue_uuid]),
+             {:ok, moved} <- current |> Item.changeset(attrs) |> repo().update() do
+          {moved, current}
         else
           {:error, reason} -> repo().rollback(reason)
         end
       end)
 
-    with {:ok, moved} <- result do
-      log_activity(%{
-        action: "item.moved",
-        mode: "manual",
-        actor_uuid: opts[:actor_uuid],
-        resource_type: "item",
-        resource_uuid: moved.uuid,
-        parent_catalogue_uuid: moved.catalogue_uuid,
-        metadata: %{
-          "name" => moved.name,
-          "from_category_uuid" => from_category_uuid,
-          "to_category_uuid" => category_uuid
-        }
-      })
+    with {:ok, {moved, before}} <- result do
+      log_activity(
+        %{
+          action: "item.moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          resource_uuid: moved.uuid,
+          parent_catalogue_uuid: moved.catalogue_uuid,
+          metadata: %{
+            "name" => moved.name,
+            "from_category_uuid" => before.category_uuid,
+            "to_category_uuid" => category_uuid,
+            "from_catalogue_uuid" => before.catalogue_uuid,
+            "to_catalogue_uuid" => moved.catalogue_uuid
+          }
+        },
+        Keyword.take(opts, [:broadcast, :mode])
+      )
+
+      if before.catalogue_uuid != moved.catalogue_uuid and Keyword.get(opts, :broadcast, true),
+        do: PubSub.broadcast(:item, nil, before.catalogue_uuid)
 
       {:ok, moved}
+    end
+  end
+
+  defp locked_move_item_to_catalogue(item, catalogue_uuid) do
+    from_catalogue_uuid =
+      repo().one(from(i in Item, where: i.uuid == ^item.uuid, select: i.catalogue_uuid)) ||
+        repo().rollback(:not_found)
+
+    if from_catalogue_uuid == catalogue_uuid, do: repo().rollback(:same_catalogue)
+    lock_catalogues!([from_catalogue_uuid, catalogue_uuid])
+
+    current =
+      case lock_live_item(item) do
+        {:ok, %Item{catalogue_uuid: ^from_catalogue_uuid} = current} -> current
+        {:ok, _moved_meanwhile} -> repo().rollback(:catalogue_moved)
+        {:error, reason} -> repo().rollback(reason)
+      end
+
+    check_move_destination!(from_catalogue_uuid, catalogue_uuid)
+
+    case current
+         |> Item.changeset(%{catalogue_uuid: catalogue_uuid, category_uuid: nil})
+         |> repo().update() do
+      {:ok, moved} -> {moved, current}
+      {:error, changeset} -> repo().rollback(changeset)
     end
   end
 
@@ -6326,18 +6813,43 @@ defmodule PhoenixKitCatalogue.Catalogue do
     end
   end
 
+  # The item as it is now, row-locked; a trashed item is not movable (a
+  # stale form or tab would otherwise carry a bin row somewhere new).
+  defp lock_live_item(%Item{uuid: uuid}) do
+    case repo().one(from(i in Item, where: i.uuid == ^uuid, lock: "FOR UPDATE")) do
+      %Item{status: status} = current when status != "deleted" -> {:ok, current}
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp same_kind(_from, nil), do: :ok
+  defp same_kind(same, same), do: :ok
+
+  defp same_kind(from_uuid, to_uuid) do
+    kinds =
+      from(c in Catalogue, where: c.uuid in ^[from_uuid, to_uuid], select: {c.uuid, c.kind})
+      |> repo().all()
+      |> Map.new()
+
+    if Map.get(kinds, from_uuid) == Map.get(kinds, to_uuid),
+      do: :ok,
+      else: {:error, :kind_mismatch}
+  end
+
   @doc """
   Moves an item to a different catalogue, clearing its category.
 
-  Primarily used for **smart** items, where categories don't apply —
-  the "where does this item live?" question reduces to "which catalogue?".
-  Sets both `catalogue_uuid` and `category_uuid` in one update so the
-  item becomes uncategorized within its new catalogue.
+  For smart items this is the whole move — categories don't apply; for
+  standard items it files the item uncategorized in the target. Sets
+  both `catalogue_uuid` and `category_uuid` in one update.
 
-  Returns `{:error, :catalogue_not_found}` if the target catalogue UUID
-  doesn't resolve, `{:error, :same_catalogue}` if it's already there, or
-  `{:error, changeset}` on validation failure. Logs an `item.moved`
-  activity with from/to catalogue metadata.
+  Returns `{:error, :catalogue_not_found}` if the target catalogue is
+  missing or trashed, `{:error, :same_catalogue}` if the item is already
+  there, `{:error, :kind_mismatch}` for a catalogue of the other kind,
+  `{:error, :not_found}` for a trashed item, or `{:error, changeset}` on
+  validation failure. Both catalogues' locks are held, so a concurrent
+  trash of either cannot interleave. Logs an `item.moved` activity with
+  from/to catalogue metadata and tells both catalogues.
 
   ## Examples
 
@@ -6345,40 +6857,49 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
   @spec move_item_to_catalogue(Item.t(), Ecto.UUID.t(), keyword()) ::
           {:ok, Item.t()}
-          | {:error, :catalogue_not_found | :same_catalogue | Ecto.Changeset.t(Item.t())}
+          | {:error,
+             :catalogue_not_found
+             | :same_catalogue
+             | :kind_mismatch
+             | :not_found
+             | :catalogue_moved
+             | Ecto.Changeset.t(Item.t())}
   def move_item_to_catalogue(%Item{} = item, catalogue_uuid, opts \\ [])
       when is_binary(catalogue_uuid) do
-    from_catalogue_uuid = item.catalogue_uuid
+    # Whether the item is already there is decided from the row under the
+    # lock, not from the caller's struct, which may be stale.
+    if valid_uuid?(catalogue_uuid),
+      do: do_move_item_to_catalogue(item, catalogue_uuid, opts),
+      else: {:error, :catalogue_not_found}
+  end
 
-    cond do
-      catalogue_uuid == from_catalogue_uuid ->
-        {:error, :same_catalogue}
+  defp do_move_item_to_catalogue(item, catalogue_uuid, opts) do
+    result = locked_transaction(fn -> locked_move_item_to_catalogue(item, catalogue_uuid) end)
 
-      is_nil(repo().get(Catalogue, catalogue_uuid)) ->
-        {:error, :catalogue_not_found}
+    with {:ok, {moved, before}} <- result do
+      log_activity(
+        %{
+          action: "item.moved",
+          mode: "manual",
+          actor_uuid: opts[:actor_uuid],
+          resource_type: "item",
+          resource_uuid: moved.uuid,
+          parent_catalogue_uuid: catalogue_uuid,
+          metadata: %{
+            "name" => moved.name,
+            "from_catalogue_uuid" => before.catalogue_uuid,
+            "to_catalogue_uuid" => catalogue_uuid,
+            "from_category_uuid" => before.category_uuid,
+            "to_category_uuid" => nil
+          }
+        },
+        Keyword.take(opts, [:broadcast, :mode])
+      )
 
-      true ->
-        attrs = %{catalogue_uuid: catalogue_uuid, category_uuid: nil}
+      if Keyword.get(opts, :broadcast, true),
+        do: PubSub.broadcast(:item, nil, before.catalogue_uuid)
 
-        with {:ok, moved} <- item |> Item.changeset(attrs) |> repo().update() do
-          log_activity(%{
-            action: "item.moved",
-            mode: "manual",
-            actor_uuid: opts[:actor_uuid],
-            resource_type: "item",
-            resource_uuid: moved.uuid,
-            parent_catalogue_uuid: catalogue_uuid,
-            metadata: %{
-              "name" => moved.name,
-              "from_catalogue_uuid" => from_catalogue_uuid,
-              "to_catalogue_uuid" => catalogue_uuid,
-              "from_category_uuid" => item.category_uuid,
-              "to_category_uuid" => nil
-            }
-          })
-
-          {:ok, moved}
-        end
+      {:ok, moved}
     end
   end
 

@@ -2031,7 +2031,7 @@ msgstr ""
 msgid "Item Name"
 msgstr ""
 
-msgid "Items can only be moved within this catalogue."
+msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
 msgstr ""
 
 msgid "Items keep their catalogue but lose their category."
@@ -2118,7 +2118,7 @@ msgstr ""
 msgid "Move this PDF to trash?"
 msgstr ""
 
-msgid "Move this category and all its items to a different catalogue."
+msgid "Move this category and all its items to a different catalogue — at its top level or under one of its categories."
 msgstr ""
 
 msgid "Move this item into a different smart catalogue. Its catalogue rules stay attached."
@@ -3478,4 +3478,70 @@ msgid "Failed to delete attribute."
 msgstr ""
 
 msgid "%{value} (archived)"
+msgstr ""
+
+msgid "Standard and smart catalogues can't exchange items or categories."
+msgstr ""
+
+msgid "Items go to the chosen catalogue without a category."
+msgstr ""
+
+msgid "Put items in a category there"
+msgstr ""
+
+msgid "They sit at the root of the chosen catalogue."
+msgstr ""
+
+msgid "%{name} (this catalogue)"
+msgstr ""
+
+msgid "%{catalogue} — no category"
+msgstr ""
+
+msgid "%{catalogue} — top level"
+msgstr ""
+
+msgid "-- Select destination --"
+msgstr ""
+
+msgid "%{name} (copy %{number})"
+msgstr ""
+
+msgid "This catalogue is already being duplicated."
+msgstr ""
+
+msgid "Duplicate catalogue"
+msgstr ""
+
+msgid "Creates a copy of “%{name}” with all its categories (%{categories}) and items (%{items}), in the same folder and with “(copy)” after its name."
+msgstr ""
+
+msgid "Not copied: items in Deleted, comments, history and links to other systems (such as a shop's product ids)."
+msgstr ""
+
+msgid "Shared with the original, not duplicated. Removing one from either catalogue leaves the other untouched."
+msgstr ""
+
+msgid "Duplicating “%{name}”…"
+msgstr ""
+
+msgid "Created “%{name}” (categories: %{categories}, items: %{items})."
+msgstr ""
+
+msgid "Failed to duplicate the catalogue."
+msgstr ""
+
+msgid "Copy SKUs"
+msgstr ""
+
+msgid "Copy images and files"
+msgstr ""
+
+msgid "Copy suppliers and purchase prices"
+msgstr ""
+
+msgid "Start the copy archived"
+msgstr ""
+
+msgid "Otherwise it gets the original's status."
 msgstr ""

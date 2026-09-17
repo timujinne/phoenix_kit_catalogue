@@ -2025,8 +2025,8 @@ msgstr "Sisemärkmed selle tarnija kohta..."
 msgid "Item Name"
 msgstr "Toote nimi"
 
-msgid "Items can only be moved within this catalogue."
-msgstr "Tooteid saab liigutada ainult selle kataloogi sees."
+msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
+msgstr "Mõni valitud toode ei ole enam selles kataloogis. Laadi leht uuesti ja proovi uuesti."
 
 msgid "Items keep their catalogue but lose their category."
 msgstr "Tooted jäävad kataloogi, kuid kaotavad kategooria."
@@ -2112,8 +2112,8 @@ msgstr "Liiguta valitud tooted"
 msgid "Move this PDF to trash?"
 msgstr "Viia see PDF prügikasti?"
 
-msgid "Move this category and all its items to a different catalogue."
-msgstr "Liiguta see kategooria ja kõik selle tooted teise kataloogi."
+msgid "Move this category and all its items to a different catalogue — at its top level or under one of its categories."
+msgstr "Liiguta see kategooria ja kõik selle tooted teise kataloogi — selle ülatasemele või mõne selle kategooria alla."
 
 msgid "Move this item into a different smart catalogue. Its catalogue rules stay attached."
 msgstr "Liiguta see toode teise nutikataloogi. Selle kataloogireeglid jäävad külge."
@@ -3473,3 +3473,69 @@ msgstr "Atribuudi kustutamine ebaõnnestus."
 
 msgid "%{value} (archived)"
 msgstr "%{value} (arhiveeritud)"
+
+msgid "Standard and smart catalogues can't exchange items or categories."
+msgstr "Tava- ja nutikataloogid ei saa tooteid ega kategooriaid omavahel vahetada."
+
+msgid "Items go to the chosen catalogue without a category."
+msgstr "Tooted lähevad valitud kataloogi ilma kategooriata."
+
+msgid "Put items in a category there"
+msgstr "Pane tooted sealsesse kategooriasse"
+
+msgid "They sit at the root of the chosen catalogue."
+msgstr "Need jäävad valitud kataloogi ülatasemele."
+
+msgid "%{name} (this catalogue)"
+msgstr "%{name} (see kataloog)"
+
+msgid "%{catalogue} — no category"
+msgstr "%{catalogue} — ilma kategooriata"
+
+msgid "%{catalogue} — top level"
+msgstr "%{catalogue} — ülatase"
+
+msgid "-- Select destination --"
+msgstr "-- Vali sihtkoht --"
+
+msgid "%{name} (copy %{number})"
+msgstr "%{name} (koopia %{number})"
+
+msgid "This catalogue is already being duplicated."
+msgstr "Seda kataloogi juba dubleeritakse."
+
+msgid "Duplicate catalogue"
+msgstr "Dubleeri kataloog"
+
+msgid "Creates a copy of “%{name}” with all its categories (%{categories}) and items (%{items}), in the same folder and with “(copy)” after its name."
+msgstr "Loob kataloogist „%{name}“ koopia koos kõigi selle kategooriate (%{categories}) ja toodetega (%{items}) samasse kausta, nime järel „(koopia)“."
+
+msgid "Not copied: items in Deleted, comments, history and links to other systems (such as a shop's product ids)."
+msgstr "Ei kopeerita: kustutatud tooteid, kommentaare, ajalugu ega seoseid teiste süsteemidega (näiteks poe tootetunnuseid)."
+
+msgid "Shared with the original, not duplicated. Removing one from either catalogue leaves the other untouched."
+msgstr "Jagatakse originaaliga, neid ei dubleerita. Ühest kataloogist eemaldamine teist ei mõjuta."
+
+msgid "Duplicating “%{name}”…"
+msgstr "Dubleerin kataloogi „%{name}“…"
+
+msgid "Created “%{name}” (categories: %{categories}, items: %{items})."
+msgstr "Loodud „%{name}“ (kategooriaid: %{categories}, tooteid: %{items})."
+
+msgid "Failed to duplicate the catalogue."
+msgstr "Kataloogi dubleerimine ebaõnnestus."
+
+msgid "Copy SKUs"
+msgstr "Kopeeri artiklid"
+
+msgid "Copy images and files"
+msgstr "Kopeeri pildid ja failid"
+
+msgid "Copy suppliers and purchase prices"
+msgstr "Kopeeri tarnijad ja ostuhinnad"
+
+msgid "Start the copy archived"
+msgstr "Loo koopia arhiveerituna"
+
+msgid "Otherwise it gets the original's status."
+msgstr "Muidu saab koopia originaali oleku."

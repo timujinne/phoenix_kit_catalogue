@@ -347,3 +347,72 @@ defmodule PhoenixKitCatalogue.Test.DelimiterModule do
 
   def catalogue_extensions, do: [BadIdExtension, BadKeyExtension]
 end
+
+defmodule PhoenixKitCatalogue.Test.CopyAwareExtension do
+  @moduledoc """
+  An extension that owns `data["copyaware"]` and drops its
+  `external_id` from copies, the way a shop drops its external product
+  id. Disabled on purpose: a switched-off extension's data still sits in
+  the rows, so a copy must still ask it.
+  """
+
+  def key, do: "copyaware"
+  def enabled?, do: false
+
+  def duplicate_data(_kind, data), do: Map.delete(data, "external_id")
+end
+
+defmodule PhoenixKitCatalogue.Test.RaisingCopyExtension do
+  @moduledoc "An extension whose `duplicate_data/2` raises; its namespace must be left out of copies."
+
+  def key, do: "raisingcopy"
+  def enabled?, do: true
+
+  def duplicate_data(_kind, _data), do: raise("boom")
+end
+
+defmodule PhoenixKitCatalogue.Test.NilCopyExtension do
+  @moduledoc "Returns `nil` from `duplicate_data/2`: its namespace is left out of copies."
+
+  def key, do: "nilcopy"
+  def enabled?, do: true
+  def duplicate_data(_kind, _data), do: nil
+end
+
+defmodule PhoenixKitCatalogue.Test.BadCopyExtension do
+  @moduledoc "Returns neither a map nor nil: its namespace is left out of copies, and the value is not logged."
+
+  def key, do: "badcopy"
+  def enabled?, do: true
+  def duplicate_data(_kind, _data), do: {:oops, "secret-external-id"}
+end
+
+defmodule PhoenixKitCatalogue.Test.ThrowingKeyExtension do
+  @moduledoc "A copy-aware extension whose `key/0` exits: it is skipped, and the copy still succeeds."
+
+  def key, do: exit(:registry_down)
+  def enabled?, do: true
+  def duplicate_data(_kind, data), do: data
+end
+
+defmodule PhoenixKitCatalogue.Test.LanguageShapedExtension do
+  @moduledoc "A three-letter key that looks like a language code; no `duplicate_data/2`."
+
+  def key, do: "pos"
+  def enabled?, do: true
+end
+
+defmodule PhoenixKitCatalogue.Test.CopyAwareModule do
+  @moduledoc "Registry carrier for the copy-aware test extensions (see `FakeModule`)."
+
+  def catalogue_extensions,
+    do: [
+      PhoenixKitCatalogue.Test.CopyAwareExtension,
+      PhoenixKitCatalogue.Test.RaisingCopyExtension,
+      PhoenixKitCatalogue.Test.NilCopyExtension,
+      PhoenixKitCatalogue.Test.BadCopyExtension,
+      PhoenixKitCatalogue.Test.ThrowingKeyExtension,
+      PhoenixKitCatalogue.Test.LanguageShapedExtension,
+      "not a module"
+    ]
+end

@@ -84,8 +84,13 @@ the live children.
   `category_uuid`, so the item reappears in Uncategorized rather than silently
   reviving its category. Restore the category instead to get items back in place.
 - **An item stamped by a root whose own category is still trashed** (its category
-  was restored and trashed again on its own in between) stays in the trash when
-  the root is restored, inside that category.
+  was restored and trashed again in between) stays in the trash when the root is
+  restored, inside that category — and joins that category's trash: it takes the
+  category's stamp root (`via: category`), or becomes `via: self` when the
+  category has no stamp, keeping `from_status`. Restoring the category, or what
+  trashed it, then brings it back, and a later trash and restore of the first
+  root leaves it alone. `restore_catalogue/2` applies the same rule to the
+  items it leaves behind.
 
 ## What a catalogue's Deleted tab lists
 

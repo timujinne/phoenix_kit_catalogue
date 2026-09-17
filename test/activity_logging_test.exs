@@ -228,6 +228,28 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       )
     end
 
+    test "duplicate_catalogue logs one catalogue.duplicated and no per-row entries",
+         %{catalogue: cat} do
+      {:ok, _item} =
+        Catalogue.create_item(%{name: "Item A", catalogue_uuid: cat.uuid}, actor_opts())
+
+      {:ok, %{catalogue: copy}} = Catalogue.duplicate_catalogue(cat, actor_opts())
+
+      assert_activity_logged("catalogue.duplicated",
+        resource_uuid: copy.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "source_uuid" => cat.uuid,
+          "items" => 1,
+          "categories" => 0,
+          "without" => [],
+          "archived" => false
+        }
+      )
+
+      refute_activity_logged("item.duplicated")
+    end
+
     test "bulk_duplicate_items logs item.bulk_duplicated with actor", %{catalogue: cat} do
       {:ok, item} =
         Catalogue.create_item(%{name: "Item A", catalogue_uuid: cat.uuid}, actor_opts())
@@ -237,6 +259,103 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       assert_activity_logged("item.bulk_duplicated",
         actor_uuid: @actor,
         metadata_has: %{"count" => 1}
+      )
+    end
+  end
+
+  describe "move actions" do
+    setup %{catalogue: cat} do
+      {:ok, other} = Catalogue.create_catalogue(%{name: "Activity Move Target"})
+      {:ok, home} = Catalogue.create_category(%{name: "Home", catalogue_uuid: cat.uuid})
+      {:ok, away} = Catalogue.create_category(%{name: "Away", catalogue_uuid: other.uuid})
+      {:ok, item} = Catalogue.create_item(%{name: "Mover", category_uuid: home.uuid})
+      %{other: other, home: home, away: away, item: item}
+    end
+
+    test "move_item_to_category logs item.moved with actor and both places",
+         %{catalogue: cat, other: other, home: home, away: away, item: item} do
+      {:ok, _} = Catalogue.move_item_to_category(item, away.uuid, actor_opts())
+
+      assert_activity_logged("item.moved",
+        resource_uuid: item.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "from_category_uuid" => home.uuid,
+          "to_category_uuid" => away.uuid,
+          "from_catalogue_uuid" => cat.uuid,
+          "to_catalogue_uuid" => other.uuid
+        }
+      )
+    end
+
+    test "move_item_to_catalogue logs item.moved with actor",
+         %{catalogue: cat, other: other, home: home, item: item} do
+      {:ok, _} = Catalogue.move_item_to_catalogue(item, other.uuid, actor_opts())
+
+      assert_activity_logged("item.moved",
+        resource_uuid: item.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "from_catalogue_uuid" => cat.uuid,
+          "to_catalogue_uuid" => other.uuid,
+          "from_category_uuid" => home.uuid,
+          "to_category_uuid" => nil
+        }
+      )
+    end
+
+    test "move_category_to_catalogue logs category.moved with actor, parent and sizes",
+         %{catalogue: cat, other: other, home: home, away: away} do
+      {:ok, _} =
+        Catalogue.move_category_to_catalogue(
+          home,
+          other.uuid,
+          [parent_uuid: away.uuid] ++ actor_opts()
+        )
+
+      assert_activity_logged("category.moved",
+        resource_uuid: home.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{
+          "from_catalogue_uuid" => cat.uuid,
+          "to_catalogue_uuid" => other.uuid,
+          "from_parent_uuid" => nil,
+          "to_parent_uuid" => away.uuid,
+          "subtree_size" => 1,
+          "items_cascaded" => 1
+        }
+      )
+    end
+
+    test "move_category_under logs category.moved with actor", %{catalogue: cat, home: home} do
+      {:ok, parent} = Catalogue.create_category(%{name: "New parent", catalogue_uuid: cat.uuid})
+      {:ok, _} = Catalogue.move_category_under(home, parent.uuid, actor_opts())
+
+      assert_activity_logged("category.moved",
+        resource_uuid: home.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"to_parent_uuid" => parent.uuid, "catalogue_uuid" => cat.uuid}
+      )
+    end
+
+    test "bulk_move_items logs one item.bulk_moved with actor and destination",
+         %{catalogue: cat, other: other, away: away, item: item} do
+      {:ok, 1} =
+        Catalogue.bulk_move_items(
+          [item.uuid],
+          {:category, away.uuid},
+          [catalogue_uuid: cat.uuid] ++ actor_opts()
+        )
+
+      assert_activity_logged("item.bulk_moved",
+        actor_uuid: @actor,
+        metadata_has: %{
+          "count" => 1,
+          "uuids" => [item.uuid],
+          "from_catalogue_uuid" => cat.uuid,
+          "to_catalogue_uuid" => other.uuid,
+          "to_category_uuid" => away.uuid
+        }
       )
     end
   end

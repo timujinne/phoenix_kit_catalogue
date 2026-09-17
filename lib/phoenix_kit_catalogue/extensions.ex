@@ -51,11 +51,94 @@ defmodule PhoenixKitCatalogue.Extensions do
   """
   @spec all() :: [module()]
   def all do
+    Enum.filter(registered(), &(enabled?(&1) and valid_key?(&1)))
+  end
+
+  # Only atoms: a registry entry of any other shape is not a module, and
+  # the checks below would raise on it.
+  defp registered do
     ModuleRegistry.all_modules()
     |> Enum.flat_map(&contributed_by/1)
+    |> Enum.filter(&is_atom/1)
     |> Enum.uniq()
-    |> Enum.filter(&(enabled?(&1) and valid_key?(&1)))
   end
+
+  @doc """
+  The `data` keys owned by registered extensions, enabled or not — a copy
+  must not mistake one for a language code.
+  """
+  @spec owned_keys() :: [String.t()]
+  def owned_keys do
+    registered()
+    |> Enum.filter(
+      &(Code.ensure_loaded?(&1) and function_exported?(&1, :key, 0) and valid_key?(&1))
+    )
+    |> Enum.map(& &1.key())
+  end
+
+  @doc """
+  A copied item's or category's `data`, with each extension's namespace
+  passed through that extension's optional `duplicate_data/2`: the
+  returned map replaces the namespace, `nil` drops it. Namespaces with no
+  such callback are copied as they are.
+
+  Disabled extensions are asked too — their data is still in the row, and
+  switching a module off must not let a copy carry its external ids. A
+  callback that raises, or returns something else, drops its namespace
+  (logged): a copy without the shop's fields is recoverable, a second
+  row claiming the same external product is not.
+  """
+  @spec duplicate_data(:item | :category, map()) :: map()
+  def duplicate_data(kind, data) when kind in [:item, :category] and is_map(data) do
+    registered()
+    |> Enum.filter(&copy_aware?/1)
+    |> Enum.reduce(data, fn ext, acc ->
+      key = ext.key()
+
+      case Map.fetch(acc, key) do
+        {:ok, %{} = current} -> put_duplicate(acc, key, run_duplicate(ext, kind, current))
+        _ -> acc
+      end
+    end)
+  end
+
+  defp copy_aware?(ext) do
+    Code.ensure_loaded?(ext) and function_exported?(ext, :duplicate_data, 2) and valid_key?(ext)
+  catch
+    _, _ -> false
+  end
+
+  defp put_duplicate(data, key, %{} = namespace), do: Map.put(data, key, namespace)
+  defp put_duplicate(data, key, nil), do: Map.delete(data, key)
+
+  defp run_duplicate(ext, kind, current) do
+    case ext.duplicate_data(kind, current) do
+      result when is_map(result) or is_nil(result) ->
+        result
+
+      _other ->
+        # The value itself is not logged: it may hold the very ids the
+        # callback exists to drop.
+        Logger.error(
+          "PhoenixKitCatalogue.Extensions: #{inspect(ext)}.duplicate_data/2 returned " <>
+            "neither a map nor nil; the copy leaves its namespace out"
+        )
+
+        nil
+    end
+  catch
+    kind_of_failure, reason ->
+      Logger.error(
+        "PhoenixKitCatalogue.Extensions: #{inspect(ext)}.duplicate_data/2 failed " <>
+          "(#{kind_of_failure} #{failure_label(reason)}); the copy leaves its namespace out"
+      )
+
+      nil
+  end
+
+  defp failure_label(%{__struct__: struct}), do: inspect(struct)
+  defp failure_label(reason) when is_atom(reason), do: inspect(reason)
+  defp failure_label(_reason), do: "term"
 
   defp valid_key?(ext) do
     key = ext.key()
@@ -76,8 +159,9 @@ defmodule PhoenixKitCatalogue.Extensions do
       true ->
         true
     end
-  rescue
-    _ -> false
+  catch
+    # A `key/0` that raises, throws or exits must not abort a copy.
+    _, _ -> false
   end
 
   # `all/0` runs many times per render, so the complaint lands once per

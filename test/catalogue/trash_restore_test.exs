@@ -356,6 +356,80 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
     end
   end
 
+  describe "rows a restore has to leave behind" do
+    defp trash_stamp(schema, uuid),
+      do: (reload(%{__struct__: schema, uuid: uuid}).data || %{})["_trash"]
+
+    test "an item left inside a still-trashed category joins that category's trash (seed 423352)" do
+      cat = catalogue!()
+      r = category!(cat)
+      m = category!(cat, %{parent_uuid: r.uuid})
+      l = category!(cat, %{parent_uuid: m.uuid})
+      i = item!(%{category_uuid: l.uuid})
+
+      {:ok, _} = Catalogue.trash_category(m, items: :cascade)
+      {:ok, _} = Catalogue.restore_category(reload(l))
+      {:ok, _} = Catalogue.trash_category(reload(r), items: :cascade)
+      {:ok, _} = Catalogue.restore_category(reload(m))
+
+      # m's restore could not bring i back (l is trashed by r), so i now
+      # belongs to l's trash, not m's.
+      assert status(Item, i.uuid) == "deleted"
+      assert %{"root" => root, "via" => "category"} = trash_stamp(Item, i.uuid)
+      assert root == r.uuid
+
+      {:ok, _} = Catalogue.restore_category(reload(l))
+
+      # A later trash and restore of m leaves i where it is.
+      {:ok, _} = Catalogue.trash_category(reload(m), items: :cascade)
+      {:ok, _} = Catalogue.restore_category(reload(m))
+      assert status(Item, i.uuid) == "deleted"
+
+      # Restoring what took l brings i back.
+      {:ok, _} = Catalogue.restore_category(reload(r))
+      assert status(Item, i.uuid) == "active"
+    end
+
+    test "a catalogue restore hands a legacy item in a self-trashed category to that category" do
+      cat = catalogue!()
+      k = category!(cat)
+      j = item!(%{category_uuid: k.uuid})
+
+      {:ok, _} = Catalogue.trash_category(k, items: :cascade)
+      strip_stamp!(Item, j.uuid)
+      {:ok, _} = Catalogue.trash_catalogue(reload(cat))
+      {:ok, _} = Catalogue.restore_catalogue(reload(cat))
+
+      assert status(Category, k.uuid) == "deleted"
+      assert status(Item, j.uuid) == "deleted"
+      assert %{"root" => root, "via" => "category"} = trash_stamp(Item, j.uuid)
+      assert root == k.uuid
+
+      {:ok, _} = Catalogue.restore_category(reload(k))
+      assert status(Item, j.uuid) == "active"
+    end
+
+    test "an item left in an unstamped trashed category becomes trashed on its own" do
+      cat = catalogue!()
+      m = category!(cat)
+      l = category!(cat, %{parent_uuid: m.uuid})
+      i = item!(%{category_uuid: l.uuid, status: "inactive"})
+
+      {:ok, _} = Catalogue.trash_category(m, items: :cascade)
+      # l as a pre-provenance trash: m's restore does not take it back.
+      strip_stamp!(Category, l.uuid)
+      {:ok, _} = Catalogue.restore_category(reload(m))
+
+      assert status(Category, l.uuid) == "deleted"
+      assert status(Item, i.uuid) == "deleted"
+
+      assert %{"root" => root, "via" => "self", "from_status" => "inactive"} =
+               trash_stamp(Item, i.uuid)
+
+      assert root == i.uuid
+    end
+  end
+
   describe "randomized combinations" do
     @describetag timeout: 600_000
 
@@ -462,7 +536,8 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
     &__MODULE__.op_bulk_restore_items/1,
     &__MODULE__.op_bulk_trash_categories/1,
     &__MODULE__.op_trash_catalogue/1,
-    &__MODULE__.op_restore_catalogue/1
+    &__MODULE__.op_restore_catalogue/1,
+    &__MODULE__.op_move_category_under/1
   ]
 
   defp random_op(world), do: pick(@random_ops).(world)
@@ -481,6 +556,9 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
 
   def op_bulk_trash_categories(%{categories: cats}),
     do: {:bulk_trash_categories, subset(cats), :cascade}
+
+  def op_move_category_under(%{categories: cats}),
+    do: {:move_category_under, pick(cats), pick([nil | cats])}
 
   def op_trash_catalogue(_world), do: :trash_catalogue
   def op_restore_catalogue(_world), do: :restore_catalogue
@@ -513,6 +591,9 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
 
   defp apply_op(:restore_catalogue, w),
     do: outcome(Catalogue.restore_catalogue(Repo.get!(CatalogueRow, w.catalogue)))
+
+  defp apply_op({:move_category_under, uuid, parent_uuid}, _w),
+    do: outcome(Catalogue.move_category_under(Repo.get!(Category, uuid), parent_uuid))
 
   defp outcome({:ok, _}), do: :ok
   defp outcome({:error, %Ecto.Changeset{}}), do: :changeset
@@ -561,6 +642,9 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
              )
     end
 
+    assert unreachable_stamps(w) == [],
+           failure("a trashed row's stamp names a root its restore cannot reach", context)
+
     catalogue = Repo.get!(CatalogueRow, w.catalogue)
 
     assert Map.has_key?(catalogue.data || %{}, "_trash") == (catalogue.status == "deleted"),
@@ -576,6 +660,39 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashRestoreTest do
 
     assert status(Item, other_item) == "active", failure("bystander item touched", context)
   end
+
+  # A restore walks its root's current subtree (or the catalogue), so a
+  # stamp must name the catalogue, the row itself, or one of its ancestors.
+  defp unreachable_stamps(w) do
+    parents =
+      Repo.all(
+        from(c in Category,
+          where: c.catalogue_uuid == ^w.catalogue,
+          select: {c.uuid, c.parent_uuid}
+        )
+      )
+      |> Map.new()
+
+    stamped = fn schema, category_of ->
+      Repo.all(
+        from(r in schema,
+          where: r.catalogue_uuid == ^w.catalogue and r.status == "deleted",
+          select: {r.uuid, field(r, ^category_of), fragment("? #>> '{_trash,root}'", r.data)}
+        )
+      )
+    end
+
+    for {uuid, start, root} <-
+          stamped.(Category, :uuid) ++ stamped.(Item, :category_uuid),
+        root not in [w.catalogue, uuid | path_up(start, parents, map_size(parents))],
+        do: uuid
+  end
+
+  defp path_up(nil, _parents, _fuel), do: []
+  defp path_up(_uuid, _parents, 0), do: []
+
+  defp path_up(uuid, parents, fuel),
+    do: [uuid | path_up(Map.get(parents, uuid), parents, fuel - 1)]
 
   defp assert_round_trip(w, context) do
     case round_trip_target(w) do

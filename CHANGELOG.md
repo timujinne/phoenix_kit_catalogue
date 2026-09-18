@@ -1,3 +1,41 @@
+## 0.37.0 - 2026-09-17
+
+Review: `dev_docs/pull_requests/2026/125-picks-in-catalogue-order/`.
+
+### Changed
+
+- **`ItemSelectorModal` Confirm picks arrive in the catalogue's own manual
+  order** (#125), not the order the user clicked or typed a quantity in:
+  catalogue `{position, name, uuid}`, then the category path from that
+  catalogue's root down to the pick's own category (`{position, name}` per
+  hop) — a category's own items before its subcategories', recursively — then
+  that catalogue's uncategorized picks after all of its categorized ones, and
+  finally the item's own position (a null one last), name and uuid. An admin's
+  tile-sort preference never changes it; it only happens to match what the
+  tiles show under the default Manual sort. The tray keeps click order, as a
+  cart should. Hosts no longer need to re-sort `picks` themselves.
+- One scope shape is outside that guarantee and now says so in the moduledoc:
+  a scope naming only categories (`catalogue_uuids: nil`) whose categories span
+  several catalogues. The popup draws no tree for it either; pass the
+  catalogues in `:catalogue_uuids` as well to get the tree order.
+- `Browse.present_items/2` carries `catalogue_uuid`, `category_uuid` and
+  `position` on every presented item. No component renders them — they are what
+  the pick order is computed from.
+- Dependency bumps: `phoenix_kit` 2.28.2, `phoenix_kit_ai` 0.23.1 and
+  `tessera` 0.3.7.
+
+### Fixed
+
+- A pick whose category the tiles never showed — a narrow `category_uuids`
+  scope reaching a subcategory through subtree expansion — no longer falls out
+  of the sort index and lands first as an empty path (#125).
+- An item whose `position` is NULL now sorts LAST in the confirm payload, the
+  way the manual order has it (`asc: i.position`, Postgres ASC being NULLS
+  LAST), instead of first.
+- Two catalogues tied on both position and name now deliver their picks as one
+  block each instead of interleaving them position by position, matching the
+  uuid tie-break the manual order already carried.
+
 ## 0.36.0 - 2026-09-17
 
 Review: `dev_docs/pull_requests/2026/124-duplicate-and-move-anywhere/`.

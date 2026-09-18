@@ -88,6 +88,33 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       for rendering the host's own summary without a re-query; it is
       NOT an order record — re-read and re-price items server-side when
       the selection becomes something real.
+
+      `picks` arrive in the CATALOGUE'S OWN MANUAL order (2026-09-17),
+      not the order the user clicked or typed a quantity: catalogue
+      `{position, name, uuid}`, then the category path from that
+      catalogue's root down to the pick's own category —
+      `{position, name}` per hop — a category's own items before its
+      subcategories', subcategories in their own manual position order,
+      recursively — then a catalogue's uncategorized picks after ALL of
+      its categorized ones (and a pick whose category is gone from the
+      catalogue's active list after both), and finally the item's own
+      position (a null one last), name, uuid. This is the catalogue's
+      manual order UNCONDITIONALLY — an admin's tile-sort preference
+      (name, item count, updated-at…) never changes it, it only happens
+      to match what the tiles show under the default Manual sort.
+      Click/type order (`entry_seq`) only breaks a tie nothing else
+      resolved, which in practice never happens (the item uuid already
+      disambiguates). Hosts do not need to re-sort `picks` themselves.
+
+      One scope shape is outside the guarantee, and it is the one the
+      popup draws no tree for either: a scope that names ONLY
+      categories (`catalogue_uuids: nil`) whose categories span SEVERAL
+      catalogues. `build_category_tree/3` cannot derive a single
+      catalogue there, so it degrades to the empty tree — no tiles, and
+      no ancestry to sort by — and `picks` come back in the flat
+      `{position, name, uuid}` item order, catalogues interleaved. A
+      host that needs the tree order for such a selection should pass
+      the catalogues in `:catalogue_uuids` as well.
     * `handle_info({:item_selector_closed, %{id: id}}, socket)` — fired on
       cancel/ESC/backdrop, AND after a confirm. Reset the `:if` assign
       here. One exception: with the item-details popup stacked open, the
@@ -724,7 +751,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # the root lists the catalogues as tiles, drilling into one shows its
   # top categories. Below that, drilling is catalogue-agnostic — category
   # uuids are global and the fetch still re-ANDs catalogue_uuids.
-  @empty_cat_tree %{index: %{}, children: %{}, roots: [], counts: %{}}
+  @empty_cat_tree %{index: %{}, sort_index: %{}, children: %{}, roots: [], counts: %{}}
 
   defp build_category_tree(scope, original, locale) do
     scope
@@ -964,15 +991,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # tiles (the two clauses used to carry this verbatim twice —
   # external review, 2026-08-31).
   defp category_tree_base(catalogue_uuids, scope, original, locale) do
-    categories =
+    raw_categories =
       catalogue_uuids
       |> Enum.flat_map(&Catalogue.list_categories_metadata_for_catalogue/1)
-      |> scope_categories(scope[:category_uuids])
       |> Enum.map(fn category ->
         category
         |> Map.put(:name, translated_name(category, locale) || category.name)
         |> Map.put(:uuid, to_string(category.uuid))
       end)
+
+    categories = scope_categories(raw_categories, scope[:category_uuids])
 
     children =
       Enum.group_by(categories, fn category ->
@@ -981,6 +1009,15 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
     %{
       index: Map.new(categories, &{&1.uuid, &1}),
+      # The FULL per-catalogue category set, ignoring the scope's tile
+      # filter — `pick_sort_key/2`'s tree walk needs a pick's whole
+      # ancestor chain even under a narrow `category_uuids` scope
+      # (tim-dev's per-category picker, `scope_categories/2` above): a
+      # pick from a subcategory the tiles never show is still
+      # confirmable (`in_scope?/3` expands to the subtree) and must
+      # not fall out of the sort index and land first as an empty path
+      # (external review, 2026-09-17).
+      sort_index: Map.new(raw_categories, &{&1.uuid, &1}),
       children: children,
       roots: tree_roots(categories, children, original)
     }
@@ -2103,14 +2140,144 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     end
   end
 
-  # Pick order. The selection is a map, so without this the tray and the
-  # confirm payload fell back to sorting by name — and the host's rows came
-  # out alphabetical whatever order the user picked in (2026-09-16).
-  # Monotonic per node: re-selecting a deselected item puts it last, as a
-  # user would expect from a cart.
+  # Pick order for the TRAY (the user's own cart view, `@streams`/
+  # `Enum.sort_by(&entry_seq/1)` in the template). The selection is a
+  # map, so without this the tray fell back to sorting by name — and
+  # the user's cart reordered itself under them mid-pick (2026-09-16).
+  # Monotonic per node: re-selecting a deselected item puts it last, as
+  # a user would expect from a cart. `confirm_payload/1`'s host-facing
+  # order is separate — see `pick_sort_key/2` — and only falls back to
+  # this as an unreachable last-resort tie-break (2026-09-17).
   defp next_seq, do: System.unique_integer([:monotonic, :positive])
 
   defp entry_seq({_uuid, entry}), do: Map.get(entry, :seq, 0)
+
+  # ── Confirm payload order: the catalogue's own MANUAL tree order ────
+  #
+  # `{catalogue_key, {category_bucket, category_path}, item_position,
+  #   item_name, uuid, click_seq}` — Erlang/Elixir term order compares
+  # tuples and lists element by element, and a strict list PREFIX sorts
+  # before its extension, so a category's own items (whose path stops at
+  # that category) land before its subcategories' items (whose path
+  # extends it) without any special-casing here.
+  #
+  # Deliberately the catalogue's own manual (position, name) order
+  # throughout — for the catalogue key too, not whatever tile sort an
+  # admin picked (`Browse.global_categories_order/0`,
+  # `ViewConfig.load_global_sort(:catalogues)`: may be name, item count,
+  # updated-at…). A pick list is not a tile grid; it follows the SAME
+  # order under every tile-sort preference, which happens to be what the
+  # tiles show only under the default Manual sort (external review,
+  # 2026-09-17).
+  defp pick_sort_key(cat_tree, {uuid, entry} = pair) do
+    item = entry.item
+
+    {
+      catalogue_sort_key(cat_tree, Map.get(item, :catalogue_uuid)),
+      category_sort_path(cat_tree, Map.get(item, :category_uuid)),
+      position_key(Map.get(item, :position)),
+      String.downcase(Map.get(item, :name) || ""),
+      uuid,
+      entry_seq(pair)
+    }
+  end
+
+  # Multi-catalogue scope: `cat_tree.catalogues` carries each
+  # catalogue's own `:position`/`:name` (unsorted use of the data, not
+  # `order_catalogue_tiles/1`'s admin-preference order). A catalogue
+  # missing from it (shouldn't happen for an available pick) sorts
+  # last rather than crashing.
+  #
+  # `{position, name, uuid}` — the uuid tie-break is
+  # `Search.apply_search_order/2`'s, and it is there for the reason that
+  # function documents: catalogue positions default to 0 and run one
+  # sequence PER FOLDER LEVEL, so ties are the common case, and two
+  # same-named catalogues would otherwise interleave their items rather
+  # than each arriving as one block (external review, 2026-09-17).
+  #
+  # Every clause returns a 3-tuple: Erlang term order compares tuples by
+  # SIZE first, so a clause of another arity would dominate the key
+  # outright instead of tie-breaking within it.
+  defp catalogue_sort_key(%{catalogues: catalogues}, catalogue_uuid) when is_list(catalogues) do
+    catalogue_uuid = catalogue_uuid && to_string(catalogue_uuid)
+
+    case Enum.find(catalogues, &(to_string(&1.uuid) == catalogue_uuid)) do
+      nil ->
+        {position_key(nil), "", ""}
+
+      catalogue ->
+        {position_key(Map.get(catalogue, :position)), downcase_name(catalogue),
+         to_string(catalogue.uuid)}
+    end
+  end
+
+  # Single-catalogue (or no) scope: `cat_tree` carries no catalogue
+  # tiles to key off, and every available pick shares the one scoped
+  # catalogue anyway — a constant key is a no-op.
+  defp catalogue_sort_key(_cat_tree, _catalogue_uuid), do: {position_key(0), "", ""}
+
+  # Uncategorized items of a catalogue sort after its categorized ones,
+  # and a pick whose category is entirely absent from `sort_index`
+  # (deleted, corrupt data) sorts after BOTH — the bucket flag wins
+  # over the path itself (an empty path would otherwise sort FIRST as a
+  # prefix of everything).
+  defp category_sort_path(_cat_tree, nil), do: {1, []}
+
+  defp category_sort_path(cat_tree, category_uuid) do
+    sort_index = Map.get(cat_tree, :sort_index, %{})
+    category_uuid = to_string(category_uuid)
+
+    case Map.get(sort_index, category_uuid) do
+      nil -> {2, []}
+      _category -> {0, category_path(sort_index, category_uuid, %{})}
+    end
+  end
+
+  # Root-to-leaf: `{position (nulls last), lowercased name}` per hop,
+  # walking the SCOPE-INDEPENDENT `sort_index` (the catalogue's whole
+  # category set) — never the tile-filtered `index`, which a narrow
+  # `category_uuids` scope (a per-category picker) trims to what the
+  # tiles show, dropping the very ancestors a scoped-in subcategory
+  # pick still needs (external review, 2026-09-17). Stops — rather
+  # than raising — the moment the chain breaks: a dangling parent, or a
+  # cycle re-visiting a uuid already on this walk (crafted/corrupt
+  # `parent_uuid` data must not hang the request).
+  #
+  # `visited` is a plain map used as a set, not a `MapSet`: the walk
+  # recurses, so dialyzer infers the parameter from the body and then
+  # sees the opaque `MapSet.t()` the caller passes as a violation
+  # (`call_without_opaque` — it failed `mix precommit` as merged). The
+  # set holds one uuid per level of category nesting, where a map is no
+  # worse anyway. `if`, not `&&`, for the parent: `&&` on an untyped
+  # map field widens to `false | nil | binary()`, and the `nil` clause
+  # above then does not cover the whole falsy side.
+  defp category_path(_sort_index, nil, _visited), do: []
+
+  defp category_path(sort_index, category_uuid, visited) do
+    if Map.has_key?(visited, category_uuid) do
+      []
+    else
+      case Map.get(sort_index, category_uuid) do
+        nil ->
+          []
+
+        category ->
+          visited = Map.put(visited, category_uuid, true)
+          parent_uuid = if category.parent_uuid, do: to_string(category.parent_uuid)
+          hop = {position_key(category.position), downcase_name(category)}
+          category_path(sort_index, parent_uuid, visited) ++ [hop]
+      end
+    end
+  end
+
+  defp downcase_name(%{name: name}), do: String.downcase(name || "")
+  defp downcase_name(_record), do: ""
+
+  # Postgres-style nulls-last: a bare `nil` is an atom, which Erlang
+  # term order places BELOW every number — sorting it first, not last,
+  # if compared raw.
+  defp position_key(nil), do: {1, 0}
+  defp position_key(position), do: {0, position}
 
   defp deselect(socket, uuid) do
     assign(socket,
@@ -2265,7 +2432,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       # the tray but must never reach the host as a pick — the host's
       # scope said no.
       |> Enum.filter(fn {_uuid, entry} -> entry.available end)
-      |> Enum.sort_by(&entry_seq/1)
+      |> Enum.sort_by(&pick_sort_key(assigns.cat_tree, &1))
       |> Enum.map(fn {uuid, %{qty: qty, item: item}} ->
         %{
           uuid: uuid,

@@ -222,8 +222,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     end
   end
 
-  describe "pick order and unit labels (2026-09-16)" do
-    test "picks reach the host in the order they were selected, not by name", %{
+  describe "pick order and unit labels (2026-09-16 tray, 2026-09-17 confirm order)" do
+    test "the tray keeps click order; the CONFIRM payload follows the catalogue's own order", %{
       conn: conn,
       cat: cat,
       screw: screw,
@@ -231,7 +231,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     } do
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
 
-      # "White Paint" first, "M8 Screw" second — alphabetical would flip them.
+      # "White Paint" clicked first, "M8 Screw" second — the tray (the
+      # user's own cart view) keeps that click order regardless.
       view |> picker() |> render_click("card_click", %{"uuid" => paint.uuid})
       view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
 
@@ -240,15 +241,20 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       {screw_at, _} = :binary.match(tray, "picker-tray-#{screw.uuid}")
       assert paint_at < screw_at
 
+      # Both items are uncategorized in the same catalogue, so the
+      # confirm payload falls all the way to the item tie-break —
+      # `position` (Screw was seeded before Paint), not click order:
+      # "M8 Screw" sorts before "White Paint" even though White Paint
+      # was clicked first.
       view |> picker() |> render_click("confirm", %{})
       html = render(view)
 
       {paint_at, _} = :binary.match(html, "pick-#{paint.uuid}")
       {screw_at, _} = :binary.match(html, "pick-#{screw.uuid}")
-      assert paint_at < screw_at
+      assert screw_at < paint_at
     end
 
-    test "a live refresh while two items are picked keeps the pick order", %{
+    test "a live refresh while two items are picked keeps the confirm order stable", %{
       conn: conn,
       cat: cat,
       screw: screw,
@@ -260,7 +266,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       view |> picker() |> render_click("card_click", %{"uuid" => screw.uuid})
 
       # Someone else edits a picked item: the relay re-hydrates the
-      # selection from the catalogue — the order must survive that.
+      # selection from the catalogue — the (position-derived) order must
+      # survive that untouched.
       {:ok, _} = Catalogue.update_item(screw, %{name: "M8 Screw Renamed"})
       eventually(fn -> render(view) =~ "M8 Screw Renamed" end)
 
@@ -269,10 +276,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
       {paint_at, _} = :binary.match(html, "pick-#{paint.uuid}")
       {screw_at, _} = :binary.match(html, "pick-#{screw.uuid}")
-      assert paint_at < screw_at
+      assert screw_at < paint_at
     end
 
-    test "preselects come first; a re-picked item goes last", %{
+    test "preselecting or re-picking an item does not move it in the confirm payload", %{
       conn: conn,
       cat: cat,
       screw: screw,
@@ -282,8 +289,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
         Catalogue.create_item(%{name: "Aaa Glue", sku: "GLUE-1", catalogue_uuid: cat.uuid})
 
       # Paint is preselected by the host; Glue and Screw are clicked, then
-      # Glue is deselected and picked again — it must land last, as in a
-      # cart, not back in its original slot and not alphabetically first.
+      # Glue is deselected and re-picked last — none of that reorders the
+      # CONFIRM payload (only the tray, which this test doesn't inspect):
+      # all three are uncategorized in the same catalogue, so the payload
+      # follows their (auto-assigned, creation-order) `position` —
+      # Screw, Paint, Glue — whatever order they were clicked in.
       {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click&pre=#{paint.uuid}:2")
 
       view |> picker() |> render_click("card_click", %{"uuid" => glue.uuid})
@@ -294,7 +304,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       html = render(view)
 
       positions =
-        Enum.map([paint, screw, glue], fn item ->
+        Enum.map([screw, paint, glue], fn item ->
           {at, _} = :binary.match(html, "pick-#{item.uuid}")
           at
         end)
@@ -324,6 +334,341 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       {:ok, _view, html} = open(conn, "c=#{cat.uuid}&sel=click&cols=name,price")
 
       assert html =~ "/ pc"
+    end
+  end
+
+  describe "confirm payload follows the catalogue's own tree order (2026-09-17)" do
+    test "a parent's own items, then each child subtree, in the catalogue's tile order — not click order",
+         %{conn: conn, cat: cat} do
+      # A nested "Lisateenused > Lisateenused"-shaped tree: the parent
+      # sits at position 5 (irrelevant here — it's the only top-level
+      # category), holds two items of its own, and has two children —
+      # the first at position 1 (with its own child, a grandchild), the
+      # second at position 2. Names deliberately fight both the position
+      # order (the parent's own items) and the tree order (the
+      # subcategory items) so a name-based or alphabetical sort would
+      # visibly disagree with the expected result.
+      parent = fixture_category(cat, %{name: "Parent Zone", position: 5})
+      child1 = fixture_category(cat, %{name: "Child One", parent_uuid: parent.uuid, position: 1})
+      child2 = fixture_category(cat, %{name: "Child Two", parent_uuid: parent.uuid, position: 2})
+
+      grandchild =
+        fixture_category(cat, %{name: "Grandchild", parent_uuid: child1.uuid, position: 1})
+
+      parent_item1 =
+        fixture_item(%{
+          name: "Zulu Parent Item",
+          position: 1,
+          catalogue_uuid: cat.uuid,
+          category_uuid: parent.uuid
+        })
+
+      parent_item2 =
+        fixture_item(%{
+          name: "Alpha Parent Item",
+          position: 2,
+          catalogue_uuid: cat.uuid,
+          category_uuid: parent.uuid
+        })
+
+      child1_item =
+        fixture_item(%{
+          name: "Child One Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: child1.uuid
+        })
+
+      grandchild_item =
+        fixture_item(%{
+          name: "AAA Grandchild Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: grandchild.uuid
+        })
+
+      child2_item =
+        fixture_item(%{
+          name: "ZZZ Child Two Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: child2.uuid
+        })
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      # Scrambled pick order: deepest first, then the parent's own items
+      # in reverse position order, then the first child.
+      view |> picker() |> render_click("browse_category", %{"uuid" => child2.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => child2_item.uuid})
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => grandchild.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => grandchild_item.uuid})
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => parent.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => parent_item2.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => parent_item1.uuid})
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => child1.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => child1_item.uuid})
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      expected_order = [parent_item1, parent_item2, child1_item, grandchild_item, child2_item]
+
+      positions =
+        Enum.map(expected_order, fn item ->
+          {at, _} = :binary.match(html, "pick-#{item.uuid}")
+          at
+        end)
+
+      assert positions == Enum.sort(positions)
+    end
+
+    test "within one category, item order tie-breaks on position, not name", %{
+      conn: conn,
+      cat: cat
+    } do
+      category = fixture_category(cat, %{name: "Fixings"})
+
+      zeta =
+        fixture_item(%{
+          name: "Zeta",
+          position: 1,
+          catalogue_uuid: cat.uuid,
+          category_uuid: category.uuid
+        })
+
+      alpha =
+        fixture_item(%{
+          name: "Alpha",
+          position: 2,
+          catalogue_uuid: cat.uuid,
+          category_uuid: category.uuid
+        })
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => category.uuid})
+      # Clicked in reverse — position order must still win on confirm.
+      view |> picker() |> render_click("card_click", %{"uuid" => alpha.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => zeta.uuid})
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      {zeta_at, _} = :binary.match(html, "pick-#{zeta.uuid}")
+      {alpha_at, _} = :binary.match(html, "pick-#{alpha.uuid}")
+      assert zeta_at < alpha_at
+    end
+
+    test "a per-category narrow scope (category_uuids only, no catalogue_uuids) still confirms in tree order",
+         %{conn: conn, cat: cat} do
+      # tim-dev's per-category narrow picker shape: the host scope names
+      # ONLY a category (`cat_scope`, no `c=`) — `catalogue_uuids: nil`.
+      # A pick from a subcategory the tiles filter down to must still
+      # sort correctly: it must not fall out of the sort index and land
+      # FIRST as an empty path (external review, 2026-09-17).
+      parent = fixture_category(cat, %{name: "Parent Scope", position: 5})
+
+      child_low =
+        fixture_category(cat, %{name: "Child Low", parent_uuid: parent.uuid, position: 1})
+
+      child_high =
+        fixture_category(cat, %{name: "Child High", parent_uuid: parent.uuid, position: 9})
+
+      parent_item =
+        fixture_item(%{
+          name: "Parent's Own Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: parent.uuid
+        })
+
+      low_item =
+        fixture_item(%{
+          name: "Low Child Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: child_low.uuid
+        })
+
+      high_item =
+        fixture_item(%{
+          name: "High Child Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: child_high.uuid
+        })
+
+      # No c= param — only cat_scope, exactly the narrow-picker shape.
+      {:ok, view, _html} = open(conn, "cat_scope=#{parent.uuid}&sel=click")
+
+      # Scrambled: the higher-position subcategory first, then the
+      # lower one, then the parent's own item last.
+      view |> picker() |> render_click("browse_category", %{"uuid" => child_high.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => high_item.uuid})
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => child_low.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => low_item.uuid})
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => parent.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => parent_item.uuid})
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      expected_order = [parent_item, low_item, high_item]
+
+      positions =
+        Enum.map(expected_order, fn item ->
+          {at, _} = :binary.match(html, "pick-#{item.uuid}")
+          at
+        end)
+
+      assert positions == Enum.sort(positions)
+    end
+
+    test "a pick whose category is gone from the catalogue's active list sorts LAST, not first",
+         %{conn: conn, cat: cat} do
+      normal_category = fixture_category(cat, %{name: "Still Here"})
+
+      normal_item =
+        fixture_item(%{
+          name: "Normal Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: normal_category.uuid
+        })
+
+      doomed_category = fixture_category(cat, %{name: "Doomed"})
+
+      ghost_item =
+        fixture_item(%{
+          name: "Ghost Item",
+          catalogue_uuid: cat.uuid,
+          category_uuid: doomed_category.uuid
+        })
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      # Pick the item that will end up "unknown" FIRST, the normal one
+      # second — click order must not save it.
+      view |> picker() |> render_click("browse_category", %{"uuid" => doomed_category.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => ghost_item.uuid})
+
+      # Trash the category AFTER picking: the tray entry is a frozen
+      # snapshot (`entry.available` is never re-validated against a
+      # live browse), so the pick survives, but its category drops out
+      # of `Catalogue.list_categories_metadata_for_catalogue/1`'s
+      # default `:active` listing — exactly what a genuinely deleted or
+      # corrupt category looks like to the sort.
+      {:ok, _} = Catalogue.trash_category(doomed_category)
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => normal_category.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => normal_item.uuid})
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      {normal_at, _} = :binary.match(html, "pick-#{normal_item.uuid}")
+      {ghost_at, _} = :binary.match(html, "pick-#{ghost_item.uuid}")
+      assert normal_at < ghost_at
+    end
+
+    test "an item whose position is NULL sorts LAST, not first", %{conn: conn, cat: cat} do
+      # `position` is nullable (default 0, but an import or a hand-edit
+      # can write NULL) and the manual order puts a null LAST —
+      # `Search.apply_search_order/2`'s `asc: i.position`, Postgres ASC
+      # being NULLS LAST. `Browse.present_items/2` defaulted it to 0,
+      # which sorted such an item FIRST and quietly defeated
+      # `position_key/1`'s own nulls-last handling (external review,
+      # 2026-09-17).
+      category = fixture_category(cat, %{name: "Nullables"})
+
+      nulled =
+        fixture_item(%{
+          name: "AAA Nulled Position",
+          catalogue_uuid: cat.uuid,
+          category_uuid: category.uuid
+        })
+
+      positioned =
+        fixture_item(%{
+          name: "ZZZ Real Position",
+          catalogue_uuid: cat.uuid,
+          category_uuid: category.uuid
+        })
+
+      # Behind the changeset: position is auto-assigned on create, and
+      # the seeded order (nulled first, position 1) is exactly the one a
+      # `nil -> 0` default preserved. The name order fights it too.
+      {1, _} =
+        Repo.update_all(
+          from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^nulled.uuid),
+          set: [position: nil]
+        )
+
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      view |> picker() |> render_click("browse_category", %{"uuid" => category.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => nulled.uuid})
+      view |> picker() |> render_click("card_click", %{"uuid" => positioned.uuid})
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      {nulled_at, _} = :binary.match(html, "pick-#{nulled.uuid}")
+      {positioned_at, _} = :binary.match(html, "pick-#{positioned.uuid}")
+      assert positioned_at < nulled_at
+    end
+
+    test "two catalogues tied on position AND name still arrive as one block each", %{conn: conn} do
+      # Catalogue positions default to 0 and run one sequence per folder
+      # level, so ties are ordinary. Without the uuid tie-break
+      # `Search.apply_search_order/2` carries for exactly this reason,
+      # two same-named catalogues interleaved their picks
+      # position-by-position instead of arriving as blocks (external
+      # review, 2026-09-17).
+      left = fixture_catalogue(%{name: "Twin Catalogue"})
+      right = fixture_catalogue(%{name: "Twin Catalogue"})
+
+      {2, _} =
+        Repo.update_all(
+          from(c in CatalogueSchema, where: c.uuid in ^[left.uuid, right.uuid]),
+          set: [position: 0]
+        )
+
+      left_items =
+        Enum.map(1..2, &fixture_item(%{name: "Alpha #{&1}", catalogue_uuid: left.uuid}))
+
+      right_items =
+        Enum.map(1..2, &fixture_item(%{name: "Beta #{&1}", catalogue_uuid: right.uuid}))
+
+      {:ok, view, _html} = open(conn, "c=#{left.uuid}&c2=#{right.uuid}&sel=click")
+
+      # Interleaved on purpose, one catalogue at a time — the two
+      # catalogues' items share their `position` ordinals (1 and 2), so
+      # a tie at the catalogue key mixes them.
+      for {catalogue, items} <- [{left, left_items}, {right, right_items}] do
+        view |> picker() |> render_click("browse_catalogue", %{"uuid" => catalogue.uuid})
+
+        for item <- items do
+          view |> picker() |> render_click("card_click", %{"uuid" => item.uuid})
+        end
+      end
+
+      view |> picker() |> render_click("confirm", %{})
+      html = render(view)
+
+      at = fn item ->
+        {offset, _} = :binary.match(html, "pick-#{item.uuid}")
+        offset
+      end
+
+      left_at = Enum.map(left_items, at)
+      right_at = Enum.map(right_items, at)
+
+      # Each catalogue's picks are contiguous, and the blocks follow the
+      # catalogues' uuid order — the key's last resort.
+      {first, second} =
+        if to_string(left.uuid) < to_string(right.uuid),
+          do: {left_at, right_at},
+          else: {right_at, left_at}
+
+      assert Enum.max(first) < Enum.min(second)
     end
   end
 

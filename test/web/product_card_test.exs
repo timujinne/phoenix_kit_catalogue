@@ -240,5 +240,55 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardTest do
       assert html =~ "carousel"
       refute html =~ "<dialog"
     end
+
+    # The body still ACCEPTS `target` (hosts pass it, and it was required
+    # before the delegation), but core's `preview_card_body/1` declares no
+    # such attr — forwarding it is an undefined-attribute compile warning,
+    # which `mix precommit` turns into a build failure.
+    test "accepts a target without forwarding it to core's body" do
+      html =
+        render_component(
+          &ProductCard.product_card_body/1,
+          base_assigns(%{target: :some_target}) |> Map.drop([:id, :show, :on_close])
+        )
+
+      assert html =~ "carousel"
+      refute html =~ "phx-target"
+    end
+
+    test "renders without a target at all" do
+      html =
+        render_component(
+          &ProductCard.product_card_body/1,
+          base_assigns(%{}) |> Map.drop([:id, :show, :on_close, :target])
+        )
+
+      assert html =~ "img-1"
+    end
+  end
+
+  describe "title fallback" do
+    # Core's PreviewCard falls back to a generic "Preview"; the catalogue
+    # keeps its own "Item", translated by THIS module's backend.
+    test "a nameless item falls back to the catalogue Item label, not core Preview" do
+      html = render_card(%{item_name: nil})
+
+      assert html =~ "Item"
+      refute html =~ "Preview"
+    end
+
+    test "an empty name falls back the same way" do
+      assert render_card(%{item_name: ""}) =~ "Item"
+    end
+
+    test "the fallback also reaches the carousel's aria-label in the body" do
+      html =
+        render_component(
+          &ProductCard.product_card_body/1,
+          base_assigns(%{item_name: nil}) |> Map.drop([:id, :show, :on_close])
+        )
+
+      assert html =~ ~s(aria-label="Item")
+    end
   end
 end

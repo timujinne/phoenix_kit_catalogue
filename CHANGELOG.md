@@ -1,3 +1,40 @@
+## 0.38.0 - 2026-09-18
+
+Review: `dev_docs/pull_requests/2026/126-product-card-on-core-preview-card/`.
+
+### Changed
+
+- **The product card's markup now lives in core** (#126). `ProductCard.product_card/1`
+  and `product_card_body/1` delegate to `PhoenixKitWeb.Components.Core.PreviewCard`
+  (phoenix_kit#827) — the same photos-then-files swipe carousel, jump strip,
+  fields grid and compact file list, generalised for any resource with photos
+  and files, so the catalogue item card and a host's own preview cards share one
+  implementation. Both functions keep their names, their attrs and their
+  behaviour; the DB-backed helpers (`resolve_images/1`, `resolve_files/1`,
+  `resolve_name/2`, `build_fields/3`) are untouched.
+- `product_card_body/1`'s `:target` attr is no longer `required:` — core's
+  `preview_card_body/1` renders no event of its own, so the body has nothing to
+  point at. It is still accepted, and ignored, for compatibility with hosts that
+  pass it.
+- Dependency bump: `phoenix_kit` 2.30.0.
+
+### Fixed
+
+- The nameless-item card title no longer changes wording when it falls back.
+  Delegating passed the raw name through, so an item with no name in the active
+  locale fell back to core's generic "Preview" from core's gettext backend;
+  it says "Item" again, from this module's own `et`/`ru` catalogues, in the
+  modal title, the carousel's `aria-label` and the image `alt`. A blank (`""`)
+  name now falls back too, where it previously rendered an empty title.
+
+### Upgrade notes
+
+- **Requires `phoenix_kit >= 2.30.0`.** `PreviewCard` first ships there, and
+  this module now references it unguarded. The declared requirement is
+  deliberately left at `>= 2.13.11 and < 3.0.0` so hosts keep a loose
+  constraint, but a host resolving a core older than 2.30.0 will fail to
+  compile this module.
+
 ## 0.37.0 - 2026-09-17
 
 Review: `dev_docs/pull_requests/2026/125-picks-in-catalogue-order/`.

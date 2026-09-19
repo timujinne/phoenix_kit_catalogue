@@ -380,6 +380,52 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
     end
   end
 
+  describe "column_toggle/1 placement" do
+    test "the list is a popover anchored to its button, flipping above it when there is no room" do
+      html =
+        render_component(&Browse.column_toggle/1,
+          id: "sel-cols",
+          columns: [:thumb, :sku],
+          visible: [:thumb]
+        )
+
+      [menu] = Regex.run(~r/<ul[^>]*id="sel-cols-menu"[^>]*>/, html)
+
+      assert html =~ ~s(popovertarget="sel-cols-menu")
+      assert html =~ "anchor-name: --pk-anchor-sel-cols"
+      assert menu =~ "popover"
+      assert menu =~ "position-anchor: --pk-anchor-sel-cols"
+      assert menu =~ "position-try-fallbacks: flip-block"
+      assert menu =~ "max-height: calc(50dvh - 2.5rem)"
+      # A button scrolled out of sight takes its list with it.
+      assert menu =~ "position-visibility: anchors-visible"
+      # A colocated hook's name is expanded to `<Module>.<name>` at compile
+      # time, so the leading-dot form never reaches the HTML — asserting on
+      # it too would let a wrong name pass on the other half of the `or`.
+      assert html =~
+               ~s(phx-hook="PhoenixKitCatalogue.Web.Components.Browse.ColumnToggle")
+
+      # The old focus-driven dropdown is gone: it was clipped by the modal.
+      refute html =~ "dropdown-content"
+      refute html =~ ~s(tabindex="0")
+    end
+
+    test "the hook reopens an open list that scrolled off screen" do
+      source = File.read!("lib/phoenix_kit_catalogue/web/components/browse.ex")
+
+      [hook] =
+        Regex.run(~r/name="\.ColumnToggle">(.*?)<\/script>/s, source, capture: :all_but_first)
+
+      assert hook =~ ~s|addEventListener("scroll", this._onViewportChange, true)|
+      assert hook =~ "this.menu.hidePopover()"
+      assert hook =~ "this.menu.showPopover()"
+    end
+
+    test "popover_anchor/1 makes a valid identifier from any DOM id" do
+      assert Browse.popover_anchor("row-1.picker:x y") == "--pk-anchor-row-1-picker-x-y"
+    end
+  end
+
   describe "qty_stepper/1" do
     # 2026-08-30: a native <input type="number"> — browser spinner arrows,
     # no custom −/+ buttons.

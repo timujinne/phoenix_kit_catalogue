@@ -157,9 +157,18 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     * Escape closes the dropdown and keeps focus on the input.
     * Clicking outside the picker closes it (`phx-click-away`).
 
-  The dropdown is absolutely positioned and elevated with `z-50`; the
-  parent container must allow overflow (`overflow: visible` or just
-  don't set `overflow: hidden` on an ancestor that clips it).
+  The hook also sends what is typed (`query_change`, debounced) and keeps
+  the input's own events away from any form around it, so the picker
+  searches with or without a host form and never triggers the host
+  form's `phx-change`.
+
+  ### Placement
+
+  The dropdown is a popover anchored to the input
+  (`Browse.popover_anchor/1`). It renders above every scrolling or
+  clipping ancestor, so hosts need no overflow rules, and it opens above
+  the input when there is no room below. Where the browser has no CSS
+  anchor positioning, the hook places it with the same rule.
   """
 
   use Phoenix.LiveComponent
@@ -715,6 +724,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
         :selected_photo_uuid,
         effective_photo_uuid(assigns[:selected_item], assigns[:show_photo])
       )
+      |> assign(:anchor, Browse.popover_anchor(assigns.id))
 
     ~H"""
     <div
@@ -794,7 +804,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
             <.icon name="hero-photo" class="h-1/2 w-1/2" />
           </span>
         </button>
-        <div class="relative flex-1">
+        <div class="relative flex-1" data-picker-anchor style={"anchor-name: #{@anchor}"}>
           <input
             id={"#{@id}-input"}
             type="text"
@@ -807,8 +817,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
             placeholder={@placeholder_text}
             disabled={@disabled}
             phx-target={@myself}
-            phx-change="query_change"
-            phx-debounce="300"
             phx-focus="open"
             class={[
               "input input-sm w-full pr-8",
@@ -829,12 +837,19 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
 
           <%!-- Rendered whenever open — aria-expanded="true" promises that
           aria-controls resolves, so the empty state is a status row inside
-          the listbox rather than a listbox that doesn't exist. --%>
+          the listbox rather than a listbox that doesn't exist.
+          A manual popover the hook shows: the top layer is above every
+          clipping ancestor. Capped at half the viewport, the list always
+          fits on one side of the input; flip-block picks that side.
+          text-base-content: a popover's UA colour is CanvasText. --%>
           <ul
             :if={@open}
             id={"#{@id}-listbox"}
             role="listbox"
-            class="absolute z-50 mt-1 w-full max-h-64 overflow-y-auto bg-base-100 border border-base-300 rounded-box shadow-lg"
+            popover="manual"
+            data-picker-listbox
+            class="m-0 p-0 overflow-y-auto bg-base-100 text-base-content border border-base-300 rounded-box shadow-lg"
+            style={"position-anchor: #{@anchor}; position-area: bottom; position-try-fallbacks: flip-block; position-visibility: anchors-visible; width: anchor-size(width); margin-block: 0.25rem; max-height: min(16rem, calc(50dvh - 2.5rem))"}
           >
             <li
               :if={@options == []}
@@ -927,13 +942,139 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       />
 
       <script :type={Phoenix.LiveView.ColocatedHook} name=".ItemPicker">
+        // Browsers without CSS anchor positioning get the listbox placed
+        // here instead, by the same rule: below the input unless only the
+        // space above fits it.
+        const ANCHORED = typeof CSS !== "undefined" && CSS.supports("position-area: bottom")
+        const QUERY_DEBOUNCE_MS = 300
+
         export default {
           mounted() {
             this.input = this.el.querySelector('input[role="combobox"]')
+            this.anchor = this.el.querySelector("[data-picker-anchor]")
             this.focusedIdx = -1
             this._optSig = ""
             this._onKey = (e) => this.handleKey(e)
             this.input.addEventListener("keydown", this._onKey)
+
+            // The query goes to the server from here, not through a form
+            // `phx-change`: LiveView refuses that outside a form, and inside
+            // a host form it would also fire the host's own `phx-change`.
+            // Stopping the input's events keeps them out of both.
+            this._onInput = (e) => {
+              e.stopPropagation()
+              if (!e.isComposing) this.queueQuery()
+            }
+            this._onChange = (e) => e.stopPropagation()
+            this._onCompositionEnd = () => this.queueQuery()
+            this.input.addEventListener("input", this._onInput)
+            this.input.addEventListener("change", this._onChange)
+            this.input.addEventListener("compositionend", this._onCompositionEnd)
+
+            // Back in a field whose last search was skipped because the
+            // user had left it: search what it holds now.
+            this._onFocus = () => {
+              if (this._skipped) this.queueQuery()
+            }
+            this.input.addEventListener("focus", this._onFocus)
+
+            // Tabbing to another field leaves no click for phx-click-away,
+            // and the list floats above the page, over the next row.
+            this._onFocusOut = (e) => {
+              if (e.relatedTarget && !this.el.contains(e.relatedTarget)) this.close()
+            }
+            this.el.addEventListener("focusout", this._onFocusOut)
+
+            // A press on an option picks from the list on screen, as Enter
+            // does; it also blurs the input, which would skip the search.
+            this._onPointerDown = (e) => {
+              if (e.target instanceof Element && e.target.closest('li[role="option"]')) this.cancelQuery()
+            }
+            this.el.addEventListener("pointerdown", this._onPointerDown)
+
+            this._onViewportChange = (e) => {
+              const list = this.listbox()
+              if (!list || (e.target instanceof Node && list.contains(e.target))) return
+              if (this._frame) return
+              this._frame = requestAnimationFrame(() => {
+                this._frame = null
+                this.syncListbox({refit: true})
+              })
+            }
+            window.addEventListener("scroll", this._onViewportChange, true)
+            window.addEventListener("resize", this._onViewportChange)
+            this.syncListbox()
+          },
+
+          listbox() {
+            return this.el.querySelector("[data-picker-listbox]")
+          },
+
+          queueQuery() {
+            clearTimeout(this._queryTimer)
+            this._queryTimer = setTimeout(() => this.pushQuery(), QUERY_DEBOUNCE_MS)
+          },
+
+          // A search that lands after the user left the field would open
+          // the list again under whatever they are doing now.
+          pushQuery() {
+            this._queryTimer = null
+            this._skipped = document.activeElement !== this.input
+            if (!this._skipped) this.pushEventTo(this.el, "query_change", {value: this.input.value})
+          },
+
+          cancelQuery() {
+            clearTimeout(this._queryTimer)
+            this._queryTimer = null
+            this._skipped = false
+          },
+
+          close() {
+            this.cancelQuery()
+            this.pushEventTo(this.el, "close", {})
+          },
+
+          // The server renders the listbox only while open; each render of
+          // it is a new element to show. With `refit`, an open list that no
+          // longer fits on screen (the page scrolled under it, or new
+          // results made it taller) is reopened: browsers pick a position
+          // option when a popover opens, not when its anchor scrolls.
+          syncListbox({refit = false} = {}) {
+            const list = this.listbox()
+            if (!list || typeof list.showPopover !== "function") {
+              if (list && !ANCHORED) this.placeListbox(list)
+              return
+            }
+            if (!list.matches(":popover-open")) {
+              try { list.showPopover() } catch (_e) {}
+            } else if (refit && ANCHORED && !this.fitsViewport(list)) {
+              list.hidePopover()
+              list.showPopover()
+            }
+            if (!ANCHORED) this.placeListbox(list)
+          },
+
+          // A pixel of slack: sub-pixel sizes must not reopen on every frame.
+          fitsViewport(el) {
+            const rect = el.getBoundingClientRect()
+            return rect.top >= -1 && rect.bottom <= window.innerHeight + 1
+          },
+
+          placeListbox(list) {
+            const rect = this.anchor.getBoundingClientRect()
+            const gap = 4
+            Object.assign(list.style, {
+              position: "fixed",
+              inset: "auto",
+              margin: "0",
+              left: `${rect.left}px`,
+              width: `${rect.width}px`
+            })
+            const height = list.offsetHeight
+            const below = window.innerHeight - rect.bottom - gap
+            const above = rect.top - gap
+            const top = height <= below || below >= above ? rect.bottom + gap : rect.top - gap - height
+            list.style.top = `${Math.max(0, Math.min(top, window.innerHeight - height))}px`
           },
 
           updated() {
@@ -952,12 +1093,23 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
               this.focusedIdx = opts.length - 1
             }
             this.syncActiveDescendant()
+            this.syncListbox({refit: true})
           },
 
           destroyed() {
+            this.cancelQuery()
+            cancelAnimationFrame(this._frame)
             if (this.input && this._onKey) {
               this.input.removeEventListener("keydown", this._onKey)
+              this.input.removeEventListener("input", this._onInput)
+              this.input.removeEventListener("change", this._onChange)
+              this.input.removeEventListener("compositionend", this._onCompositionEnd)
+              this.input.removeEventListener("focus", this._onFocus)
             }
+            this.el.removeEventListener("focusout", this._onFocusOut)
+            this.el.removeEventListener("pointerdown", this._onPointerDown)
+            window.removeEventListener("scroll", this._onViewportChange, true)
+            window.removeEventListener("resize", this._onViewportChange)
           },
 
           enabledOptions() {
@@ -1002,13 +1154,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
               case "Enter":
                 if (this.focusedIdx >= 0 && this.focusedIdx < opts.length) {
                   e.preventDefault()
+                  // The pick is from the list on screen; a search still
+                  // pending would reopen it over the chosen item.
+                  this.cancelQuery()
                   opts[this.focusedIdx].click()
                 }
                 break
 
               case "Escape":
                 e.preventDefault()
-                this.pushEventTo(this.el, "close", {})
+                this.close()
                 break
             }
           },

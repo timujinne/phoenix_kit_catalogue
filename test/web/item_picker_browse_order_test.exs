@@ -74,8 +74,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerBrowseOrderTest do
 
     html =
       view
-      |> element("#host-picker-input")
-      |> render_change(%{"value" => "handle"})
+      |> with_target("#host-picker")
+      |> render_hook("query_change", %{"value" => "handle"})
 
     handle_names = Enum.filter(@names, &(&1 =~ ~r/handle/i))
     assert order_in(html, handle_names) == handle_names
@@ -97,7 +97,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerBrowseOrderTest do
     view |> element("#host-picker-input") |> render_focus()
     assert order_in(render(view), @names) == Enum.sort(@names, :desc)
 
-    html = view |> element("#host-picker-input") |> render_change(%{"value" => "handle"})
+    html =
+      view |> with_target("#host-picker") |> render_hook("query_change", %{"value" => "handle"})
+
     handle_names = Enum.filter(@names, &(&1 =~ ~r/handle/i))
     assert order_in(html, handle_names) == handle_names
   end

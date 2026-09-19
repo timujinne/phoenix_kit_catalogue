@@ -1,3 +1,44 @@
+## 0.39.0 - 2026-09-18
+
+Reviews: `dev_docs/pull_requests/2026/127-popover-dropdowns/`.
+
+### Changed
+
+- **The Columns list and the item picker's dropdown are top-layer popovers**
+  (#127), anchored to their trigger with the new `Browse.popover_anchor/1`
+  (`anchor-name` on the button or input, `position-anchor` +
+  `position-try-fallbacks: flip-block` + `position-visibility: anchors-visible`
+  on the list). They render above every scrolling or clipping ancestor, so
+  nothing cuts them off inside the selector modal, and they open above their
+  trigger when there is no room below. Both are capped at half the viewport, so
+  one side always fits; each reopens itself when the page scrolls it off screen,
+  because a browser picks a popover's position option when it opens, not when
+  its anchor moves. Hosts embedding `<.item_picker>` no longer need any
+  `overflow` rule on its container.
+- **The item picker searches without a form around it** (#127). The input
+  carries no `phx-change`/`phx-debounce` any more; its colocated hook debounces
+  what is typed and pushes `query_change` itself, and stops the input's
+  `input`/`change` from reaching a host form — so the picker works with or
+  without one and never fires the host form's own `phx-change`. Tabbing away
+  closes the list (there is no click for `phx-click-away`), and a search that
+  lands after the user left the field is dropped instead of reopening the list
+  over whatever they are doing now. Tests drive the search with
+  `render_hook("query_change", …)` rather than `render_change`.
+- The Columns button is a real `<button>` with an `aria-label`, and the list
+  closes on an outside click or Escape rather than on blur, so several columns
+  can still be flipped before it closes.
+- `ItemSelectorModal`'s toolbar row wraps, and its search form keeps 12rem: with
+  the opt-in root switcher on, a narrow screen no longer pushes Columns and View
+  past the modal's edge.
+
+### Fixed
+
+- `mix precommit` is clean again. The merge reindented `category_facts/2`'s
+  `, do:` continuation the way Elixir 1.18 formats it, which Elixir 1.19 undoes,
+  so `quality.ci` aborted at `format --check-formatted` and credo and dialyzer
+  never ran. The clause is a `do` block now, which both versions format the same
+  way; AGENTS.md records the trap.
+
 ## 0.38.0 - 2026-09-18
 
 Review: `dev_docs/pull_requests/2026/126-product-card-on-core-preview-card/`.

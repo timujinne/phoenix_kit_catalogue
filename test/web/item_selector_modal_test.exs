@@ -1147,6 +1147,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
   end
 
   describe "hardening from the 2026-08-25 quorum review" do
+    test "the toolbar row wraps, so its buttons never sit past the modal's edge", %{
+      conn: conn,
+      cat: cat
+    } do
+      {:ok, view, _html} = open(conn, "c=#{cat.uuid}&sel=click")
+
+      assert has_element?(view, "div.flex-wrap > #picker-search-form.min-w-48")
+      assert has_element?(view, "div.flex-wrap > #picker-view-toggle")
+    end
+
     test "the search form routes submit — Enter must not become a native page load", %{
       conn: conn,
       cat: cat

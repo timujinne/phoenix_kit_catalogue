@@ -86,6 +86,10 @@ PHOENIX_KIT_COMMENTS_PATH=../phoenix_kit_comments mix test
 Repo-local aliases:
 
 - `mix quality` — `format` + `credo --strict` + `dialyzer` (applies formatting).
+  Note the formatter is version-sensitive: Elixir 1.18 and 1.19 indent a wrapped
+  `, do:` continuation differently, so a clause head too long to keep its
+  `, do:` on one line flip-flops between contributors and breaks `quality.ci`
+  for whoever runs the other version. Write those clauses as a `do` block.
 - `mix quality.ci` — `format --check-formatted` + `credo --strict` + `dialyzer`: it CHECKS formatting rather than applying it, so run `mix format` first.
 
 ## Conventions
@@ -198,7 +202,20 @@ Repo-local aliases:
 ### Landmines
 
 - A `<select phx-change=…>` outside a `<form>` never reaches the server. Wrap it
-  in a form, and drive it in tests via `render_change` through the form.
+  in a form, and drive it in tests via `render_change` through the form. Where a
+  form is not available (the host may already own one, and the input's `input`
+  events would then fire the host's `phx-change` too), the other way out is the
+  component's own hook: `ItemPicker` debounces and pushes `query_change` itself
+  and `stopPropagation`s the input's `input`/`change`. Tests then drive it with
+  `render_hook("query_change", …)`, never `render_change`.
+- A dropdown that a scrolling or `overflow-hidden` ancestor can clip belongs in
+  the top layer, not under a `z-50`: render it as a `popover` anchored with
+  `Browse.popover_anchor/1` (`anchor-name` on the trigger, `position-anchor` +
+  `position-try-fallbacks: flip-block` + `position-visibility: anchors-visible`
+  on the list). A browser picks a popover's position option when it OPENS, not
+  when its anchor scrolls, so an open list that no longer fits has to be
+  re-opened (`hidePopover()` then `showPopover()`) — both `ItemPicker` and
+  `Browse.column_toggle/1` do that from a scroll/resize handler.
 - A client-side echo of a stale param can freeze a derived field (a slug that
   stops following the name). Keep derived-field ownership in server assigns and
   test with stale params.
@@ -424,7 +441,8 @@ Pointers, not docs — the moduledocs are the contract.
   precompiled NIF, poppler as fallback when installed).
 - **Item picker** — `<.item_picker>` LiveComponent; the parent LV needs
   `handle_info/2` clauses for `{:item_picker_select, id, item}` and
-  `{:item_picker_clear, id}`.
+  `{:item_picker_clear, id}`. It needs no form around it and no overflow rules
+  on its container — see the two Landmines above for why.
 - **Item selector + browse stack** — `Components.{ItemSelectorModal,
   CatalogueBrowse, Browse}` over `Catalogue.BrowseState` (a pure reducer). Scope
   is a security boundary fixed at init; selection is only ever for rendered

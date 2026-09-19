@@ -84,10 +84,25 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
     refute has_element?(view, "#last-message")
   end
 
+  # The hook sends the query itself: LiveView refuses a `phx-change` on an
+  # input with no form around it, and this host has none.
+  test "searching needs no form around the picker", %{conn: conn, cat: cat} do
+    fixture_item(%{name: "Unrelated Decoy", catalogue_uuid: cat.uuid})
+    {:ok, view, html} = mount_host(conn, %{})
+
+    refute html =~ "<form"
+    refute has_element?(view, "#guard-picker-input[phx-change]")
+
+    view |> picker() |> render_hook("query_change", %{"value" => "Guarded"})
+
+    assert has_element?(view, "#guard-picker-listbox", "Guarded Item")
+    refute has_element?(view, "#guard-picker-listbox", "Unrelated Decoy")
+  end
+
   test "a disabled picker ignores query, select, and clear", %{conn: conn, item: item} do
     {:ok, view, _html} = mount_host(conn, %{"disabled" => true})
 
-    view |> picker() |> render_change("query_change", %{"value" => "Guarded"})
+    view |> picker() |> render_hook("query_change", %{"value" => "Guarded"})
     refute has_element?(view, "#guard-picker-listbox")
 
     view |> picker() |> render_click("select", %{"uuid" => item.uuid})
@@ -101,8 +116,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
     # Each of these was a FunctionClauseError in the host LV process
     # before the is_binary guard + catch-all clause.
     view |> picker() |> render_click("select", %{})
-    view |> picker() |> render_change("query_change", %{})
-    view |> picker() |> render_change("query_change", %{"value" => 123})
+    view |> picker() |> render_hook("query_change", %{})
+    view |> picker() |> render_hook("query_change", %{"value" => 123})
     view |> picker() |> render_click("no_such_event", %{"x" => 1})
 
     assert Process.alive?(view.pid)
@@ -111,7 +126,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
   test "an oversized query is capped before it reaches the search", %{conn: conn} do
     {:ok, view, _html} = mount_host(conn, %{})
 
-    view |> picker() |> render_change("query_change", %{"value" => String.duplicate("a", 5_000)})
+    view |> picker() |> render_hook("query_change", %{"value" => String.duplicate("a", 5_000)})
 
     assert Process.alive?(view.pid)
     # The input renders the capped value, proving the cap happened

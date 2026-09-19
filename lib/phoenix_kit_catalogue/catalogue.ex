@@ -5650,8 +5650,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # The derive step already read this category FOR SHARE in the same
   # transaction; reading it again cost a query per item write, which imports
   # multiply.
-  defp category_facts(uuid, %Category{uuid: uuid, status: status, catalogue_uuid: catalogue_uuid}),
-       do: {status, catalogue_uuid}
+  # A `do` block, not `, do:` — the formatter's indent for a wrapped
+  # `, do:` continuation moved between Elixir 1.18 and 1.19, so the
+  # one-liner flip-flops with whichever version last ran `mix format`.
+  defp category_facts(uuid, %Category{uuid: uuid} = known) do
+    {known.status, known.catalogue_uuid}
+  end
 
   defp category_facts(uuid, _known) do
     repo().one(

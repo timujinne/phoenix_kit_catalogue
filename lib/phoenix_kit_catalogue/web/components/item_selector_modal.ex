@@ -2705,11 +2705,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
           treated by LiveView's client as an external form — Enter would
           run a NATIVE submit (full page navigation) and destroy the modal
           and every pick in it. Routing submit at the same handler makes
-          Enter a plain re-search. --%>
-          <div class="flex items-center gap-2">
+          Enter a plain re-search.
+          The row wraps: with the root switcher on, a narrow screen has no
+          room for everything, and a row that doesn't wrap pushes the
+          buttons past the modal's edge. --%>
+          <div class="flex flex-wrap items-center gap-2">
             <form
               id={"#{@id}-search-form"}
-              class="flex-1"
+              class="flex-1 min-w-48"
               phx-change="browse_search"
               phx-submit="browse_search"
               phx-target={@myself}

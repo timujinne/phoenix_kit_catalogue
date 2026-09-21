@@ -73,7 +73,7 @@ defmodule PhoenixKitCatalogue.Metadata do
       %{key: "region", label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Region")},
       %{
         key: "vendor_ref",
-        label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Vendor Reference")
+        label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Vendor reference")
       }
     ]
   end

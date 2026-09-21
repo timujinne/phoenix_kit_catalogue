@@ -2,6 +2,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKitCatalogue.Web.Components
 
   setup do
     previous = Gettext.get_locale(PhoenixKitCatalogue.Gettext)
@@ -66,9 +67,6 @@ defmodule PhoenixKitCatalogue.GettextTest do
           {"That category belongs to another catalogue.",
            "Эта категория принадлежит другому каталогу.",
            "See kategooria kuulub teise kataloogi."},
-          {"Drag-reorder needs the Manual sort — choose it in the sort selector.",
-           "Для перетаскивания выберите ручную сортировку в списке сортировки.",
-           "Lohistades järjestamiseks vali sortimise valikust käsitsi järjestus."},
           # The delete-confirmation strings for the attribute-value delete
           # (2026-09-13: boss asked for a confirm popup on every permanent
           # delete; the value delete was the one that had none).
@@ -85,7 +83,51 @@ defmodule PhoenixKitCatalogue.GettextTest do
           # clause in item_form_live.ex.
           {"This value has no slug and cannot be selected",
            "У этого значения нет слага, выбрать его нельзя.",
-           "Sellel väärtusel pole silti ja seda ei saa valida."}
+           "Sellel väärtusel pole silti ja seda ei saa valida."},
+          # The header's level switchers (boss, 2026-09-19, "like in GitHub").
+          {"Switch catalogue", "Сменить каталог", "Vaheta kataloogi"},
+          {"Switch category", "Сменить категорию", "Vaheta kategooriat"},
+          {"Search catalogues…", "Найти каталог…", "Leia kataloog…"},
+          {"Search categories…", "Найти категорию…", "Leia kategooria…"},
+          # The item form's inline supplier picker (boss, 2026-09-19).
+          {"— Add supplier —", "— Добавить поставщика —", "— Lisa tarnija —"},
+          # The item form's Location section and the staged suppliers table
+          # (boss and Max, 2026-09-19).
+          {"Location", "Расположение", "Asukoht"},
+          {"Undo", "Отменить", "Võta tagasi"},
+          {"Unsaved changes", "Несохранённые изменения", "Salvestamata muudatused"},
+          {"Choose a location", "Выберите расположение", "Vali asukoht"},
+          {"Search catalogues and categories…", "Найти каталог или категорию…",
+           "Leia kataloog või kategooria…"},
+          {"No matches.", "Совпадений нет.", "Vasteid pole."},
+          {"New", "Новый", "Uus"},
+          {"Collapse", "Свернуть", "Sule"},
+          {"Expand", "Развернуть", "Ava"},
+          {"Currency must be a three-letter code, like EUR.",
+           "Валюта должна быть трёхбуквенным кодом, например EUR.",
+           "Valuuta peab olema kolmetäheline kood, näiteks EUR."},
+          {"Some supplier values are not valid.", "Некоторые значения поставщиков некорректны.",
+           "Mõned tarnija väärtused ei sobi."},
+          {"That location no longer exists. Choose another.",
+           "Этого расположения больше нет. Выберите другое.",
+           "Seda asukohta pole enam. Vali mõni teine."},
+          # "No manufacturer" read as if there were none (boss, 2026-09-19).
+          {"— Manufacturer not set —", "— Производитель не указан —", "— Tootja määramata —"},
+          # "No suppliers linked yet." — what does "linked" mean? (boss,
+          # 2026-09-19); the metadata one had the same jargon.
+          {"Suppliers not set.", "Поставщики не указаны.", "Tarnijad määramata."},
+          {"Metadata not set.", "Метаданные не указаны.", "Metaandmed määramata."},
+          # The View popup's operator rows (boss, 2026-09-19: an item was
+          # "either editing or nothing at all").
+          {"Primary supplier", "Основной поставщик", "Peamine tarnija"},
+          # The catalogue's and category's own View cards (Max, 2026-09-20).
+          {"Standard", "Стандартный", "Standardne"},
+          {"Markup", "Наценка", "Juurdehindlus"},
+          # The activity feed's fallbacks for a reference that no longer
+          # resolves (the sweep's code-vs-catalogue diff caught these two
+          # as raw English literals, 2026-09-20).
+          {"Unknown supplier", "Неизвестный поставщик", "Tundmatu tarnija"},
+          {"Unknown item", "Неизвестная позиция", "Tundmatu toode"}
         ] do
       Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
       assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid) == ru
@@ -257,30 +299,30 @@ defmodule PhoenixKitCatalogue.GettextTest do
     assert untranslated == []
   end
 
-  test "Tab.localized_label/1 returns Russian translation for Catalogue" do
+  test "Tab.localized_label/1 returns Russian translation for Catalogues" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
 
     tab = %Tab{
       id: :admin_catalogue,
-      label: "Catalogue",
+      label: "Catalogues",
       gettext_backend: PhoenixKitCatalogue.Gettext,
       gettext_domain: "default"
     }
 
-    assert Tab.localized_label(tab) == "Каталог"
+    assert Tab.localized_label(tab) == "Каталоги"
   end
 
-  test "Tab.localized_label/1 returns Estonian translation for Catalogue" do
+  test "Tab.localized_label/1 returns Estonian translation for Catalogues" do
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
 
     tab = %Tab{
       id: :admin_catalogue,
-      label: "Catalogue",
+      label: "Catalogues",
       gettext_backend: PhoenixKitCatalogue.Gettext,
       gettext_domain: "default"
     }
 
-    assert Tab.localized_label(tab) == "Kataloog"
+    assert Tab.localized_label(tab) == "Kataloogid"
   end
 
   test "Tab.localized_label/1 returns Russian translation for Export" do
@@ -387,18 +429,18 @@ defmodule PhoenixKitCatalogue.GettextTest do
     end
   end
 
-  # Regression: "Export Items" (export_live.ex) had en/ru entries but the
+  # Regression: "Export items" (export_live.ex) had en/ru entries but the
   # et entry was missing, and nothing exercised it — deleting the et entry
   # left the whole suite green. Also covers the four Export-page strings
-  # (Destination, Format, "Select a format...", "Add the catalogue name to
+  # (Destination, Format, "— Select a format —", "Add the catalogue name to
   # the item name") that were never added to any locale at all, leaving a
   # Russian or Estonian admin four raw English strings on that page.
-  # "Format" and "Select a format..." are shared with the Import page.
+  # "Format" and "— Select a format —" are shared with the Import page.
   describe "Export tab strings are present in every locale" do
-    test "Export Items" do
-      assert po_msgstr("en", "Export Items") == "Export Items"
-      assert gettext_in("et", "Export Items") == "Ekspordi tooteid"
-      assert gettext_in("ru", "Export Items") == "Экспорт позиций"
+    test "Export items" do
+      assert po_msgstr("en", "Export items") == "Export items"
+      assert gettext_in("et", "Export items") == "Ekspordi tooteid"
+      assert gettext_in("ru", "Export items") == "Экспорт позиций"
     end
 
     test "Destination" do
@@ -413,11 +455,11 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert gettext_in("ru", "Format") == "Формат"
     end
 
-    test "Select a format..." do
-      msgid = "Select a format..."
+    test "— Select a format —" do
+      msgid = "— Select a format —"
       assert po_msgstr("en", msgid) == msgid
-      assert gettext_in("et", msgid) == "Vali formaat..."
-      assert gettext_in("ru", msgid) == "Выберите формат..."
+      assert gettext_in("et", msgid) == "— Vali formaat —"
+      assert gettext_in("ru", msgid) == "— Выберите формат —"
     end
 
     test "Add the catalogue name to the item name" do
@@ -432,8 +474,8 @@ defmodule PhoenixKitCatalogue.GettextTest do
   # of core's generic "Select Media"; the msgid lives in all three form
   # LiveViews' MediaSelectorModal embeds (catalogue / category / item).
   describe "Media picker strings are present in every locale" do
-    test "Select Featured Image" do
-      msgid = "Select Featured Image"
+    test "Select featured image" do
+      msgid = "Select featured image"
       assert po_msgstr("en", msgid) == msgid
       assert gettext_in("et", msgid) == "Vali põhipilt"
       assert gettext_in("ru", msgid) == "Выбрать главное изображение"
@@ -494,8 +536,8 @@ defmodule PhoenixKitCatalogue.GettextTest do
       end
     end
 
-    test "Photos and Files" do
-      msgid = "Photos and Files"
+    test "Photos and files" do
+      msgid = "Photos and files"
       assert po_msgstr("en", msgid) == msgid
       assert gettext_in("et", msgid) == "Fotod ja failid"
       assert gettext_in("ru", msgid) == "Фото и файлы"
@@ -510,10 +552,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
              "Перетащите сюда, чтобы переместить в корень (без папки)"},
             {"Drag to reorder or move into a folder",
              "Lohista järjestamiseks või kausta viimiseks",
-             "Перетащите, чтобы изменить порядок или переместить в папку"},
-            {"Clear search and filters to see the folder tree.",
-             "Puhasta otsing ja filtrid, et näha kaustapuud.",
-             "Очистите поиск и фильтры, чтобы увидеть дерево папок."}
+             "Перетащите, чтобы изменить порядок или переместить в папку"}
           ] do
         assert po_msgstr("en", msgid) == msgid
         assert gettext_in("et", msgid) == et
@@ -538,7 +577,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
     test "save button strings" do
       for {msgid, et, ru} <- [
             {"Save", "Salvesta", "Сохранить"},
-            {"Save & Exit", "Salvesta ja välju", "Сохранить и выйти"}
+            {"Save & exit", "Salvesta ja välju", "Сохранить и выйти"}
           ] do
         assert po_msgstr("en", msgid) == msgid
         assert gettext_in("et", msgid) == et
@@ -551,14 +590,15 @@ defmodule PhoenixKitCatalogue.GettextTest do
             {"Attributes", "Atribuudid", "Атрибуты"},
             {"Archive", "Arhiveeri", "Архивировать"},
             {"Add", "Lisa", "Добавить"},
-            {"New Attribute Group", "Uus atribuudirühm", "Новая группа атрибутов"},
+            {"New attribute group", "Uus atribuudirühm", "Новая группа атрибутов"},
             {"Attribute group created.", "Atribuudirühm loodud.", "Группа атрибутов создана."},
             {"Make default", "Määra vaikeväärtuseks", "Сделать по умолчанию"},
             {"This group is used by items — archive it instead.",
              "See rühm on toodetel kasutusel — arhiveeri see kustutamise asemel.",
              "Эта группа используется товарами — вместо удаления заархивируйте её."},
             {"Attribute group", "Atribuudirühm", "Группа атрибутов"},
-            {"— No attribute group —", "— Atribuudirühm puudub —", "— Без группы атрибутов —"},
+            {"— Attribute group not set —", "— Atribuudirühm määramata —",
+             "— Группа атрибутов не указана —"},
             {"Manage groups", "Halda rühmi", "Управлять группами"}
           ] do
         assert po_msgstr("en", msgid) == msgid
@@ -661,6 +701,21 @@ defmodule PhoenixKitCatalogue.GettextTest do
 
       assert ngettext_item(1) == "1 item"
       assert ngettext_item(5) == "5 items"
+    end
+
+    test "the subcategory count reads in words in every locale (boss, 2026-09-19)" do
+      label = &Components.subcategories_label/1
+
+      for {locale, one, two, five} <- [
+            {"en", "1 subcategory", "2 subcategories", "5 subcategories"},
+            {"et", "1 alamkategooria", "2 alamkategooriat", "5 alamkategooriat"},
+            {"ru", "1 подкатегория", "2 подкатегории", "5 подкатегорий"},
+            {"de", "1 Unterkategorie", "2 Unterkategorien", "5 Unterkategorien"},
+            {"fr", "1 sous-catégorie", "2 sous-catégories", "5 sous-catégories"}
+          ] do
+        Gettext.put_locale(PhoenixKitCatalogue.Gettext, locale)
+        assert {label.(1), label.(2), label.(5)} == {one, two, five}, locale
+      end
     end
 
     defp ngettext_item(count) do
@@ -823,8 +878,8 @@ defmodule PhoenixKitCatalogue.GettextTest do
   end
 
   describe "import failed-step strings are present in every locale" do
-    test "Import Failed" do
-      msgid = "Import Failed"
+    test "Import failed" do
+      msgid = "Import failed"
       assert po_msgstr("en", msgid) != nil
       assert gettext_in("et", msgid) == "Import ebaõnnestus"
       assert gettext_in("ru", msgid) == "Импорт не удался"
@@ -951,7 +1006,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
            "%{catalogue} — ilma kategooriata"},
           {"%{catalogue} — top level", "%{catalogue} — верхний уровень",
            "%{catalogue} — ülatase"},
-          {"-- Select destination --", "-- Выберите, куда переместить --", "-- Vali sihtkoht --"},
+          {"— Select destination —", "— Выберите, куда переместить —", "— Vali sihtkoht —"},
           {"Some selected items are no longer in this catalogue. Reload the page and try again.",
            "Некоторых выбранных товаров больше нет в этом каталоге. Обновите страницу и попробуйте снова.",
            "Mõni valitud toode ei ole enam selles kataloogis. Laadi leht uuesti ja proovi uuesti."}

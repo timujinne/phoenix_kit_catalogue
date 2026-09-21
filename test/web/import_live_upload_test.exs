@@ -54,8 +54,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveUploadTest do
       render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
 
       mappings = :sys.get_state(view.pid).socket.assigns.column_mappings
-      # Auto-detect should map "Name" → :name, "Article Code" → :sku,
-      # "Base Price" → :base_price (case-insensitive header match).
+      # Auto-detect should map "Name" → :name, "Article code" → :sku,
+      # "Base price" → :base_price (case-insensitive header match).
       assert Enum.any?(mappings, &(&1.target == :name))
       assert Enum.any?(mappings, &(&1.target == :sku))
       assert Enum.any?(mappings, &(&1.target == :base_price))

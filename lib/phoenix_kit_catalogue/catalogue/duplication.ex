@@ -782,7 +782,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
 
   # Only the CURRENT row per supplier (closed revisions are the source's
   # price history, not the copy's). The stored thread key is dropped and
-  # a fresh one stamped, so the two items never share supplier comments.
+  # the copy's own pair thread stamped (`thread_for_pair/2` — the copy is a
+  # new item, so it is a new thread), so the two items never share
+  # supplier comments.
   defp copy_supplier_rows(source, item) do
     from(i in ItemSupplierInfo, where: i.item_uuid == ^source.uuid and is_nil(i.valid_to))
     |> repo().all()
@@ -797,7 +799,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
 
       %ItemSupplierInfo{}
       |> ItemSupplierInfo.changeset(attrs)
-      |> SupplierComments.stamp_changeset(UUIDv7.generate())
+      |> SupplierComments.stamp_changeset(
+        SupplierComments.thread_for_pair(item.uuid, row.supplier_uuid) || UUIDv7.generate()
+      )
       |> insert!()
     end)
   end

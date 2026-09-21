@@ -239,11 +239,7 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   def normalize(scope, raw) when is_map(raw) do
     d = defaults(scope)
 
-    cols =
-      case TableConfig.validate_columns(scope, List.wrap(raw["columns"])) do
-        [] -> d.columns
-        list -> list
-      end
+    cols = normalize_columns(scope, raw["columns"], d.columns)
 
     filters =
       if is_map(raw["filters"]) do
@@ -268,6 +264,20 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   end
 
   def normalize(scope, _), do: defaults(scope)
+
+  # An empty list is a choice — every optional column hidden, Name left —
+  # and stays empty. Only a missing list, or one whose every id went
+  # stale, falls back to the defaults.
+  defp normalize_columns(_scope, [], _defaults), do: []
+
+  defp normalize_columns(scope, stored, defaults) when is_list(stored) do
+    case TableConfig.validate_columns(scope, stored) do
+      [] -> defaults
+      list -> list
+    end
+  end
+
+  defp normalize_columns(_scope, _stored, defaults), do: defaults
 
   defp dir("desc", _), do: :desc
   defp dir("asc", _), do: :asc

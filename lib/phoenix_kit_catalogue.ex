@@ -48,7 +48,11 @@ defmodule PhoenixKitCatalogue do
   def migration_module, do: PhoenixKitCatalogue.Migrations
 
   @impl PhoenixKit.Module
-  def module_name, do: "Catalogue"
+  # The plural, as every page says it ("Catalogues / …" in the header, the
+  # index's title): the module was named "Catalogue" while its pages said
+  # "Catalogues", and the boss asked for one name (2026-09-19). Core's
+  # Modules page translates both.
+  def module_name, do: "Catalogues"
 
   @impl PhoenixKit.Module
   def enabled? do
@@ -110,8 +114,48 @@ defmodule PhoenixKitCatalogue do
   # callback on every loaded module and registers the resolver itself. A
   # host's `config :phoenix_kit, :comment_resource_handlers` entry for the
   # same type is an override, not a requirement.
-  def resource_links,
-    do: %{PhoenixKitCatalogue.Catalogue.supplier_comment_resource_type() => __MODULE__}
+  def resource_links do
+    %{PhoenixKitCatalogue.Catalogue.supplier_comment_resource_type() => __MODULE__}
+    |> Map.merge(record_links())
+  end
+
+  # Every catalogue row an activity entry can name, pointed at the page that
+  # shows it. Core renders the Subject of an Activity entry as a plain uuid
+  # until a type resolves here — the owner opened an event and had no way
+  # through to what it happened to (boss via Max, 2026-09-20).
+  #
+  # These are TEMPLATES, not a resolver module: core fills `:uuid` and
+  # `:metadata.<key>` from the entry it already holds, so a link costs no
+  # query at all. Paths are RAW — core applies the prefix and locale once at
+  # render, and pre-applying them would double up.
+  #
+  # `{path, the metadata key that names the row}`. The title key differs per
+  # type because the logs do: a PDF is known by its filename, everything else
+  # by its name. Core falls back to "<type> <short-uuid>" when the key is
+  # missing, so a link never renders blank. Pinned by
+  # `test/activity_resource_links_test.exs`.
+  @record_links %{
+    "item" => {"/admin/catalogue/items/:uuid/edit", "name"},
+    "category" => {"/admin/catalogue/categories/:uuid/edit", "name"},
+    "catalogue" => {"/admin/catalogue/:uuid", "name"},
+    "pdf" => {"/admin/catalogue/pdfs/:uuid", "original_filename"},
+    "attribute_group" => {"/admin/catalogue/attributes/:uuid/edit", "name"},
+    # A folder is not a page of its own — it is a location on the index.
+    "folder" => {"/admin/catalogue?folder=:uuid", "name"},
+    # A supplier row belongs to its item's Suppliers tab, so the link goes to
+    # the ITEM — metadata.item_uuid, not the join row's own uuid.
+    "item_supplier_info" => {"/admin/catalogue/items/:metadata.item_uuid/edit", "name"}
+  }
+
+  @doc false
+  # The resource types this module deep-links, for the conformance test.
+  def record_link_types, do: Map.keys(@record_links)
+
+  defp record_links do
+    Map.new(@record_links, fn {type, {path, title_key}} ->
+      {type, %{"path" => path, "title" => ":metadata.#{title_key}"}}
+    end)
+  end
 
   @doc """
   Resolver for supplier comment threads (`"catalogue_item_supplier"`): turns
@@ -186,7 +230,7 @@ defmodule PhoenixKitCatalogue do
   def permission_metadata do
     %{
       key: module_key(),
-      label: "Catalogue",
+      label: "Catalogues",
       icon: "hero-rectangle-stack",
       description: "Product catalogue management for items and categories"
     }
@@ -201,7 +245,7 @@ defmodule PhoenixKitCatalogue do
       # Note: parent highlights on hidden subpages (e.g. /catalogue/new) — acceptable tradeoff.
       %Tab{
         id: :admin_catalogue,
-        label: "Catalogue",
+        label: "Catalogues",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
@@ -216,10 +260,11 @@ defmodule PhoenixKitCatalogue do
         redirect_to_first_subtab: true,
         live_view: {PhoenixKitCatalogue.Web.CataloguesLive, :index}
       },
-      # Subtabs — Catalogues, Manufacturers, Suppliers
+      # Subtabs. The first is "All catalogues", not a second "Catalogues"
+      # under the parent of that name (the kit's idiom: Posts → All Posts).
       %Tab{
         id: :admin_catalogue_list,
-        label: "Catalogues",
+        label: "All catalogues",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
@@ -235,7 +280,7 @@ defmodule PhoenixKitCatalogue do
         #
         # Without this, hidden subtabs with literal `:uuid` segments
         # (e.g. "catalogue/:uuid/edit") never match a real URL, so the
-        # parent "Catalogue" tab is the only thing that lights up on
+        # parent "Catalogues" tab is the only thing that lights up on
         # detail/form pages — which looks wrong in the sidebar.
         match:
           {:regex,
@@ -264,7 +309,7 @@ defmodule PhoenixKitCatalogue do
       # wins the route match.
       %Tab{
         id: :admin_catalogue_attribute_group_new,
-        label: "New Attribute Group",
+        label: "New attribute group",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
@@ -386,7 +431,7 @@ defmodule PhoenixKitCatalogue do
       # Catalogue — static paths
       %Tab{
         id: :admin_catalogue_new,
-        label: "New Catalogue",
+        label: "New catalogue",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
@@ -459,7 +504,7 @@ defmodule PhoenixKitCatalogue do
       },
       %Tab{
         id: :admin_catalogue_category_new,
-        label: "New Category",
+        label: "New category",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
@@ -473,7 +518,7 @@ defmodule PhoenixKitCatalogue do
       },
       %Tab{
         id: :admin_catalogue_item_new,
-        label: "New Item",
+        label: "New item",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",

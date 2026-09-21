@@ -37,7 +37,7 @@ msgstr "PDF-failid"
 msgid "PDF"
 msgstr "PDF"
 
-msgid "New Catalogue"
+msgid "New catalogue"
 msgstr "Uus kataloog"
 
 msgid "Edit Catalogue"
@@ -55,13 +55,13 @@ msgstr "Uus tarnija"
 msgid "Edit Supplier"
 msgstr "Muuda tarnijat"
 
-msgid "New Category"
+msgid "New category"
 msgstr "Uus kategooria"
 
 msgid "Edit Category"
 msgstr "Muuda kategooriat"
 
-msgid "New Item"
+msgid "New item"
 msgstr "Uus toode"
 
 msgid "Edit Item"
@@ -116,11 +116,6 @@ msgstr "Tootmine lõpetatud"
 
 msgid "Toggle folder"
 msgstr "Ava/sule kaust"
-
-#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2956
-#, elixir-autogen
-msgid "Clear search and filters to see the folder tree."
-msgstr "Puhasta otsing ja filtrid, et näha kaustapuud."
 
 msgid "Up"
 msgstr "Üles"
@@ -201,7 +196,7 @@ msgstr "Hooaeg"
 msgid "Region"
 msgstr "Piirkond"
 
-msgid "Vendor Reference"
+msgid "Vendor reference"
 msgstr "Tarnija viide"
 
 ## Error messages
@@ -345,8 +340,8 @@ msgstr "Kategooria jäädavalt kustutatud."
 msgid "Category moved."
 msgstr "Kategooria teisaldatud."
 
-msgid "Working..."
-msgstr "Töötlen..."
+msgid "Working…"
+msgstr "Töötlen…"
 
 msgid "Unknown target language — refresh the page and try again."
 msgstr "Tundmatu sihtkeel — värskenda lehte ja proovi uuesti."
@@ -468,9 +463,6 @@ msgstr "Kustuta"
 msgid "Restore"
 msgstr "Taasta"
 
-msgid "Delete Forever"
-msgstr "Kustuta jäädavalt"
-
 msgid "Edit"
 msgstr "Muuda"
 
@@ -494,10 +486,10 @@ msgstr "Loo tarnija"
 msgid "Create Item"
 msgstr "Loo toode"
 
-msgid "Add Category"
+msgid "Add category"
 msgstr "Lisa kategooria"
 
-msgid "Add Item"
+msgid "Add item"
 msgstr "Lisa toode"
 
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:819
@@ -536,11 +528,8 @@ msgstr "Märkmed"
 msgid "Actions"
 msgstr "Toimingud"
 
-msgid "Search..."
-msgstr "Otsi..."
-
-msgid "Search items..."
-msgstr "Otsi tooteid..."
+msgid "Search…"
+msgstr "Otsi…"
 
 msgid "Upload"
 msgstr "Laadi üles"
@@ -557,16 +546,10 @@ msgstr "Positsioon"
 msgid "Confirm"
 msgstr "Kinnita"
 
-msgid "Loading..."
-msgstr "Laadimine..."
+msgid "Saving…"
+msgstr "Salvestamine…"
 
-msgid "Saving..."
-msgstr "Salvestamine..."
-
-msgid "Deleting..."
-msgstr "Kustutamine..."
-
-msgid "Featured Image"
+msgid "Featured image"
 msgstr "Põhipilt"
 
 msgid "No featured image set."
@@ -595,7 +578,7 @@ msgstr "— Valige väli —"
 msgid "Legacy"
 msgstr "Vananenud"
 
-msgid "Attached Files"
+msgid "Attached files"
 msgstr "Manustatud failid"
 
 msgid "No files attached yet."
@@ -610,7 +593,7 @@ msgstr "Klõpsake üleslaadimiseks"
 msgid "or drag & drop"
 msgstr "või lohistage"
 
-msgid "File is too large (max 10MB)"
+msgid "File is too large (max 10MB)."
 msgstr "Fail on liiga suur (maks. 10 MB)"
 
 msgid "File type not accepted."
@@ -664,10 +647,7 @@ msgstr "Artikkel"
 msgid "Price"
 msgstr "Hind"
 
-msgid "Base Price"
-msgstr "Algne hind"
-
-msgid "Final Price"
+msgid "Final price"
 msgstr "Lõpphind"
 
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:823
@@ -675,7 +655,13 @@ msgstr "Lõpphind"
 msgid "Unit"
 msgstr "Ühik"
 
-msgid "Unit of Measure"
+msgid "Unknown item"
+msgstr "Tundmatu toode"
+
+msgid "Unknown supplier"
+msgstr "Tundmatu tarnija"
+
+msgid "Unit of measure"
 msgstr "Mõõtühik"
 
 msgid "Kind"
@@ -683,6 +669,9 @@ msgstr "Tüüp"
 
 msgid "Smart"
 msgstr "Nutikas"
+
+msgid "Standard"
+msgstr "Standardne"
 
 msgid "Standard — items priced directly"
 msgstr "Standardne — toodetel on otsene hind"
@@ -692,6 +681,9 @@ msgstr "Nutikas — tooted viitavad teistele kataloogidele"
 
 msgid "Markup %"
 msgstr "Juurdehindlus %"
+
+msgid "Markup"
+msgstr "Juurdehindlus"
 
 msgid "Discount"
 msgstr "Allahindlus"
@@ -742,10 +734,10 @@ msgstr "Tootjaid pole veel lisatud."
 msgid "No suppliers yet."
 msgstr "Tarnijaid pole veel lisatud."
 
-msgid "No items found"
+msgid "No items found."
 msgstr "Tooteid ei leitud"
 
-msgid "No events recorded yet"
+msgid "No events recorded yet."
 msgstr "Sündmusi pole veel salvestatud"
 
 msgid "No PDFs uploaded yet."
@@ -766,22 +758,22 @@ msgstr "Leia toode PDF-failidest"
 msgid "Pages"
 msgstr "Lehed"
 
-msgid "Import Complete"
+msgid "Import complete"
 msgstr "Import lõpetatud"
 
-msgid "Import Another"
+msgid "Import another"
 msgstr "Impordi veel"
 
-msgid "Confirm Import"
+msgid "Confirm import"
 msgstr "Kinnita import"
 
-msgid "Back to Mapping"
+msgid "Back to mapping"
 msgstr "Tagasi veergude vastendamise juurde"
 
-msgid "Import Items"
+msgid "Import items"
 msgstr "Impordi tooteid"
 
-msgid "Export Items"
+msgid "Export items"
 msgstr "Ekspordi tooteid"
 
 msgid "Destination"
@@ -790,13 +782,13 @@ msgstr "Sihtkoht"
 msgid "Format"
 msgstr "Formaat"
 
-msgid "Select a format..."
-msgstr "Vali formaat..."
+msgid "— Select a format —"
+msgstr "— Vali formaat —"
 
 msgid "Add the catalogue name to the item name"
 msgstr "Lisa kataloogi nimi toote nimele"
 
-msgid "Map Columns"
+msgid "Map columns"
 msgstr "Vastenda veerud"
 
 msgid "All events loaded"
@@ -805,16 +797,16 @@ msgstr "Kõik sündmused laaditud"
 msgid "Events: %{count}"
 msgstr "Sündmusi: %{count}"
 
-msgid "Danger Zone"
+msgid "Danger zone"
 msgstr "Ohutsoon"
 
-msgid "Permanently Delete Catalogue"
+msgid "Permanently delete catalogue"
 msgstr "Kustuta kataloog jäädavalt"
 
-msgid "Permanently Delete Category"
+msgid "Permanently delete category"
 msgstr "Kustuta kategooria jäädavalt"
 
-msgid "Permanently Delete Item"
+msgid "Permanently delete item"
 msgstr "Kustuta toode jäädavalt"
 
 #: lib/phoenix_kit_catalogue/web/components.ex:871
@@ -845,10 +837,10 @@ msgstr "Seotud tarnijad"
 msgid "Scope"
 msgstr "Ulatus"
 
-msgid "Catalogue Rules"
+msgid "Catalogue rules"
 msgstr "Kataloogi reeglid"
 
-msgid "View Catalogue"
+msgid "View catalogue"
 msgstr "Vaata kataloogi"
 
 msgid "View details"
@@ -873,6 +865,11 @@ msgid_plural "%{count} categories"
 msgstr[0] "%{count} kategooria"
 msgstr[1] "%{count} kategooriat"
 
+msgid "%{count} subcategory"
+msgid_plural "%{count} subcategories"
+msgstr[0] "%{count} alamkategooria"
+msgstr[1] "%{count} alamkategooriat"
+
 msgid "%{count} catalogue"
 msgid_plural "%{count} catalogues"
 msgstr[0] "%{count} kataloog"
@@ -883,8 +880,8 @@ msgid_plural "%{active} of %{total} catalogues selected"
 msgstr[0] "Valitud %{active} kataloogist %{total}"
 msgstr[1] "Valitud %{active} kataloogist %{total}"
 
-msgid "%{count} result for \"%{query}\""
-msgid_plural "%{count} results for \"%{query}\""
+msgid "%{count} result for “%{query}”"
+msgid_plural "%{count} results for “%{query}”"
 msgstr[0] "%{count} tulemus päringule «%{query}»"
 msgstr[1] "%{count} tulemust päringule «%{query}»"
 
@@ -986,9 +983,6 @@ msgstr "Tühjenda otsing ja filtrid, et lohistades ümber järjestada."
 msgid "Nothing in the trash."
 msgstr "Prügikast on tühi."
 
-msgid "New Folder"
-msgstr "Uus kaust"
-
 msgid "New folder"
 msgstr "Uus kaust"
 
@@ -1001,17 +995,11 @@ msgstr "Teisalda kausta"
 msgid "Rename"
 msgstr "Nimeta ümber"
 
-msgid "Permanently Delete Folder"
+msgid "Permanently delete folder"
 msgstr "Kustuta kaust jäädavalt"
 
-msgid "Creating..."
-msgstr "Loomisel..."
-
-msgid "Moving..."
-msgstr "Teisaldamisel..."
-
-msgid "Restoring..."
-msgstr "Taastamisel..."
+msgid "Moving…"
+msgstr "Teisaldamisel…"
 
 msgid "— Root (unfiled) —"
 msgstr "— Juur (liigitamata) —"
@@ -1089,20 +1077,20 @@ msgstr "Tulemusi ei leitud."
 msgid "Add Supplier"
 msgstr "Lisa tarnija"
 
+msgid "Primary supplier"
+msgstr "Peamine tarnija"
+
 msgid "Supplier SKU"
 msgstr "Tarnija SKU"
 
-msgid "Unit Cost"
-msgstr "Ühikuhind"
-
-msgid "Lead Time (days)"
+msgid "Lead time (days)"
 msgstr "Tarneaeg (päevades)"
 
-msgid "Min. Order Qty"
+msgid "Min. order qty"
 msgstr "Min. tellimiskogus"
 
-msgid "No suppliers linked yet."
-msgstr "Tarnijaid pole veel seotud."
+msgid "Suppliers not set."
+msgstr "Tarnijad määramata."
 
 msgid "Lead (d)"
 msgstr "Tarneaeg (p)"
@@ -1116,8 +1104,6 @@ msgstr "Esmane"
 msgid "Make primary"
 msgstr "Tee esmaseks"
 
-msgid "Remove this supplier link?"
-msgstr "Eemaldada tarnija seos?"
 
 msgid "-- Select supplier --"
 msgstr "-- Vali tarnija --"
@@ -1143,7 +1129,7 @@ msgstr "Tarnija eemaldamine ebaõnnestus."
 msgid "History"
 msgstr "Ajalugu"
 
-msgid "Price History"
+msgid "Price history"
 msgstr "Hinna ajalugu"
 
 msgid "No price history."
@@ -1152,10 +1138,10 @@ msgstr "Hinna ajalugu puudub."
 msgid "Currency"
 msgstr "Valuuta"
 
-msgid "Valid From"
+msgid "Valid from"
 msgstr "Kehtib alates"
 
-msgid "Valid To"
+msgid "Valid to"
 msgstr "Kehtib kuni"
 
 msgid "Current"
@@ -1166,7 +1152,7 @@ msgid "Row %{row}: belongs to %{group}, not to this catalogue"
 msgstr "Rida %{row}: kuulub kataloogi „%{group}“, mitte sellesse kataloogi"
 
 ## Media picker
-msgid "Select Featured Image"
+msgid "Select featured image"
 msgstr "Vali põhipilt"
 
 ## Product card
@@ -1231,7 +1217,7 @@ msgstr "Kategooriad järjestati ümber."
 msgid "Failed to reorder."
 msgstr "Ümberjärjestamine ebaõnnestus."
 
-msgid "Photos and Files"
+msgid "Photos and files"
 msgstr "Fotod ja failid"
 
 #: lib/phoenix_kit_catalogue/web/components.ex:1550
@@ -1249,7 +1235,7 @@ msgstr "Kompaktne vaade"
 msgid "Save"
 msgstr "Salvesta"
 
-msgid "Save & Exit"
+msgid "Save & exit"
 msgstr "Salvesta ja välju"
 
 msgid "Attributes"
@@ -1261,13 +1247,13 @@ msgstr "Arhiveeri"
 msgid "Add"
 msgstr "Lisa"
 
-msgid "New Attribute Group"
+msgid "New attribute group"
 msgstr "Uus atribuudirühm"
 
 msgid "Edit Attribute Group"
 msgstr "Muuda atribuudirühma"
 
-msgid "Delete Attribute Group"
+msgid "Delete attribute group"
 msgstr "Kustuta atribuudirühm"
 
 msgid "Attribute group not found."
@@ -1306,7 +1292,7 @@ msgstr "Määra korduvkasutatav valikute komplekt — värvid, kandid, pinnad �
 msgid "Manage this group's attributes, values, and translations."
 msgstr "Halda selle rühma atribuute, väärtusi ja tõlkeid."
 
-msgid "No attributes yet. Add one below — e.g. Color, Trim, Surface."
+msgid "No attributes yet. Add one below — e.g., Color, Trim, Surface."
 msgstr "Atribuute pole veel. Lisa mõni allpool — nt Värv, Kant, Pind."
 
 msgid "Failed to add attribute."
@@ -1321,11 +1307,11 @@ msgstr "Kustuta atribuut"
 msgid "This removes the attribute and all its values from the group."
 msgstr "See eemaldab atribuudi ja kõik selle väärtused rühmast."
 
-msgid "Add value..."
-msgstr "Lisa väärtus..."
+msgid "Add value…"
+msgstr "Lisa väärtus…"
 
-msgid "New attribute name..."
-msgstr "Uue atribuudi nimi..."
+msgid "New attribute name…"
+msgstr "Uue atribuudi nimi…"
 
 msgid "Default value"
 msgstr "Vaikeväärtus"
@@ -1348,8 +1334,8 @@ msgstr "Vali rühm, mis annab tootele valikud — värvid, kandid, pinnad. Raken
 msgid "Manage groups"
 msgstr "Halda rühmi"
 
-msgid "— No attribute group —"
-msgstr "— Atribuudirühm puudub —"
+msgid "— Attribute group not set —"
+msgstr "— Atribuudirühm määramata —"
 
 msgid "archived"
 msgstr "arhiveeritud"
@@ -1519,7 +1505,7 @@ msgstr "Näita arhiveeritud"
 msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Üks mõõde ühelt tarnijalt — Ikea värvid, HomeDepot liistud. Toote külge saab siduda mistahes arvu komplekte."
 
-msgid "New Set"
+msgid "New set"
 msgstr "Uus komplekt"
 
 msgid "No sets yet. Create one, or migrate your legacy groups below."
@@ -1564,8 +1550,8 @@ msgstr "Eemalda komplekt"
 msgid "Selected, but archived — no longer offered for new picks"
 msgstr "Valitud, kuid arhiveeritud — uuteks valikuteks enam ei pakuta"
 
-msgid "Attach a set..."
-msgstr "Seo komplekt..."
+msgid "— Attach a set —"
+msgstr "— Seo komplekt —"
 
 msgid "No sets exist yet — create one under Manage sets."
 msgstr "Komplekte pole veel — loo üks jaotises Halda komplekte."
@@ -1738,14 +1724,14 @@ msgstr "%{total} kataloogi saadaval — ühtegi pole valitud"
 msgid "-- No category --"
 msgstr "-- Kategooria puudub --"
 
-msgid "-- No manufacturer --"
-msgstr "-- Tootja puudub --"
+msgid "— Manufacturer not set —"
+msgstr "— Tootja määramata —"
 
 msgid "-- Select catalogue --"
 msgstr "-- Vali kataloog --"
 
-msgid "-- Select category --"
-msgstr "-- Vali kategooria --"
+msgid "— Select category —"
+msgstr "— Vali kategooria —"
 
 msgid "0.00"
 msgstr "0.00"
@@ -1761,11 +1747,8 @@ msgstr "Tegevus"
 msgid "Add a new product or material to the catalogue."
 msgstr "Lisa kataloogi uus toode või materjal."
 
-msgid "All Actions"
+msgid "All actions"
 msgstr "Kõik tegevused"
-
-msgid "All Types"
-msgstr "Kõik tüübid"
 
 msgid "All columns are already mapped. Free one up by setting it to '— Skip —' in the column mapping section below, or by switching another picker (Category, Manufacturer, or Supplier) out of 'Use a column' mode."
 msgstr "Kõik veerud on juba seotud. Vabasta mõni, määrates selle allpool veergude sidumise osas valikule '— Jäta vahele —', või lülita mõni teine valija (Kategooria, Tootja või Tarnija) välja režiimist 'Kasuta veergu'."
@@ -1776,13 +1759,13 @@ msgstr "Rakendatakse müügihinnale lõpphinna arvutamiseks. 0..100. Üksikud to
 msgid "Applied to all item base prices to calculate sale prices. Leave blank for no markup."
 msgstr "Rakendatakse kõigi toodete baashindadele müügihindade arvutamiseks. Jäta tühjaks, kui juurdehindlust pole."
 
-msgid "Applying..."
-msgstr "Rakendan..."
+msgid "Applying…"
+msgstr "Rakendan…"
 
 msgid "Archived catalogues are hidden from active views."
 msgstr "Arhiveeritud kataloogid on aktiivsetest vaadetest peidetud."
 
-msgid "Article Code"
+msgid "Article code"
 msgstr "Artiklikood"
 
 msgid "Attach any metadata fields that apply to this catalogue. Blank values are dropped on save."
@@ -1797,8 +1780,8 @@ msgstr "Selle tootja lühikirjeldus..."
 msgid "Brief description of this supplier..."
 msgstr "Selle tarnija lühikirjeldus..."
 
-msgid "Brief description of what this catalogue contains..."
-msgstr "Lühikirjeldus selle kataloogi sisust..."
+msgid "Brief description of what this catalogue contains…"
+msgstr "Lühikirjeldus selle kataloogi sisust…"
 
 msgid "Brochures, spec sheets, datasheets. Any file type is accepted."
 msgstr "Brošüürid, spetsifikatsioonid, andmelehed. Lubatud on iga failitüüp."
@@ -1827,8 +1810,8 @@ msgstr "Vali, kuhu iga veerg imporditakse."
 msgid "Classification"
 msgstr "Klassifikatsioon"
 
-msgid "Clearing..."
-msgstr "Tühjendan..."
+msgid "Clearing…"
+msgstr "Tühjendan…"
 
 msgid "Click to toggle manufacturer associations."
 msgstr "Klõpsa tootjaseoste lülitamiseks."
@@ -1845,7 +1828,7 @@ msgstr "Kontakt ja veeb"
 msgid "Continue"
 msgstr "Jätka"
 
-msgid "Continue to Confirm"
+msgid "Continue to confirm"
 msgstr "Jätka kinnitamisele"
 
 msgid "Cost/purchase price before catalogue markup."
@@ -1878,7 +1861,7 @@ msgstr "Üleslaaditud faili ei õnnestunud salvestada. Proovi uuesti või pöör
 msgid "Could not start extraction. The :catalogue_pdf Oban queue may not be running."
 msgstr "Teksti eraldamist ei õnnestunud käivitada. :catalogue_pdf Oban-järjekord ei pruugi töötada."
 
-msgid "Create Categories"
+msgid "Create categories"
 msgstr "Loo kategooriad"
 
 msgid "Create a new manufacturer — fill in the details below"
@@ -1890,11 +1873,8 @@ msgstr "Loo uus tarnija — seotakse kõigi puudutatud tootjatega"
 msgid "Create one first"
 msgstr "Loo esmalt üks"
 
-msgid "Default Unit"
+msgid "Default unit"
 msgstr "Vaikeühik"
-
-msgid "Default Value"
-msgstr "Vaikeväärtus"
 
 msgid "Move category and items to Deleted"
 msgstr "Teisalda kategooria ja tooted kustutatute hulka"
@@ -1917,10 +1897,10 @@ msgstr "Kustutan…"
 msgid "Discontinued items are kept for reference but hidden from active listings."
 msgstr "Tootmisest maas tooted säilivad viitena, kuid on aktiivsetest loenditest peidetud."
 
-msgid "Discount Override (%)"
+msgid "Discount override (%)"
 msgstr "Allahindluse ülekirjutus (%)"
 
-msgid "Discount Percentage"
+msgid "Discount percentage"
 msgstr "Allahindlusprotsent"
 
 msgid "Drag to reorder"
@@ -1956,7 +1936,7 @@ msgstr "Fail on importimiseks liiga suur. Jaga see väiksemateks failideks."
 msgid "File is too large."
 msgstr "Fail on liiga suur."
 
-msgid "File type not supported. Use .xlsx or .csv"
+msgid "File type not supported. Use .xlsx or .csv."
 msgstr "Failitüüp pole toetatud. Kasuta .xlsx või .csv"
 
 msgid "Filename"
@@ -1977,13 +1957,13 @@ msgstr "Fikseeritud summa"
 msgid "Has subcategories"
 msgstr "Sisaldab alamkategooriaid"
 
-msgid "Import %{count} Items"
+msgid "Import %{count} items"
 msgstr "Impordi %{count} toodet"
 
-msgid "Import Into Category"
+msgid "Import into category"
 msgstr "Impordi kategooriasse"
 
-msgid "Import Language"
+msgid "Import language"
 msgstr "Impordi keel"
 
 msgid "Import all — create everything including duplicates"
@@ -1992,8 +1972,8 @@ msgstr "Impordi kõik — loo kõik, ka duplikaadid"
 msgid "Import failed: %{reason}"
 msgstr "Import ebaõnnestus: %{reason}"
 
-msgid "Importing..."
-msgstr "Impordin..."
+msgid "Importing…"
+msgstr "Impordin…"
 
 msgid "Inactive manufacturers won't appear in item dropdowns."
 msgstr "Mitteaktiivsed tootjad ei ilmu toodete rippmenüüdes."
@@ -2022,7 +2002,7 @@ msgstr "Sisemärkmed selle tootja kohta..."
 msgid "Internal notes about this supplier..."
 msgstr "Sisemärkmed selle tarnija kohta..."
 
-msgid "Item Name"
+msgid "Item name"
 msgstr "Toote nimi"
 
 msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
@@ -2046,7 +2026,7 @@ msgstr "Jäta tühjaks, et pärida kataloogi allahindlus. Määra (ka 0), et ül
 msgid "Leave blank to inherit the catalogue's markup. Set (including 0) to override just this item."
 msgstr "Jäta tühjaks, et pärida kataloogi juurdehindlus. Määra (ka 0), et üle kirjutada ainult see toode."
 
-msgid "Link to Supplier"
+msgid "Link to supplier"
 msgstr "Seo tarnijaga"
 
 msgid "Loading…"
@@ -2088,10 +2068,10 @@ msgstr "Seo"
 msgid "Map each value to a system unit:"
 msgstr "Seo iga väärtus süsteemi ühikuga:"
 
-msgid "Markup Override (%)"
+msgid "Markup override (%)"
 msgstr "Juurdehindluse ülekirjutus (%)"
 
-msgid "Markup Percentage"
+msgid "Markup percentage"
 msgstr "Juurdehindlusprotsent"
 
 msgid "Match across all languages"
@@ -2121,13 +2101,13 @@ msgstr "Liiguta see toode teise nutikataloogi. Selle kataloogireeglid jäävad k
 msgid "Move this item to a category in any catalogue."
 msgstr "Liiguta see toode mistahes kataloogi kategooriasse."
 
-msgid "Move to Another Catalogue"
+msgid "Move to another catalogue"
 msgstr "Liiguta teise kataloogi"
 
 msgid "Move to Another Category"
 msgstr "Liiguta teise kategooriasse"
 
-msgid "Move to Another Parent"
+msgid "Move to another parent"
 msgstr "Liiguta teise ülemkategooria alla"
 
 msgid "Move to Another Smart Catalogue"
@@ -2136,7 +2116,7 @@ msgstr "Liiguta teise nutikataloogi"
 msgid "Name *"
 msgstr "Nimi *"
 
-msgid "New Categories"
+msgid "New categories"
 msgstr "Uued kategooriad"
 
 #: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2779
@@ -2180,8 +2160,8 @@ msgstr "Otsingule vastavaid tooteid pole."
 msgid "No manufacturer — items imported without a maker"
 msgstr "Tootja puudub — tooted imporditakse ilma valmistajata"
 
-msgid "No metadata attached yet. Pick a field below to add one."
-msgstr "Metaandmeid pole veel lisatud. Vali allpool väli, et lisada."
+msgid "Metadata not set."
+msgstr "Metaandmed määramata."
 
 msgid "No other catalogues available to reference yet."
 msgstr "Viitamiseks pole veel teisi katalooge."
@@ -2215,7 +2195,7 @@ msgstr "Ava PDF uuel vahekaardil"
 msgid "PDF files only. Identical content is deduplicated; same file uploaded again under a new name shares one underlying file + extraction."
 msgstr "Ainult PDF-failid. Identne sisu dedubleeritakse; uue nimega uuesti üles laaditud sama fail jagab üht alusfaili ja eraldust."
 
-msgid "PRO100 Sync Preview"
+msgid "PRO100 sync preview"
 msgstr "PRO100 sünkroonimise eelvaade"
 
 msgid "Parent category"
@@ -2269,13 +2249,13 @@ msgstr "Vali formaat."
 msgid "Please upload a file."
 msgstr "Laadi fail üles."
 
-msgid "Pricing & Identification"
+msgid "Pricing & identification"
 msgstr "Hinnad ja identifitseerimine"
 
-msgid "Product specifications, dimensions, materials..."
-msgstr "Toote spetsifikatsioonid, mõõdud, materjalid..."
+msgid "Product specifications, dimensions, materials…"
+msgstr "Toote spetsifikatsioonid, mõõdud, materjalid…"
 
-msgid "Re-queue any PDFs whose text extraction never ran or got stuck (e.g. after the job queue was down)."
+msgid "Re-queue any PDFs whose text extraction never ran or got stuck (e.g., after the job queue was down)."
 msgstr "Pane uuesti järjekorda PDF-id, mille teksti eraldamine ei käivitunud või jäi kinni (nt pärast tööjärjekorra seisakut)."
 
 msgid "Re-queued %{count} stuck extraction(s)."
@@ -2311,8 +2291,8 @@ msgstr "Eemaldada see fail kategooriast? Kui see pole seotud ühegi teise ressur
 msgid "Remove this file from the item? If it's not attached to any other item, it will be moved to trash (admins can restore)."
 msgstr "Eemaldada see fail tootelt? Kui see pole seotud ühegi teise tootega, liigub see prügikasti (adminid saavad taastada)."
 
-msgid "Removing..."
-msgstr "Eemaldan..."
+msgid "Removing…"
+msgstr "Eemaldan…"
 
 msgid "Reparent this category within its catalogue. Its subtree comes along."
 msgstr "Paiguta see kategooria oma kataloogis teise ülemkategooria alla. Alampuu tuleb kaasa."
@@ -2375,7 +2355,7 @@ msgstr "Komplekt (kmpl)"
 msgid "Running meter"
 msgstr "Jooksev meeter"
 
-msgid "Sample Data (first 5 rows)"
+msgid "Sample data (first 5 rows)"
 msgstr "Näidisandmed (esimesed 5 rida)"
 
 msgid "Search failed. Please try again."
@@ -2384,8 +2364,8 @@ msgstr "Otsing ebaõnnestus. Proovi uuesti."
 msgid "Search is temporarily unavailable. Please try again in a moment."
 msgstr "Otsing pole ajutiselt saadaval. Proovi hetke pärast uuesti."
 
-msgid "Search items by name, description, or SKU..."
-msgstr "Otsi tooteid nime, kirjelduse või SKU järgi..."
+msgid "Search items by name, description, or SKU…"
+msgstr "Otsi tooteid nime, kirjelduse või SKU järgi…"
 
 #: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:233
 #: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2372
@@ -2393,11 +2373,11 @@ msgstr "Otsi tooteid nime, kirjelduse või SKU järgi..."
 msgid "Search items…"
 msgstr "Otsi tooteid…"
 
-msgid "Search uncategorized items..."
-msgstr "Otsi kategoriseerimata tooteid..."
+msgid "Search uncategorized items…"
+msgstr "Otsi kategoriseerimata tooteid…"
 
-msgid "Search within this category..."
-msgstr "Otsi selles kategoorias..."
+msgid "Search within this category…"
+msgstr "Otsi selles kategoorias…"
 
 msgid "Searched for: %{name}"
 msgstr "Otsitud: %{name}"
@@ -2405,17 +2385,17 @@ msgstr "Otsitud: %{name}"
 msgid "Searches the entire PDF library for the item's name across all enabled languages."
 msgstr "Otsib kogu PDF-kogust toote nime kõigis lubatud keeltes."
 
-msgid "Searching for \"%{query}\"..."
-msgstr "Otsin \"%{query}\"..."
+msgid "Searching for “%{query}”…"
+msgstr "Otsin \"%{query}\"…"
 
 msgid "Searching…"
 msgstr "Otsin…"
 
-msgid "Select a catalogue..."
-msgstr "Vali kataloog..."
+msgid "— Select a catalogue —"
+msgstr "— Vali kataloog —"
 
-msgid "Select a column..."
-msgstr "Vali veerg..."
+msgid "— Select a column —"
+msgstr "— Vali veerg —"
 
 msgid "Select all items"
 msgstr "Vali kõik tooted"
@@ -2423,10 +2403,10 @@ msgstr "Vali kõik tooted"
 msgid "Selected image could not be loaded."
 msgstr "Valitud pilti ei õnnestunud laadida."
 
-msgid "Selected items share positions. Apply \"Reorder all\" first to normalise."
+msgid "Selected items share positions. Apply “Reorder all” first to normalise."
 msgstr "Valitud toodetel on kattuvad positsioonid. Normaliseerimiseks rakenda esmalt \"Järjesta kõik\"."
 
-msgid "Set Manufacturer"
+msgid "Set manufacturer"
 msgstr "Määra tootja"
 
 msgid "Sheet:"
@@ -2435,7 +2415,7 @@ msgstr "Leht:"
 msgid "Show %{n} more"
 msgstr "Näita veel %{n}"
 
-msgid "Showing %{loaded} of %{count} results for \"%{query}\""
+msgid "Showing %{loaded} of %{count} results for “%{query}”"
 msgstr "Kuvatud %{loaded} / %{count} tulemust päringule \"%{query}\""
 
 msgid "Showing first 20 of %{count} items."
@@ -2462,7 +2442,7 @@ msgstr "Jäta duplikaadid vahele — impordi ainult uued, unikaalsed tooted"
 msgid "Skipped"
 msgstr "Vahele jäetud"
 
-msgid "Smart catalogues hold items like \"Delivery\" whose cost is a per-catalogue %/flat rule picked from other catalogues. Items here reference other catalogues instead of carrying a base price of their own."
+msgid "Smart catalogues hold items like “Delivery” whose cost is a per-catalogue %/flat rule picked from other catalogues. Items here reference other catalogues instead of carrying a base price of their own."
 msgstr "Nutikataloogid sisaldavad tooteid nagu \"Tarne\", mille hind on teiste kataloogide kaupa määratud %/fikseeritud reegel. Siinsed tooted viitavad teistele kataloogidele, mitte ei kanna oma baashinda."
 
 msgid "Smart rule"
@@ -2480,8 +2460,8 @@ msgstr "Spetsifikatsioonid, joonised, fotod. Lubatud on iga failitüüp."
 msgid "Standard catalogues hold items priced directly — each item has its own base price, markup, and discount. This is the normal flow for materials, products, or anything with a fixed price tag."
 msgstr "Tavakataloogid sisaldavad otse hinnastatud tooteid — igal tootel on oma baashind, juurdehindlus ja allahindlus. See on tavaline vool materjalide, toodete või mistahes fikseeritud hinnaga asjade jaoks."
 
-msgid "Starting import..."
-msgstr "Alustan importi..."
+msgid "Starting import…"
+msgstr "Alustan importi…"
 
 msgid "Still uploading — please wait a moment."
 msgstr "Üleslaadimine kestab — palun oota hetk."
@@ -2498,10 +2478,10 @@ msgstr "Loodavad või sobitatavad tarnijad:"
 msgid "Supports .xlsx, .csv, .txt, .json files (max 10MB)"
 msgstr "Toetatud on .xlsx, .csv, .txt, .json failid (max 10MB)"
 
-msgid "Sync Complete"
+msgid "Sync complete"
 msgstr "Sünkroonimine valmis"
 
-msgid "Target Catalogue"
+msgid "Target catalogue"
 msgstr "Sihtkataloog"
 
 msgid "Target category not found."
@@ -2567,7 +2547,7 @@ msgstr "Uuenda toote andmeid, hindu ja klassifikatsiooni."
 msgid "Updates"
 msgstr "Uuendused"
 
-msgid "Upload & Parse"
+msgid "Upload & parse"
 msgstr "Laadi üles ja analüüsi"
 
 msgid "Upload error: %{reason}"
@@ -2585,8 +2565,8 @@ msgstr "Üleslaadimine ebaõnnestus ootamatul põhjusel. Proovi uuesti."
 msgid "Uploaded"
 msgstr "Üles laaditud"
 
-msgid "Uploading..."
-msgstr "Laadin üles..."
+msgid "Uploading…"
+msgstr "Laadin üles…"
 
 msgid "Use a column — create categories from column values"
 msgstr "Kasuta veergu — loo kategooriad veeru väärtustest"
@@ -2600,17 +2580,17 @@ msgstr "Kasuta veergu — seo rea tarnija rea tootjaga"
 msgid "Used for any selected catalogue that doesn't have its own unit."
 msgstr "Kasutatakse iga valitud kataloogi puhul, millel pole oma ühikut."
 
-msgid "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g. $50 flat)."
+msgid "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g., $50 flat)."
 msgstr "Kasutatakse iga valitud kataloogi puhul, millel pole oma väärtust. Kui ühtegi kataloogi pole valitud, on see toote iseseisev tasu (nt 50 € fikseeritult)."
 
-msgid "Validating..."
-msgstr "Kontrollin..."
+msgid "Validating…"
+msgstr "Kontrollin…"
 
-msgid "Waiting for uploads..."
-msgstr "Ootan üleslaadimisi..."
+msgid "Waiting for uploads…"
+msgstr "Ootan üleslaadimisi…"
 
-msgid "What kinds of items belong in this category..."
-msgstr "Millised tooted sellesse kategooriasse kuuluvad..."
+msgid "What kinds of items belong in this category…"
+msgstr "Millised tooted sellesse kategooriasse kuuluvad…"
 
 msgid "Which column contains the category names?"
 msgstr "Milline veerg sisaldab kategooriate nimesid?"
@@ -2731,9 +2711,6 @@ msgstr "— Jäta vahele —"
 msgid "— Top level (no parent) —"
 msgstr "— Tipptase (ülemkategooriata) —"
 
-msgid "— no category —"
-msgstr "— kategooriata —"
-
 msgid "…and %{count} more"
 msgstr "…ja veel %{count}"
 
@@ -2824,7 +2801,7 @@ msgstr "Ei saanud sellele CRM ettevõttele rolli anda, seega midagi ei seotud."
 msgid "Someone else changed this link first. Reload the page and try again."
 msgstr "Keegi teine muutis seda seost enne. Laadi leht uuesti ja proovi uuesti."
 
-msgid "Suppliers and Manufacturer"
+msgid "Suppliers and manufacturer"
 msgstr "Tarnijad ja tootja"
 
 msgid "A field was removed while this was open. Close and reopen the form."
@@ -2884,7 +2861,7 @@ msgstr "Ühiku hind peab olema arv."
 msgid "Yes"
 msgstr "Jah"
 
-msgid "e.g. Incoterm"
+msgid "e.g., Incoterm"
 msgstr "nt Incoterm"
 
 msgid "Comments"
@@ -2970,10 +2947,6 @@ msgstr "Eemalda valikust"
 msgid "Browse"
 msgstr "Sirvi"
 
-#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex
-msgid "Drag-reorder needs the Manual sort — choose it in the sort selector."
-msgstr "Lohistades järjestamiseks vali sortimise valikust käsitsi järjestus."
-
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:94
 #, elixir-autogen
 msgid "Computed"
@@ -2992,7 +2965,7 @@ msgstr "Selles valikus pole saadaval"
 msgid "Shown on category landing pages."
 msgstr "Kuvatakse kategooria avalehtedel."
 
-msgid "Import Failed"
+msgid "Import failed"
 msgstr "Import ebaõnnestus"
 
 msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
@@ -3049,7 +3022,7 @@ msgstr "%{count} toodet kopeeritakse koos failide, atribuudikomplektide, tarnija
 msgid "%{count} categories will be copied with their subcategories and items."
 msgstr "%{count} kategooriat kopeeritakse koos alamkategooriate ja toodetega."
 
-msgid "Each copy is named after its original with \"(copy)\" added and placed right after it."
+msgid "Each copy is named after its original with “(copy)” added and placed right after it."
 msgstr "Iga koopia saab originaali nime lisandiga „(koopia)“ ja paigutatakse kohe selle järele."
 
 msgid "Duplicated %{count} items."
@@ -3136,7 +3109,7 @@ msgstr "Otsi komplekte ja väärtusi…"
 msgid "No sets match your search."
 msgstr "Otsingule ei vasta ükski komplekt."
 
-msgid "No values yet"
+msgid "No values yet."
 msgstr "Väärtusi pole veel"
 
 msgid "Creating…"
@@ -3155,7 +3128,7 @@ msgid "Clear filters"
 msgstr "Tühjenda filtrid"
 
 # Attribute filter: dead values (2026-08-28)
-msgid "Nothing matches this together with the filters already on"
+msgid "Nothing matches this together with the filters already on."
 msgstr "Koos juba valitud filtritega ei vasta sellele miski"
 
 msgid "Attribute set not found."
@@ -3495,8 +3468,8 @@ msgstr "%{catalogue} — ilma kategooriata"
 msgid "%{catalogue} — top level"
 msgstr "%{catalogue} — ülatase"
 
-msgid "-- Select destination --"
-msgstr "-- Vali sihtkoht --"
+msgid "— Select destination —"
+msgstr "— Vali sihtkoht —"
 
 msgid "%{name} (copy %{number})"
 msgstr "%{name} (koopia %{number})"
@@ -3539,3 +3512,54 @@ msgstr "Loo koopia arhiveerituna"
 
 msgid "Otherwise it gets the original's status."
 msgstr "Muidu saab koopia originaali oleku."
+
+msgid "Switch catalogue"
+msgstr "Vaheta kataloogi"
+
+msgid "Switch category"
+msgstr "Vaheta kategooriat"
+
+msgid "Search catalogues…"
+msgstr "Leia kataloog…"
+
+msgid "Search categories…"
+msgstr "Leia kategooria…"
+
+msgid "— Add supplier —"
+msgstr "— Lisa tarnija —"
+
+msgid "Location"
+msgstr "Asukoht"
+
+msgid "Undo"
+msgstr "Võta tagasi"
+
+msgid "Unsaved changes"
+msgstr "Salvestamata muudatused"
+
+msgid "Choose a location"
+msgstr "Vali asukoht"
+
+msgid "Search catalogues and categories…"
+msgstr "Leia kataloog või kategooria…"
+
+msgid "No matches."
+msgstr "Vasteid pole."
+
+msgid "New"
+msgstr "Uus"
+
+msgid "Collapse"
+msgstr "Sule"
+
+msgid "Expand"
+msgstr "Ava"
+
+msgid "Currency must be a three-letter code, like EUR."
+msgstr "Valuuta peab olema kolmetäheline kood, näiteks EUR."
+
+msgid "Some supplier values are not valid."
+msgstr "Mõned tarnija väärtused ei sobi."
+
+msgid "That location no longer exists. Choose another."
+msgstr "Seda asukohta pole enam. Vali mõni teine."

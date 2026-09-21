@@ -101,14 +101,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
 
     test "a LOCAL supplier (no CRM company) gets the Comments action and an empty preview",
          %{conn: conn, scope: scope} do
-      {item, _supplier, info} = item_with_supplier()
+      {item, supplier, _info} = item_with_supplier()
 
       {:ok, view, html} =
         conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
 
       assert has_element?(
                view,
-               "[phx-click=open_supplier_comments][phx-value-uuid='#{info.uuid}']"
+               "[phx-click=open_supplier_comments][phx-value-supplier='#{supplier.uuid}']"
              )
 
       assert html =~ "No comments yet."
@@ -122,7 +122,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
       {:ok, view, _} =
         conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
 
-      html = render_click(view, "open_supplier_comments", %{"uuid" => info.uuid})
+      html = render_click(view, "open_supplier_comments", %{"supplier" => supplier.uuid})
       assert html =~ "About this supplier for this item only."
       assert html =~ "Acme Metals"
       # A local row has no company page to offer.
@@ -144,13 +144,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
     end
 
     test "the thread — and its comments — survive a price revision", %{conn: conn, scope: scope} do
-      {item, _supplier, info} = item_with_supplier()
+      {item, supplier, info} = item_with_supplier()
       thread = Catalogue.supplier_comment_thread_uuid(info)
 
       {:ok, view, _} =
         conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
 
-      render_click(view, "open_supplier_comments", %{"uuid" => info.uuid})
+      render_click(view, "open_supplier_comments", %{"supplier" => supplier.uuid})
       type_and_post(view, thread, "Discount promised on the first batch")
       render_click(view, "close_supplier_comments", %{})
 
@@ -162,13 +162,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
         conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
 
       assert html =~ "Discount promised on the first batch"
+      assert Catalogue.supplier_comment_thread_uuid(successor) == thread
 
-      assert has_element?(
-               view,
-               "[phx-click=open_supplier_comments][phx-value-uuid='#{successor.uuid}']"
-             )
-
-      refute has_element?(view, "[phx-value-uuid='#{info.uuid}']")
+      # The row is addressed by its supplier, which the revision keeps.
+      html = render_click(view, "open_supplier_comments", %{"supplier" => supplier.uuid})
+      assert html =~ "About this supplier for this item only."
     end
 
     # The CRM link goes through <.pk_link navigate>, which prefixes the path
@@ -202,7 +200,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
       refute html =~ ~r{href="[^"]*/admin/crm/companies/[^"]*/admin/crm/companies/}
       refute html =~ ~r{href="/[^"]*?(/en/)[^"]*\1}
 
-      html = render_click(view, "open_supplier_comments", %{"uuid" => info.uuid})
+      html = render_click(view, "open_supplier_comments", %{"supplier" => info.supplier_uuid})
       assert html =~ "Open the company"
       assert html =~ ~s(href="#{expected}")
     end
@@ -210,16 +208,108 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
     test "the modal opens only rows this item renders, resolved server-side",
          %{conn: conn, scope: scope} do
       {item, _supplier, _info} = item_with_supplier()
-      {_other_item, _other_supplier, other_info} = item_with_supplier()
+      {_other_item, other_supplier, _other_info} = item_with_supplier()
 
       {:ok, view, _} =
         conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
 
-      render_click(view, "open_supplier_comments", %{"uuid" => other_info.uuid})
+      render_click(view, "open_supplier_comments", %{"supplier" => other_supplier.uuid})
+      refute has_element?(view, "#supplier-comments-modal")
+
+      render_click(view, "open_supplier_comments", %{"supplier" => UUIDv7.generate()})
       refute has_element?(view, "#supplier-comments-modal")
 
       render_click(view, "open_supplier_comments", %{"uuid" => UUIDv7.generate()})
       refute has_element?(view, "#supplier-comments-modal")
+    end
+
+    # Max, 2026-09-19: the comment line appeared only after Save. A staged
+    # row shows the thread it will be created with, and Save keeps it.
+    test "a supplier picked but not yet saved can be commented on, and Save keeps the thread",
+         %{conn: conn, scope: scope} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      supplier = fixture_supplier(%{name: "Nordic Hinges"})
+      thread = Catalogue.supplier_comment_thread_for_pair(item.uuid, supplier.uuid)
+
+      {:ok, view, _} =
+        conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
+
+      view
+      |> element("#supplier-add-picker")
+      |> render_change(%{"supplier_add" => supplier.uuid})
+
+      assert view |> element("#supplier-comments-row-#{supplier.uuid}") |> render() =~
+               "No comments yet."
+
+      html = render_click(view, "open_supplier_comments", %{"supplier" => supplier.uuid})
+      assert html =~ "Nordic Hinges"
+
+      type_and_post(view, thread, "Quoted over the phone, confirm by mail")
+      assert render(view) =~ "Quoted over the phone"
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+
+      render_click(view, "close_supplier_comments", %{})
+      render_submit(view, "save", %{"item" => %{"name" => "Oak Panel"}, "save_action" => "stay"})
+
+      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert Catalogue.supplier_comment_thread_uuid(info) == thread
+      assert [_] = PhoenixKitComments.list_comments(@type_, thread)
+      assert render(view) =~ "Quoted over the phone"
+    end
+
+    test "a staged supplier dropped and picked again gets its comments back",
+         %{conn: conn, scope: scope} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      supplier = fixture_supplier(%{name: "Nordic Hinges"})
+      thread = Catalogue.supplier_comment_thread_for_pair(item.uuid, supplier.uuid)
+
+      {:ok, view, _} =
+        conn |> with_scope(scope) |> live(edit_item_url(item.uuid) <> "?tab=sourcing")
+
+      pick = fn ->
+        view
+        |> element("#supplier-add-picker")
+        |> render_change(%{"supplier_add" => supplier.uuid})
+      end
+
+      pick.()
+      render_click(view, "open_supplier_comments", %{"supplier" => supplier.uuid})
+      type_and_post(view, thread, "Only ships on Tuesdays")
+      render_click(view, "close_supplier_comments", %{})
+
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
+      refute has_element?(view, "#supplier-comments-row-#{supplier.uuid}")
+
+      assert pick.() =~ "Only ships on Tuesdays"
+    end
+
+    test "a new item's staged suppliers offer no comments until it exists",
+         %{conn: conn, scope: scope} do
+      catalogue = fixture_catalogue()
+      supplier = fixture_supplier(%{name: "Nordic Hinges"})
+
+      {:ok, view, _} =
+        conn
+        |> with_scope(scope)
+        |> live("/en/admin/catalogue/#{catalogue.uuid}/items/new?tab=sourcing")
+
+      view
+      |> element("#supplier-add-picker")
+      |> render_change(%{"supplier_add" => supplier.uuid})
+
+      assert has_element?(view, "#supplier-row-#{supplier.uuid}")
+      refute has_element?(view, "#supplier-comments-row-#{supplier.uuid}")
+      refute has_element?(view, "[phx-click=open_supplier_comments]")
     end
 
     test "a comments update for a thread that is not on the item is ignored, not a crash",

@@ -80,13 +80,13 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
   def available_targets do
     [
       {:skip, "— Skip —"},
-      {:name, "Item Name"},
+      {:name, "Item name"},
       {:description, "Description"},
-      {:sku, "Article Code"},
-      {:base_price, "Base Price"},
-      {:markup_percentage, "Markup Override (%)"},
-      {:unit, "Unit of Measure"},
-      {:category, "Create Categories"},
+      {:sku, "Article code"},
+      {:base_price, "Base price"},
+      {:markup_percentage, "Markup override (%)"},
+      {:unit, "Unit of measure"},
+      {:category, "Create categories"},
       {:manufacturer, "Manufacturer"},
       {:supplier, "Supplier"}
     ]

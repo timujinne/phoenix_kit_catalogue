@@ -37,7 +37,7 @@ msgstr "PDF-файлы"
 msgid "PDF"
 msgstr "PDF"
 
-msgid "New Catalogue"
+msgid "New catalogue"
 msgstr "Новый каталог"
 
 msgid "Edit Catalogue"
@@ -55,13 +55,13 @@ msgstr "Новый поставщик"
 msgid "Edit Supplier"
 msgstr "Редактировать поставщика"
 
-msgid "New Category"
+msgid "New category"
 msgstr "Новая категория"
 
 msgid "Edit Category"
 msgstr "Редактировать категорию"
 
-msgid "New Item"
+msgid "New item"
 msgstr "Новая позиция"
 
 msgid "Edit Item"
@@ -116,11 +116,6 @@ msgstr "Снят с производства"
 
 msgid "Toggle folder"
 msgstr "Развернуть/свернуть папку"
-
-#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2956
-#, elixir-autogen
-msgid "Clear search and filters to see the folder tree."
-msgstr "Очистите поиск и фильтры, чтобы увидеть дерево папок."
 
 msgid "Up"
 msgstr "Вверх"
@@ -201,7 +196,7 @@ msgstr "Сезон"
 msgid "Region"
 msgstr "Регион"
 
-msgid "Vendor Reference"
+msgid "Vendor reference"
 msgstr "Артикул поставщика"
 
 ## Error messages
@@ -345,8 +340,8 @@ msgstr "Категория удалена окончательно."
 msgid "Category moved."
 msgstr "Категория перемещена."
 
-msgid "Working..."
-msgstr "Обработка..."
+msgid "Working…"
+msgstr "Обработка…"
 
 msgid "Unknown target language — refresh the page and try again."
 msgstr "Неизвестный целевой язык — обновите страницу и попробуйте ещё раз."
@@ -468,9 +463,6 @@ msgstr "Удалить"
 msgid "Restore"
 msgstr "Восстановить"
 
-msgid "Delete Forever"
-msgstr "Удалить навсегда"
-
 msgid "Edit"
 msgstr "Редактировать"
 
@@ -494,10 +486,10 @@ msgstr "Создать поставщика"
 msgid "Create Item"
 msgstr "Создать позицию"
 
-msgid "Add Category"
+msgid "Add category"
 msgstr "Добавить категорию"
 
-msgid "Add Item"
+msgid "Add item"
 msgstr "Добавить позицию"
 
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:819
@@ -536,11 +528,8 @@ msgstr "Заметки"
 msgid "Actions"
 msgstr "Действия"
 
-msgid "Search..."
-msgstr "Поиск..."
-
-msgid "Search items..."
-msgstr "Поиск позиций..."
+msgid "Search…"
+msgstr "Поиск…"
 
 msgid "Upload"
 msgstr "Загрузить"
@@ -557,16 +546,10 @@ msgstr "Позиция"
 msgid "Confirm"
 msgstr "Подтвердить"
 
-msgid "Loading..."
-msgstr "Загрузка..."
+msgid "Saving…"
+msgstr "Сохранение…"
 
-msgid "Saving..."
-msgstr "Сохранение..."
-
-msgid "Deleting..."
-msgstr "Удаление..."
-
-msgid "Featured Image"
+msgid "Featured image"
 msgstr "Главное изображение"
 
 msgid "No featured image set."
@@ -595,7 +578,7 @@ msgstr "— Выберите поле —"
 msgid "Legacy"
 msgstr "Устаревшее"
 
-msgid "Attached Files"
+msgid "Attached files"
 msgstr "Прикреплённые файлы"
 
 msgid "No files attached yet."
@@ -610,7 +593,7 @@ msgstr "Нажмите для загрузки"
 msgid "or drag & drop"
 msgstr "или перетащите"
 
-msgid "File is too large (max 10MB)"
+msgid "File is too large (max 10MB)."
 msgstr "Файл слишком большой (макс. 10 МБ)"
 
 msgid "File type not accepted."
@@ -664,10 +647,7 @@ msgstr "Артикул"
 msgid "Price"
 msgstr "Цена"
 
-msgid "Base Price"
-msgstr "Базовая цена"
-
-msgid "Final Price"
+msgid "Final price"
 msgstr "Итоговая цена"
 
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:823
@@ -675,7 +655,13 @@ msgstr "Итоговая цена"
 msgid "Unit"
 msgstr "Единица"
 
-msgid "Unit of Measure"
+msgid "Unknown item"
+msgstr "Неизвестная позиция"
+
+msgid "Unknown supplier"
+msgstr "Неизвестный поставщик"
+
+msgid "Unit of measure"
 msgstr "Единица измерения"
 
 msgid "Kind"
@@ -683,6 +669,9 @@ msgstr "Тип"
 
 msgid "Smart"
 msgstr "Смарт"
+
+msgid "Standard"
+msgstr "Стандартный"
 
 msgid "Standard — items priced directly"
 msgstr "Стандартный — позиции с прямыми ценами"
@@ -692,6 +681,9 @@ msgstr "Смарт — позиции ссылаются на другие ка�
 
 msgid "Markup %"
 msgstr "Наценка %"
+
+msgid "Markup"
+msgstr "Наценка"
 
 msgid "Discount"
 msgstr "Скидка"
@@ -742,10 +734,10 @@ msgstr "Производители ещё не добавлены."
 msgid "No suppliers yet."
 msgstr "Поставщики ещё не добавлены."
 
-msgid "No items found"
+msgid "No items found."
 msgstr "Позиции не найдены"
 
-msgid "No events recorded yet"
+msgid "No events recorded yet."
 msgstr "События ещё не зафиксированы"
 
 msgid "No PDFs uploaded yet."
@@ -766,22 +758,22 @@ msgstr "Найти позицию в PDF"
 msgid "Pages"
 msgstr "Страницы"
 
-msgid "Import Complete"
+msgid "Import complete"
 msgstr "Импорт завершён"
 
-msgid "Import Another"
+msgid "Import another"
 msgstr "Импортировать ещё"
 
-msgid "Confirm Import"
+msgid "Confirm import"
 msgstr "Подтвердить импорт"
 
-msgid "Back to Mapping"
+msgid "Back to mapping"
 msgstr "Назад к маппингу"
 
-msgid "Import Items"
+msgid "Import items"
 msgstr "Импорт позиций"
 
-msgid "Export Items"
+msgid "Export items"
 msgstr "Экспорт позиций"
 
 msgid "Destination"
@@ -790,13 +782,13 @@ msgstr "Назначение"
 msgid "Format"
 msgstr "Формат"
 
-msgid "Select a format..."
-msgstr "Выберите формат..."
+msgid "— Select a format —"
+msgstr "— Выберите формат —"
 
 msgid "Add the catalogue name to the item name"
 msgstr "Добавить название каталога к названию позиции"
 
-msgid "Map Columns"
+msgid "Map columns"
 msgstr "Сопоставление столбцов"
 
 msgid "All events loaded"
@@ -805,16 +797,16 @@ msgstr "Все события загружены"
 msgid "Events: %{count}"
 msgstr "Событий: %{count}"
 
-msgid "Danger Zone"
+msgid "Danger zone"
 msgstr "Опасная зона"
 
-msgid "Permanently Delete Catalogue"
+msgid "Permanently delete catalogue"
 msgstr "Удалить каталог навсегда"
 
-msgid "Permanently Delete Category"
+msgid "Permanently delete category"
 msgstr "Удалить категорию навсегда"
 
-msgid "Permanently Delete Item"
+msgid "Permanently delete item"
 msgstr "Удалить позицию навсегда"
 
 #: lib/phoenix_kit_catalogue/web/components.ex:871
@@ -845,10 +837,10 @@ msgstr "Связанные поставщики"
 msgid "Scope"
 msgstr "Область"
 
-msgid "Catalogue Rules"
+msgid "Catalogue rules"
 msgstr "Правила каталога"
 
-msgid "View Catalogue"
+msgid "View catalogue"
 msgstr "Открыть каталог"
 
 msgid "View details"
@@ -875,6 +867,12 @@ msgstr[0] "%{count} категория"
 msgstr[1] "%{count} категории"
 msgstr[2] "%{count} категорий"
 
+msgid "%{count} subcategory"
+msgid_plural "%{count} subcategories"
+msgstr[0] "%{count} подкатегория"
+msgstr[1] "%{count} подкатегории"
+msgstr[2] "%{count} подкатегорий"
+
 msgid "%{count} catalogue"
 msgid_plural "%{count} catalogues"
 msgstr[0] "%{count} каталог"
@@ -887,8 +885,8 @@ msgstr[0] "Выбран %{active} из %{total} каталога"
 msgstr[1] "Выбрано %{active} из %{total} каталогов"
 msgstr[2] "Выбрано %{active} из %{total} каталогов"
 
-msgid "%{count} result for \"%{query}\""
-msgid_plural "%{count} results for \"%{query}\""
+msgid "%{count} result for “%{query}”"
+msgid_plural "%{count} results for “%{query}”"
 msgstr[0] "%{count} результат по запросу «%{query}»"
 msgstr[1] "%{count} результата по запросу «%{query}»"
 msgstr[2] "%{count} результатов по запросу «%{query}»"
@@ -995,9 +993,6 @@ msgstr "Очистите поиск и фильтры, чтобы менять �
 msgid "Nothing in the trash."
 msgstr "В корзине ничего нет."
 
-msgid "New Folder"
-msgstr "Новая папка"
-
 msgid "New folder"
 msgstr "Новая папка"
 
@@ -1010,17 +1005,11 @@ msgstr "Переместить в папку"
 msgid "Rename"
 msgstr "Переименовать"
 
-msgid "Permanently Delete Folder"
+msgid "Permanently delete folder"
 msgstr "Удалить папку навсегда"
 
-msgid "Creating..."
-msgstr "Создаётся..."
-
-msgid "Moving..."
-msgstr "Перемещается..."
-
-msgid "Restoring..."
-msgstr "Восстанавливается..."
+msgid "Moving…"
+msgstr "Перемещается…"
 
 msgid "— Root (unfiled) —"
 msgstr "— Корень (без папки) —"
@@ -1098,20 +1087,20 @@ msgstr "Ничего не найдено."
 msgid "Add Supplier"
 msgstr "Добавить поставщика"
 
+msgid "Primary supplier"
+msgstr "Основной поставщик"
+
 msgid "Supplier SKU"
 msgstr "Артикул поставщика"
 
-msgid "Unit Cost"
-msgstr "Цена за единицу"
-
-msgid "Lead Time (days)"
+msgid "Lead time (days)"
 msgstr "Срок поставки (дней)"
 
-msgid "Min. Order Qty"
+msgid "Min. order qty"
 msgstr "Мин. кол-во заказа"
 
-msgid "No suppliers linked yet."
-msgstr "Поставщики ещё не привязаны."
+msgid "Suppliers not set."
+msgstr "Поставщики не указаны."
 
 msgid "Lead (d)"
 msgstr "Срок (д)"
@@ -1125,8 +1114,6 @@ msgstr "Основной"
 msgid "Make primary"
 msgstr "Сделать основным"
 
-msgid "Remove this supplier link?"
-msgstr "Удалить связь с поставщиком?"
 
 msgid "-- Select supplier --"
 msgstr "-- Выберите поставщика --"
@@ -1152,7 +1139,7 @@ msgstr "Не удалось удалить поставщика."
 msgid "History"
 msgstr "История"
 
-msgid "Price History"
+msgid "Price history"
 msgstr "История цен"
 
 msgid "No price history."
@@ -1161,10 +1148,10 @@ msgstr "История цен пуста."
 msgid "Currency"
 msgstr "Валюта"
 
-msgid "Valid From"
+msgid "Valid from"
 msgstr "Действует с"
 
-msgid "Valid To"
+msgid "Valid to"
 msgstr "Действует по"
 
 msgid "Current"
@@ -1175,7 +1162,7 @@ msgid "Row %{row}: belongs to %{group}, not to this catalogue"
 msgstr "Строка %{row}: относится к «%{group}», а не к этому каталогу"
 
 ## Media picker
-msgid "Select Featured Image"
+msgid "Select featured image"
 msgstr "Выбрать главное изображение"
 
 ## Product card
@@ -1240,7 +1227,7 @@ msgstr "Категории переупорядочены."
 msgid "Failed to reorder."
 msgstr "Не удалось изменить порядок."
 
-msgid "Photos and Files"
+msgid "Photos and files"
 msgstr "Фото и файлы"
 
 #: lib/phoenix_kit_catalogue/web/components.ex:1550
@@ -1258,7 +1245,7 @@ msgstr "Компактный вид"
 msgid "Save"
 msgstr "Сохранить"
 
-msgid "Save & Exit"
+msgid "Save & exit"
 msgstr "Сохранить и выйти"
 
 msgid "Attributes"
@@ -1270,13 +1257,13 @@ msgstr "Архивировать"
 msgid "Add"
 msgstr "Добавить"
 
-msgid "New Attribute Group"
+msgid "New attribute group"
 msgstr "Новая группа атрибутов"
 
 msgid "Edit Attribute Group"
 msgstr "Изменить группу атрибутов"
 
-msgid "Delete Attribute Group"
+msgid "Delete attribute group"
 msgstr "Удалить группу атрибутов"
 
 msgid "Attribute group not found."
@@ -1315,7 +1302,7 @@ msgstr "Задайте многоразовый набор опций — цве
 msgid "Manage this group's attributes, values, and translations."
 msgstr "Управляйте атрибутами, значениями и переводами этой группы."
 
-msgid "No attributes yet. Add one below — e.g. Color, Trim, Surface."
+msgid "No attributes yet. Add one below — e.g., Color, Trim, Surface."
 msgstr "Атрибутов пока нет. Добавьте ниже — напр. Цвет, Кант, Поверхность."
 
 msgid "Failed to add attribute."
@@ -1330,11 +1317,11 @@ msgstr "Удалить атрибут"
 msgid "This removes the attribute and all its values from the group."
 msgstr "Это удалит атрибут и все его значения из группы."
 
-msgid "Add value..."
-msgstr "Добавить значение..."
+msgid "Add value…"
+msgstr "Добавить значение…"
 
-msgid "New attribute name..."
-msgstr "Название нового атрибута..."
+msgid "New attribute name…"
+msgstr "Название нового атрибута…"
 
 msgid "Default value"
 msgstr "Значение по умолчанию"
@@ -1357,8 +1344,8 @@ msgstr "Выберите группу, чтобы задать товару оп
 msgid "Manage groups"
 msgstr "Управлять группами"
 
-msgid "— No attribute group —"
-msgstr "— Без группы атрибутов —"
+msgid "— Attribute group not set —"
+msgstr "— Группа атрибутов не указана —"
 
 msgid "archived"
 msgstr "в архиве"
@@ -1528,7 +1515,7 @@ msgstr "Показать архивные"
 msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
 msgstr "Одно измерение от одного поставщика: цвета Ikea, планки HomeDepot. К товару можно прикрепить любое число наборов."
 
-msgid "New Set"
+msgid "New set"
 msgstr "Новый набор"
 
 msgid "No sets yet. Create one, or migrate your legacy groups below."
@@ -1573,8 +1560,8 @@ msgstr "Открепить набор"
 msgid "Selected, but archived — no longer offered for new picks"
 msgstr "Выбрано, но архивировано — больше не предлагается для нового выбора"
 
-msgid "Attach a set..."
-msgstr "Прикрепить набор..."
+msgid "— Attach a set —"
+msgstr "— Прикрепить набор —"
 
 msgid "No sets exist yet — create one under Manage sets."
 msgstr "Наборов ещё нет — создайте в разделе «Управление наборами»."
@@ -1747,14 +1734,14 @@ msgstr "Доступно каталогов: %{total} — ни один не в�
 msgid "-- No category --"
 msgstr "-- Без категории --"
 
-msgid "-- No manufacturer --"
-msgstr "-- Без производителя --"
+msgid "— Manufacturer not set —"
+msgstr "— Производитель не указан —"
 
 msgid "-- Select catalogue --"
 msgstr "-- Выберите каталог --"
 
-msgid "-- Select category --"
-msgstr "-- Выберите категорию --"
+msgid "— Select category —"
+msgstr "— Выберите категорию —"
 
 msgid "0.00"
 msgstr "0.00"
@@ -1770,11 +1757,8 @@ msgstr "Действие"
 msgid "Add a new product or material to the catalogue."
 msgstr "Добавьте в каталог новый товар или материал."
 
-msgid "All Actions"
+msgid "All actions"
 msgstr "Все действия"
-
-msgid "All Types"
-msgstr "Все типы"
 
 msgid "All columns are already mapped. Free one up by setting it to '— Skip —' in the column mapping section below, or by switching another picker (Category, Manufacturer, or Supplier) out of 'Use a column' mode."
 msgstr "Все столбцы уже сопоставлены. Освободите один, выбрав для него «— Пропустить —» в разделе сопоставления ниже, либо переключите другой селектор (Категория, Производитель или Поставщик) из режима «Использовать столбец»."
@@ -1785,13 +1769,13 @@ msgstr "Применяется поверх продажной цены для �
 msgid "Applied to all item base prices to calculate sale prices. Leave blank for no markup."
 msgstr "Применяется к базовым ценам всех позиций для расчёта продажных цен. Оставьте пустым, если наценки нет."
 
-msgid "Applying..."
-msgstr "Применение..."
+msgid "Applying…"
+msgstr "Применение…"
 
 msgid "Archived catalogues are hidden from active views."
 msgstr "Архивные каталоги скрыты из активных представлений."
 
-msgid "Article Code"
+msgid "Article code"
 msgstr "Артикул"
 
 msgid "Attach any metadata fields that apply to this catalogue. Blank values are dropped on save."
@@ -1806,8 +1790,8 @@ msgstr "Краткое описание этого производителя...
 msgid "Brief description of this supplier..."
 msgstr "Краткое описание этого поставщика..."
 
-msgid "Brief description of what this catalogue contains..."
-msgstr "Краткое описание содержимого этого каталога..."
+msgid "Brief description of what this catalogue contains…"
+msgstr "Краткое описание содержимого этого каталога…"
 
 msgid "Brochures, spec sheets, datasheets. Any file type is accepted."
 msgstr "Брошюры, спецификации, даташиты. Принимается любой тип файлов."
@@ -1836,8 +1820,8 @@ msgstr "Выберите, куда импортировать каждый ст�
 msgid "Classification"
 msgstr "Классификация"
 
-msgid "Clearing..."
-msgstr "Очистка..."
+msgid "Clearing…"
+msgstr "Очистка…"
 
 msgid "Click to toggle manufacturer associations."
 msgstr "Нажмите, чтобы переключить связи с производителями."
@@ -1854,7 +1838,7 @@ msgstr "Контакты и веб"
 msgid "Continue"
 msgstr "Продолжить"
 
-msgid "Continue to Confirm"
+msgid "Continue to confirm"
 msgstr "Перейти к подтверждению"
 
 msgid "Cost/purchase price before catalogue markup."
@@ -1887,7 +1871,7 @@ msgstr "Не удалось сохранить загруженный файл. 
 msgid "Could not start extraction. The :catalogue_pdf Oban queue may not be running."
 msgstr "Не удалось запустить извлечение текста. Очередь Oban :catalogue_pdf может не работать."
 
-msgid "Create Categories"
+msgid "Create categories"
 msgstr "Создать категории"
 
 msgid "Create a new manufacturer — fill in the details below"
@@ -1899,11 +1883,8 @@ msgstr "Создайте нового поставщика — будет свя
 msgid "Create one first"
 msgstr "Сначала создайте его"
 
-msgid "Default Unit"
+msgid "Default unit"
 msgstr "Единица по умолчанию"
-
-msgid "Default Value"
-msgstr "Значение по умолчанию"
 
 msgid "Move category and items to Deleted"
 msgstr "Переместить категорию и позиции в удалённые"
@@ -1926,10 +1907,10 @@ msgstr "Удаление…"
 msgid "Discontinued items are kept for reference but hidden from active listings."
 msgstr "Снятые с производства позиции сохраняются для справки, но скрыты из активных списков."
 
-msgid "Discount Override (%)"
+msgid "Discount override (%)"
 msgstr "Переопределение скидки (%)"
 
-msgid "Discount Percentage"
+msgid "Discount percentage"
 msgstr "Процент скидки"
 
 msgid "Drag to reorder"
@@ -1965,7 +1946,7 @@ msgstr "Файл слишком велик для импорта. Разбейт
 msgid "File is too large."
 msgstr "Файл слишком велик."
 
-msgid "File type not supported. Use .xlsx or .csv"
+msgid "File type not supported. Use .xlsx or .csv."
 msgstr "Тип файла не поддерживается. Используйте .xlsx или .csv"
 
 msgid "Filename"
@@ -1986,13 +1967,13 @@ msgstr "Фиксированная сумма"
 msgid "Has subcategories"
 msgstr "Содержит подкатегории"
 
-msgid "Import %{count} Items"
+msgid "Import %{count} items"
 msgstr "Импортировать позиций: %{count}"
 
-msgid "Import Into Category"
+msgid "Import into category"
 msgstr "Импортировать в категорию"
 
-msgid "Import Language"
+msgid "Import language"
 msgstr "Язык импорта"
 
 msgid "Import all — create everything including duplicates"
@@ -2001,8 +1982,8 @@ msgstr "Импортировать всё — создать всё, включ�
 msgid "Import failed: %{reason}"
 msgstr "Импорт не удался: %{reason}"
 
-msgid "Importing..."
-msgstr "Импорт..."
+msgid "Importing…"
+msgstr "Импорт…"
 
 msgid "Inactive manufacturers won't appear in item dropdowns."
 msgstr "Неактивные производители не появляются в выпадающих списках позиций."
@@ -2031,7 +2012,7 @@ msgstr "Внутренние заметки об этом производите
 msgid "Internal notes about this supplier..."
 msgstr "Внутренние заметки об этом поставщике..."
 
-msgid "Item Name"
+msgid "Item name"
 msgstr "Название позиции"
 
 msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
@@ -2055,7 +2036,7 @@ msgstr "Оставьте пустым, чтобы наследовать ски�
 msgid "Leave blank to inherit the catalogue's markup. Set (including 0) to override just this item."
 msgstr "Оставьте пустым, чтобы наследовать наценку каталога. Задайте (в т.ч. 0), чтобы переопределить только эту позицию."
 
-msgid "Link to Supplier"
+msgid "Link to supplier"
 msgstr "Связать с поставщиком"
 
 msgid "Loading…"
@@ -2097,10 +2078,10 @@ msgstr "Сопоставить"
 msgid "Map each value to a system unit:"
 msgstr "Сопоставьте каждое значение с системной единицей:"
 
-msgid "Markup Override (%)"
+msgid "Markup override (%)"
 msgstr "Переопределение наценки (%)"
 
-msgid "Markup Percentage"
+msgid "Markup percentage"
 msgstr "Процент наценки"
 
 msgid "Match across all languages"
@@ -2130,13 +2111,13 @@ msgstr "Переместите эту позицию в другой умный 
 msgid "Move this item to a category in any catalogue."
 msgstr "Переместите эту позицию в категорию любого каталога."
 
-msgid "Move to Another Catalogue"
+msgid "Move to another catalogue"
 msgstr "Переместить в другой каталог"
 
 msgid "Move to Another Category"
 msgstr "Переместить в другую категорию"
 
-msgid "Move to Another Parent"
+msgid "Move to another parent"
 msgstr "Переместить под другого родителя"
 
 msgid "Move to Another Smart Catalogue"
@@ -2145,7 +2126,7 @@ msgstr "Переместить в другой умный каталог"
 msgid "Name *"
 msgstr "Название *"
 
-msgid "New Categories"
+msgid "New categories"
 msgstr "Новые категории"
 
 #: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2779
@@ -2189,8 +2170,8 @@ msgstr "Нет позиций, соответствующих запросу."
 msgid "No manufacturer — items imported without a maker"
 msgstr "Без производителя — позиции импортируются без изготовителя"
 
-msgid "No metadata attached yet. Pick a field below to add one."
-msgstr "Метаданные ещё не прикреплены. Выберите поле ниже, чтобы добавить."
+msgid "Metadata not set."
+msgstr "Метаданные не указаны."
 
 msgid "No other catalogues available to reference yet."
 msgstr "Других каталогов для ссылки пока нет."
@@ -2224,7 +2205,7 @@ msgstr "Открыть PDF в новой вкладке"
 msgid "PDF files only. Identical content is deduplicated; same file uploaded again under a new name shares one underlying file + extraction."
 msgstr "Только PDF-файлы. Идентичное содержимое дедуплицируется; тот же файл, загруженный снова под новым именем, использует один общий файл и извлечение."
 
-msgid "PRO100 Sync Preview"
+msgid "PRO100 sync preview"
 msgstr "Предпросмотр синхронизации PRO100"
 
 msgid "Parent category"
@@ -2278,13 +2259,13 @@ msgstr "Выберите формат."
 msgid "Please upload a file."
 msgstr "Загрузите файл."
 
-msgid "Pricing & Identification"
+msgid "Pricing & identification"
 msgstr "Цены и идентификация"
 
-msgid "Product specifications, dimensions, materials..."
-msgstr "Характеристики товара, размеры, материалы..."
+msgid "Product specifications, dimensions, materials…"
+msgstr "Характеристики товара, размеры, материалы…"
 
-msgid "Re-queue any PDFs whose text extraction never ran or got stuck (e.g. after the job queue was down)."
+msgid "Re-queue any PDFs whose text extraction never ran or got stuck (e.g., after the job queue was down)."
 msgstr "Повторно поставьте в очередь PDF, у которых извлечение текста не запустилось или зависло (напр. после простоя очереди задач)."
 
 msgid "Re-queued %{count} stuck extraction(s)."
@@ -2320,8 +2301,8 @@ msgstr "Убрать этот файл из категории? Если он н
 msgid "Remove this file from the item? If it's not attached to any other item, it will be moved to trash (admins can restore)."
 msgstr "Убрать этот файл у позиции? Если он не прикреплён ни к какой другой позиции, он попадёт в корзину (администраторы могут восстановить)."
 
-msgid "Removing..."
-msgstr "Удаление..."
+msgid "Removing…"
+msgstr "Удаление…"
 
 msgid "Reparent this category within its catalogue. Its subtree comes along."
 msgstr "Переместите эту категорию под другого родителя в её каталоге. Поддерево переносится вместе с ней."
@@ -2384,7 +2365,7 @@ msgstr "Комплект (компл.)"
 msgid "Running meter"
 msgstr "Погонный метр"
 
-msgid "Sample Data (first 5 rows)"
+msgid "Sample data (first 5 rows)"
 msgstr "Пример данных (первые 5 строк)"
 
 msgid "Search failed. Please try again."
@@ -2393,8 +2374,8 @@ msgstr "Поиск не удался. Попробуйте снова."
 msgid "Search is temporarily unavailable. Please try again in a moment."
 msgstr "Поиск временно недоступен. Попробуйте чуть позже."
 
-msgid "Search items by name, description, or SKU..."
-msgstr "Ищите позиции по названию, описанию или артикулу..."
+msgid "Search items by name, description, or SKU…"
+msgstr "Ищите позиции по названию, описанию или артикулу…"
 
 #: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:233
 #: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2372
@@ -2402,11 +2383,11 @@ msgstr "Ищите позиции по названию, описанию или
 msgid "Search items…"
 msgstr "Поиск позиций…"
 
-msgid "Search uncategorized items..."
-msgstr "Поиск позиций без категории..."
+msgid "Search uncategorized items…"
+msgstr "Поиск позиций без категории…"
 
-msgid "Search within this category..."
-msgstr "Поиск в этой категории..."
+msgid "Search within this category…"
+msgstr "Поиск в этой категории…"
 
 msgid "Searched for: %{name}"
 msgstr "Искали: %{name}"
@@ -2414,17 +2395,17 @@ msgstr "Искали: %{name}"
 msgid "Searches the entire PDF library for the item's name across all enabled languages."
 msgstr "Ищет название позиции по всей библиотеке PDF на всех включённых языках."
 
-msgid "Searching for \"%{query}\"..."
-msgstr "Поиск «%{query}»..."
+msgid "Searching for “%{query}”…"
+msgstr "Поиск «%{query}»…"
 
 msgid "Searching…"
 msgstr "Поиск…"
 
-msgid "Select a catalogue..."
-msgstr "Выберите каталог..."
+msgid "— Select a catalogue —"
+msgstr "— Выберите каталог —"
 
-msgid "Select a column..."
-msgstr "Выберите столбец..."
+msgid "— Select a column —"
+msgstr "— Выберите столбец —"
 
 msgid "Select all items"
 msgstr "Выбрать все позиции"
@@ -2432,10 +2413,10 @@ msgstr "Выбрать все позиции"
 msgid "Selected image could not be loaded."
 msgstr "Выбранное изображение не удалось загрузить."
 
-msgid "Selected items share positions. Apply \"Reorder all\" first to normalise."
+msgid "Selected items share positions. Apply “Reorder all” first to normalise."
 msgstr "У выбранных позиций совпадают позиции сортировки. Сначала примените «Переупорядочить все» для нормализации."
 
-msgid "Set Manufacturer"
+msgid "Set manufacturer"
 msgstr "Задать производителя"
 
 msgid "Sheet:"
@@ -2444,7 +2425,7 @@ msgstr "Лист:"
 msgid "Show %{n} more"
 msgstr "Показать ещё %{n}"
 
-msgid "Showing %{loaded} of %{count} results for \"%{query}\""
+msgid "Showing %{loaded} of %{count} results for “%{query}”"
 msgstr "Показано %{loaded} из %{count} результатов по запросу «%{query}»"
 
 msgid "Showing first 20 of %{count} items."
@@ -2471,7 +2452,7 @@ msgstr "Пропускать дубликаты — импортировать �
 msgid "Skipped"
 msgstr "Пропущено"
 
-msgid "Smart catalogues hold items like \"Delivery\" whose cost is a per-catalogue %/flat rule picked from other catalogues. Items here reference other catalogues instead of carrying a base price of their own."
+msgid "Smart catalogues hold items like “Delivery” whose cost is a per-catalogue %/flat rule picked from other catalogues. Items here reference other catalogues instead of carrying a base price of their own."
 msgstr "Умные каталоги содержат позиции вроде «Доставка», чья стоимость — правило (%/фикс.) на каталог, взятое из других каталогов. Позиции здесь ссылаются на другие каталоги вместо собственной базовой цены."
 
 msgid "Smart rule"
@@ -2489,8 +2470,8 @@ msgstr "Спецификации, чертежи, фото. Принимаетс
 msgid "Standard catalogues hold items priced directly — each item has its own base price, markup, and discount. This is the normal flow for materials, products, or anything with a fixed price tag."
 msgstr "Обычные каталоги содержат позиции с прямыми ценами — у каждой свои базовая цена, наценка и скидка. Это стандартный путь для материалов, товаров и всего с фиксированным ценником."
 
-msgid "Starting import..."
-msgstr "Запуск импорта..."
+msgid "Starting import…"
+msgstr "Запуск импорта…"
 
 msgid "Still uploading — please wait a moment."
 msgstr "Загрузка ещё идёт — подождите немного."
@@ -2507,10 +2488,10 @@ msgstr "Поставщики, которые будут созданы или с
 msgid "Supports .xlsx, .csv, .txt, .json files (max 10MB)"
 msgstr "Поддерживаются файлы .xlsx, .csv, .txt, .json (макс. 10 МБ)"
 
-msgid "Sync Complete"
+msgid "Sync complete"
 msgstr "Синхронизация завершена"
 
-msgid "Target Catalogue"
+msgid "Target catalogue"
 msgstr "Целевой каталог"
 
 msgid "Target category not found."
@@ -2576,7 +2557,7 @@ msgstr "Обновите данные позиции, цены и классиф
 msgid "Updates"
 msgstr "Обновления"
 
-msgid "Upload & Parse"
+msgid "Upload & parse"
 msgstr "Загрузить и разобрать"
 
 msgid "Upload error: %{reason}"
@@ -2594,8 +2575,8 @@ msgstr "Загрузка не удалась по неожиданной при�
 msgid "Uploaded"
 msgstr "Загружено"
 
-msgid "Uploading..."
-msgstr "Загрузка..."
+msgid "Uploading…"
+msgstr "Загрузка…"
 
 msgid "Use a column — create categories from column values"
 msgstr "Использовать столбец — создать категории из значений столбца"
@@ -2609,17 +2590,17 @@ msgstr "Использовать столбец — связать постав�
 msgid "Used for any selected catalogue that doesn't have its own unit."
 msgstr "Используется для каждого выбранного каталога без собственной единицы."
 
-msgid "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g. $50 flat)."
+msgid "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g., $50 flat)."
 msgstr "Используется для каждого выбранного каталога без собственного значения. Если каталоги не выбраны, это самостоятельная плата позиции (напр. 50 фикс.)."
 
-msgid "Validating..."
-msgstr "Проверка..."
+msgid "Validating…"
+msgstr "Проверка…"
 
-msgid "Waiting for uploads..."
-msgstr "Ожидание загрузок..."
+msgid "Waiting for uploads…"
+msgstr "Ожидание загрузок…"
 
-msgid "What kinds of items belong in this category..."
-msgstr "Какие позиции относятся к этой категории..."
+msgid "What kinds of items belong in this category…"
+msgstr "Какие позиции относятся к этой категории…"
 
 msgid "Which column contains the category names?"
 msgstr "В каком столбце находятся названия категорий?"
@@ -2740,9 +2721,6 @@ msgstr "— Пропустить —"
 msgid "— Top level (no parent) —"
 msgstr "— Верхний уровень (без родителя) —"
 
-msgid "— no category —"
-msgstr "— без категории —"
-
 msgid "…and %{count} more"
 msgstr "…и ещё %{count}"
 
@@ -2833,7 +2811,7 @@ msgstr "Не удалось назначить роль этой компани�
 msgid "Someone else changed this link first. Reload the page and try again."
 msgstr "Кто-то другой изменил эту связь раньше. Обновите страницу и попробуйте снова."
 
-msgid "Suppliers and Manufacturer"
+msgid "Suppliers and manufacturer"
 msgstr "Поставщики и производитель"
 
 msgid "A field was removed while this was open. Close and reopen the form."
@@ -2893,7 +2871,7 @@ msgstr "Цена за единицу должна быть числом."
 msgid "Yes"
 msgstr "Да"
 
-msgid "e.g. Incoterm"
+msgid "e.g., Incoterm"
 msgstr "напр. Incoterm"
 
 msgid "Comments"
@@ -2979,10 +2957,6 @@ msgstr "Убрать из выбора"
 msgid "Browse"
 msgstr "Обзор"
 
-#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex
-msgid "Drag-reorder needs the Manual sort — choose it in the sort selector."
-msgstr "Для перетаскивания выберите ручную сортировку в списке сортировки."
-
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:94
 #, elixir-autogen
 msgid "Computed"
@@ -3001,7 +2975,7 @@ msgstr "Недоступно в этом выборе"
 msgid "Shown on category landing pages."
 msgstr "Отображается на страницах категорий."
 
-msgid "Import Failed"
+msgid "Import failed"
 msgstr "Импорт не удался"
 
 msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
@@ -3058,7 +3032,7 @@ msgstr "%{count} товаров будут скопированы вместе �
 msgid "%{count} categories will be copied with their subcategories and items."
 msgstr "%{count} категорий будут скопированы вместе с подкатегориями и товарами."
 
-msgid "Each copy is named after its original with \"(copy)\" added and placed right after it."
+msgid "Each copy is named after its original with “(copy)” added and placed right after it."
 msgstr "Каждая копия получает имя оригинала с добавлением «(копия)» и размещается сразу после него."
 
 msgid "Duplicated %{count} items."
@@ -3145,7 +3119,7 @@ msgstr "Поиск наборов и значений…"
 msgid "No sets match your search."
 msgstr "Нет наборов по вашему запросу."
 
-msgid "No values yet"
+msgid "No values yet."
 msgstr "Значений пока нет"
 
 msgid "Creating…"
@@ -3164,7 +3138,7 @@ msgid "Clear filters"
 msgstr "Очистить фильтры"
 
 # Attribute filter: dead values (2026-08-28)
-msgid "Nothing matches this together with the filters already on"
+msgid "Nothing matches this together with the filters already on."
 msgstr "Ничего не найдено вместе с уже выбранными фильтрами"
 
 msgid "Attribute set not found."
@@ -3507,8 +3481,8 @@ msgstr "%{catalogue} — без категории"
 msgid "%{catalogue} — top level"
 msgstr "%{catalogue} — верхний уровень"
 
-msgid "-- Select destination --"
-msgstr "-- Выберите, куда переместить --"
+msgid "— Select destination —"
+msgstr "— Выберите, куда переместить —"
 
 msgid "%{name} (copy %{number})"
 msgstr "%{name} (копия %{number})"
@@ -3551,3 +3525,54 @@ msgstr "Создать копию в архиве"
 
 msgid "Otherwise it gets the original's status."
 msgstr "Иначе у копии будет статус оригинала."
+
+msgid "Switch catalogue"
+msgstr "Сменить каталог"
+
+msgid "Switch category"
+msgstr "Сменить категорию"
+
+msgid "Search catalogues…"
+msgstr "Найти каталог…"
+
+msgid "Search categories…"
+msgstr "Найти категорию…"
+
+msgid "— Add supplier —"
+msgstr "— Добавить поставщика —"
+
+msgid "Location"
+msgstr "Расположение"
+
+msgid "Undo"
+msgstr "Отменить"
+
+msgid "Unsaved changes"
+msgstr "Несохранённые изменения"
+
+msgid "Choose a location"
+msgstr "Выберите расположение"
+
+msgid "Search catalogues and categories…"
+msgstr "Найти каталог или категорию…"
+
+msgid "No matches."
+msgstr "Совпадений нет."
+
+msgid "New"
+msgstr "Новый"
+
+msgid "Collapse"
+msgstr "Свернуть"
+
+msgid "Expand"
+msgstr "Развернуть"
+
+msgid "Currency must be a three-letter code, like EUR."
+msgstr "Валюта должна быть трёхбуквенным кодом, например EUR."
+
+msgid "Some supplier values are not valid."
+msgstr "Некоторые значения поставщиков некорректны."
+
+msgid "That location no longer exists. Choose another."
+msgstr "Этого расположения больше нет. Выберите другое."

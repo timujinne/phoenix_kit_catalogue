@@ -2,8 +2,25 @@ defmodule PhoenixKitCatalogue.Web.TableConfigTest do
   use ExUnit.Case, async: true
   alias PhoenixKitCatalogue.Web.TableConfig, as: TC
 
-  test "catalogues defaults are the visible managed+name set, in order" do
-    assert TC.default_columns(:catalogues) == ["name", "folder", "items", "status", "updated"]
+  test "catalogues defaults are the visible managed set, in order" do
+    assert TC.default_columns(:catalogues) == ["folder", "items", "status", "updated"]
+  end
+
+  test "defaults hold only managed ids — never a column the tables draw on their own" do
+    # "name" is unmanaged and every table draws it itself; in the defaults
+    # it gave the detail page's Uncategorized row a cell its header lacked.
+    for scope <- [
+          :catalogues,
+          :suppliers,
+          :manufacturers,
+          :attribute_groups,
+          :detail_items,
+          :detail_categories
+        ] do
+      defaults = TC.default_columns(scope)
+      assert defaults == TC.validate_columns(scope, defaults), "#{scope}"
+      refute "name" in defaults
+    end
   end
 
   test "name is always present but not managed (never hidden via modal)" do
@@ -49,8 +66,8 @@ defmodule PhoenixKitCatalogue.Web.TableConfigTest do
   end
 
   test "suppliers/manufacturers share the column shape" do
-    assert TC.default_columns(:suppliers) == ["name", "website", "status"]
-    assert TC.default_columns(:manufacturers) == ["name", "website", "status"]
+    assert TC.default_columns(:suppliers) == ["website", "status"]
+    assert TC.default_columns(:manufacturers) == ["website", "status"]
   end
 
   describe "the managed Image column (detail_items / detail_categories)" do

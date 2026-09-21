@@ -42,6 +42,12 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
     # Core's "[dev]" header tag follows the machine's hostname, so the
     # snapshot would pass or fail by whose computer runs it.
     |> String.replace(~r{<span class="[^"]*">\s*\[dev\]\s*</span>}, "")
+    # The supplier picker lists whatever suppliers the test database holds;
+    # the snapshot is about the form's shape, not that data.
+    |> String.replace(
+      ~r{(<select id="supplier-add-picker"[^>]*>).*?</select>}s,
+      "\\1</select>"
+    )
   end
 
   describe "no extension registered" do

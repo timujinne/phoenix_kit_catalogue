@@ -359,7 +359,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     # picker mounted with a `selected_item` that was never searched in this
     # process — `update/2` mirrors the item's name into `:query` on mount,
     # so a query-based guard here never re-triggers and focusing the input
-    # opens an empty "No items found" dropdown instead of a replacement
+    # opens an empty "No items found." dropdown instead of a replacement
     # list. A live selection doesn't hit this: `options` already holds the
     # results from the search that led to the pick.
     #
@@ -857,7 +857,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
               aria-disabled="true"
               class="px-3 py-2 text-sm text-base-content/50 cursor-default select-none"
             >
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items found")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No items found.")}
             </li>
             <li
               :for={{item, idx} <- Enum.with_index(@options)}

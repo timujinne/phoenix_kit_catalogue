@@ -17,7 +17,7 @@ defmodule PhoenixKitCatalogue.Web.SweepDeltaTest do
 
   describe "C5 — phx-disable-with on item-table destructive buttons" do
     test "components.ex source pins the perm-delete phx-disable-with attr" do
-      # The C5 fix added `phx-disable-with="Deleting..."` to the two
+      # The C5 fix added `phx-disable-with="Deleting…"` to the two
       # perm-delete button call sites (`item_row_actions/1` and
       # `item_actions/1`, both private). Both are exercised when the
       # detail-view item card / table row exposes its action menu.

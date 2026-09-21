@@ -23,7 +23,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
   describe "CatalogueFormLive :new" do
     test "renders the form", %{conn: conn} do
       {:ok, _view, html} = live(conn, "#{@base}/new")
-      assert html =~ "New Catalogue"
+      assert html =~ "New catalogue"
       assert html =~ ~s(name="catalogue[name]")
     end
 
@@ -57,7 +57,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
         |> render_submit()
 
       # Still on the form — no redirect, no record created.
-      assert html =~ "New Catalogue"
+      assert html =~ "New catalogue"
       assert Catalogue.list_catalogues() == []
     end
 
@@ -120,7 +120,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
         })
         |> render_submit()
 
-      assert html =~ "New Catalogue"
+      assert html =~ "New catalogue"
       assert Catalogue.list_catalogues() == []
     end
   end
@@ -203,7 +203,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
       catalogue = fixture_catalogue()
 
       {:ok, _view, html} = live(conn, "#{@base}/#{catalogue.uuid}/categories/new")
-      assert html =~ "New Category"
+      assert html =~ "New category"
     end
 
     test "creates a category and assigns it to the right catalogue", %{conn: conn} do
@@ -249,9 +249,9 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
 
       # Same strip as the catalogue/item forms; files tab carries the
       # shared attachments panel (dropzone + featured image card).
-      assert html =~ "Photos and Files"
+      assert html =~ "Photos and files"
       assert html =~ "Details"
-      assert html =~ "Attached Files"
+      assert html =~ "Attached files"
 
       files = render_click(view, "switch_tab", %{"tab" => "files"})
       assert files =~ "Click to upload"

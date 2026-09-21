@@ -11,6 +11,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   alias PhoenixKitCatalogue.Catalogue.SupplierFields
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
+  alias PhoenixKitCatalogue.Web.SupplierDraft
 
   # ─────────────────────────────────────────────────────────────────
   # Helpers
@@ -53,7 +54,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       refute Map.has_key?(item.data || %{}, "evil")
     end
 
-    test "a non-string category_uuid is refused, not crashed on", %{conn: conn} do
+    # Location owns where the item lives; a category in the payload is not
+    # a field the form renders, so it is dropped — whatever its shape.
+    test "a category_uuid in the payload is ignored, not crashed on", %{conn: conn} do
       catalogue = fixture_catalogue(%{name: "Scope Cat"})
       item = fixture_item(%{name: "Scoped", catalogue_uuid: catalogue.uuid})
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
@@ -64,7 +67,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       })
 
       assert Process.alive?(view.pid)
-      assert Catalogue.get_item!(item.uuid).name == "Scoped"
+      saved = Catalogue.get_item!(item.uuid)
+      assert saved.name == "Renamed"
+      assert is_nil(saved.category_uuid)
     end
   end
 
@@ -81,7 +86,6 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
         "sku" => "",
         "base_price" => "25.50",
         "unit" => "piece",
-        "category_uuid" => "",
         "manufacturer_uuid" => "",
         "status" => "active"
       },
@@ -99,20 +103,23 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:ok, _view, html} = live(conn, new_item_url(catalogue.uuid))
 
-      assert html =~ "New Item"
+      assert html =~ "New item"
       assert html =~ ~s(name="item[name]")
       assert html =~ ~s(name="item[base_price]")
     end
 
-    test "lists the catalogue's categories in the category dropdown", %{conn: conn} do
-      catalogue = fixture_catalogue()
+    test "Location starts at the catalogue and offers its categories", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
       fixture_category(catalogue, %{name: "Frames"})
       fixture_category(catalogue, %{name: "Hinges"})
 
-      {:ok, _view, html} = live(conn, new_item_url(catalogue.uuid))
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
-      assert html =~ "Frames"
-      assert html =~ "Hinges"
+      assert view |> element("#item-location-path") |> render() =~ "Kitchen"
+
+      tree = render_click(view, "open_location_picker", %{})
+      assert tree =~ "Frames"
+      assert tree =~ "Hinges"
     end
   end
 
@@ -153,11 +160,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
-      params = base_item_params(%{"category_uuid" => category.uuid})
+      render_click(view, "open_location_picker", %{})
+      render_click(view, "pick_location", %{"target" => "category:" <> category.uuid})
 
       {:error, {:live_redirect, %{to: to}}} =
         view
-        |> form("form[action=\"#\"][phx-submit=save]", %{"item" => params})
+        |> form("form[action=\"#\"][phx-submit=save]", %{"item" => base_item_params()})
         |> render_submit()
 
       # After create the LiveView navigates to the catalogue detail.
@@ -225,7 +233,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
           "item" => base_item_params(%{"name" => "Bad Price", "base_price" => "abc"})
         })
 
-      assert html =~ "New Item"
+      assert html =~ "New item"
       assert TestRepo.all(Item) == []
     end
 
@@ -250,18 +258,18 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       refute item.catalogue_uuid == other.uuid
     end
 
-    test "a category from another catalogue is refused, not silently followed",
-         %{conn: conn} do
+    # The longer route to the catalogue: `derive_catalogue_uuid/2` copies a
+    # CATEGORY's catalogue over whatever the server set, so a forged
+    # category_uuid would beat the scope pin. Location owns the place, and
+    # the payload's category is dropped.
+    test "a forged category from another catalogue is not followed", %{conn: conn} do
       catalogue = fixture_catalogue()
       other = fixture_catalogue()
       foreign_category = fixture_category(other, %{name: "Elsewhere"})
 
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
-      # The longer route to the same field: `derive_catalogue_uuid/2` copies
-      # the CATEGORY's catalogue over whatever the server set, deliberately,
-      # so a forged category_uuid beats the server-side scope pin.
-      html =
+      {:error, {:live_redirect, _}} =
         render_submit(view, "save", %{
           "item" =>
             base_item_params(%{
@@ -270,7 +278,46 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
             })
         })
 
-      assert html =~ "another catalogue"
+      [item] = TestRepo.all(Item)
+      assert item.catalogue_uuid == catalogue.uuid
+      assert is_nil(item.category_uuid)
+    end
+
+    test "a new item is created where Location says, even in another catalogue",
+         %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Opened here"})
+      other = fixture_catalogue(%{name: "Filed there"})
+      target = fixture_category(other, %{name: "Shelves"})
+
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      render_click(view, "open_location_picker", %{})
+      render_click(view, "pick_location", %{"target" => "category:" <> target.uuid})
+
+      assert view |> element("#item-location-path") |> render() =~ "Filed there"
+
+      {:error, {:live_redirect, _}} =
+        render_submit(view, "save", %{"item" => base_item_params(%{"name" => "Placed"})})
+
+      [item] = TestRepo.all(Item)
+      assert item.catalogue_uuid == other.uuid
+      assert item.category_uuid == target.uuid
+    end
+
+    test "a place trashed after it was picked stops the create with a message",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      target = fixture_category(catalogue, %{name: "Doomed"})
+
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+
+      render_click(view, "open_location_picker", %{})
+      render_click(view, "pick_location", %{"target" => "category:" <> target.uuid})
+      {:ok, _} = Catalogue.trash_category(target)
+
+      html = render_submit(view, "save", %{"item" => base_item_params(%{"name" => "Homeless"})})
+
+      assert html =~ "That location no longer exists."
       assert TestRepo.all(Item) == []
     end
 
@@ -281,7 +328,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:error, {:live_redirect, _}} =
         view
         |> form("form[action=\"#\"][phx-submit=save]", %{
-          "item" => base_item_params(%{"name" => "Loose item", "category_uuid" => ""})
+          "item" => base_item_params(%{"name" => "Loose item"})
         })
         |> render_submit()
 
@@ -304,7 +351,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
         |> render_submit()
 
       # Still on the form — no redirect.
-      assert html =~ "New Item"
+      assert html =~ "New item"
       # User's typed SKU is still in the input so they don't lose work.
       assert html =~ "user-typed-sku"
       # And nothing got written.
@@ -373,7 +420,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:error, {:live_redirect, %{to: to}}} =
         view
         |> form("form[action=\"#\"][phx-submit=save]", %{
-          "item" => base_item_params(%{"name" => "New name", "category_uuid" => category.uuid})
+          "item" => base_item_params(%{"name" => "New name"})
         })
         |> render_submit()
 
@@ -403,7 +450,6 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
           "item" =>
             base_item_params(%{
               "name" => "X",
-              "category_uuid" => category.uuid,
               "manufacturer_uuid" => ""
             })
         })
@@ -427,342 +473,595 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   # Suppliers card (item_supplier_info)
   # ─────────────────────────────────────────────────────────────────
 
-  describe "supplier info card" do
-    test "save_supplier_info attributes the activity log to the logged-in actor",
-         %{conn: conn, scope: scope} do
+  # 2026-09-19 (boss): the PDF search left the bottom of the form (a
+  # "Search PDFs" button under the Save row) for a tab of its own, with a
+  # search box in case the exact name does not match.
+  describe "PDFs tab" do
+    test "the old button is gone and the tab searches only once opened", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, html} = live(conn, edit_item_url(item.uuid))
+
+      refute html =~ "Find this item in PDFs"
+      refute html =~ "open_pdf_search"
+      assert has_element?(view, ~s(button[phx-value-tab="pdfs"]))
+      refute has_element?(view, "#item-pdf-search")
+
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      # The box starts with the item's name and has already searched it.
+      assert view |> element("#item-pdf-search input[name=q]") |> render() =~
+               ~s(value="Oak Panel")
+
+      assert render(view) =~ "No PDF mentions this item by name."
+
+      # Another tab and back: still mounted, still the same search.
+      render_click(view, "switch_tab", %{"tab" => "details"})
+      assert has_element?(view, "#item-pdf-search")
+    end
+
+    test "editing the box searches the library for what was typed", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      html =
+        view
+        |> element("#item-pdf-search-query-form")
+        |> render_change(%{"q" => "walnut veneer"})
+
+      assert html =~ "No pages match your search."
+
+      # Putting the name back is the item search again.
+      html =
+        view
+        |> element("#item-pdf-search-query-form")
+        |> render_change(%{"q" => "Oak Panel"})
+
+      assert html =~ "No PDF mentions this item by name."
+    end
+
+    test "saving the item under a new name searches the new name", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      render_submit(view, "save", %{
+        "item" => %{"name" => "Walnut Panel"},
+        "save_action" => "stay"
+      })
+
+      assert Catalogue.get_item!(item.uuid).name == "Walnut Panel"
+
+      assert view |> element("#item-pdf-search input[name=q]") |> render() =~
+               ~s(value="Walnut Panel")
+    end
+
+    test "a typed query survives a rename", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      view
+      |> element("#item-pdf-search-query-form")
+      |> render_change(%{"q" => "walnut veneer"})
+
+      render_submit(view, "save", %{
+        "item" => %{"name" => "Walnut Panel"},
+        "save_action" => "stay"
+      })
+
+      assert view |> element("#item-pdf-search input[name=q]") |> render() =~
+               ~s(value="walnut veneer")
+
+      assert render(view) =~ "No pages match your search."
+    end
+
+    test "show more from results a newer search replaced is a no-op", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      view
+      |> with_target("#item-pdf-search")
+      |> render_click("show_more", %{"pdf_uuid" => Ecto.UUID.generate()})
+
+      assert Process.alive?(view.pid)
+      assert has_element?(view, "#item-pdf-search input[name=q]")
+    end
+
+    test "a ?tab=pdfs link opens the tab with its search", %{conn: conn} do
+      item =
+        fixture_item(%{
+          name: "Oak Panel",
+          category_uuid: fixture_category(fixture_catalogue()).uuid
+        })
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid) <> "?tab=pdfs")
+
+      assert has_element?(view, "#item-pdf-search input[name=q]")
+    end
+
+    test "a new item has no PDFs tab", %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-      item = fixture_item(%{name: "Oak Panel", category_uuid: category.uuid})
+      {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}/items/new")
+      refute has_element?(view, ~s(button[phx-value-tab="pdfs"]))
+    end
+
+    test "a new item sent to ?tab=pdfs lands on Details, not an empty form", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}/items/new?tab=pdfs")
+      assert has_element?(view, ~s(button.tab-active[phx-value-tab="details"]))
+
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+      assert has_element?(view, ~s(button.tab-active[phx-value-tab="details"]))
+    end
+  end
+
+  # Max, 2026-09-19: picking a supplier is enough to add it, the cost is
+  # edited straight in the table, and the item's Save commits it all —
+  # adds, costs, removes and the primary alike.
+  describe "suppliers, staged until Save" do
+    defp supplier_item do
+      fixture_item(%{
+        name: "Oak Panel",
+        category_uuid: fixture_category(fixture_catalogue()).uuid
+      })
+    end
+
+    defp pick_supplier(view, supplier_uuid) do
+      view
+      |> element("#supplier-add-picker")
+      |> render_change(%{"supplier_add" => supplier_uuid})
+    end
+
+    defp save_suppliers(view, rows \\ %{}, mode \\ "stay") do
+      render_submit(view, "save", %{
+        "item" => %{"name" => "Oak Panel"},
+        "supplier_rows" => rows,
+        "save_action" => mode
+      })
+    end
+
+    defp saved_row(item, supplier, attrs \\ %{}) do
+      {:ok, info} =
+        Catalogue.create_supplier_info(
+          Map.merge(
+            %{
+              "item_uuid" => item.uuid,
+              "supplier_uuid" => supplier.uuid,
+              "supplier_source" => "local"
+            },
+            attrs
+          )
+        )
+
+      info
+    end
+
+    test "picking a supplier adds its row at once, and Save writes it",
+         %{conn: conn, scope: scope} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = conn |> with_scope(scope) |> live(edit_item_url(item.uuid))
 
-      render_click(view, "open_add_supplier", %{})
+      html = pick_supplier(view, supplier.uuid)
 
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => supplier.uuid}
-      })
+      assert has_element?(view, "#supplier-row-#{supplier.uuid}")
+      assert html =~ "Unsaved changes"
+      # Nothing written yet.
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+      # The picked supplier is no longer offered; the picker is back on its
+      # placeholder.
+      refute view |> element("#supplier-add-picker") |> render() =~ supplier.uuid
 
-      render_click(view, "save_supplier_info", %{})
+      save_suppliers(view)
 
       [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert info.supplier_uuid == supplier.uuid
+      # The first supplier on an item is its primary.
+      assert info.is_primary
 
       assert_activity_logged("item_supplier_info.created",
         resource_uuid: info.uuid,
         actor_uuid: scope.user.uuid,
         metadata_has: %{"item_uuid" => item.uuid}
       )
+
+      refute render(view) =~ "Unsaved changes"
     end
 
-    # Owner decisions 2026-08-21: the supplier form carries the picker and
-    # the PRICE, nothing else. SKU, lead time and MOQ stay behind
-    # @supplier_terms_fields — their data and columns are untouched.
-    test "the modal carries the picker and the price, and nothing else", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      {:ok, view, _page} = live(conn, edit_item_url(item.uuid))
-      html = render_click(view, "open_add_supplier", %{})
-
-      assert html =~ ~s(name="supplier_info[supplier_uuid]")
-      assert html =~ ~s(name="supplier_info[unit_cost]")
-      assert html =~ ~s(name="supplier_info[currency]")
-
-      for field <- ~w(supplier_sku lead_time_days min_order_qty) do
-        refute html =~ ~s(name="supplier_info[#{field}]")
-      end
-    end
-
-    # 2026-08-31 delta pin: the Unit label is hand-rolled to Input's
-    # markup (label mb-2 + plain font-semibold span) because core's
-    # <.select> labelled through FormFieldLabel's fieldset-legend span,
-    # which rendered smaller than the Input labels beside it. Local
-    # until the core harmonisation releases; a revert re-breaks the row.
-    test "the Unit label matches its Input neighbours' markup", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      {:ok, _view, html} = live(conn, edit_item_url(item.uuid))
-
-      assert html =~ ~r/<label class="label mb-2"[^>]*>\s*<span class="font-semibold">\s*Unit/
-    end
-
-    # The price control comes from entities' `decimal` renderer, not a
-    # hand-rolled number input — that is what keeps it exact.
-    test "the price control is the entities decimal field", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      {:ok, view, _page} = live(conn, edit_item_url(item.uuid))
-      html = render_click(view, "open_add_supplier", %{})
-
-      # Since entities 0.4.16 the decimal renderer is core's text control
-      # with `inputmode="decimal"`: no `type="number"` and no `step`, so
-      # the browser can never block a 4-place value on submit (the reason
-      # the original cent step was wrong; entities 0.4.9 review).
-      [control] = Regex.run(~r/<input[^>]*id="supplier-unit-cost"[^>]*>/, html)
-      assert control =~ ~s(inputmode="decimal")
-      assert control =~ ~s(name="supplier_info[unit_cost]")
-      refute control =~ ~s(type="number")
-      refute control =~ "step="
-
-      builtin = Catalogue.supplier_builtin_field("unit_cost")
-
-      # Catalogue's side of the contract: sane arrows, 4-place storage,
-      # nothing typed ever blocked — the boss's "too precise" report,
-      # 2026-08-30, corrected 2026-08-31.
-      assert builtin["scale"] == 4
-      assert builtin["step"] == "any"
-      assert builtin["type"] == "decimal"
-    end
-
-    # The whole reason entities grew a `decimal` type: a price must reach
-    # NUMERIC(14,4) exactly, not via Float.parse/1.
-    test "a price saves to the column exactly, to four places", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
+    test "the cost is typed in the row, through the item form, and saved exactly",
+         %{conn: conn} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
+      pick_supplier(view, supplier.uuid)
 
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{
-          "supplier_uuid" => supplier.uuid,
-          "unit_cost" => "5.1234",
-          "currency" => "eur"
-        }
-      })
+      row = %{supplier.uuid => %{"unit_cost" => "5.1234", "currency" => "eur"}}
 
-      render_click(view, "save_supplier_info", %{})
+      view |> form("#item-form", %{"supplier_rows" => row}) |> render_change()
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+
+      view |> form("#item-form", %{"supplier_rows" => row}) |> render_submit()
 
       [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
-      assert Decimal.equal?(info.unit_cost, Decimal.new("5.1234"))
       assert Decimal.to_string(info.unit_cost, :normal) == "5.1234"
       # Currency is upcased on the way in — the input is uppercase by CSS only.
       assert info.currency == "EUR"
     end
 
-    # `min_order_qty` renders behind `@supplier_terms_fields` (off by
-    # default), but the event path — and the comma normalization ahead of
-    # the schema's `:decimal` cast — is independent of what the DOM shows,
-    # exactly like the crafted-payload tests elsewhere in this module.
-    test "a comma or dot min_order_qty lands unrounded", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
+    # The price control comes from entities' `decimal` renderer, not a
+    # hand-rolled number input — that is what keeps it exact.
+    test "the row's price control is the entities decimal field", %{conn: conn} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
+      html = pick_supplier(view, supplier.uuid)
 
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "min_order_qty" => "2,5"}
-      })
+      [control] = Regex.run(~r/<input[^>]*id="supplier-cost-#{supplier.uuid}"[^>]*>/, html)
+      assert control =~ ~s(inputmode="decimal")
+      assert control =~ ~s(name="supplier_rows[#{supplier.uuid}][unit_cost]")
+      refute control =~ ~s(type="number")
+      refute control =~ "step="
 
-      render_click(view, "save_supplier_info", %{})
-
-      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
-      assert Decimal.equal?(info.min_order_qty, Decimal.new("2.5"))
+      builtin = Catalogue.supplier_builtin_field("unit_cost")
+      assert builtin["scale"] == 4
+      assert builtin["type"] == "decimal"
     end
 
-    test "garbage min_order_qty is refused exactly as before", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
+    test "a price that is not a number shows on the row and blocks the whole save",
+         %{conn: conn} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
+      pick_supplier(view, supplier.uuid)
 
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "min_order_qty" => "abc"}
-      })
-
-      render_click(view, "save_supplier_info", %{})
-
-      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
-    end
-
-    test "a price that is not a number is refused inside the modal", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      supplier = fixture_supplier()
-
-      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
-
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "unit_cost" => "abc"}
-      })
-
-      html = render_click(view, "save_supplier_info", %{})
+      html =
+        view
+        |> form("#item-form", %{"supplier_rows" => %{supplier.uuid => %{"unit_cost" => "abc"}}})
+        |> render_change()
 
       assert html =~ "Unit cost must be a number."
+
+      html =
+        render_submit(view, "save", %{
+          "item" => %{"name" => "Renamed"},
+          "supplier_rows" => %{supplier.uuid => %{"unit_cost" => "abc"}},
+          "save_action" => "exit"
+        })
+
+      assert html =~ "Some supplier values are not valid."
       assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+      # The item's own fields waited too.
+      assert Catalogue.get_item(item.uuid).name == "Oak Panel"
     end
 
-    # Max hit this on max-dev: the same supplier could be added twice,
-    # leaving one item with two live prices for one company.
-    test "a supplier already on the item is not offered again", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      linked = fixture_supplier()
-      other = fixture_supplier()
-
-      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
-
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => linked.uuid}
-      })
-
-      render_click(view, "save_supplier_info", %{})
-
-      html = render_click(view, "open_add_supplier", %{})
-
-      refute html =~ linked.uuid
-      assert html =~ other.uuid
-    end
-
-    test "adding the same supplier twice is refused with a clear reason", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
+    test "a currency that is not three letters is refused", %{conn: conn} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick_supplier(view, supplier.uuid)
 
-      for _attempt <- 1..2 do
-        render_click(view, "open_add_supplier", %{})
+      html = save_suppliers(view, %{supplier.uuid => %{"unit_cost" => "3", "currency" => "EURO"}})
 
-        render_change(view, "supplier_info_field_change", %{
-          "supplier_info" => %{"supplier_uuid" => supplier.uuid}
-        })
-
-        render_click(view, "save_supplier_info", %{})
-      end
-
-      assert length(Catalogue.list_supplier_infos_for_item(item.uuid)) == 1
-    end
-
-    test "add is refused with no supplier picked, and says so inside the modal",
-         %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-
-      render_click(view, "open_add_supplier", %{})
-      html = render_click(view, "save_supplier_info", %{})
-
-      assert html =~ "Please select a supplier."
+      assert html =~ "Currency must be a three-letter code, like EUR."
       assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
-    end
-
-    test "edit_supplier_info updates the row's columns", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
-
-      supplier = fixture_supplier()
-
-      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
-
-      render_change(view, "supplier_info_field_change", %{
-        "supplier_info" => %{"supplier_uuid" => supplier.uuid, "supplier_sku" => "OLD-1"}
-      })
-
-      render_click(view, "save_supplier_info", %{})
-      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
-
-      render_click(view, "edit_supplier_info", %{"uuid" => info.uuid})
-
-      render_click(view, "save_supplier_info", %{
-        "supplier_info" => %{"supplier_sku" => "NEW-2", "lead_time_days" => "5"}
-      })
-
-      [updated] = Catalogue.list_supplier_infos_for_item(item.uuid)
-      assert updated.supplier_sku == "NEW-2"
-      assert updated.lead_time_days == 5
     end
 
     # A cost CHANGE closes the current row and opens a successor, which is
     # what feeds the History dialog — a plain overwrite would lose it.
-    test "changing an existing unit cost creates a price revision", %{conn: conn} do
-      item =
-        fixture_item(%{
-          name: "Oak Panel",
-          category_uuid: fixture_category(fixture_catalogue()).uuid
-        })
+    test "a new cost on a saved row is a price revision on Save", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      saved_row(item, supplier, %{"unit_cost" => "10.00", "currency" => "EUR"})
 
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      # The saved price shows without the column's trailing zeros.
+      assert view |> element("#supplier-cost-#{supplier.uuid}") |> render() =~ ~s(value="10")
+
+      save_suppliers(view, %{supplier.uuid => %{"unit_cost" => "12.50", "currency" => "EUR"}})
+
+      [current] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert Decimal.equal?(current.unit_cost, Decimal.new("12.50"))
+
+      history = Catalogue.supplier_info_history_for_pair(item.uuid, supplier.uuid)
+      assert length(history) == 2
+    end
+
+    test "a row saved back unchanged writes nothing", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      info = saved_row(item, supplier, %{"unit_cost" => "10.0000", "currency" => "EUR"})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      save_suppliers(view, %{supplier.uuid => %{"unit_cost" => "10", "currency" => "eur"}})
+
+      assert [%{uuid: uuid}] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert uuid == info.uuid
+      assert length(Catalogue.supplier_info_history_for_pair(item.uuid, supplier.uuid)) == 1
+    end
+
+    test "a stored empty currency is not a change", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      info = saved_row(item, supplier, %{"unit_cost" => "4"})
+
+      # Only a raw write stores "" (the changeset casts it to nil).
+      import Ecto.Query, only: [from: 2]
+
+      TestRepo.update_all(
+        from(i in PhoenixKitCatalogue.Schemas.ItemSupplierInfo, where: i.uuid == ^info.uuid),
+        set: [currency: ""]
+      )
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      refute render(view) =~ "Unsaved changes"
+
+      save_suppliers(view, %{supplier.uuid => %{"unit_cost" => "4", "currency" => ""}})
+
+      assert [%{uuid: uuid, currency: ""}] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert uuid == info.uuid
+    end
+
+    test "Remove waits for Save, and Undo takes it back", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      saved_row(item, supplier)
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
+
+      assert has_element?(
+               view,
+               ~s(#supplier-row-#{supplier.uuid} button[phx-click="restore_supplier"])
+             )
+
+      assert [_] = Catalogue.list_supplier_infos_for_item(item.uuid)
+
+      render_click(view, "restore_supplier", %{"supplier" => supplier.uuid})
+      save_suppliers(view)
+      assert [_] = Catalogue.list_supplier_infos_for_item(item.uuid)
+
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
+      save_suppliers(view)
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+    end
+
+    test "a staged row removed before Save is simply dropped", %{conn: conn} do
+      item = supplier_item()
       supplier = fixture_supplier()
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-      render_click(view, "open_add_supplier", %{})
+      pick_supplier(view, supplier.uuid)
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
 
-      render_change(view, "supplier_info_field_change", %{
+      refute has_element?(view, "#supplier-row-#{supplier.uuid}")
+      assert view |> element("#supplier-add-picker") |> render() =~ supplier.uuid
+
+      save_suppliers(view)
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
+    end
+
+    test "Make primary waits for Save", %{conn: conn} do
+      item = supplier_item()
+      first = fixture_supplier()
+      second = fixture_supplier()
+      saved_row(item, first)
+      saved_row(item, second)
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "stage_supplier_primary", %{"supplier" => second.uuid})
+
+      assert view |> element("#supplier-row-#{second.uuid}") |> render() =~ "badge-primary"
+      refute view |> element("#supplier-row-#{first.uuid}") |> render() =~ "badge-primary"
+
+      assert Enum.find(Catalogue.list_supplier_infos_for_item(item.uuid), & &1.is_primary).supplier_uuid ==
+               first.uuid
+
+      save_suppliers(view)
+
+      assert Enum.find(Catalogue.list_supplier_infos_for_item(item.uuid), & &1.is_primary).supplier_uuid ==
+               second.uuid
+    end
+
+    test "a supplier on the item, saved or staged, is not offered again", %{conn: conn} do
+      item = supplier_item()
+      linked = fixture_supplier()
+      staged = fixture_supplier()
+      other = fixture_supplier()
+      saved_row(item, linked)
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick_supplier(view, staged.uuid)
+      # A second pick of the same supplier (a forged or stale event) stages nothing new.
+      render_change(view, "stage_supplier_add", %{"supplier_add" => staged.uuid})
+      render_change(view, "stage_supplier_add", %{"supplier_add" => linked.uuid})
+
+      picker = view |> element("#supplier-add-picker") |> render()
+      refute picker =~ linked.uuid
+      refute picker =~ staged.uuid
+      assert picker =~ other.uuid
+
+      assert :sys.get_state(view.pid).socket.assigns.supplier_draft.adds == [staged.uuid]
+    end
+
+    test "a supplier linked elsewhere meanwhile is reported, not doubled", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick_supplier(view, supplier.uuid)
+
+      # Another session links the same supplier before this one saves; the
+      # broadcast reaches the form, which drops the now-duplicate staged row.
+      saved_row(item, supplier)
+      _ = render(view)
+
+      save_suppliers(view)
+      assert [_] = Catalogue.list_supplier_infos_for_item(item.uuid)
+    end
+
+    test "a new item takes its staged suppliers when it is created", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      supplier = fixture_supplier()
+
+      {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
+      pick_supplier(view, supplier.uuid)
+
+      {:error, {:live_redirect, _}} =
+        render_submit(view, "save", %{
+          "item" => base_item_params(%{"name" => "Born supplied"}),
+          "supplier_rows" => %{supplier.uuid => %{"unit_cost" => "7", "currency" => "EUR"}}
+        })
+
+      [item] = TestRepo.all(Item)
+      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert info.supplier_uuid == supplier.uuid
+      assert Decimal.equal?(info.unit_cost, Decimal.new("7"))
+    end
+
+    # Owner decisions 2026-08-21: SKU, lead time and MOQ stay behind
+    # @supplier_terms_fields — their data and columns are untouched, and
+    # the row dialog that edits them is reachable by its event.
+    test "the row dialog stages the terms; Save writes them", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      saved_row(item, supplier, %{"supplier_sku" => "OLD-1"})
+
+      {:ok, view, html} = live(conn, edit_item_url(item.uuid))
+
+      for field <- ~w(supplier_sku lead_time_days min_order_qty) do
+        refute html =~ ~s([#{field}])
+      end
+
+      render_click(view, "edit_supplier_info", %{"supplier" => supplier.uuid})
+
+      render_click(view, "save_supplier_info", %{
         "supplier_info" => %{
-          "supplier_uuid" => supplier.uuid,
-          "unit_cost" => "10.00",
-          "currency" => "EUR"
+          "supplier_sku" => "NEW-2",
+          "lead_time_days" => "5",
+          "min_order_qty" => "2,5"
         }
       })
 
-      render_click(view, "save_supplier_info", %{})
-      [info] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert [%{supplier_sku: "OLD-1"}] = Catalogue.list_supplier_infos_for_item(item.uuid)
 
-      render_click(view, "edit_supplier_info", %{"uuid" => info.uuid})
+      save_suppliers(view)
 
-      render_click(view, "save_supplier_info", %{
-        "supplier_info" => %{"unit_cost" => "12.50", "currency" => "EUR"}
+      [updated] = Catalogue.list_supplier_infos_for_item(item.uuid)
+      assert updated.supplier_sku == "NEW-2"
+      assert updated.lead_time_days == 5
+      assert Decimal.equal?(updated.min_order_qty, Decimal.new("2.5"))
+    end
+
+    # The badge must mean "a save would write something". Re-staging a
+    # row's own values is not a change: the dialog seeds itself from the
+    # row, and Done sends that seed straight back.
+    test "the row dialog closed without an edit leaves the row clean", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+
+      saved_row(item, supplier, %{
+        "supplier_sku" => "OLD-1",
+        "lead_time_days" => "5",
+        "min_order_qty" => "2.5",
+        "unit_cost" => "7",
+        "currency" => "EUR"
       })
 
-      # One CURRENT row at the new price...
-      [current] = Catalogue.list_supplier_infos_for_item(item.uuid)
-      assert Decimal.equal?(current.unit_cost, Decimal.new("12.50"))
-      assert is_nil(current.valid_to)
+      {:ok, view, html} = live(conn, edit_item_url(item.uuid))
+      refute html =~ "Unsaved changes"
 
-      # ...and the old price kept as a closed row.
-      history = Catalogue.supplier_info_history_for_pair(item.uuid, supplier.uuid)
-      assert length(history) == 2
-      assert Enum.any?(history, &(not is_nil(&1.valid_to)))
+      render_click(view, "edit_supplier_info", %{"supplier" => supplier.uuid})
+
+      html =
+        render_click(view, "save_supplier_info", %{
+          "supplier_info" => %{
+            "supplier_sku" => "OLD-1",
+            "lead_time_days" => "5",
+            "min_order_qty" => "2.5",
+            "unit_cost" => "7",
+            "currency" => "EUR"
+          }
+        })
+
+      refute html =~ "Unsaved changes"
+
+      state = :sys.get_state(view.pid).socket.assigns
+      refute SupplierDraft.dirty?(state.supplier_draft, state.supplier_infos)
+    end
+
+    test "garbage in the row dialog stays in the dialog", %{conn: conn} do
+      item = supplier_item()
+      supplier = fixture_supplier()
+      saved_row(item, supplier)
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      render_click(view, "edit_supplier_info", %{"supplier" => supplier.uuid})
+
+      html =
+        render_click(view, "save_supplier_info", %{
+          "supplier_info" => %{"min_order_qty" => "abc"}
+        })
+
+      assert html =~ "Could not save the supplier."
+      assert :sys.get_state(view.pid).socket.assigns.supplier_draft.values == %{}
+    end
+
+    # Scope the lookup to the rows this item actually shows: a uuid from a
+    # crafted payload must not reach another item's supplier row.
+    test "staging events for a supplier the item does not hold do nothing", %{conn: conn} do
+      item = supplier_item()
+      other_item = supplier_item()
+      supplier = fixture_supplier()
+      saved_row(other_item, supplier)
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
+      render_click(view, "stage_supplier_primary", %{"supplier" => supplier.uuid})
+      render_click(view, "edit_supplier_info", %{"supplier" => supplier.uuid})
+
+      render_change(view, "validate", %{
+        "supplier_rows" => %{supplier.uuid => %{"unit_cost" => "1"}}
+      })
+
+      assert :sys.get_state(view.pid).socket.assigns.supplier_draft == SupplierDraft.new()
+
+      assert :sys.get_state(view.pid).socket.assigns.supplier_form == nil
     end
   end
 
@@ -800,16 +1099,18 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
         refute html =~ "open_supplier_field_manager"
         refute html =~ "Incoterm"
 
-        # The supplier modal carries no Extra fields block either.
-        modal_html = render_click(view, "open_add_supplier", %{})
-        refute modal_html =~ "Extra fields"
-        refute modal_html =~ "custom_fields["
+        # A picked supplier's row carries no extra-field column or input,
+        # and no row dialog to reach one.
+        fields_html =
+          view
+          |> element("#supplier-add-picker")
+          |> render_change(%{"supplier_add" => supplier.uuid})
 
-        render_change(view, "supplier_info_field_change", %{
-          "supplier_info" => %{"supplier_uuid" => supplier.uuid}
-        })
+        refute fields_html =~ "Incoterm"
+        refute fields_html =~ "custom_fields["
+        refute fields_html =~ ~s(phx-click="edit_supplier_info")
 
-        render_click(view, "save_supplier_info", %{})
+        render_submit(view, "save", %{"item" => %{"name" => "Oak Panel"}, "save_action" => "stay"})
 
         # Nothing entity-shaped is stamped onto rows written while hidden.
         # (The comment thread key is the catalogue's own, not a field.)
@@ -853,11 +1154,13 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
           })
 
         {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-        render_click(view, "edit_supplier_info", %{"uuid" => info.uuid})
+        render_click(view, "edit_supplier_info", %{"supplier" => info.supplier_uuid})
 
         render_click(view, "save_supplier_info", %{
           "supplier_info" => %{"supplier_sku" => "STILL-EDITABLE"}
         })
+
+        render_submit(view, "save", %{"item" => %{"name" => "Oak Panel"}, "save_action" => "stay"})
 
         [updated] = Catalogue.list_supplier_infos_for_item(item.uuid)
         assert updated.supplier_sku == "STILL-EDITABLE"
@@ -867,41 +1170,233 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   end
 
   # ─────────────────────────────────────────────────────────────────
-  # move_item
+  # Location (boss, 2026-09-19): one section on Details, a folder tree to
+  # pick from, the move made on Save. Replaced the Category select and the
+  # Move section.
   # ─────────────────────────────────────────────────────────────────
 
-  describe "move_item" do
-    test "moves item to a different category via the move form", %{conn: conn} do
-      catalogue = fixture_catalogue()
-      source = fixture_category(catalogue, %{name: "Source"})
-      target = fixture_category(catalogue, %{name: "Target"})
-      item = fixture_item(%{name: "Movable", category_uuid: source.uuid})
-
-      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
-
-      # The form's move dropdown picks a target category.
-      view
-      |> form("#item-move-form", %{"move_target" => "category:" <> target.uuid})
-      |> render_change()
-
-      render_click(view, "move_item", %{})
-
-      reloaded = Catalogue.get_item(item.uuid)
-      assert reloaded.category_uuid == target.uuid
+  describe "Location" do
+    defp pick(view, target) do
+      render_click(view, "open_location_picker", %{})
+      render_click(view, "pick_location", %{"target" => target})
     end
 
-    test "move event with no selected target is a no-op", %{conn: conn} do
+    defp save_stay(view, params) do
+      render_submit(view, "save", %{"item" => params, "save_action" => "stay"})
+    end
+
+    test "the Move section and the Category select are gone", %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
-      item = fixture_item(%{name: "Stays", category_uuid: category.uuid})
+      item = fixture_item(%{name: "Placed", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, html} = live(conn, edit_item_url(item.uuid))
+
+      refute has_element?(view, "#item-move-section")
+      refute html =~ ~s(name="item[category_uuid]")
+      assert has_element?(view, "#item-location #item-location-change")
+    end
+
+    test "a pick moves nothing until Save; Save moves it and stays",
+         %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      parent = fixture_category(catalogue, %{name: "Hardware"})
+      target = fixture_category(catalogue, %{name: "Hinges", parent_uuid: parent.uuid})
+      item = fixture_item(%{name: "Movable", catalogue_uuid: catalogue.uuid})
 
       {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
 
-      # No select_move_target event fired — move_target is still nil.
-      render_click(view, "move_item", %{})
+      pick(view, "category:" <> target.uuid)
 
-      reloaded = Catalogue.get_item(item.uuid)
-      assert reloaded.category_uuid == category.uuid
+      path = view |> element("#item-location-path") |> render()
+      assert path =~ "Kitchen"
+      assert path =~ "Hardware"
+      assert path =~ "Hinges"
+      assert render(view) =~ "Unsaved changes"
+      assert is_nil(Catalogue.get_item(item.uuid).category_uuid)
+
+      save_stay(view, %{"name" => "Movable"})
+
+      assert Catalogue.get_item(item.uuid).category_uuid == target.uuid
+      refute view |> element("#item-location") |> render() =~ "Unsaved changes"
+    end
+
+    test "a move to another catalogue reloads the form there", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Here"})
+      other = fixture_catalogue(%{name: "There"})
+      item = fixture_item(%{name: "Traveller", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick(view, "catalogue:" <> other.uuid)
+
+      assert {:error, {:live_redirect, %{to: to}}} = save_stay(view, %{"name" => "Traveller"})
+      assert to =~ "/items/#{item.uuid}/edit"
+
+      moved = Catalogue.get_item(item.uuid)
+      assert moved.catalogue_uuid == other.uuid
+      assert is_nil(moved.category_uuid)
+    end
+
+    test "Save & Exit after a move goes to the item's new catalogue", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      other = fixture_catalogue()
+      item = fixture_item(%{name: "Leaver", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick(view, "catalogue:" <> other.uuid)
+
+      assert {:error, {:live_redirect, %{to: to}}} =
+               render_submit(view, "save", %{
+                 "item" => %{"name" => "Leaver"},
+                 "save_action" => "exit"
+               })
+
+      assert to == catalogue_detail_url(other.uuid)
+    end
+
+    test "Undo, or picking the item's own place, takes the move back", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      shelf = fixture_category(catalogue, %{name: "Shelf"})
+      target = fixture_category(catalogue, %{name: "Elsewhere"})
+      item = fixture_item(%{name: "Stayer", category_uuid: shelf.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      pick(view, "category:" <> target.uuid)
+      render_click(view, "reset_location", %{})
+      save_stay(view, %{"name" => "Stayer"})
+      assert Catalogue.get_item(item.uuid).category_uuid == shelf.uuid
+
+      pick(view, "category:" <> target.uuid)
+      pick(view, "category:" <> shelf.uuid)
+      refute render(view) =~ "Unsaved changes"
+      save_stay(view, %{"name" => "Stayer"})
+      assert Catalogue.get_item(item.uuid).category_uuid == shelf.uuid
+    end
+
+    test "a place the tree did not offer is ignored", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      {:ok, smart} = Catalogue.create_catalogue(%{name: "NotOffered", kind: "smart"})
+      item = fixture_item(%{name: "Standard", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      # Kinds never mix: a smart catalogue is not in a standard item's tree.
+      pick(view, "catalogue:" <> smart.uuid)
+      pick(view, "category:" <> Ecto.UUID.generate())
+      render_click(view, "pick_location", %{"target" => "garbage"})
+
+      assert is_nil(:sys.get_state(view.pid).socket.assigns.location_target)
+      save_stay(view, %{"name" => "Standard"})
+      assert Catalogue.get_item(item.uuid).catalogue_uuid == catalogue.uuid
+    end
+
+    test "a smart item moves among smart catalogues only", %{conn: conn} do
+      {:ok, smart} = Catalogue.create_catalogue(%{name: "Services", kind: "smart"})
+      {:ok, other_smart} = Catalogue.create_catalogue(%{name: "Extras", kind: "smart"})
+      _standard = fixture_catalogue(%{name: "Plain Standard"})
+      item = fixture_item(%{name: "Delivery", catalogue_uuid: smart.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      render_click(view, "open_location_picker", %{})
+      # The rules picker lists standard catalogues too; the tree does not.
+      tree = view |> element("#location-tree") |> render()
+      assert tree =~ "Extras"
+      refute tree =~ "Plain Standard"
+
+      render_click(view, "pick_location", %{"target" => "catalogue:" <> other_smart.uuid})
+      save_stay(view, %{"name" => "Delivery"})
+
+      assert Catalogue.get_item(item.uuid).catalogue_uuid == other_smart.uuid
+    end
+
+    test "the tree nests catalogues in their folders, and search keeps the path",
+         %{conn: conn} do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Estonian stuff"})
+      {:ok, _empty} = Catalogue.create_folder(%{name: "Nothing here"})
+      filed = fixture_catalogue(%{name: "Tables"})
+      {:ok, _} = Catalogue.move_catalogue_to_folder(filed, folder.uuid)
+      legs = fixture_category(filed, %{name: "Legs"})
+      _tops = fixture_category(filed, %{name: "Tops"})
+
+      home = fixture_catalogue(%{name: "Home"})
+      item = fixture_item(%{name: "Leg", catalogue_uuid: home.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      tree = render_click(view, "open_location_picker", %{})
+
+      assert tree =~ "Estonian stuff"
+      # A folder leading to no catalogue of the item's kind is left out.
+      refute tree =~ "Nothing here"
+      # Closed until opened.
+      refute tree =~ "Legs"
+
+      html = render_click(view, "toggle_location_node", %{"id" => "folder:" <> folder.uuid})
+      assert html =~ "Tables"
+
+      html =
+        view
+        |> element("#location-search-form")
+        |> render_change(%{"q" => "leg"})
+
+      # The match and the rows above it, opened; its siblings are gone.
+      assert html =~ "Estonian stuff"
+      assert html =~ "Tables"
+      assert html =~ ~s(data-location="category:#{legs.uuid}")
+      refute html =~ "Tops"
+
+      html = view |> element("#location-search-form") |> render_change(%{"q" => "zzz"})
+      assert html =~ "No matches."
+    end
+
+    test "a category trashed after the pick keeps the save and reports the move",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      target = fixture_category(catalogue, %{name: "Soon gone"})
+      item = fixture_item(%{name: "Hopeful", catalogue_uuid: catalogue.uuid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick(view, "category:" <> target.uuid)
+      {:ok, _} = Catalogue.trash_category(target)
+
+      html = save_stay(view, %{"name" => "Renamed hopeful"})
+
+      assert html =~ "Category not found."
+      saved = Catalogue.get_item(item.uuid)
+      assert saved.name == "Renamed hopeful"
+      assert is_nil(saved.category_uuid)
+      # Still staged, for the admin to pick again or take back.
+      assert :sys.get_state(view.pid).socket.assigns.location_target == "category:" <> target.uuid
+    end
+
+    test "a move decides from the item as it is now, not as the page loaded it",
+         %{conn: conn} do
+      catalogue = fixture_catalogue()
+      shelf = fixture_category(catalogue, %{name: "Shelf"})
+      item = fixture_item(%{name: "Wanderer", category_uuid: shelf.uuid})
+      {:ok, away} = Catalogue.create_catalogue(%{name: "Away"})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+
+      # Another tab moves it away meanwhile.
+      {:ok, _} = Catalogue.move_item_to_catalogue(item, away.uuid)
+
+      pick(view, "catalogue:" <> catalogue.uuid)
+      save_stay(view, %{"name" => "Wanderer"})
+
+      moved = Catalogue.get_item(item.uuid)
+      assert moved.catalogue_uuid == catalogue.uuid
+      assert moved.category_uuid == nil
+    end
+
+    test "?category= on a new item starts Location there", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      category = fixture_category(catalogue, %{name: "Frames"})
+
+      {:ok, view, _html} =
+        live(conn, new_item_url(catalogue.uuid) <> "?category=" <> category.uuid)
+
+      assert view |> element("#item-location-path") |> render() =~ "Frames"
     end
   end
 
@@ -1062,25 +1557,27 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   end
 
   describe "origin-aware Add Item" do
-    test "?category= prefills the category select on the new form", %{conn: conn} do
+    test "?category= starts the new item's Location in that category", %{conn: conn} do
       catalogue = fixture_catalogue()
-      category = fixture_category(catalogue)
+      category = fixture_category(catalogue, %{name: "Origin shelf"})
 
-      {:ok, _view, html} =
+      {:ok, view, _html} =
         live(conn, new_item_url(catalogue.uuid) <> "?category=#{category.uuid}")
 
-      assert html =~ ~s(<option selected="" value="#{category.uuid}")
+      assert view |> element("#item-location-path") |> render() =~ "Origin shelf"
     end
 
     test "a category from another catalogue is ignored", %{conn: conn} do
-      catalogue = fixture_catalogue()
+      catalogue = fixture_catalogue(%{name: "Mine"})
       other = fixture_catalogue(%{name: "Other"})
-      foreign = fixture_category(other)
+      foreign = fixture_category(other, %{name: "Foreign shelf"})
 
-      {:ok, _view, html} =
+      {:ok, view, _html} =
         live(conn, new_item_url(catalogue.uuid) <> "?category=#{foreign.uuid}")
 
-      refute html =~ ~s(<option selected="" value="#{foreign.uuid}")
+      path = view |> element("#item-location-path") |> render()
+      refute path =~ "Foreign shelf"
+      assert path =~ "Mine"
     end
 
     test "a valid return_to drives the Cancel link; an external one is dropped", %{conn: conn} do

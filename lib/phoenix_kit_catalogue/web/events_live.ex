@@ -13,6 +13,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
+  alias PhoenixKit.Activity
   alias PhoenixKit.Utils.Routes
   alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Paths
@@ -40,7 +41,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
        page: 1,
        has_more: false,
        # Starts true: nothing loads until the connected mount, and the
-       # dead render must not claim "No events recorded yet".
+       # dead render must not claim "No events recorded yet.".
        loading: true,
        filter_action: nil,
        filter_resource_type: nil,
@@ -232,15 +233,58 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     end
   end
 
+  # What MOVED leads the line; the rest is context. Matches the platform
+  # Activity list, so the same event reads the same on both pages (boss via
+  # Max, 2026-09-20).
+  #
+  # Values go through `humanize_metadata_value/1`, never bare interpolation:
+  # metadata now carries maps — a `from`/`to` diff, a snapshotted
+  # `{uuid, label}` reference — and `"#{v}"` on a map raises
+  # Protocol.UndefinedError, taking the whole page with it.
+  @summary_change_limit 3
+
   defp summarize_metadata(nil), do: nil
 
   defp summarize_metadata(meta) do
-    meta
-    |> Map.drop(["actor_role"])
-    |> Enum.reject(fn {_k, v} -> v == nil or v == "" end)
+    {changes, rest} = Activity.split_changes(meta)
+
+    [summarize_changes(changes), summarize_rest(rest)]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" · ")
     |> case do
-      [] -> nil
-      entries -> Enum.map_join(entries, ", ", fn {k, v} -> "#{k}: #{v}" end)
+      "" -> nil
+      summary -> summary
+    end
+  end
+
+  defp summarize_changes(changes) when map_size(changes) == 0, do: nil
+
+  defp summarize_changes(changes) do
+    shown = changes |> Enum.sort() |> Enum.take(@summary_change_limit)
+    hidden = map_size(changes) - length(shown)
+
+    summary =
+      Enum.map_join(shown, ", ", fn {field, change} ->
+        "#{Activity.humanize_metadata_key(field)} #{Activity.humanize_metadata_value(change)}"
+      end)
+
+    if hidden > 0, do: summary <> " +#{hidden}", else: summary
+  end
+
+  defp summarize_rest(meta) do
+    meta
+    # `name` is already rendered in bold beside this summary, and the uuid
+    # keys are plumbing a reader cannot use.
+    |> Map.drop(["actor_role", "name", "item_uuid", "uuids", "uuids_truncated"])
+    |> Enum.reject(fn {_k, v} -> v in [nil, ""] end)
+    |> case do
+      [] ->
+        nil
+
+      entries ->
+        Enum.map_join(entries, ", ", fn {k, v} ->
+          "#{Activity.humanize_metadata_key(k)}: #{Activity.humanize_metadata_value(v)}"
+        end)
     end
   end
 
@@ -266,7 +310,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events")}
       page_subtitle={
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue") <>
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues") <>
           " · " <>
           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events: %{count}", count: @total)
       }
@@ -275,27 +319,27 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
     >
     <div class="flex flex-col w-full px-4 py-6 gap-4">
       <%!-- Filters --%>
-      <div class="bg-base-200 rounded-lg p-3">
+      <div class="bg-base-200 rounded-lg p-3 text-sm">
         <.form for={%{}} id="events-filter" phx-change="filter" class="flex flex-wrap gap-3 items-end">
-          <div class="fieldset">
+          <div>
             <.select
               name="filter[action]"
               id="events-filter-action"
               label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Action")}
               value={@filter_action}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All Actions")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All actions")}
               options={Enum.map(@action_types, &{&1, &1})}
               class="select-sm"
             />
           </div>
 
-          <div class="fieldset">
+          <div>
             <.select
               name="filter[resource_type]"
               id="events-filter-resource"
               label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Resource")}
               value={@filter_resource_type}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All Types")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All types")}
               options={Enum.map(@resource_types, &{humanize_resource_type(&1), &1})}
               class="select-sm"
             />
@@ -390,7 +434,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       <%= if @total == 0 and not @loading do %>
         <div class="text-center py-12 text-base-content/60">
           <.icon name="hero-bell-slash" class="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "No events recorded yet")}</p>
+          <p>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "No events recorded yet.")}</p>
         </div>
       <% end %>
 

@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveTest do
       {:ok, _view, html} = live(conn, @events_url)
       # LiveView auto-excludes phoenix_kit_activities from other modules;
       # tests start clean so there should be no events.
-      assert html =~ "No events recorded yet" or html =~ "Events"
+      assert html =~ "No events recorded yet." or html =~ "Events"
     end
 
     test "mutations in the Catalogue context appear as events", %{conn: conn} do
@@ -39,7 +39,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveTest do
 
       # No assertion on the URL — we just verify no crash, since
       # live/2 follows the patch automatically.
-      assert render(view) =~ "All Actions"
+      assert render(view) =~ "All actions"
     end
 
     test "filter event patches the URL with the chosen action", %{conn: conn} do
@@ -53,7 +53,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveTest do
       # verify it doesn't crash.
       render_change(view, "filter", %{"filter" => %{"action" => "", "resource_type" => ""}})
 
-      assert render(view) =~ "All Actions"
+      assert render(view) =~ "All actions"
     end
   end
 

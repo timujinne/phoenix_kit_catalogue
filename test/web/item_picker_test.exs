@@ -367,7 +367,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
           })
         )
 
-      assert html =~ "No items found"
+      assert html =~ "No items found."
     end
   end
 

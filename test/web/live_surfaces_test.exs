@@ -347,9 +347,9 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
 
       assert assigns(view).step == :failed
       assert assigns(view).import_task == nil
-      assert html =~ "Import Failed"
+      assert html =~ "Import failed"
       assert html =~ "key :sku not found"
-      assert html =~ "Import Another"
+      assert html =~ "Import another"
     end
 
     test "a second execute_import while a task runs is ignored", %{conn: conn} do
@@ -519,13 +519,17 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
       _mine = supplier_info!(item, supplier)
       {:ok, view, _html} = live(conn, "#{@base}/items/#{item.uuid}/edit?tab=sourcing")
 
-      render_click(view, "set_primary_supplier", %{"uuid" => foreign.uuid})
       render_click(view, "open_supplier_history", %{"uuid" => foreign.uuid})
-      render_click(view, "delete_supplier_info", %{"uuid" => foreign.uuid})
-
       refute assigns(view).supplier_history_open
+
+      # Staging is keyed by supplier and resolved against THIS item's rows:
+      # the same supplier on another item is out of reach.
+      render_click(view, "stage_supplier_remove", %{"supplier" => supplier.uuid})
+      render_submit(view, "save", %{"item" => %{"name" => item.name}, "save_action" => "stay"})
+
       assert Catalogue.get_supplier_info(foreign.uuid).valid_to == nil
       assert Catalogue.primary_supplier_info_for_item(other.uuid).uuid == foreign.uuid
+      assert Catalogue.list_supplier_infos_for_item(item.uuid) == []
     end
 
     test "a primary flip and a removal elsewhere are reflected",
@@ -614,16 +618,17 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
       assert file_uuid in files_state_uuids(view)
     end
 
-    test "a category added elsewhere becomes selectable", %{conn: conn} do
+    test "a category renamed elsewhere shows in the Location path", %{conn: conn} do
       cat = fixture_catalogue()
-      item = fixture_item(%{name: "Cat aware", catalogue_uuid: cat.uuid})
+      section = fixture_category(cat, %{name: "Early Section"})
+      item = fixture_item(%{name: "Cat aware", category_uuid: section.uuid})
       {:ok, view, _html} = live(conn, "#{@base}/items/#{item.uuid}/edit")
-      assert assigns(view).categories == []
+      assert assigns(view).location_current_path |> List.last() == "Early Section"
 
-      sec = fixture_category(cat, %{name: "Late Section"})
+      {:ok, _} = Catalogue.update_category(section, %{name: "Late Section"})
       _ = render(view)
 
-      assert Enum.map(assigns(view).categories, & &1.uuid) == [sec.uuid]
+      assert assigns(view).location_current_path |> List.last() == "Late Section"
     end
   end
 

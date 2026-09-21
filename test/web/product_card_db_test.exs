@@ -312,4 +312,101 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCardDBTest do
       assert Enum.any?(fields, fn {label, _} -> label == "Цвет" end)
     end
   end
+
+  describe "build_fields/3 admin rows" do
+    setup do
+      suffix = System.unique_integer([:positive])
+
+      {:ok, catalogue} = Catalogue.create_catalogue(%{name: "Kitchens #{suffix}"})
+
+      {:ok, hardware} =
+        Catalogue.create_category(%{name: "Hardware", catalogue_uuid: catalogue.uuid})
+
+      {:ok, hinges} =
+        Catalogue.create_category(%{
+          name: "Hinges",
+          catalogue_uuid: catalogue.uuid,
+          parent_uuid: hardware.uuid
+        })
+
+      {:ok, manufacturer} = Catalogue.create_manufacturer(%{name: "Blum #{suffix}"})
+      {:ok, supplier} = Catalogue.create_supplier(%{name: "Nordic Fittings #{suffix}"})
+
+      {:ok, item} =
+        Catalogue.create_item(%{
+          name: "Soft-close hinge",
+          catalogue_uuid: catalogue.uuid,
+          category_uuid: hinges.uuid,
+          manufacturer_uuid: manufacturer.uuid
+        })
+
+      {:ok, _} =
+        Catalogue.create_supplier_info(%{
+          item_uuid: item.uuid,
+          supplier_uuid: supplier.uuid,
+          # The item form stamps the snapshot on every row it writes; the
+          # card's fallback is only worth anything on a row that has one.
+          supplier_name_snapshot: supplier.name,
+          unit_cost: Decimal.new("8.5"),
+          currency: "EUR"
+        })
+
+      %{
+        item: item,
+        catalogue: catalogue,
+        manufacturer: manufacturer,
+        supplier: supplier
+      }
+    end
+
+    test "admin: true adds status, location, manufacturer and the primary supplier", %{
+      item: item,
+      catalogue: catalogue,
+      manufacturer: manufacturer,
+      supplier: supplier
+    } do
+      fields = Map.new(ProductCard.build_fields(item, "en", admin: true))
+
+      assert fields["Status"] == "Active"
+      assert fields["Location"] == "#{catalogue.name} › Hardware › Hinges"
+      assert fields["Manufacturer"] == manufacturer.name
+      # Name and cost in one row — the same "8.50" the listing shows.
+      assert fields["Primary supplier"] == "#{supplier.name} · 8.50 EUR"
+    end
+
+    test "the client-facing default keeps them all off", %{item: item} do
+      labels = item |> ProductCard.build_fields("en") |> Enum.map(&elem(&1, 0))
+
+      refute "Status" in labels
+      refute "Location" in labels
+      refute "Manufacturer" in labels
+      refute "Primary supplier" in labels
+    end
+
+    test "a supplier that no longer resolves falls back to the row's snapshot", %{
+      item: item,
+      supplier: supplier
+    } do
+      # Suppliers are hard-delete only, so the row's snapshot is the last
+      # name there is.
+      {:ok, _} = Catalogue.delete_supplier(supplier)
+
+      fields = Map.new(ProductCard.build_fields(item, "en", admin: true))
+
+      assert fields["Primary supplier"] == "#{supplier.name} · 8.50 EUR"
+    end
+
+    test "an item with no category, manufacturer or supplier shows only what is set", %{
+      catalogue: catalogue
+    } do
+      {:ok, bare} =
+        Catalogue.create_item(%{name: "Loose screw", catalogue_uuid: catalogue.uuid})
+
+      fields = Map.new(ProductCard.build_fields(bare, "en", admin: true))
+
+      assert fields["Location"] == catalogue.name
+      refute Map.has_key?(fields, "Manufacturer")
+      refute Map.has_key?(fields, "Primary supplier")
+    end
+  end
 end

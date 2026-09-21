@@ -2,7 +2,7 @@ defmodule PhoenixKitCatalogue.Web.DeadRenderSkeletonsTest do
   @moduledoc """
   Every page that defers its data to the connected mount must render a
   skeleton on the dead HTTP render — not an empty state. "No catalogues
-  yet." / "No PDFs uploaded yet." / "No events recorded yet" / "No
+  yet." / "No PDFs uploaded yet." / "No events recorded yet." / "No
   categories or items yet" all flashed on pages that were NOT empty
   (Max's report, 2026-08-27, first seen on the attributes tab — that
   page's dead render is pinned in attribute_sets_surfaces_test.exs).
@@ -47,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.DeadRenderSkeletonsTest do
 
   test "events log: skeleton, not 'No events recorded yet'", %{conn: conn} do
     static = conn |> get("/en/admin/catalogue/events") |> html_response(200)
-    refute static =~ "No events recorded yet"
+    refute static =~ "No events recorded yet."
     assert static =~ "skeleton"
 
     # The first connected load clears the initial loading flag, so a

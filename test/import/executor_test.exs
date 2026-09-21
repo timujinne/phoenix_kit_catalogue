@@ -81,7 +81,7 @@ defmodule PhoenixKitCatalogue.Import.ExecutorTest do
       plan = %{
         items: [
           %{name: "Duplicate", sku: "DUP-1", base_price: Decimal.new("9.99")},
-          %{name: "New Item", sku: "NEW-1", base_price: Decimal.new("5.00")}
+          %{name: "New item", sku: "NEW-1", base_price: Decimal.new("5.00")}
         ],
         categories_to_create: [],
         custom_fields: [],

@@ -33,7 +33,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
       {:ok, _view, html} = live(conn, "#{@base}/attributes")
 
       assert html =~ "Idea doors"
-      assert html =~ "New Attribute Group"
+      assert html =~ "New attribute group"
     end
 
     test "delete is refused for a group in use, works for an unused one", %{conn: conn} do
@@ -91,7 +91,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
   describe "AttributeGroupFormLive :new" do
     test "renders and creates; Save (stay) lands on the edit form", %{conn: conn} do
       {:ok, view, html} = live(conn, "#{@base}/attributes/new")
-      assert html =~ "New Attribute Group"
+      assert html =~ "New attribute group"
 
       {:error, {:live_redirect, %{to: to}}} =
         view

@@ -74,6 +74,77 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   require Logger
 
+  # What an `.updated` entry reports as changed, per resource. The activity
+  # feed used to say only that a row had been updated, naming it but never
+  # what moved (boss via Max, 2026-09-20). `ActivityLog.changed_fields/3`
+  # turns these into `from`/`to` pairs, which core renders as `old → new`.
+  #
+  # `description` is tracked but records only THAT it changed — see
+  # `ActivityLog`'s `@flag_only_fields`. A move is not here at all; it has its
+  # own action (`item.moved`, `category.moved`, `catalogue.moved_to_folder`)
+  # carrying both ends.
+  @item_logged_fields [
+    :name,
+    :sku,
+    :base_price,
+    :markup_percentage,
+    :discount_percentage,
+    :unit,
+    :status,
+    :default_value,
+    :default_unit,
+    :description
+  ]
+
+  @category_logged_fields [:name, :status, :description]
+
+  # A move's two ends, snapshotted with the names they had at the time. The
+  # log used to carry `from_category_uuid`/`to_category_uuid` and friends —
+  # true, and unreadable: the owner saw walls of uuids and could not tell
+  # where a thing had gone (boss via Max, 2026-09-20).
+  #
+  # Resolved on the WRITE, deliberately: a name looked up on read changes
+  # under the reader and vanishes entirely once the category is deleted,
+  # which is the moment the log is the only record of where something was.
+  defp category_ref(nil), do: ActivityLog.ref(nil, nil, uncategorized_label())
+
+  defp category_ref(uuid) do
+    ActivityLog.ref(uuid, name_of(&get_category/1, uuid), uncategorized_label())
+  end
+
+  defp catalogue_ref(uuid), do: ActivityLog.ref(uuid, name_of(&get_catalogue/1, uuid))
+
+  defp folder_ref(nil), do: ActivityLog.ref(nil, nil, folder_root_label())
+
+  defp folder_ref(uuid),
+    do: ActivityLog.ref(uuid, name_of(&get_folder/1, uuid), folder_root_label())
+
+  defp name_of(getter, uuid) when is_binary(uuid) do
+    case getter.(uuid) do
+      %{name: name} -> name
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp name_of(_getter, _uuid), do: nil
+
+  defp uncategorized_label,
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uncategorized")
+
+  defp folder_root_label,
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "All catalogues")
+
+  @catalogue_logged_fields [
+    :name,
+    :kind,
+    :status,
+    :markup_percentage,
+    :discount_percentage,
+    :description
+  ]
+
   # Slug projection tables read by `get_item_by_slug/3` / `get_category_by_slug/3`
   # (owned by `PhoenixKitCatalogue.Catalogue.Slugs`'s generation rule, kept in
   # sync by the `trg_cat_item_slugs` / `trg_cat_category_slugs` triggers).
@@ -585,7 +656,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   @doc "Fetches a catalogue by UUID without preloads. Returns `nil` if not found."
   @spec get_catalogue(Ecto.UUID.t()) :: Catalogue.t() | nil
-  def get_catalogue(uuid), do: repo().get(Catalogue, uuid)
+  def get_catalogue(uuid), do: Helpers.get_by_uuid(Catalogue, uuid)
 
   @doc """
   Fetches a catalogue by UUID without preloading categories or items.
@@ -595,7 +666,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   items separately).
   """
   @spec fetch_catalogue!(Ecto.UUID.t()) :: Catalogue.t()
-  def fetch_catalogue!(uuid), do: repo().get!(Catalogue, uuid)
+  def fetch_catalogue!(uuid), do: Helpers.get_by_uuid!(Catalogue, uuid)
 
   @doc """
   Fetches a catalogue by UUID with preloaded categories and items.
@@ -632,7 +703,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
       end
 
     Catalogue
-    |> repo().get!(uuid)
+    |> Helpers.get_by_uuid!(uuid)
     |> repo().preload(categories: {category_query, [items: item_query]})
   end
 
@@ -721,7 +792,13 @@ defmodule PhoenixKitCatalogue.Catalogue do
             actor_uuid: opts[:actor_uuid],
             resource_type: "catalogue",
             resource_uuid: updated.uuid,
-            metadata: %{"name" => updated.name}
+            metadata:
+              ActivityLog.with_changes(
+                %{"name" => updated.name},
+                catalogue,
+                updated,
+                @catalogue_logged_fields
+              )
           },
           opts
         )
@@ -1590,11 +1667,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   @doc "Fetches a category by UUID. Returns `nil` if not found."
   @spec get_category(Ecto.UUID.t()) :: Category.t() | nil
-  def get_category(uuid), do: repo().get(Category, uuid)
+  def get_category(uuid), do: Helpers.get_by_uuid(Category, uuid)
 
   @doc "Fetches a category by UUID. Raises `Ecto.NoResultsError` if not found."
   @spec get_category!(Ecto.UUID.t()) :: Category.t()
-  def get_category!(uuid), do: repo().get!(Category, uuid)
+  def get_category!(uuid), do: Helpers.get_by_uuid!(Category, uuid)
 
   @doc """
   Fetches a category by its per-language `slug`.
@@ -1711,7 +1788,13 @@ defmodule PhoenixKitCatalogue.Catalogue do
             resource_type: "category",
             resource_uuid: updated.uuid,
             parent_catalogue_uuid: updated.catalogue_uuid,
-            metadata: %{"name" => updated.name}
+            metadata:
+              ActivityLog.with_changes(
+                %{"name" => updated.name},
+                category,
+                updated,
+                @category_logged_fields
+              )
           },
           opts
         )
@@ -1993,7 +2076,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   defp apply_item_disposition({:move_to, target_uuid}, subtree, category, now) do
-    case repo().get(Category, target_uuid) do
+    case Helpers.get_by_uuid(Category, target_uuid) do
       nil ->
         {:error, :move_target_not_found}
 
@@ -2559,12 +2642,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
             parent_catalogue_uuid: target_catalogue_uuid,
             metadata: %{
               "name" => moved.name,
-              "from_catalogue_uuid" => source_catalogue_uuid,
-              "to_catalogue_uuid" => target_catalogue_uuid,
-              "from_parent_uuid" => from_parent_uuid,
-              "to_parent_uuid" => parent_uuid,
               "subtree_size" => categories_updated,
-              "items_cascaded" => items_updated
+              "items_cascaded" => items_updated,
+              "changes" =>
+                ActivityLog.changes([
+                  {:catalogue, catalogue_ref(source_catalogue_uuid),
+                   catalogue_ref(target_catalogue_uuid)},
+                  {:parent, category_ref(from_parent_uuid), category_ref(parent_uuid)}
+                ])
             }
           },
           Keyword.take(opts, [:broadcast, :mode])
@@ -2750,9 +2835,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
           parent_catalogue_uuid: moved.catalogue_uuid,
           metadata: %{
             "name" => moved.name,
-            "from_parent_uuid" => from_parent_uuid,
-            "to_parent_uuid" => new_parent_uuid,
-            "catalogue_uuid" => moved.catalogue_uuid
+            "catalogue_uuid" => moved.catalogue_uuid,
+            "changes" =>
+              ActivityLog.changes([
+                {:parent, category_ref(from_parent_uuid), category_ref(new_parent_uuid)}
+              ])
           }
         },
         Keyword.take(opts, [:broadcast, :mode])
@@ -3031,6 +3118,24 @@ defmodule PhoenixKitCatalogue.Catalogue do
       end)
 
     Enum.reverse(acc)
+  end
+
+  @doc """
+  The live (non-deleted) categories of several catalogues in one query,
+  in `list_category_tree/2`'s sibling order (position, then name). The
+  nesting is left to the caller through `parent_uuid` — for pickers that
+  show many catalogues' trees at once, where one `list_category_tree/2`
+  per catalogue would be a query each.
+  """
+  @spec list_live_categories([Ecto.UUID.t()]) :: [Category.t()]
+  def list_live_categories([]), do: []
+
+  def list_live_categories(catalogue_uuids) when is_list(catalogue_uuids) do
+    from(c in Category,
+      where: c.catalogue_uuid in ^catalogue_uuids and c.status != "deleted",
+      order_by: [asc: :position, asc: :name]
+    )
+    |> repo().all()
   end
 
   defp collect_tree(%Category{} = cat, index, depth, acc) do
@@ -3312,7 +3417,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   @doc "Fetches a folder by UUID. Returns `nil` if not found."
   @spec get_folder(Ecto.UUID.t()) :: Folder.t() | nil
-  def get_folder(uuid), do: repo().get(Folder, uuid)
+  def get_folder(uuid), do: Helpers.get_by_uuid(Folder, uuid)
 
   @doc """
   Creates a folder. `:parent_uuid` (optional) nests it; a new folder is
@@ -3430,8 +3535,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
         resource_uuid: folder.uuid,
         metadata: %{
           "name" => folder.name,
-          "from_parent_uuid" => folder.parent_uuid,
-          "to_parent_uuid" => new_parent
+          "changes" =>
+            ActivityLog.changes([
+              {:parent, folder_ref(folder.parent_uuid), folder_ref(new_parent)}
+            ])
         }
       })
 
@@ -3851,8 +3958,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
         resource_uuid: catalogue.uuid,
         metadata: %{
           "name" => catalogue.name,
-          "from_folder_uuid" => catalogue.folder_uuid,
-          "to_folder_uuid" => target
+          "changes" =>
+            ActivityLog.changes([
+              {:folder, folder_ref(catalogue.folder_uuid), folder_ref(target)}
+            ])
         }
       })
 
@@ -5274,7 +5383,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
   @spec get_item(Ecto.UUID.t(), keyword()) :: Item.t() | nil
   def get_item(uuid, opts \\ []) do
-    case repo().get(Item, uuid) do
+    case Helpers.get_by_uuid(Item, uuid) do
       nil -> nil
       item -> repo().preload(item, Keyword.get(opts, :preload, []))
     end
@@ -5290,7 +5399,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   @spec get_item!(Ecto.UUID.t(), keyword()) :: Item.t()
   def get_item!(uuid, opts \\ []) do
     Item
-    |> repo().get!(uuid)
+    |> Helpers.get_by_uuid!(uuid)
     |> repo().preload(Helpers.merge_preloads([:catalogue, :category], opts))
     |> Manufacturers.hydrate()
   end
@@ -5750,7 +5859,13 @@ defmodule PhoenixKitCatalogue.Catalogue do
             resource_type: "item",
             resource_uuid: updated.uuid,
             parent_catalogue_uuid: updated.catalogue_uuid,
-            metadata: %{"name" => updated.name, "sku" => updated.sku || ""}
+            metadata:
+              ActivityLog.with_changes(
+                %{"name" => updated.name, "sku" => updated.sku || ""},
+                item,
+                updated,
+                @item_logged_fields
+              )
           },
           opts
         )
@@ -6374,13 +6489,19 @@ defmodule PhoenixKitCatalogue.Catalogue do
         actor_uuid: opts[:actor_uuid],
         resource_type: "item",
         parent_catalogue_uuid: target_catalogue,
-        metadata: %{
-          "count" => count,
-          "uuids" => uuids,
-          "from_catalogue_uuid" => scope,
-          "to_catalogue_uuid" => target_catalogue,
-          "to_category_uuid" => target_category
-        }
+        metadata:
+          %{
+            "count" => count,
+            # WHERE they landed, not a from/to: a bulk move gathers items
+            # from many categories at once, so there is no single source to
+            # put on the left of an arrow. Claiming one would be a lie the
+            # reader cannot check.
+            "moved_to" => %{
+              "catalogue" => catalogue_ref(target_catalogue),
+              "category" => category_ref(target_category)
+            }
+          }
+          |> Map.merge(ActivityLog.sample_uuids(uuids, count))
       },
       opts
     )
@@ -6679,7 +6800,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   defp bulk_trash_category_step(uuid, disposition, opts, acc) do
-    case repo().get(Category, uuid) do
+    case Helpers.get_by_uuid(Category, uuid) do
       nil -> {:cont, acc}
       %Category{status: "deleted"} -> {:cont, acc}
       %Category{} = category -> trash_one_in_bulk(category, disposition, opts, acc)
@@ -6760,10 +6881,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
           parent_catalogue_uuid: moved.catalogue_uuid,
           metadata: %{
             "name" => moved.name,
-            "from_category_uuid" => before.category_uuid,
-            "to_category_uuid" => category_uuid,
-            "from_catalogue_uuid" => before.catalogue_uuid,
-            "to_catalogue_uuid" => moved.catalogue_uuid
+            "changes" =>
+              ActivityLog.changes([
+                {:category, category_ref(before.category_uuid), category_ref(category_uuid)},
+                {:catalogue, catalogue_ref(before.catalogue_uuid),
+                 catalogue_ref(moved.catalogue_uuid)}
+              ])
           }
         },
         Keyword.take(opts, [:broadcast, :mode])
@@ -6891,10 +7014,11 @@ defmodule PhoenixKitCatalogue.Catalogue do
           parent_catalogue_uuid: catalogue_uuid,
           metadata: %{
             "name" => moved.name,
-            "from_catalogue_uuid" => before.catalogue_uuid,
-            "to_catalogue_uuid" => catalogue_uuid,
-            "from_category_uuid" => before.category_uuid,
-            "to_category_uuid" => nil
+            "changes" =>
+              ActivityLog.changes([
+                {:catalogue, catalogue_ref(before.catalogue_uuid), catalogue_ref(catalogue_uuid)},
+                {:category, category_ref(before.category_uuid), category_ref(nil)}
+              ])
           }
         },
         Keyword.take(opts, [:broadcast, :mode])
@@ -7241,6 +7365,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # See PhoenixKitCatalogue.Catalogue.SupplierComments.
   defdelegate supplier_comment_resource_type(), to: SupplierComments, as: :resource_type
   defdelegate supplier_comment_thread_uuid(info), to: SupplierComments, as: :thread_uuid
+
+  defdelegate supplier_comment_thread_for_pair(item_uuid, supplier_uuid),
+    to: SupplierComments,
+    as: :thread_for_pair
 
   defdelegate resolve_supplier_comment_resources(uuids),
     to: SupplierComments,

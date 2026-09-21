@@ -72,7 +72,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       />
 
       <%!-- Search bar --%>
-      <.search_input query={@search_query} placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search items...")} />
+      <.search_input query={@search_query} placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search items…")} />
   """
 
   use Phoenix.Component
@@ -158,7 +158,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <div class="flex items-center justify-between">
           <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
             <.icon name="hero-photo" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Featured Image")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Featured image")}
           </h2>
           <span class="text-xs text-base-content/50">{@subtitle_text}</span>
         </div>
@@ -197,7 +197,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
               <button
                 type="button"
                 phx-click="clear_featured_image"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing…")}
                 class="btn btn-sm btn-ghost"
               >
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
@@ -228,7 +228,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   end
 
   @doc """
-  The shared "Photos and Files" tab panel: featured-image card plus the
+  The shared "Photos and files" tab panel: featured-image card plus the
   attached-files manager (dropzone, in-flight uploads, file grid with
   signed links and a confirm-guarded remove). One implementation for
   the catalogue / category / item forms so the three tabs cannot drift.
@@ -259,7 +259,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <div class="flex flex-col gap-0.5">
           <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
             <.icon name="hero-paper-clip" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attached Files")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attached files")}
             <span :if={@files_state.files != []} class="badge badge-sm badge-ghost ml-1">
               {length(@files_state.files)}
             </span>
@@ -384,7 +384,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
                 type="button"
                 phx-click="remove_file"
                 phx-value-uuid={file.uuid}
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing…")}
                 data-confirm={@remove_confirm}
                 class="btn btn-ghost btn-xs btn-square"
                 title={@remove_title}
@@ -570,7 +570,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
                   value_dead?(value, @counts, @selected) &&
                     Gettext.gettext(
                       PhoenixKitCatalogue.Gettext,
-                      "Nothing matches this together with the filters already on"
+                      "Nothing matches this together with the filters already on."
                     )
                 }
               >
@@ -760,6 +760,20 @@ defmodule PhoenixKitCatalogue.Web.Components do
   def card_media_band, do: "relative h-40 bg-base-200 overflow-hidden"
 
   @doc """
+  Classes for a NAME cell in the catalogue's listing tables — the item's
+  and the category's alike, so the two cannot drift apart on a page that
+  shows both.
+
+  The name is the row's title and now reads larger than the facts beside
+  it (boss via Max, 2026-09-20: "we have space to increase the size of the
+  titles a little bit"). It used to carry no size class at all, so it
+  inherited daisyUI's `table-sm` 12px while every sibling cell set
+  `text-sm` — the one column a person scans was the smallest text in the
+  row.
+  """
+  def name_cell_class, do: "text-base font-medium"
+
+  @doc """
   The band as a DYNAMIC attribute for `table_default`.
 
   `card_media_class` only exists in core after this module's released pin,
@@ -850,7 +864,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           phx_click={@phx_click}
           phx_target={@phx_target}
           uuid={@category.uuid}
-          class="font-medium truncate text-left hover:text-primary"
+          class={"truncate text-left hover:text-primary " <> name_cell_class()}
         >
           {@name || @category.name}
         </.category_card_trigger>
@@ -896,8 +910,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
           <% end %>
         </div>
         <div class="flex items-center gap-1.5">
-          <span :if={@has_subs} class="badge badge-ghost badge-xs" title={gettext("Has subcategories")}>
-            <.icon name="hero-rectangle-stack" class="w-3 h-3" />
+          <span :if={@has_subs} class="badge badge-ghost badge-xs whitespace-nowrap">
+            {subcategories_label(@subcat_count)}
           </span>
           <span :if={@has_files} class="badge badge-ghost badge-xs" title={gettext("Files")}>
             <.icon name="hero-paper-clip" class="w-3 h-3 rotate-45" />
@@ -985,7 +999,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           phx_click={@phx_click}
           phx_target={@phx_target}
           uuid="__uncategorized__"
-          class="font-medium truncate text-left hover:text-primary"
+          class={"truncate text-left hover:text-primary " <> name_cell_class()}
         >
           {gettext("Uncategorized")}
         </.category_card_trigger>
@@ -996,6 +1010,84 @@ defmodule PhoenixKitCatalogue.Web.Components do
       </div>
     </div>
     """
+  end
+
+  # ── Column widths ───────────────────────────────────────────────
+
+  # Prose columns wrap inside a bounded width instead of holding one line.
+  @prose_columns ~w(description attributes)
+
+  @doc """
+  The width rule every catalogue table shares (boss, 2026-09-19: the
+  columns took far more room than their content). Name is the one column
+  left without a width, which makes it the table's only auto column — and
+  a table hands all of its spare width to its auto columns. Every other
+  column is `w-px`, a fixed column sized to its content, so the data
+  columns pack against the right edge and the table still fills its
+  container however few columns are shown.
+
+  `whitespace-nowrap` is what keeps a fixed column at its content's full
+  width: a fixed column takes its min-content, which for wrapping text is
+  its longest word ("Supplier / price", a date on two lines). Prose columns
+  wrap instead, their content bounded by `prose_cell_class/0`.
+
+  Not `w-full` on Name: a percentage column makes a browser widen the
+  table past its container rather than shrink Name when space runs out.
+
+  Takes the Columns-modal ids (strings) and `item_table/1`'s atoms.
+  """
+  @spec column_fit_class(String.t() | atom()) :: String.t() | nil
+  def column_fit_class(id) when is_atom(id), do: column_fit_class(Atom.to_string(id))
+  def column_fit_class("name"), do: nil
+  def column_fit_class(id) when id in @prose_columns, do: "w-px"
+  def column_fit_class(_id), do: "w-px whitespace-nowrap"
+
+  @doc """
+  Classes for a prose cell's CONTENT (a description, an attribute list): as
+  wide as the text up to 16rem, then wrapping, two lines at most. The
+  width sits on the content because a table ignores `max-width` on the
+  cell itself.
+  """
+  @spec prose_cell_class() :: String.t()
+  def prose_cell_class, do: "w-max max-w-64 whitespace-normal line-clamp-2"
+
+  @doc """
+  The ⋮ menu column's header. No visible label: the column is only as wide
+  as its button (boss, 2026-09-19), and the word stays for screen readers.
+  """
+  def actions_header_cell(assigns) do
+    ~H"""
+    <.table_default_header_cell class="w-px">
+      <span class="sr-only">{gettext("Actions")}</span>
+    </.table_default_header_cell>
+    """
+  end
+
+  @doc """
+  The words every surface uses for a category's subcategories — the tree's
+  toggle, the sorted table, the cards, the item picker. Words, not an icon:
+  an unlabelled glyph left the client's owner guessing what it meant
+  (boss, 2026-09-19).
+  """
+  @spec subcategories_label(non_neg_integer()) :: String.t()
+  def subcategories_label(count) do
+    ngettext("%{count} subcategory", "%{count} subcategories", count)
+  end
+
+  # The ids `category_header_cells/1` knows how to draw.
+  @category_cell_ids ~w(items image updated subcategories description files status created)
+
+  @doc """
+  The entries of a category table's columns list that actually draw a
+  cell: the known ids plus enabled extensions' columns, in the given
+  order. The header, every row and the Uncategorized row all iterate THIS
+  list, so no row can carry a cell the header lacks — an unknown id
+  anywhere used to give one row an extra column, and the table then drew
+  its header past every other row's edge.
+  """
+  @spec category_cell_ids([String.t()], map()) :: [String.t()]
+  def category_cell_ids(columns, extension_columns \\ %{}) do
+    Enum.filter(columns, &(&1 in @category_cell_ids or is_map_key(extension_columns, &1)))
   end
 
   @doc """
@@ -1017,44 +1109,44 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   def category_header_cells(assigns) do
     ~H"""
-    <%= for col <- @columns do %>
+    <%= for col <- category_cell_ids(@columns, @extension_columns) do %>
       <%= case col do %>
         <% "items" -> %>
-          <.table_default_header_cell class="text-right">
+          <.table_default_header_cell class="text-right w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")}
           </.table_default_header_cell>
         <% "image" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Image")}
           </.table_default_header_cell>
         <% "updated" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Updated")}
           </.table_default_header_cell>
         <% "subcategories" -> %>
-          <.table_default_header_cell class="text-right">
+          <.table_default_header_cell class="text-right w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Subcategories")}
           </.table_default_header_cell>
         <% "description" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")}
           </.table_default_header_cell>
         <% "files" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Files")}
           </.table_default_header_cell>
         <% "status" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
           </.table_default_header_cell>
         <% "created" -> %>
-          <.table_default_header_cell>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Created")}
           </.table_default_header_cell>
-        <% other -> %>
-          <%= if ext = Map.get(@extension_columns, other) do %>
-            <.table_default_header_cell>{ext.label.()}</.table_default_header_cell>
-          <% end %>
+        <% ext_id -> %>
+          <.table_default_header_cell class="w-px whitespace-nowrap">
+            {@extension_columns[ext_id].label.()}
+          </.table_default_header_cell>
       <% end %>
     <% end %>
     """
@@ -1077,45 +1169,63 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   def category_body_cells(assigns) do
     ~H"""
-    <%= for col <- @columns do %>
+    <%= for col <- category_cell_ids(@columns, @extension_columns) do %>
       <%= case col do %>
         <% "items" -> %>
-          <.table_default_cell class="text-right tabular-nums">
+          <.table_default_cell class="text-right tabular-nums whitespace-nowrap">
             {Map.get(@child_counts, @cat.uuid, 0)}
           </.table_default_cell>
         <% "image" -> %>
-          <.table_default_cell>
+          <.table_default_cell class="whitespace-nowrap">
             <.image_column_cell resource={@cat} />
           </.table_default_cell>
         <% "updated" -> %>
-          <.table_default_cell class="text-sm text-base-content/60">
+          <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
             {Calendar.strftime(@cat.updated_at, "%Y-%m-%d %H:%M")}
           </.table_default_cell>
         <% "subcategories" -> %>
-          <.table_default_cell class="text-right tabular-nums text-base-content/60">
+          <.table_default_cell class="text-right tabular-nums text-base-content/60 whitespace-nowrap">
             {Map.get(@child_subcat_counts, @cat.uuid, 0)}
           </.table_default_cell>
         <% "description" -> %>
-          <.table_default_cell class="text-sm text-base-content/60 max-w-64">
-            <span class="line-clamp-2">{@cat.description || "—"}</span>
+          <.table_default_cell class="text-sm text-base-content/60">
+            <span class={prose_cell_class()}>{@cat.description || "—"}</span>
           </.table_default_cell>
         <% "files" -> %>
-          <.table_default_cell class="text-sm tabular-nums text-base-content/60">
+          <.table_default_cell class="text-sm tabular-nums text-base-content/60 whitespace-nowrap">
             {Map.get(@file_counts, @cat.uuid, 0)}
           </.table_default_cell>
         <% "status" -> %>
-          <.table_default_cell>
+          <.table_default_cell class="whitespace-nowrap">
             <.status_badge status={@cat.status} size={:xs} />
           </.table_default_cell>
         <% "created" -> %>
-          <.table_default_cell class="text-sm text-base-content/60">
+          <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
             {Calendar.strftime(@cat.inserted_at, "%Y-%m-%d %H:%M")}
           </.table_default_cell>
-        <% other -> %>
-          <%= if ext = Map.get(@extension_columns, other) do %>
-            <.table_default_cell>{ext.render.(@cat)}</.table_default_cell>
-          <% end %>
+        <% ext_id -> %>
+          <.table_default_cell class="whitespace-nowrap">
+            {@extension_columns[ext_id].render.(@cat)}
+          </.table_default_cell>
       <% end %>
+    <% end %>
+    """
+  end
+
+  @doc """
+  The Uncategorized row's configurable cells: the item count under Items,
+  an empty cell under every other column `category_header_cells/1` draws —
+  never a cell the header lacks.
+  """
+  attr(:columns, :list, required: true)
+  attr(:count, :integer, required: true)
+  attr(:extension_columns, :map, default: %{})
+
+  def uncategorized_category_cells(assigns) do
+    ~H"""
+    <%= for col <- category_cell_ids(@columns, @extension_columns) do %>
+      <td :if={col == "items"} class="text-right tabular-nums whitespace-nowrap">{@count}</td>
+      <td :if={col != "items"}></td>
     <% end %>
     """
   end
@@ -1295,7 +1405,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <span class="text-sm">
           {Gettext.gettext(
             PhoenixKitCatalogue.Gettext,
-            "No metadata attached yet. Pick a field below to add one."
+            "Metadata not set."
           )}
         </span>
       </div>
@@ -1368,7 +1478,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       type="button"
       phx-click="remove_meta_field"
       phx-value-key={@def_.key}
-      phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing...")}
+      phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing…")}
       class="btn btn-ghost btn-sm btn-square text-error"
       title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
     >
@@ -1401,7 +1511,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       type="button"
       phx-click="remove_meta_field"
       phx-value-key={@key}
-      phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing...")}
+      phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Removing…")}
       class="btn btn-ghost btn-sm btn-square text-error"
       title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Remove")}
     >
@@ -1454,9 +1564,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
     * `query` — current search query string (required)
     * `placeholder` — input placeholder text. `nil` (default) resolves
-      to a translated `gettext("Search...")` inside the component body.
+      to a translated `gettext("Search…")` inside the component body.
       Pass an explicit string to override (e.g.
-      `gettext("Search items...")`).
+      `gettext("Search items…")`).
     * `on_search` — event name for search (default: "search")
     * `on_clear` — event name for clear (default: "clear_search")
     * `debounce` — debounce ms (default: 300)
@@ -1477,7 +1587,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   def search_input(assigns) do
     placeholder =
       assigns.placeholder ||
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search...")
+        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search…")
 
     assigns = assign(assigns, :placeholder, placeholder)
 
@@ -1531,7 +1641,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <%= if is_integer(@loaded) and @loaded < @count do %>
         {Gettext.gettext(
           PhoenixKitCatalogue.Gettext,
-          "Showing %{loaded} of %{count} results for \"%{query}\"",
+          "Showing %{loaded} of %{count} results for “%{query}”",
           loaded: @loaded,
           count: @count,
           query: @query
@@ -1539,8 +1649,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <% else %>
         {Gettext.ngettext(
           PhoenixKitCatalogue.Gettext,
-          "%{count} result for \"%{query}\"",
-          "%{count} results for \"%{query}\"",
+          "%{count} result for “%{query}”",
+          "%{count} results for “%{query}”",
           @count, count: @count, query: @query)}
       <% end %>
     </span>
@@ -1798,9 +1908,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <div class="grid gap-4 md:grid-cols-2">
           <section :if={@has_catalogues}>
             <div class="flex items-center justify-between mb-2">
-              <span class="fieldset-legend font-medium">
+              <span class="label"><span class="font-semibold">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
-              </span>
+              </span></span>
               <button
                 :if={@cat_count > 0}
                 type="button"
@@ -1820,16 +1930,16 @@ defmodule PhoenixKitCatalogue.Web.Components do
                     phx-click={@on_toggle_catalogue}
                     phx-value-uuid={cat.uuid}
                   />
-                  <span class="fieldset-legend truncate" title={cat.name}>{cat.name}</span>
+                  <span class="truncate" title={cat.name}>{cat.name}</span>
                 </label>
               </li>
             </ul>
           </section>
           <section :if={@has_categories}>
             <div class="flex items-center justify-between mb-2">
-              <span class="fieldset-legend font-medium">
+              <span class="label"><span class="font-semibold">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Categories")}
-              </span>
+              </span></span>
               <button
                 :if={@cat_categories_count > 0}
                 type="button"
@@ -1849,7 +1959,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
                     phx-click={@on_toggle_category}
                     phx-value-uuid={cat.uuid}
                   />
-                  <span class="fieldset-legend truncate" title={cat.name}>{cat.name}</span>
+                  <span class="truncate" title={cat.name}>{cat.name}</span>
                 </label>
               </li>
             </ul>
@@ -2294,6 +2404,12 @@ defmodule PhoenixKitCatalogue.Web.Components do
       "When set, action menu gets a 'Search PDFs' entry that pushes this event with phx-value-uuid"
   )
 
+  attr(:preview_event, :string,
+    default: nil,
+    doc:
+      "When set, the action menu opens the read-only product card with this event and phx-value-uuid"
+  )
+
   attr(:on_reorder, :string,
     default: nil,
     doc: "When set, rows become draggable and emit this event"
@@ -2412,12 +2528,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
         <.table_default_row>
           <.table_default_header_cell :if={!is_nil(@on_reorder) or @selectable} class="w-10"></.table_default_header_cell>
           <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
-          <.table_default_header_cell :for={col <- @columns}>
+          <.table_default_header_cell :for={col <- @columns} class={column_fit_class(col)}>
             {column_label(col)}
           </.table_default_header_cell>
-          <.table_default_header_cell :if={@has_actions} class="text-right">
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Actions")}
-          </.table_default_header_cell>
+          <.actions_header_cell :if={@has_actions} />
         </.table_default_row>
       </.table_default_header>
       <tbody
@@ -2500,6 +2614,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
             on_permanent_delete={@on_permanent_delete}
             permanent_delete_type={@permanent_delete_type}
             pdf_search_event={@pdf_search_event}
+            preview_event={@preview_event}
           />
         </.table_default_row>
       </tbody>
@@ -2512,6 +2627,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           on_permanent_delete={@on_permanent_delete}
           permanent_delete_type={@permanent_delete_type}
           pdf_search_event={@pdf_search_event}
+          preview_event={@preview_event}
         />
       </:card_actions>
     </.table_default>
@@ -2632,7 +2748,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     assigns = assign(assigns, :sale_price, pricing.sale_price)
 
     ~H"""
-    <.table_default_cell class="font-medium">
+    <.table_default_cell class={name_cell_class()}>
       <.link
         :if={@edit_path && @item.uuid}
         navigate={safe_call(@edit_path, @item.uuid)}
@@ -2652,34 +2768,34 @@ defmodule PhoenixKitCatalogue.Web.Components do
     <%= for col <- @columns do %>
       <%= case col do %>
         <% "sku" -> %>
-          <.table_default_cell class="text-sm font-mono text-base-content/60">
+          <.table_default_cell class="text-sm font-mono text-base-content/60 whitespace-nowrap">
             {@item.sku || "—"}
           </.table_default_cell>
         <% "image" -> %>
-          <.table_default_cell>
+          <.table_default_cell class="whitespace-nowrap">
             <.image_column_cell resource={@item} />
           </.table_default_cell>
         <% "price" -> %>
-          <.table_default_cell class="text-sm font-semibold">
+          <.table_default_cell class="text-sm font-semibold whitespace-nowrap">
             {format_price(@sale_price)}
           </.table_default_cell>
         <% "supplier_price" -> %>
-          <.table_default_cell class="text-sm text-base-content/80">
+          <.table_default_cell class="text-sm text-base-content/80 whitespace-nowrap">
             {format_supplier_costs(@supplier_costs)}
           </.table_default_cell>
         <% "unit" -> %>
-          <.table_default_cell class="text-sm">{format_unit(@item.unit)}</.table_default_cell>
+          <.table_default_cell class="text-sm whitespace-nowrap">{format_unit(@item.unit)}</.table_default_cell>
         <% "status" -> %>
-          <.table_default_cell>
+          <.table_default_cell class="whitespace-nowrap">
             <.status_badge status={@item.status || "unknown"} size={:xs} />
           </.table_default_cell>
         <% "attributes" -> %>
           <.table_default_cell>
-            <span :if={@attribute_text}>{@attribute_text}</span>
+            <span :if={@attribute_text} class={prose_cell_class()}>{@attribute_text}</span>
             <span :if={!@attribute_text} class="text-base-content/30">—</span>
           </.table_default_cell>
         <% "files" -> %>
-          <.table_default_cell class="text-sm tabular-nums text-base-content/60">
+          <.table_default_cell class="text-sm tabular-nums text-base-content/60 whitespace-nowrap">
             <span :if={@file_count > 0} class="inline-flex items-center gap-1">
               <.icon name="hero-paper-clip" class="w-3.5 h-3.5 rotate-45 opacity-60" />
               {@file_count}
@@ -2687,8 +2803,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
             <span :if={@file_count == 0} class="text-base-content/30">—</span>
           </.table_default_cell>
         <% "description" -> %>
-          <.table_default_cell class="text-sm text-base-content/60 max-w-64">
-            <span class="line-clamp-2">{@item.description || "—"}</span>
+          <.table_default_cell class="text-sm text-base-content/60">
+            <span class={prose_cell_class()}>{@item.description || "—"}</span>
           </.table_default_cell>
         <% "updated" -> %>
           <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
@@ -2700,7 +2816,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           </.table_default_cell>
         <% other -> %>
           <%= if ext = Map.get(@extension_columns, other) do %>
-            <.table_default_cell>{ext.render.(@item)}</.table_default_cell>
+            <.table_default_cell class="whitespace-nowrap">{ext.render.(@item)}</.table_default_cell>
           <% end %>
       <% end %>
     <% end %>
@@ -2717,6 +2833,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   attr(:on_delete, :string, default: nil)
   attr(:pdf_search_event, :string, default: nil)
+  attr(:preview_event, :string, default: nil)
 
   def item_row_menu(assigns) do
     ~H"""
@@ -2727,6 +2844,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         edit_path={@edit_path}
         on_delete={@on_delete}
         pdf_search_event={@pdf_search_event}
+        preview_event={@preview_event}
       />
     </.table_default_cell>
     """
@@ -2743,10 +2861,18 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   attr(:on_delete, :string, default: nil)
   attr(:pdf_search_event, :string, default: nil)
+  attr(:preview_event, :string, default: nil)
 
   def item_card_menu(assigns) do
     ~H"""
     <.table_row_menu mode="auto" id={"#{@id_prefix}-#{@item.uuid}"}>
+      <.table_row_menu_button
+        :if={@preview_event}
+        phx-click={@preview_event}
+        phx-value-uuid={@item.uuid}
+        icon="hero-eye"
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+      />
       <.table_row_menu_link
         :if={@edit_path}
         navigate={safe_call(@edit_path, @item.uuid)}
@@ -2761,13 +2887,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search PDFs")}
       />
       <.table_row_menu_divider :if={
-        (@edit_path || @pdf_search_event) && @on_delete
+        (@preview_event || @edit_path || @pdf_search_event) && @on_delete
       } />
       <.table_row_menu_button
         :if={@on_delete}
         phx-click={@on_delete}
         phx-value-uuid={@item.uuid}
-        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
         icon="hero-trash"
         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
         variant="error"
@@ -2851,12 +2977,20 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:on_permanent_delete, :string, default: nil)
   attr(:permanent_delete_type, :string, default: "item")
   attr(:pdf_search_event, :string, default: nil)
+  attr(:preview_event, :string, default: nil)
 
   defp card_action_buttons(assigns) do
     ~H"""
     <%!-- Card footers use the same ⋮ menu as table rows (boss standard) —
          one compact trigger instead of a row of icon buttons. --%>
     <.table_row_menu mode="auto" id={"item-table-card-menu-#{@item.uuid}"}>
+      <.table_row_menu_button
+        :if={@preview_event}
+        phx-click={@preview_event}
+        phx-value-uuid={@item.uuid}
+        icon="hero-eye"
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+      />
       <.table_row_menu_link
         :if={@edit_path && @item.uuid}
         navigate={safe_call(@edit_path, @item.uuid)}
@@ -2874,7 +3008,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         :if={@on_restore}
         phx-click={@on_restore}
         phx-value-uuid={@item.uuid}
-        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
+        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
         icon="hero-arrow-path"
         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
         variant="success"
@@ -2884,7 +3018,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         :if={@on_delete}
         phx-click={@on_delete}
         phx-value-uuid={@item.uuid}
-        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
         icon="hero-trash"
         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
         variant="error"
@@ -2894,9 +3028,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
         phx-click={@on_permanent_delete}
         phx-value-uuid={@item.uuid}
         phx-value-type={@permanent_delete_type}
-        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+        phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
         icon="hero-trash"
-        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         variant="error"
       />
     </.table_row_menu>
@@ -2928,7 +3062,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     assigns = assign(assigns, :name_link, item_name_link(assigns, assigns.item))
 
     ~H"""
-    <.table_default_cell class="font-medium">
+    <.table_default_cell class={name_cell_class()}>
       <.link :if={@name_link} navigate={@name_link} class="link link-hover">
         {@item.name || "—"}
       </.link>
@@ -2946,7 +3080,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :sku} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm font-mono text-base-content/60">
+    <.table_default_cell class="text-sm font-mono text-base-content/60 whitespace-nowrap">
       {@item.sku || "—"}
     </.table_default_cell>
     """
@@ -2954,13 +3088,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :base_price} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm">{format_price(@item.base_price)}</.table_default_cell>
+    <.table_default_cell class="text-sm whitespace-nowrap">{format_price(@item.base_price)}</.table_default_cell>
     """
   end
 
   defp item_cell(%{column: :price} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm font-semibold">
+    <.table_default_cell class="text-sm font-semibold whitespace-nowrap">
       {format_price(safe_sale_price(@item, @markup_percentage))}
     </.table_default_cell>
     """
@@ -2968,7 +3102,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :discount} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm">
+    <.table_default_cell class="text-sm whitespace-nowrap">
       {format_percentage(safe_effective_discount(@item, @discount_percentage))}
     </.table_default_cell>
     """
@@ -2976,7 +3110,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :final_price} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm font-semibold">
+    <.table_default_cell class="text-sm font-semibold whitespace-nowrap">
       {format_price(safe_final_price(@item, @markup_percentage, @discount_percentage))}
     </.table_default_cell>
     """
@@ -2984,13 +3118,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :unit} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm">{format_unit(@item.unit)}</.table_default_cell>
+    <.table_default_cell class="text-sm whitespace-nowrap">{format_unit(@item.unit)}</.table_default_cell>
     """
   end
 
   defp item_cell(%{column: :status} = assigns) do
     ~H"""
-    <.table_default_cell>
+    <.table_default_cell class="whitespace-nowrap">
       <.status_badge status={@item.status || "unknown"} size={:xs} />
     </.table_default_cell>
     """
@@ -2998,7 +3132,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :category} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm text-base-content/60">
+    <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
       {safe_assoc_field(@item, :category, :name)}
     </.table_default_cell>
     """
@@ -3013,7 +3147,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       )
 
     ~H"""
-    <.table_default_cell class="text-sm">
+    <.table_default_cell class="text-sm whitespace-nowrap">
       <.link
         :if={@catalogue_name != "—" && @catalogue_path}
         navigate={safe_call(@catalogue_path, safe_assoc_field(@item, :catalogue, :uuid))}
@@ -3028,7 +3162,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   defp item_cell(%{column: :manufacturer} = assigns) do
     ~H"""
-    <.table_default_cell class="text-sm text-base-content/60">
+    <.table_default_cell class="text-sm text-base-content/60 whitespace-nowrap">
       {manufacturer_display(@item)}
     </.table_default_cell>
     """
@@ -3053,6 +3187,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:on_permanent_delete, :string, default: nil)
   attr(:permanent_delete_type, :string, default: "item")
   attr(:pdf_search_event, :string, default: nil)
+  attr(:preview_event, :string, default: nil)
 
   defp item_actions(%{item: %{uuid: nil}} = assigns) do
     ~H"""
@@ -3064,6 +3199,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
     ~H"""
     <.table_default_cell class="text-right whitespace-nowrap">
       <.table_row_menu mode="auto" id={"item-action-#{@item.uuid}"}>
+        <.table_row_menu_button
+          :if={@preview_event}
+          phx-click={@preview_event}
+          phx-value-uuid={@item.uuid}
+          icon="hero-eye"
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+        />
         <.table_row_menu_link
           :if={@edit_path}
           navigate={safe_call(@edit_path, @item.uuid)}
@@ -3078,13 +3220,13 @@ defmodule PhoenixKitCatalogue.Web.Components do
           label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search PDFs")}
         />
         <.table_row_menu_divider :if={
-          (@edit_path || @pdf_search_event) && (@on_delete || @on_restore)
+          (@preview_event || @edit_path || @pdf_search_event) && (@on_delete || @on_restore)
         } />
         <.table_row_menu_button
           :if={@on_delete}
           phx-click={@on_delete}
           phx-value-uuid={@item.uuid}
-          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
           icon="hero-trash"
           label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
           variant="error"
@@ -3093,7 +3235,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           :if={@on_restore}
           phx-click={@on_restore}
           phx-value-uuid={@item.uuid}
-          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
+          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
           icon="hero-arrow-path"
           label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
           variant="success"
@@ -3104,9 +3246,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
           phx-click={@on_permanent_delete}
           phx-value-uuid={@item.uuid}
           phx-value-type={@permanent_delete_type}
-          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+          phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
           icon="hero-trash"
-          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
           variant="error"
         />
       </.table_row_menu>
@@ -3228,15 +3370,15 @@ defmodule PhoenixKitCatalogue.Web.Components do
   defp has_actions?(assigns) do
     assigns[:edit_path] != nil or assigns[:on_delete] != nil or
       assigns[:on_restore] != nil or assigns[:on_permanent_delete] != nil or
-      assigns[:pdf_search_event] != nil
+      assigns[:pdf_search_event] != nil or assigns[:preview_event] != nil
   end
 
   defp column_label(:name), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")
   defp column_label(:sku), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")
-  defp column_label(:base_price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base Price")
+  defp column_label(:base_price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base price")
   defp column_label(:price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Price")
   defp column_label(:discount), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discount")
-  defp column_label(:final_price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Final Price")
+  defp column_label(:final_price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Final price")
   defp column_label(:unit), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")
   defp column_label(:status), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")
   defp column_label(:category), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")
@@ -3388,7 +3530,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       %{id: "sku", label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU") end},
       %{
         id: "base_price",
-        label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base Price") end
+        label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base price") end
       },
       %{id: "unit", label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit") end},
       %{id: "status", label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status") end},

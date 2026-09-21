@@ -62,6 +62,8 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
   use Phoenix.LiveComponent
   use Gettext, backend: PhoenixKitCatalogue.Gettext
 
+  import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
+
   import PhoenixKitCatalogue.Web.Components.Browse
 
   alias PhoenixKitCatalogue.Catalogue
@@ -307,7 +309,7 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
       </div>
 
       <div :if={@browse.items == [] and not @browse.loading?} class="text-center py-12">
-        <div class="text-4xl mb-3 opacity-40">🔍</div>
+        <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-3 opacity-40" />
         <p class="text-base-content/60">{gettext("No items match your search.")}</p>
       </div>
 

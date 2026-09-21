@@ -44,7 +44,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
   alias PhoenixKit.Modules.Storage
   alias PhoenixKit.Utils.Multilang
 
-  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub}
+  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Helpers, PubSub}
 
   alias PhoenixKitCatalogue.Schemas.{
     Item,
@@ -115,11 +115,11 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibrary do
 
   @doc "Fetches a PDF by UUID. Returns `nil` if not found."
   @spec get_pdf(Ecto.UUID.t()) :: Pdf.t() | nil
-  def get_pdf(uuid), do: repo().get(Pdf, uuid)
+  def get_pdf(uuid), do: Helpers.get_by_uuid(Pdf, uuid)
 
   @doc "Fetches a PDF by UUID. Raises `Ecto.NoResultsError` if not found."
   @spec get_pdf!(Ecto.UUID.t()) :: Pdf.t()
-  def get_pdf!(uuid), do: repo().get!(Pdf, uuid)
+  def get_pdf!(uuid), do: Helpers.get_by_uuid!(Pdf, uuid)
 
   @doc """
   Returns the extraction state for a PDF (or its `file_uuid`), or

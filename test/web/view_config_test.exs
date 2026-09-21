@@ -4,7 +4,7 @@ defmodule PhoenixKitCatalogue.Web.ViewConfigTest do
 
   test "defaults shape" do
     assert %{
-             columns: ["name", "folder", "items", "status", "updated"],
+             columns: ["folder", "items", "status", "updated"],
              sort_by: "position",
              sort_dir: :asc,
              filters: %{},
@@ -25,6 +25,23 @@ defmodule PhoenixKitCatalogue.Web.ViewConfigTest do
     assert got.columns == ["items"]
     assert got.sort_dir == :desc
     assert got.view == "card"
+  end
+
+  test "normalize keeps an empty column list — every optional column hidden is a choice" do
+    assert VC.normalize(:detail_categories, %{"columns" => []}).columns == []
+    assert VC.normalize(:catalogues, %{"columns" => []}).columns == []
+  end
+
+  test "normalize falls back to the defaults only when nothing valid was stored" do
+    defaults = VC.defaults(:detail_categories).columns
+
+    assert VC.normalize(:detail_categories, %{}).columns == defaults
+    assert VC.normalize(:detail_categories, %{"columns" => "items"}).columns == defaults
+    # Every stored id went stale (a column since removed from the module).
+    assert VC.normalize(:detail_categories, %{"columns" => ["gone"]}).columns == defaults
+    # A config saved while "name" still sat in the defaults loads without it.
+    stored = %{"columns" => ["name", "items"]}
+    assert VC.normalize(:detail_categories, stored).columns == ["items"]
   end
 
   test "normalize strips filter keys that are not filterable columns for the scope" do

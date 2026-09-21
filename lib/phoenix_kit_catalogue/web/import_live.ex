@@ -10,6 +10,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   require Logger
 
   import PhoenixKitWeb.Components.Core.Checkbox, only: [checkbox: 1]
+  import PhoenixKitWeb.Components.Core.FormFieldLabel, only: [label: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
@@ -1476,8 +1477,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   defp party_picker(assigns) do
     ~H"""
-    <div class="fieldset w-full max-w-md">
-      <span class="block mb-2 text-sm font-medium">{@label}</span>
+    <div class="w-full max-w-md">
+      <.label class="block">{@label}</.label>
       <form id={@form_id} phx-change={@on_change} class="space-y-3">
         <.select
           name={@mode_field}
@@ -1499,7 +1500,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
         <div :if={@mode == :column} class="pl-4 border-l-2 border-secondary/20">
           <% available = available_picker_columns(@column_mappings, @target) %>
-          <span class="block mb-1 text-xs text-base-content/60">{@column_picker_prompt}</span>
+          <span class="label mb-2 font-semibold">{@column_picker_prompt}</span>
           <%= if available == [] do %>
             <p class="text-xs text-warning bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">
               {Gettext.gettext(
@@ -1522,7 +1523,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
               name={@column_field}
               id={"#{@form_id}-column"}
               value={selected_col}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a column...")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a column —")}
               options={Enum.map(available, &{&1.header, &1.column_index})}
               class="select-sm"
             />
@@ -1564,10 +1565,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       class="mt-2 pl-4 border-l-2 border-secondary/20 max-w-md"
     >
       <div class="flex flex-col gap-4">
-        <div class="fieldset">
-          <span class="fieldset-legend font-semibold mb-2">
+        <div>
+          <.label class="block">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")} *
-          </span>
+          </.label>
           <input
             type="text"
             name={"#{@form_prefix}[name]"}
@@ -1581,10 +1582,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           </span>
         </div>
 
-        <div class="fieldset">
-          <span class="fieldset-legend font-semibold mb-2">
+        <div>
+          <.label class="block">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")}
-          </span>
+          </.label>
           <textarea
             name={"#{@form_prefix}[description]"}
             class="textarea w-full transition-colors focus:textarea-primary"
@@ -1592,10 +1593,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           >{Ecto.Changeset.get_field(@changeset, :description) || ""}</textarea>
         </div>
 
-        <div class="fieldset">
-          <span class="fieldset-legend font-semibold mb-2">
+        <div>
+          <.label class="block">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Website")}
-          </span>
+          </.label>
           <input
             type="url"
             name={"#{@form_prefix}[website]"}
@@ -1692,7 +1693,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           placeholder={
             Gettext.gettext(
               PhoenixKitCatalogue.Gettext,
-              "What kinds of items belong in this category..."
+              "What kinds of items belong in this category…"
             )
           }
           type="textarea"
@@ -1700,10 +1701,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         />
       </.multilang_fields_wrapper>
 
-      <div class="fieldset mt-6">
-        <span class="fieldset-legend font-semibold mb-2">
+      <div class="mt-6">
+        <.label class="block">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Position")}
-        </span>
+        </.label>
         <input
           type="number"
           name="category[position]"
@@ -1711,7 +1712,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           class="input w-28 transition-colors focus:input-primary"
           min="0"
         />
-        <span class="fieldset-label text-base-content/50 mt-1">
+        <span class="block text-xs text-base-content/50 mt-1">
           {Gettext.gettext(
             PhoenixKitCatalogue.Gettext,
             "Lower numbers appear first."
@@ -1757,21 +1758,21 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <div class="card-body gap-6">
         <h2 class="card-title">
           <.icon name="hero-arrow-up-tray" class="w-5 h-5" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Items")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import items")}
         </h2>
 
         <%!-- Upload form (catalogue + file in one form) --%>
         <form id="upload-form" phx-submit="parse_file" phx-change="validate_upload" class="space-y-6">
           <%!-- Catalogue selector --%>
-          <div class="fieldset w-full max-w-md">
-            <span class="block mb-2 text-sm font-medium">
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Target Catalogue")}
-            </span>
+          <div class="w-full max-w-md">
+            <.label class="block">
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Target catalogue")}
+            </.label>
             <.select
               name="catalogue"
               id="upload-catalogue"
               value={@selected_catalogue && @selected_catalogue.uuid}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a catalogue...")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a catalogue —")}
               options={
                 Enum.map(
                   @catalogues,
@@ -1788,10 +1789,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           </div>
 
           <%!-- Source selector --%>
-          <div class="fieldset w-full max-w-md">
-            <span class="block mb-2 text-sm font-medium">
+          <div class="w-full max-w-md">
+            <.label class="block">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Source")}
-            </span>
+            </.label>
             <.select
               name="source"
               id="upload-source"
@@ -1802,15 +1803,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
           <%!-- Format selector (only shown when the source has multiple formats) --%>
           <% source_mod = Import.source_by_key(@selected_source) %>
-          <div :if={source_mod && length(source_mod.formats()) > 1} class="fieldset w-full max-w-md">
-            <span class="block mb-2 text-sm font-medium">
+          <div :if={source_mod && length(source_mod.formats()) > 1} class="w-full max-w-md">
+            <.label class="block">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Format")}
-            </span>
+            </.label>
             <.select
               name="format"
               id="upload-format"
               value={@selected_format}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a format...")}
+              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a format —")}
               options={Enum.map(source_mod.formats(), fn {k, label} -> {label, Atom.to_string(k)} end)}
             />
           </div>
@@ -1825,7 +1826,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             <button
               type="button"
               phx-click="clear_file"
-              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clearing...")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clearing…")}
               class="btn btn-xs btn-ghost text-base-content/50"
             >
               <.icon name="hero-x-mark" class="w-4 h-4" />
@@ -1834,10 +1835,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           </div>
 
           <%!-- File upload with drag-and-drop (only when no file parsed yet) --%>
-          <div :if={@filename == nil} class="fieldset">
-            <label class="block mb-2 text-sm font-medium">
+          <div :if={@filename == nil}>
+            <.label class="block">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "File")}
-            </label>
+            </.label>
             <div
               class="border-2 border-dashed border-base-300 rounded-lg p-8 text-center transition-colors cursor-pointer hover:border-primary hover:bg-primary/5"
               phx-drop-target={@uploads.import_file.ref}
@@ -1849,7 +1850,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                     <p class="font-semibold text-base-content">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag file here or click to browse")}
                     </p>
-                    <p class="text-sm text-base-content/70 mt-1">
+                    <p class="text-xs text-base-content/50 mt-1">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supports .xlsx, .csv, .txt, .json files (max 10MB)")}
                     </p>
                   </div>
@@ -1908,10 +1909,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                 <.icon name="hero-arrow-right" class="w-4 h-4" />
               <% upload_in_progress? -> %>
                 <span class="loading loading-spinner loading-xs"></span>
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uploading...")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uploading…")}
               <% true -> %>
                 <.icon name="hero-arrow-up-tray" class="w-4 h-4" />
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload & Parse")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload & parse")}
             <% end %>
           </button>
         </form>
@@ -1940,7 +1941,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <div class="card-body gap-6">
         <h2 class="card-title">
           <.icon name="hero-arrows-right-left" class="w-5 h-5" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Map Columns")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Map columns")}
         </h2>
 
         <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
@@ -1954,7 +1955,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
         <%!-- Sheet selector --%>
         <form :if={length(@sheets) > 1} id="sheet-form" phx-change="select_sheet" class="flex items-center gap-2">
-          <span class="text-sm font-medium">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sheet:")}</span>
+          <span class="label"><span class="font-semibold">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sheet:")}</span></span>
           <.select
             name="sheet"
             id="import-sheet"
@@ -1968,14 +1969,14 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <div :if={@multilang_enabled}>
           <div class="flex items-center gap-2 mb-3">
             <.icon name="hero-language" class="w-5 h-5 text-primary" />
-            <h2 class="card-title text-lg m-0">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Language")}</h2>
+            <h2 class="card-title text-lg m-0">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import language")}</h2>
           </div>
           <.multilang_tabs multilang_enabled={@multilang_enabled} language_tabs={@language_tabs} current_lang={@current_lang} show_info={false} show_header={false} />
         </div>
 
         <%!-- Category selector --%>
-        <div class="fieldset w-full max-w-md">
-          <span class="block mb-2 text-sm font-medium">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Into Category")}</span>
+        <div class="w-full max-w-md">
+          <.label class="block">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import into category")}</.label>
           <form id="category-form" phx-change="select_import_category" class="space-y-3">
             <.select
               name="category_mode"
@@ -2023,7 +2024,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
               </.checkbox>
 
               <% available_category_cols = available_picker_columns(@column_mappings, :category) %>
-              <span class="block mb-1 text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Which column contains the category names?")}</span>
+              <span class="label mb-2 font-semibold">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Which column contains the category names?")}</span>
               <%= if available_category_cols == [] do %>
                 <p class="text-xs text-warning bg-warning/10 border border-warning/30 rounded-lg px-3 py-2">
                   {Gettext.gettext(
@@ -2040,7 +2041,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                   name="category_column"
                   id="import-category-column"
                   value={selected_category_col}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a column...")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a column —")}
                   options={Enum.map(available_category_cols, &{&1.header, &1.column_index})}
                   class="select-sm"
                 />
@@ -2072,7 +2073,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
         <%!-- Manufacturer selector --%>
         <.party_picker
-          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set Manufacturer")}
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set manufacturer")}
           form_id="manufacturer-form"
           on_change="select_import_manufacturer"
           mode_field="manufacturer_mode"
@@ -2101,7 +2102,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
         <%!-- Supplier selector --%>
         <.party_picker
-          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Link to Supplier")}
+          label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Link to supplier")}
           form_id="supplier-form"
           on_change="select_import_supplier"
           mode_field="supplier_mode"
@@ -2185,7 +2186,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           <input type="checkbox" id="sample-data-collapse" />
           <div class="collapse-title text-sm font-medium">
             <.icon name="hero-table-cells" class="w-4 h-4 inline" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sample Data (first 5 rows)")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sample data (first 5 rows)")}
           </div>
           <div class="collapse-content overflow-x-auto">
             <table class="table table-sm table-zebra [&_th]:border-r [&_th]:border-base-300 [&_td]:border-r [&_td]:border-base-300 [&_th:last-child]:border-r-0 [&_td:last-child]:border-r-0">
@@ -2213,9 +2214,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           <button
             class="btn btn-primary btn-sm"
             phx-click="continue_to_confirm"
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Validating...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Validating…")}
           >
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Continue to Confirm")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Continue to confirm")}
             <.icon name="hero-arrow-right" class="w-4 h-4" />
           </button>
         </div>
@@ -2232,7 +2233,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <div class="card-body gap-4">
         <h2 class="card-title">
           <.icon name="hero-clipboard-document-check" class="w-5 h-5" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Confirm Import")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Confirm import")}
         </h2>
 
         <%!-- Stats --%>
@@ -2242,7 +2243,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             <div class="stat-value text-primary">{@import_plan.stats.valid}</div>
           </div>
           <div :if={@import_plan.categories_to_create != []} class="stat">
-            <div class="stat-title">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Categories")}</div>
+            <div class="stat-title">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "New categories")}</div>
             <div class="stat-value text-secondary">{length(@import_plan.categories_to_create)}</div>
           </div>
           <div :if={@import_plan.stats.invalid > 0} class="stat">
@@ -2266,7 +2267,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
               <tr>
                 <th class="bg-base-200">#</th>
                 <th :if={has_mapping?(@column_mappings, :name)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}</th>
-                <th :if={has_mapping?(@column_mappings, :sku)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Article Code")}</th>
+                <th :if={has_mapping?(@column_mappings, :sku)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Article code")}</th>
                 <th :if={has_mapping?(@column_mappings, :base_price)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Price")}</th>
                 <th :if={has_mapping?(@column_mappings, :markup_percentage)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup %")}</th>
                 <th :if={has_mapping?(@column_mappings, :unit)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}</th>
@@ -2331,15 +2332,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <div class="flex gap-2">
           <button class="btn btn-ghost btn-sm" phx-click="back_to_mapping">
             <.icon name="hero-arrow-left" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Back to Mapping")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Back to mapping")}
           </button>
           <button
             class="btn btn-primary btn-sm"
             phx-click="execute_import"
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Starting import...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Starting import…")}
           >
             <.icon name="hero-play" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import %{count} Items", count: @import_plan.stats.valid)}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import %{count} items", count: @import_plan.stats.valid)}
           </button>
         </div>
       </div>
@@ -2362,7 +2363,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <div class="card-body items-center gap-4 py-12">
         <span class="loading loading-spinner loading-lg text-primary"></span>
         <h2 class="text-lg font-semibold">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Importing...")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Importing…")}
         </h2>
         <progress class="progress progress-primary w-full max-w-md" value={@pct} max="100"></progress>
         <p class="text-sm text-base-content/60">
@@ -2383,7 +2384,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           <.icon name="hero-exclamation-triangle" class="w-16 h-16" />
         </div>
         <h2 class="text-xl font-bold">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Failed")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import failed")}
         </h2>
         <p class="text-sm text-base-content/70 max-w-md text-center">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details.")}
@@ -2393,11 +2394,11 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <div class="flex gap-2 mt-4">
           <.link :if={@selected_catalogue} navigate={Paths.catalogue_detail(@selected_catalogue.uuid)} class="btn btn-ghost btn-sm">
             <.icon name="hero-eye" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View Catalogue")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View catalogue")}
           </.link>
           <button class="btn btn-primary btn-sm" phx-click="import_another">
             <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Another")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import another")}
           </button>
         </div>
       </div>
@@ -2415,7 +2416,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           <.icon name="hero-check-circle" class="w-16 h-16" />
         </div>
         <h2 class="text-xl font-bold">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Complete")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import complete")}
         </h2>
 
         <div :if={@import_result} class="stats shadow">
@@ -2440,11 +2441,11 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <div class="flex gap-2 mt-4">
           <.link :if={@selected_catalogue} navigate={Paths.catalogue_detail(@selected_catalogue.uuid)} class="btn btn-primary btn-sm">
             <.icon name="hero-eye" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View Catalogue")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View catalogue")}
           </.link>
           <button class="btn btn-ghost btn-sm" phx-click="import_another">
             <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Another")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import another")}
           </button>
         </div>
       </div>
@@ -2460,7 +2461,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       <div class="card-body gap-6">
         <h2 class="card-title">
           <.icon name="hero-magnifying-glass" class="w-5 h-5" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "PRO100 Sync Preview")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "PRO100 sync preview")}
         </h2>
 
         <div class="stats shadow">
@@ -2537,7 +2538,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
               checked={@create_unmatched}
               phx-click="toggle_create_unmatched"
             />
-            <span class="fieldset-legend font-semibold">
+            <span class="font-semibold">
               {Gettext.ngettext(
                 PhoenixKitCatalogue.Gettext,
                 "Create %{count} unmatched position",
@@ -2566,7 +2567,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                   <td>{create.attrs[:base_price]}</td>
                   <td class="text-base-content/60">
                     {create.category ||
-                      Gettext.gettext(PhoenixKitCatalogue.Gettext, "— no category —")}
+                      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uncategorized")}
                   </td>
                   <td class="flex gap-1">
                     <span :if={:price_unparseable in create.flags} class="badge badge-warning badge-sm">
@@ -2607,12 +2608,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         </div>
 
         <div class="flex gap-3">
-          <button class="btn btn-primary" phx-click="apply_pro100" phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Applying...")}>
-            <.icon name="hero-check" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Apply")}
-          </button>
           <button class="btn btn-ghost" phx-click="import_another">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
+          </button>
+          <button class="btn btn-primary" phx-click="apply_pro100" phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Applying…")}>
+            <.icon name="hero-check" class="w-4 h-4" />
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Apply")}
           </button>
         </div>
       </div>
@@ -2630,7 +2631,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           <.icon name="hero-check-circle" class="w-16 h-16" />
         </div>
         <h2 class="text-xl font-bold">
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sync Complete")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sync complete")}
         </h2>
 
         <div class="stats shadow">
@@ -2659,11 +2660,11 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         <div class="flex gap-2 mt-4">
           <.link :if={@selected_catalogue} navigate={Paths.catalogue_detail(@selected_catalogue.uuid)} class="btn btn-primary btn-sm">
             <.icon name="hero-eye" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View Catalogue")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "View catalogue")}
           </.link>
           <button class="btn btn-ghost btn-sm" phx-click="import_another">
             <.icon name="hero-arrow-path" class="w-4 h-4" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import Another")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import another")}
           </button>
         </div>
       </div>
@@ -2700,31 +2701,31 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   defp translate_target("— Skip —"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Skip —")
 
-  defp translate_target("Item Name"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item Name")
+  defp translate_target("Item name"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item name")
 
   defp translate_target("Description"),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")
 
-  defp translate_target("Article Code"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Article Code")
+  defp translate_target("Article code"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Article code")
 
-  defp translate_target("Base Price"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base Price")
+  defp translate_target("Base price"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Base price")
 
-  defp translate_target("Markup Override (%)"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup Override (%)")
+  defp translate_target("Markup override (%)"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup override (%)")
 
-  defp translate_target("Unit of Measure"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit of Measure")
+  defp translate_target("Unit of measure"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit of measure")
 
   defp translate_target("Manufacturer"),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer")
 
   defp translate_target("Supplier"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Supplier")
 
-  defp translate_target("Create Categories"),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create Categories")
+  defp translate_target("Create categories"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create categories")
 
   defp translate_target(label), do: label
 
@@ -2908,13 +2909,14 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   end
 
   defp error_to_string(:too_large),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File is too large (max 10MB)")
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File is too large (max 10MB).")
 
   defp error_to_string(:too_many_files),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Only one file allowed")
 
   defp error_to_string(:not_accepted),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File type not supported. Use .xlsx or .csv")
+    do:
+      Gettext.gettext(PhoenixKitCatalogue.Gettext, "File type not supported. Use .xlsx or .csv.")
 
   defp error_to_string(err), do: inspect(err)
 

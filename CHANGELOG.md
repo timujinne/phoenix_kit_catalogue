@@ -1,3 +1,182 @@
+## 0.42.0 - 2026-09-20
+
+Review: `dev_docs/pull_requests/2026/130-view-cards-readable-activity/`.
+
+**Requires `phoenix_kit` 2.34.0 or later** — the floor is raised from 2.13.11.
+The Events page and the bulk bar use `PhoenixKit.Activity.split_changes/1`,
+`humanize_metadata_key/1` and `bulk_select_scope`'s `swap`, which first ship
+in core 2.34.0; on an older core the Events page raises on any entry with
+metadata.
+
+### Added
+
+- **View for catalogues and categories** (#130). The read-only card the items
+  have, one level up: a catalogue shows its kind, status, folder, counts and
+  markup/discount; a category its status, the path above it and what it
+  holds. The operator rows sit behind `admin: true`, as on the item card, and
+  a deleted row offers no Edit. The old "View" link into a catalogue is now
+  "Open".
+- **Activity entries link to the record** (#130). `resource_links/0` carries
+  path templates for items, categories, catalogues, PDFs, attribute groups,
+  folders and supplier rows (which open their item), so the Subject of an
+  entry is no longer a bare uuid.
+
+### Changed
+
+- **An update says what changed** (#130). `.updated` entries for items,
+  categories and catalogues carry a `"changes"` map of `from`/`to` pairs for
+  the fields that really moved (a description records only that it changed).
+  Moves record both ends as snapshotted `{uuid, label}` references instead of
+  `from_*_uuid` / `to_*_uuid`, a bulk move caps its uuid list at ten, a cost
+  revision records `changes.unit_cost` instead of `old_cost` / `new_cost`, and
+  a supplier row's entry names the supplier and the item. The Events page
+  leads each line with the change.
+- A listing row's name is `text-base` everywhere, through one
+  `name_cell_class/0` (#130).
+
+### Fixed
+
+- The bulk action bar replaces the controls row instead of pushing every row
+  down, so the next click no longer lands on the wrong checkbox (#130).
+- A View card is closed when the detail page changes level, so it cannot
+  come back showing another level's row (#130).
+- The deep-link conformance test could not see a logged resource type that
+  was never given a link; every logged type is now linked or listed as
+  unlinked on purpose.
+
+## 0.41.0 - 2026-09-20
+
+Review: `dev_docs/pull_requests/2026/129-supplier-comments-view-popup/`.
+
+### Added
+
+- **A staged supplier can be commented on before Save** (#129). A pair's
+  comment thread is known before its row exists — the inherited thread, else a
+  name-based (v5) uuid of the item × supplier — so the comment box works on a
+  supplier that has only been picked. Save stamps the same uuid. A duplicated
+  item's copied supplier rows get the copy's own pair thread, never the
+  source's. A new item has no uuid yet, so its staged rows get none until it
+  exists.
+- **View is on the item menus** (#129) and opens the read-only product card.
+  The card gained the rows an operator opens it for — status, location
+  (catalogue › category), manufacturer, primary supplier with cost — behind
+  `admin: true`, because the same component is embedded in client-facing
+  surfaces that must not show them. The card's footer offers Edit (not for a
+  deleted item), carrying `return_to`.
+
+### Changed
+
+- Unset selects say "— X not set —" rather than "— No manufacturer —", which
+  read as if there were none to pick; empty states say "Suppliers not set."
+  and "Metadata not set." rather than "linked" or "attached" (#129).
+- **One label size, sentence case, one prompt style** (#129). daisyUI's
+  `.fieldset` was shrinking labels to 12px beside 14px ones; every field now
+  uses core's label, headings and help text match, and titles/buttons/tabs are
+  sentence case. The rules live in `dev_docs/guides/ui-conventions.md` and
+  `test/web/ui_conventions_test.exs`.
+- PDF search left the catalogue page for now (#129): the item lists offer
+  View, Edit and Delete. The item form's PDFs tab and the PDF library page
+  are untouched; the shared menus keep their optional `pdf_search_event`.
+
+### Fixed
+
+- The View popup is scoped like every other item event on the catalogue page,
+  so a crafted uuid cannot open an item from another catalogue with this
+  page's return path on its Edit link. A supplier hard-deleted after its row
+  was written falls back to `supplier_name_snapshot`; name and cost rescue
+  separately, so one failing resolve no longer drops the other (#129).
+- The Deleted tab's listing menus now offer View as well. Search results and
+  photo thumbs already opened the card; the trash ⋮ (Restore / Delete forever)
+  had dropped the new action. (Post-merge review fix.)
+
+## 0.40.0 - 2026-09-19
+
+Review: `dev_docs/pull_requests/2026/128-item-location-staged-suppliers/`.
+
+### Added
+
+- **The item form has a Location section** (#128). Where an item lives — a
+  catalogue, and optionally a category in it — is picked from a folder ›
+  catalogue › category tree in the Details tab and applied on Save through the
+  move functions, never from a form event. The tree (`Web.ItemLocation`) offers
+  only catalogues of the item's own kind, searches by name with accents and case
+  ignored, opens at the item's current place, and is re-resolved at save time so
+  a tree minutes old cannot file an item into a place that is gone. The form
+  payload's `category_uuid` is dropped outright: it is not a field this form
+  renders, and honouring a forged one would have carried the item past the
+  catalogue pin.
+- **Supplier changes are staged until Save** (#128). Picking a supplier adds its
+  row at once, the cost and currency are typed straight in the table, and
+  Remove, Make primary and the row dialog's terms are staged too —
+  `Web.SupplierDraft` holds them all and writes them once the item itself has
+  saved, in an order that keeps the context's rules meaningful (removals, edits,
+  adds, then the primary the table showed, set explicitly). Rows are keyed by
+  SUPPLIER, so a staged change survives the price revision a cost edit makes. A
+  value that would not save blocks the whole save the way an invalid item field
+  does, and what fails to write stays staged on a form that stays.
+- **The item form has a PDFs tab** (#128). `PdfSearchModal` gained an inline
+  variant: the box starts with the item's name and searches every translated
+  name, edit it and it searches the whole library, put the name back and it is
+  the item search again. Mounted on the first visit and hidden (not dropped)
+  afterwards, so results survive tab switches; a renamed item re-runs its own
+  search, a query the operator typed is left alone. `?tab=pdfs` deep-links to it
+  on an existing item and falls back to Details on a new one.
+- **GitHub-style level switchers in the catalogue detail header** (#128).
+  `Web.LevelSwitchers` puts a ▾ beside the catalogue and beside each category of
+  the trail, each opening a searchable list of the other things on that level. A
+  level with nothing to switch to gets none. Spread into the layout rather than
+  passed as an attribute, so a core without the switcher renders the header
+  exactly as before.
+
+### Changed
+
+- **The module's NAME is "Catalogues"** (#128) — `module_name/0`, the permission
+  label, the sidebar parent, the header's section and the page subtitles all say
+  the plural their pages already said, and the first subtab is "All catalogues"
+  rather than a second "Catalogues" under a parent of that name. A singular
+  "Catalogue" now always means one catalogue.
+- **Table columns are fitted to their content** (#128). Name is the only auto
+  column; every other column is `w-px whitespace-nowrap`, so data columns pack
+  against the right edge and the table still fills its container however few
+  columns are shown. Descriptions and attribute lists wrap inside 16rem, two
+  lines at most. The ⋮ column's header keeps its word for screen readers only.
+- **A category's subcategories are named in words, not an icon** (#128) — the
+  tree's toggle, the sorted table's badge, the cards and the item picker all use
+  the same "N subcategories". The Subcategories column is off by default now
+  that every row says it beside its name, and an open branch carries no tint:
+  grey guide rails do the grouping instead.
+- Removing the last column from a table's Columns editor leaves Name alone
+  rather than snapping back to the defaults, which read as the editor resetting
+  itself. `TableConfig.default_columns/1` reads the managed columns, so unmanaged
+  "name" can never reach a per-id cell loop.
+- The catalogue pages dropped their tutorial hints (the drag-reorder note and
+  the folder-tree note).
+
+### Fixed
+
+- **A hand-edited URL no longer wedges a page in an endless reload** (#128). A
+  key that is not a UUID (`?category=<uuid>?page=5`, a `page=5` glued onto a
+  path segment) named no row but raised `Ecto.Query.CastError` in Ecto, and in a
+  LiveView that reads its URL only once connected that was a page rendering,
+  crashing, reloading and crashing again. Every by-uuid getter in the context
+  now goes through `Catalogue.Helpers.get_by_uuid/2` and answers "not found",
+  which the pages already knew what to do with.
+- A new item or category under an unknown catalogue goes back to the list with
+  "Catalogue not found." instead of raising further down the mount.
+- The item form subscribes to PubSub before its first read, so a write landing
+  between the two is no longer dropped.
+- The PDFs tab searches the item's current name after a save, not the name it
+  had when the tab was opened, and a new item sent to `?tab=pdfs` renders its
+  Details form rather than an empty one.
+- The "Unsaved changes" badge no longer appears after a supplier row's dialog is
+  opened and closed without an edit. The dialog seeds itself from the row and
+  Done sends that seed back, which the dirty check read as a change; it now
+  compares through the same changeset the save writes through, so the badge
+  means a save would write something. (Post-merge review fix.)
+- `Catalogue.get_attribute/1` and `get_attribute_value/1` answer "not found" for
+  a key that is not a UUID, like every other by-uuid getter. (Post-merge review
+  fix.)
+
 ## 0.39.0 - 2026-09-18
 
 Reviews: `dev_docs/pull_requests/2026/127-popover-dropdowns/`.

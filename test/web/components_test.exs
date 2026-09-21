@@ -54,14 +54,14 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
 
   describe "search_input/1" do
     test "renders an input with the query prefilled" do
-      html = render_component(&search_input/1, query: "oak", placeholder: "Search...")
+      html = render_component(&search_input/1, query: "oak", placeholder: "Search…")
       assert html =~ "oak"
-      assert html =~ "Search..."
+      assert html =~ "Search…"
     end
 
     test "renders without a query" do
-      html = render_component(&search_input/1, query: "", placeholder: "Search...")
-      assert html =~ "Search..."
+      html = render_component(&search_input/1, query: "", placeholder: "Search…")
+      assert html =~ "Search…"
     end
   end
 
@@ -375,7 +375,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
           id_prefix: "test"
         )
 
-      assert html =~ "No metadata attached yet"
+      assert html =~ "Metadata not set."
       # Add picker is always present.
       assert html =~ "Pick a field"
     end

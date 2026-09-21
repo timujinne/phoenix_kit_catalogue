@@ -20,6 +20,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Suppliers do
 
   alias PhoenixKitCatalogue.Catalogue.{
     ActivityLog,
+    Helpers,
     ItemSupplierInfos,
     Links,
     Manufacturers,
@@ -52,11 +53,11 @@ defmodule PhoenixKitCatalogue.Catalogue.Suppliers do
 
   @doc "Fetches a supplier by UUID. Returns `nil` if not found."
   @spec get_supplier(Ecto.UUID.t()) :: Supplier.t() | nil
-  def get_supplier(uuid), do: repo().get(Supplier, uuid)
+  def get_supplier(uuid), do: Helpers.get_by_uuid(Supplier, uuid)
 
   @doc "Fetches a supplier by UUID. Raises `Ecto.NoResultsError` if not found."
   @spec get_supplier!(Ecto.UUID.t()) :: Supplier.t()
-  def get_supplier!(uuid), do: repo().get!(Supplier, uuid)
+  def get_supplier!(uuid), do: Helpers.get_by_uuid!(Supplier, uuid)
 
   @doc """
   Creates a supplier.

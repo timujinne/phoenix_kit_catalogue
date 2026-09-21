@@ -116,7 +116,14 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       assert_activity_logged("folder.moved",
         resource_uuid: child.uuid,
         actor_uuid: @actor,
-        metadata_has: %{"to_parent_uuid" => parent.uuid}
+        metadata_has: %{
+          "changes" => %{
+            "parent" => %{
+              "from" => %{"label" => "All catalogues"},
+              "to" => %{"uuid" => parent.uuid, "label" => "Parent"}
+            }
+          }
+        }
       )
     end
 
@@ -174,7 +181,14 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       assert_activity_logged("catalogue.moved_to_folder",
         resource_uuid: cat.uuid,
         actor_uuid: @actor,
-        metadata_has: %{"to_folder_uuid" => folder.uuid}
+        metadata_has: %{
+          "changes" => %{
+            "folder" => %{
+              "from" => %{"label" => "All catalogues"},
+              "to" => %{"uuid" => folder.uuid, "label" => "Filed"}
+            }
+          }
+        }
       )
     end
   end
@@ -201,6 +215,57 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         resource_uuid: item.uuid,
         actor_uuid: @actor
       )
+    end
+
+    # The entry has to say WHAT changed, not just that something did: the
+    # owner opened an event and could not tell (boss via Max, 2026-09-20).
+    test "update_item records the fields that moved, from and to", %{catalogue: cat} do
+      {:ok, item} =
+        Catalogue.create_item(
+          %{
+            name: "Item A",
+            sku: "A-1",
+            base_price: Decimal.new("8.50"),
+            catalogue_uuid: cat.uuid
+          },
+          actor_opts()
+        )
+
+      {:ok, _} =
+        Catalogue.update_item(
+          item,
+          %{name: "Renamed", base_price: Decimal.new("9.10")},
+          actor_opts()
+        )
+
+      assert_activity_logged("item.updated",
+        resource_uuid: item.uuid,
+        metadata_has: %{
+          # identity stays a plain string; the diff sits beside it
+          "name" => "Renamed",
+          "changes" => %{
+            "name" => %{"from" => "Item A", "to" => "Renamed"},
+            "base_price" => %{"from" => "8.50", "to" => "9.10"}
+          }
+        }
+      )
+    end
+
+    test "an update that changes nothing records no diff", %{catalogue: cat} do
+      {:ok, item} =
+        Catalogue.create_item(
+          %{name: "Item A", sku: "A-1", catalogue_uuid: cat.uuid},
+          actor_opts()
+        )
+
+      {:ok, _} = Catalogue.update_item(item, %{name: "Item A"}, actor_opts())
+
+      row = assert_activity_logged("item.updated", resource_uuid: item.uuid)
+
+      # The identity stays so the row is still readable and linkable; only
+      # the from/to pairs are absent, because nothing moved.
+      assert row.metadata["name"] == "Item A"
+      assert Enum.reject(row.metadata, fn {_k, v} -> is_binary(v) end) == []
     end
 
     test "trash_item logs item.trashed with actor", %{catalogue: cat} do
@@ -280,10 +345,16 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         resource_uuid: item.uuid,
         actor_uuid: @actor,
         metadata_has: %{
-          "from_category_uuid" => home.uuid,
-          "to_category_uuid" => away.uuid,
-          "from_catalogue_uuid" => cat.uuid,
-          "to_catalogue_uuid" => other.uuid
+          "changes" => %{
+            "category" => %{
+              "from" => %{"uuid" => home.uuid, "label" => home.name},
+              "to" => %{"uuid" => away.uuid, "label" => away.name}
+            },
+            "catalogue" => %{
+              "from" => %{"uuid" => cat.uuid, "label" => cat.name},
+              "to" => %{"uuid" => other.uuid, "label" => other.name}
+            }
+          }
         }
       )
     end
@@ -296,10 +367,18 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         resource_uuid: item.uuid,
         actor_uuid: @actor,
         metadata_has: %{
-          "from_catalogue_uuid" => cat.uuid,
-          "to_catalogue_uuid" => other.uuid,
-          "from_category_uuid" => home.uuid,
-          "to_category_uuid" => nil
+          "changes" => %{
+            "catalogue" => %{
+              "from" => %{"uuid" => cat.uuid, "label" => cat.name},
+              "to" => %{"uuid" => other.uuid, "label" => other.name}
+            },
+            # The item lands uncategorized in its new catalogue, and the
+            # label says so rather than leaving the arrow half empty.
+            "category" => %{
+              "from" => %{"uuid" => home.uuid, "label" => home.name},
+              "to" => %{"label" => "Uncategorized"}
+            }
+          }
         }
       )
     end
@@ -317,12 +396,18 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         resource_uuid: home.uuid,
         actor_uuid: @actor,
         metadata_has: %{
-          "from_catalogue_uuid" => cat.uuid,
-          "to_catalogue_uuid" => other.uuid,
-          "from_parent_uuid" => nil,
-          "to_parent_uuid" => away.uuid,
           "subtree_size" => 1,
-          "items_cascaded" => 1
+          "items_cascaded" => 1,
+          "changes" => %{
+            "catalogue" => %{
+              "from" => %{"uuid" => cat.uuid, "label" => cat.name},
+              "to" => %{"uuid" => other.uuid, "label" => other.name}
+            },
+            "parent" => %{
+              "from" => %{"label" => "Uncategorized"},
+              "to" => %{"uuid" => away.uuid, "label" => away.name}
+            }
+          }
         }
       )
     end
@@ -334,7 +419,15 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       assert_activity_logged("category.moved",
         resource_uuid: home.uuid,
         actor_uuid: @actor,
-        metadata_has: %{"to_parent_uuid" => parent.uuid, "catalogue_uuid" => cat.uuid}
+        metadata_has: %{
+          "catalogue_uuid" => cat.uuid,
+          "changes" => %{
+            "parent" => %{
+              "from" => %{"label" => "Uncategorized"},
+              "to" => %{"uuid" => parent.uuid, "label" => "New parent"}
+            }
+          }
+        }
       )
     end
 
@@ -352,9 +445,12 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
         metadata_has: %{
           "count" => 1,
           "uuids" => [item.uuid],
-          "from_catalogue_uuid" => cat.uuid,
-          "to_catalogue_uuid" => other.uuid,
-          "to_category_uuid" => away.uuid
+          # A bulk move gathers items from many categories, so it records
+          # WHERE they landed rather than inventing one source.
+          "moved_to" => %{
+            "catalogue" => %{"uuid" => other.uuid, "label" => other.name},
+            "category" => %{"uuid" => away.uuid, "label" => away.name}
+          }
         }
       )
     end

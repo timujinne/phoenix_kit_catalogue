@@ -30,8 +30,8 @@ defmodule PhoenixKitCatalogueTest do
       assert PhoenixKitCatalogue.module_key() == "catalogue"
     end
 
-    test "module_name/0 returns Catalogue" do
-      assert PhoenixKitCatalogue.module_name() == "Catalogue"
+    test "module_name/0 is the name every page uses: Catalogues" do
+      assert PhoenixKitCatalogue.module_name() == "Catalogues"
     end
 
     test "enabled?/0 returns a boolean" do
@@ -78,7 +78,7 @@ defmodule PhoenixKitCatalogueTest do
     test "main tab has required fields" do
       [tab | _] = PhoenixKitCatalogue.admin_tabs()
       assert tab.id == :admin_catalogue
-      assert tab.label == "Catalogue"
+      assert tab.label == "Catalogues"
       assert is_binary(tab.path)
       assert tab.level == :admin
       assert tab.permission == PhoenixKitCatalogue.module_key()

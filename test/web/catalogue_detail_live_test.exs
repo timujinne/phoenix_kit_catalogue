@@ -37,8 +37,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
       assert html =~ "Kitchen"
-      assert html =~ "Add Item"
-      assert html =~ "Add Category"
+      assert html =~ "Add item"
+      assert html =~ "Add category"
     end
 
     test "redirects to the index when the catalogue doesn't exist", %{conn: conn} do
@@ -54,6 +54,203 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
 
       assert html =~ "No categories or items yet"
+    end
+  end
+
+  # Boss, 2026-09-19: the PDF search lives on the item's edit page only for
+  # now; the catalogue's item menus and cards no longer offer it. The PDF
+  # library keeps its own page in the module's menu.
+  describe "no PDF search on the catalogue page" do
+    test "an item's menu offers View, Edit and Delete, not Search PDFs", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      cat = fixture_category(catalogue, %{name: "Hinges"})
+      fixture_item(%{name: "Soft hinge", catalogue_uuid: catalogue.uuid, category_uuid: cat.uuid})
+
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?category=" <> cat.uuid)
+      html = render(view)
+
+      assert html =~ "Soft hinge"
+      # No featured image on the fixture, so show_product_card is the menu's
+      # View, not a photo thumb.
+      assert html =~ ~s(phx-click="show_product_card")
+      refute html =~ "Search PDFs"
+      refute html =~ "show_pdf_search"
+
+      for mode <- ~w(card comfy) do
+        html = render_click(view, "set_view", %{"mode" => mode})
+        assert html =~ "Soft hinge"
+        assert html =~ ~s(phx-click="show_product_card")
+        refute html =~ "Search PDFs"
+      end
+    end
+  end
+
+  describe "View popup" do
+    test "opens the item's card with the operator rows and an Edit link", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      cat = fixture_category(catalogue, %{name: "Hinges"})
+
+      item =
+        fixture_item(%{
+          name: "Soft hinge",
+          sku: "HNG-SC",
+          catalogue_uuid: catalogue.uuid,
+          category_uuid: cat.uuid
+        })
+
+      {:ok, view, before} = live(conn, url(catalogue.uuid) <> "?category=" <> cat.uuid)
+      # The place line belongs to the card alone — the page behind it never
+      # writes one, so it is what proves the popup opened in admin mode.
+      refute before =~ "Kitchen › Hinges"
+      # The listing's own Edit would satisfy a bare "/items/…/edit" check.
+      refute has_element?(view, "#catalogue-detail-product-edit")
+
+      html = render_click(view, "show_product_card", %{"uuid" => item.uuid})
+
+      assert html =~ "Soft hinge"
+      assert html =~ "HNG-SC"
+      # The rows the View action exists for — a read-only look at the item.
+      assert html =~ "Kitchen › Hinges"
+      # The card's own Edit, carrying this page's return path — not the
+      # listing row's, which was already on the page.
+      assert has_element?(view, "#catalogue-detail-product-edit")
+      assert html =~ ~r/id="catalogue-detail-product-edit"/
+      assert html =~ ~r/href="[^"]*\/items\/#{Regex.escape(item.uuid)}\/edit\?[^"]*return_to=/
+    end
+
+    test "a crafted uuid from another catalogue opens nothing", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      cat = fixture_category(catalogue, %{name: "Hinges"})
+      fixture_item(%{name: "Soft hinge", catalogue_uuid: catalogue.uuid, category_uuid: cat.uuid})
+
+      other = fixture_catalogue(%{name: "Bathroom"})
+      elsewhere = fixture_item(%{name: "Tap cartridge", catalogue_uuid: other.uuid})
+
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?category=" <> cat.uuid)
+      html = render_click(view, "show_product_card", %{"uuid" => elsewhere.uuid})
+
+      # No card, and above all no Edit link carrying this page's return path.
+      refute html =~ "Tap cartridge"
+      refute has_element?(view, "#catalogue-detail-product-edit")
+      refute html =~ "/items/#{elsewhere.uuid}/edit"
+    end
+
+    test "a deleted item's card offers no Edit link", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      cat = fixture_category(catalogue, %{name: "Hinges"})
+
+      item =
+        fixture_item(%{
+          name: "Old hinge",
+          catalogue_uuid: catalogue.uuid,
+          category_uuid: cat.uuid
+        })
+
+      {:ok, _} = Catalogue.trash_item(item)
+
+      {:ok, view, html} =
+        live(conn, url(catalogue.uuid) <> "?category=" <> cat.uuid <> "&view=deleted")
+
+      # The Deleted tab's item menu still offers View (search results on
+      # this page already did; the listing menus had dropped it).
+      assert html =~ ~s(phx-click="show_product_card")
+
+      html = render_click(view, "show_product_card", %{"uuid" => item.uuid})
+
+      assert html =~ "Old hinge"
+      refute has_element?(view, "#catalogue-detail-product-edit")
+      refute html =~ "/items/#{item.uuid}/edit"
+    end
+
+    test "a category's menu opens its own card, with the path above it", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      hardware = fixture_category(catalogue, %{name: "Hardware"})
+      hinges = fixture_category(catalogue, %{name: "Hinges", parent_uuid: hardware.uuid})
+
+      fixture_item(%{
+        name: "Soft hinge",
+        catalogue_uuid: catalogue.uuid,
+        category_uuid: hinges.uuid
+      })
+
+      {:ok, view, html} = live(conn, url(catalogue.uuid) <> "?category=" <> hardware.uuid)
+
+      assert html =~ ~s(phx-click="show_category_card")
+      refute has_element?(view, "#catalogue-detail-product-edit")
+
+      html = render_click(view, "show_category_card", %{"uuid" => hinges.uuid})
+
+      assert html =~ "Hinges"
+      # The path ABOVE it — its own name is the card's title already.
+      assert html =~ "Kitchen › Hardware"
+      assert html =~ "Items"
+      # Its Edit goes to the CATEGORY form, carrying the level to come back to.
+      assert has_element?(view, "#catalogue-detail-product-edit")
+
+      assert html =~
+               ~r/href="[^"]*\/categories\/#{Regex.escape(hinges.uuid)}\/edit\?[^"]*return_to=/
+    end
+
+    test "a category from another catalogue opens nothing", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      cat = fixture_category(catalogue, %{name: "Hardware"})
+
+      other = fixture_catalogue(%{name: "Bathroom"})
+      elsewhere = fixture_category(other, %{name: "Taps"})
+
+      {:ok, view, before} = live(conn, url(catalogue.uuid) <> "?category=" <> cat.uuid)
+      # Nothing on this page names the other catalogue's category, so the
+      # name alone proves whether the card opened.
+      refute before =~ "Taps"
+
+      html = render_click(view, "show_category_card", %{"uuid" => elsewhere.uuid})
+
+      refute html =~ "Taps"
+      refute has_element?(view, "#catalogue-detail-product-edit")
+      refute html =~ "/categories/#{elsewhere.uuid}/edit"
+    end
+
+    test "a deleted category's card offers no Edit link", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      cat = fixture_category(catalogue, %{name: "Hardware"})
+
+      {:ok, _} = Catalogue.trash_category(cat)
+
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?view=deleted")
+      html = render_click(view, "show_category_card", %{"uuid" => cat.uuid})
+
+      assert html =~ "Hardware"
+      refute has_element?(view, "#catalogue-detail-product-edit")
+      refute html =~ "/categories/#{cat.uuid}/edit"
+    end
+
+    # A card belongs to the level it was opened from. Only `card_close` used
+    # to clear it, so a dismissal the server never heard about (Escape or a
+    # backdrop click over a dialog whose `open` attribute a patch had
+    # stripped — fixed in core's `modal/1`) came back on the next render,
+    # over another level, as an item that is not there.
+    test "drilling to another level closes an open card", %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Kitchen"})
+      hinges = fixture_category(catalogue, %{name: "Hinges"})
+      panels = fixture_category(catalogue, %{name: "Panels"})
+
+      item =
+        fixture_item(%{
+          name: "Soft hinge",
+          catalogue_uuid: catalogue.uuid,
+          category_uuid: hinges.uuid
+        })
+
+      {:ok, view, _html} = live(conn, url(catalogue.uuid) <> "?category=" <> hinges.uuid)
+
+      html = render_click(view, "show_product_card", %{"uuid" => item.uuid})
+      assert html =~ "Kitchen › Hinges"
+      assert has_element?(view, "#catalogue-detail-product-edit")
+
+      html = render_patch(view, url(catalogue.uuid) <> "?category=" <> panels.uuid)
+
+      refute html =~ "Kitchen › Hinges"
+      refute has_element?(view, "#catalogue-detail-product-edit")
     end
   end
 
@@ -402,13 +599,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
 
       {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, category.uuid))
 
-      assert html =~ "Add Category"
+      assert html =~ "Add category"
       assert html =~ "parent_uuid=#{category.uuid}"
 
       # At root the header button still creates a ROOT category; the
       # per-row "New subcategory" menu entries are what carry parents now.
       {:ok, _view, html} = live(conn, url(catalogue.uuid))
-      assert html =~ "Add Category"
+      assert html =~ "Add category"
       refute html =~ "categories/new?parent_uuid=#{catalogue.uuid}"
     end
 
@@ -470,7 +667,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       bogus = "00000000-0000-0000-0000-000000000000"
 
       case live(conn, cat_url(catalogue.uuid, bogus)) do
-        {:ok, _view, html} -> assert html =~ "Add Category"
+        {:ok, _view, html} -> assert html =~ "Add category"
         {:error, {:live_redirect, %{to: to}}} -> assert to =~ url(catalogue.uuid)
       end
     end

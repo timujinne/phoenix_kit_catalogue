@@ -67,6 +67,50 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierCommentsTest do
   defp uuid?(value),
     do: is_binary(value) and byte_size(value) == 36 and match?({:ok, _}, Ecto.UUID.cast(value))
 
+  describe "thread_for_pair/2" do
+    test "a pair without history gets its own name-based thread, the same every time" do
+      item = create_item()
+      supplier = create_supplier()
+
+      thread = SupplierComments.thread_for_pair(item.uuid, supplier.uuid)
+
+      assert uuid?(thread)
+      # RFC 9562 version 5, variant 10xx.
+      assert String.at(thread, 14) == "5"
+      assert String.at(thread, 19) in ~w(8 9 a b)
+      assert SupplierComments.thread_for_pair(item.uuid, supplier.uuid) == thread
+      assert SupplierComments.thread_for_pair(String.upcase(item.uuid), supplier.uuid) == thread
+
+      refute SupplierComments.thread_for_pair(item.uuid, create_supplier().uuid) == thread
+      refute SupplierComments.thread_for_pair(create_item().uuid, supplier.uuid) == thread
+    end
+
+    test "create/2 stamps the thread the pair was promised before the row existed" do
+      item = create_item()
+      supplier = create_supplier()
+      promised = SupplierComments.thread_for_pair(item.uuid, supplier.uuid)
+
+      info = attach(item, supplier)
+
+      assert SupplierComments.thread_uuid(info) == promised
+    end
+
+    test "a pair with history keeps its inherited thread, legacy random ones included" do
+      item = create_item()
+      supplier = create_supplier()
+      info = attach(item, supplier) |> make_legacy()
+
+      # A legacy row is its own thread; the pair's thread follows it.
+      assert SupplierComments.thread_for_pair(item.uuid, supplier.uuid) == info.uuid
+    end
+
+    test "missing or malformed uuids give no thread" do
+      assert SupplierComments.thread_for_pair(nil, UUIDv7.generate()) == nil
+      assert SupplierComments.thread_for_pair(UUIDv7.generate(), nil) == nil
+      assert SupplierComments.pair_thread("not-a-uuid", UUIDv7.generate()) == nil
+    end
+  end
+
   describe "thread_uuid/1" do
     test "create/2 mints a textual uuid under the reserved key and thread_uuid/1 reads it" do
       info = attach(create_item(), create_supplier())
@@ -309,9 +353,10 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierCommentsTest do
   end
 
   test "the resolver is self-registered through the resource_links/0 callback" do
-    assert PhoenixKitCatalogue.resource_links() == %{
-             "catalogue_item_supplier" => PhoenixKitCatalogue
-           }
+    # Registered BESIDE the record deep-links (item, category, …), not
+    # instead of them — this callback carries both kinds now.
+    assert PhoenixKitCatalogue.resource_links()["catalogue_item_supplier"] ==
+             PhoenixKitCatalogue
 
     assert function_exported?(PhoenixKitCatalogue, :resolve_comment_resources, 1)
   end

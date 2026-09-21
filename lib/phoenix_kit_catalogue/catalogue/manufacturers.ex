@@ -12,7 +12,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Manufacturers do
 
   import Ecto.Query, warn: false
 
-  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Links, PubSub, Suppliers}
+  alias PhoenixKitCatalogue.Catalogue.{ActivityLog, Helpers, Links, PubSub, Suppliers}
   alias PhoenixKitCatalogue.Schemas.{Item, Manufacturer}
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
@@ -40,11 +40,11 @@ defmodule PhoenixKitCatalogue.Catalogue.Manufacturers do
 
   @doc "Fetches a manufacturer by UUID. Returns `nil` if not found."
   @spec get_manufacturer(Ecto.UUID.t()) :: Manufacturer.t() | nil
-  def get_manufacturer(uuid), do: repo().get(Manufacturer, uuid)
+  def get_manufacturer(uuid), do: Helpers.get_by_uuid(Manufacturer, uuid)
 
   @doc "Fetches a manufacturer by UUID. Raises `Ecto.NoResultsError` if not found."
   @spec get_manufacturer!(Ecto.UUID.t()) :: Manufacturer.t()
-  def get_manufacturer!(uuid), do: repo().get!(Manufacturer, uuid)
+  def get_manufacturer!(uuid), do: Helpers.get_by_uuid!(Manufacturer, uuid)
 
   @doc """
   Creates a manufacturer.

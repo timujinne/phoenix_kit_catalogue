@@ -66,9 +66,9 @@ defmodule PhoenixKitCatalogue.Migrations do
   own migration chain always runs ahead of this one (`mix
   phoenix_kit.update` applies core's chain first), so by the time V01
   runs, every adopted table is already at core's current shape on any
-  host this chain actually executes against — the `pk_dep(:phoenix_kit,
-  "~> 2.13.11")` floor in `mix.exs` exists precisely so a host can always
-  reach that shape (see the comment there for why 2.13.4–2.13.10, which
+  host this chain actually executes against — the `pk_dep(:phoenix_kit, …)`
+  floor in `mix.exs` (never below 2.13.11) exists precisely so a host can
+  always reach that shape (see the comment there for why 2.13.4–2.13.10, which
   ship the shape, are excluded: V180 itself crashes on those releases).
 
   Because V01 changes no shape, core's `ExpectedSchema` manifest (which

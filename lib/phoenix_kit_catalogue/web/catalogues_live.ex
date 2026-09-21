@@ -45,7 +45,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Errors
   alias PhoenixKitCatalogue.Paths
+  alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal
+  alias PhoenixKitCatalogue.Web.Components.ProductCard
   alias PhoenixKitCatalogue.Web.{TableConfig, TableQuery, ViewConfig}
 
   # What the Duplicate dialog starts with (see `Catalogue.duplicate_catalogue/2`).
@@ -78,7 +80,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
     {:ok,
      assign(socket,
-       page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue"),
+       page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues"),
        catalogue_rows: [],
        attribute_group_rows: [],
        attribute_set_rows: [],
@@ -126,7 +128,15 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        catalogue_file_counts: %{},
        show_catalogues_reorder: false,
        show_column_modal: false,
-       temp_columns: nil
+       temp_columns: nil,
+       # The View card for a catalogue row (boss via Max, 2026-09-20) — the
+       # same read-only popup the items have, one level up.
+       card_open: false,
+       card_name: nil,
+       card_images: [],
+       card_fields: [],
+       card_files: [],
+       card_edit_path: nil
      )}
   end
 
@@ -324,23 +334,23 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   defp current_cfg(assigns), do: Map.fetch!(assigns.view_configs, active_scope(assigns))
 
   # Applies a columns transformation to the active scope's cfg and
-  # persists it (put_cfg). Invalid/empty results fall back to defaults;
-  # the active sort survives whenever it is still a sortable column —
-  # "name" and "position" are managed?: false so never in `ids`, and
-  # sorting doesn't require the column to be displayed.
+  # persists it (put_cfg). Removing the last column leaves Name alone
+  # rather than snapping back to the defaults. The active sort survives
+  # whenever it is still a sortable column — "name" and "position" are
+  # managed?: false so never in `ids`, and sorting doesn't require the
+  # column to be displayed.
   defp live_update_columns(socket, fun) do
     scope = active_scope(socket.assigns)
     cfg = current_cfg(socket.assigns)
 
     ids = TableConfig.validate_columns(scope, fun.(cfg.columns))
-    ids = if ids == [], do: TableConfig.default_columns(scope), else: ids
 
     cfg = %{cfg | columns: ids}
 
     cfg =
       if MapSet.member?(known_sortable_ids(scope), cfg.sort_by),
         do: cfg,
-        else: %{cfg | sort_by: List.first(ids)}
+        else: %{cfg | sort_by: elem(TableConfig.default_sort(scope), 0)}
 
     put_cfg(socket, scope, cfg)
   end
@@ -841,7 +851,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         +{@set.value_count - @cap}
       </.link>
       <span :if={@set.value_count == 0} class="text-sm text-base-content/50">
-        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No values yet")}
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No values yet.")}
       </span>
       <span :if={@set.value_count > 0} class="text-xs text-base-content/40">
         ({@set.value_count})
@@ -1416,7 +1426,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             draggable="false"
             phx-click="navigate_folder"
             phx-value-uuid={@folder.uuid}
-            class="font-medium text-left truncate cursor-pointer hover:text-primary transition-colors"
+            class={"text-left truncate cursor-pointer hover:text-primary transition-colors " <> Shared.name_cell_class()}
           >
             {@folder.name}
           </button>
@@ -1441,7 +1451,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <.table_row_menu_button
               phx-click="new_subfolder"
               phx-value-uuid={@folder.uuid}
-              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating...")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating…")}
               icon="hero-folder-plus"
               label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New subfolder")}
             />
@@ -1520,7 +1530,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <.link
             navigate={Paths.catalogue_detail(@c_row.uuid)}
             draggable="false"
-            class="link link-hover font-medium truncate flex-1 min-w-0"
+            class={"link link-hover truncate flex-1 min-w-0 " <> Shared.name_cell_class()}
           >
             {@c_row.name}
           </.link>
@@ -1533,6 +1543,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         </div>
         <div class="flex justify-end">
           <.table_row_menu mode="auto" id={"card-level-cat-menu-#{@c_row.uuid}"}>
+            <.table_row_menu_button
+              phx-click="show_catalogue_card"
+              phx-value-uuid={@c_row.uuid}
+              icon="hero-eye"
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+            />
+            <.table_row_menu_divider />
             <.table_row_menu_link
               navigate={Paths.catalogue_edit(@c_row.uuid)}
               icon="hero-pencil"
@@ -1540,8 +1557,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             />
             <.table_row_menu_link
               navigate={Paths.catalogue_detail(@c_row.uuid)}
-              icon="hero-eye"
-              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+              icon="hero-book-open"
+              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open")}
             />
             <.table_row_menu_button
               phx-click="open_move"
@@ -1560,7 +1577,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <.table_row_menu_button
               phx-click="trash_catalogue"
               phx-value-uuid={@c_row.uuid}
-              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
               icon="hero-trash"
               label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
               variant="error"
@@ -1630,12 +1647,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <.table_default_header_cell>
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
             </.table_default_header_cell>
-            <.table_default_header_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
+            <.table_default_header_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
               {c.label.()}
             </.table_default_header_cell>
-            <.table_default_header_cell class="text-right">
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Actions")}
-            </.table_default_header_cell>
+            <.actions_header_cell />
           </.table_default_row>
         </.table_default_header>
         <.table_default_body>
@@ -1694,13 +1709,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                         draggable="false"
                         phx-click="navigate_folder"
                         phx-value-uuid={folder.uuid}
-                        class="font-medium text-left truncate cursor-pointer hover:text-primary transition-colors"
+                        class={"text-left truncate cursor-pointer hover:text-primary transition-colors " <> Shared.name_cell_class()}
                       >
                         {folder.name}
                       </button>
                     <% end %>
                   </.tree_name_cell>
-                  <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
+                  <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
                     {render_folder_cell(c.id, folder, meta)}
                   </.table_default_cell>
                   <.table_default_cell class="text-right whitespace-nowrap">
@@ -1721,7 +1736,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                         phx-click="new_subfolder"
                         phx-value-uuid={folder.uuid}
                         phx-disable-with={
-                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating...")
+                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating…")
                         }
                         icon="hero-folder-plus"
                         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New subfolder")}
@@ -1778,16 +1793,23 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                     <.link
                       navigate={Paths.catalogue_detail(c_row.uuid)}
                       draggable="false"
-                      class="link link-hover font-medium truncate"
+                      class={"link link-hover truncate " <> Shared.name_cell_class()}
                     >
                       {c_row.name}
                     </.link>
                   </.tree_name_cell>
-                  <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
+                  <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
                     {render_cell(:catalogues, c.id, c_row)}
                   </.table_default_cell>
                   <.table_default_cell class="text-right whitespace-nowrap">
                     <.table_row_menu mode="auto" id={"tree-cat-menu-#{c_row.uuid}"}>
+                      <.table_row_menu_button
+                        phx-click="show_catalogue_card"
+                        phx-value-uuid={c_row.uuid}
+                        icon="hero-eye"
+                        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                      />
+                      <.table_row_menu_divider />
                       <.table_row_menu_link
                         navigate={Paths.catalogue_edit(c_row.uuid)}
                         icon="hero-pencil"
@@ -1795,8 +1817,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                       />
                       <.table_row_menu_link
                         navigate={Paths.catalogue_detail(c_row.uuid)}
-                        icon="hero-eye"
-                        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                        icon="hero-book-open"
+                        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open")}
                       />
                       <.table_row_menu_button
                         phx-click="open_move"
@@ -1816,7 +1838,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                         phx-click="trash_catalogue"
                         phx-value-uuid={c_row.uuid}
                         phx-disable-with={
-                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")
+                          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")
                         }
                         icon="hero-trash"
                         label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
@@ -1846,7 +1868,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     <div class="bg-base-100 border border-base-200 rounded-lg divide-y divide-base-200">
       <div :for={{folder, _depth} <- @tree} class="flex items-center gap-2 px-3 py-2 min-w-0">
         <.icon name="hero-folder" class="w-4 h-4 text-warning shrink-0" />
-        <span class="flex-1 min-w-0 truncate text-sm font-medium text-base-content/50">
+        <span class={"flex-1 min-w-0 truncate text-base-content/50 " <> Shared.name_cell_class()}>
           {folder.name}
         </span>
         <button
@@ -1857,7 +1879,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           class="btn btn-ghost btn-xs text-error gap-1"
         >
           <.icon name="hero-trash" class="w-3.5 h-3.5" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         </button>
       </div>
     </div>
@@ -2085,6 +2107,37 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       end
 
     {:noreply, socket |> assign(:renaming_folder, nil) |> load_data(:index)}
+  end
+
+  # The catalogue's own View card. Payloads are client-forgeable, so the
+  # uuid goes through the context's getter, which answers "not found" for
+  # anything that is not a catalogue uuid.
+  def handle_event("show_catalogue_card", %{"uuid" => uuid}, socket) do
+    case Catalogue.get_catalogue(uuid) do
+      %{} = catalogue ->
+        locale = socket.assigns[:current_locale] || "en"
+
+        {:noreply,
+         assign(socket,
+           card_open: true,
+           card_name: ProductCard.resolve_name(catalogue, locale),
+           card_images: ProductCard.resolve_images(catalogue),
+           # This page is admin-only, so the operator rows are asked for —
+           # the same opt-in the item card uses for exactly that reason.
+           card_fields: ProductCard.build_catalogue_fields(catalogue, locale, admin: true),
+           card_files: ProductCard.resolve_files(catalogue),
+           card_edit_path: catalogue.status != "deleted" && Paths.catalogue_edit(catalogue.uuid)
+         )}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("show_catalogue_card", _params, socket), do: {:noreply, socket}
+
+  def handle_event("card_close", _params, socket) do
+    {:noreply, assign(socket, :card_open, false)}
   end
 
   def handle_event("open_move", %{"type" => type, "uuid" => uuid}, socket)
@@ -3114,29 +3167,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   current_tree_folder(cfg, @folder_lookup) &&
                     current_tree_folder(cfg, @folder_lookup).uuid
                 }
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Creating…")}
                 class="btn btn-ghost btn-sm gap-1"
               >
                 <.icon name="hero-folder-plus" class="w-4 h-4" />
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Folder")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New folder")}
               </button>
               <.link :if={@catalogue_view_mode == "active"} navigate={Paths.catalogue_new()} class="btn btn-primary btn-sm">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Catalogue")}
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New catalogue")}
               </.link>
             </:actions>
           </.table_toolbar>
           <% tree? = catalogues_tree_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
           <% card_level? =
             catalogues_card_level_mode?(cfg, @catalogue_view_mode, @folder_lookup) %>
-          <p
-            :if={
-              @catalogue_view_mode == "active" and cfg.sort_by == "position" and
-                cfg.view != "card" and not tree?
-            }
-            class="text-xs text-base-content/50"
-          >
-            {gettext("Clear search and filters to see the folder tree.")}
-          </p>
           <% deleted_count = deleted_tab_count(assigns) %>
           <.deleted_folders_list
             :if={
@@ -3270,6 +3314,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                      for (product call, 2026-08-15). Entries stay neutral —
                      the daisyUI "secondary" tint made routine actions look
                      flagged; only destructive actions keep a color. --%>
+                <.table_row_menu_button
+                  phx-click="show_catalogue_card"
+                  phx-value-uuid={c.uuid}
+                  icon="hero-eye"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                />
+                <.table_row_menu_divider />
                 <.table_row_menu_link
                   navigate={Paths.catalogue_edit(c.uuid)}
                   icon="hero-pencil"
@@ -3277,8 +3328,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 />
                 <.table_row_menu_link
                   navigate={Paths.catalogue_detail(c.uuid)}
-                  icon="hero-eye"
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                  icon="hero-book-open"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open")}
                 />
                 <.table_row_menu_button
                   phx-click="open_move"
@@ -3291,7 +3342,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 <.table_row_menu_button
                   phx-click="trash_catalogue"
                   phx-value-uuid={c.uuid}
-                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
                   icon="hero-trash"
                   label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
                   variant="error"
@@ -3299,9 +3350,16 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               </.table_row_menu>
               <.table_row_menu :if={@catalogue_view_mode == "deleted"} mode="auto" id={"cat-del-menu-#{c.uuid}"}>
                 <.table_row_menu_button
+                  phx-click="show_catalogue_card"
+                  phx-value-uuid={c.uuid}
+                  icon="hero-eye"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                />
+                <.table_row_menu_divider />
+                <.table_row_menu_button
                   phx-click="restore_catalogue"
                   phx-value-uuid={c.uuid}
-                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
                   icon="hero-arrow-path"
                   label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
                   variant="success"
@@ -3312,13 +3370,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   phx-value-uuid={c.uuid}
                   phx-value-type="catalogue"
                   icon="hero-trash"
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
                   variant="error"
                 />
               </.table_row_menu>
             </:row_actions>
             <:card_actions :let={c}>
               <.table_row_menu :if={@catalogue_view_mode == "active"} mode="auto" id={"card-cat-menu-#{c.uuid}"}>
+                <.table_row_menu_button
+                  phx-click="show_catalogue_card"
+                  phx-value-uuid={c.uuid}
+                  icon="hero-eye"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                />
+                <.table_row_menu_divider />
                 <.table_row_menu_link
                   navigate={Paths.catalogue_edit(c.uuid)}
                   icon="hero-pencil"
@@ -3326,8 +3391,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 />
                 <.table_row_menu_link
                   navigate={Paths.catalogue_detail(c.uuid)}
-                  icon="hero-eye"
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                  icon="hero-book-open"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open")}
                 />
                 <.table_row_menu_button
                   phx-click="open_move"
@@ -3340,7 +3405,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 <.table_row_menu_button
                   phx-click="trash_catalogue"
                   phx-value-uuid={c.uuid}
-                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting...")}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleting…")}
                   icon="hero-trash"
                   label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
                   variant="error"
@@ -3348,9 +3413,16 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               </.table_row_menu>
               <.table_row_menu :if={@catalogue_view_mode == "deleted"} mode="auto" id={"card-cat-del-menu-#{c.uuid}"}>
                 <.table_row_menu_button
+                  phx-click="show_catalogue_card"
+                  phx-value-uuid={c.uuid}
+                  icon="hero-eye"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+                />
+                <.table_row_menu_divider />
+                <.table_row_menu_button
                   phx-click="restore_catalogue"
                   phx-value-uuid={c.uuid}
-                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring...")}
+                  phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restoring…")}
                   icon="hero-arrow-path"
                   label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restore")}
                   variant="success"
@@ -3361,7 +3433,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   phx-value-uuid={c.uuid}
                   phx-value-type="catalogue"
                   icon="hero-trash"
-                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
                   variant="error"
                 />
               </.table_row_menu>
@@ -3407,11 +3479,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <div :if={@attr_tab_loaded and @sets_enabled} class="flex flex-col gap-3">
           <div class="flex items-center justify-between gap-4">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <h3 class="font-semibold text-base flex items-center gap-2">
-                <.icon name="hero-swatch" class="w-4 h-4 text-base-content/60" />
+              <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
+                <.icon name="hero-swatch" class="w-4 h-4" />
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attribute sets")}
-              </h3>
-              <p class="text-sm text-base-content/60">
+              </h2>
+              <p class="text-xs text-base-content/50">
                 {Gettext.gettext(
                   PhoenixKitCatalogue.Gettext,
                   "One dimension from one vendor — a color range, a trim series. Items attach any number of sets. Sets are edited in the Entities module."
@@ -3420,7 +3492,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             </div>
             <button type="button" phx-click="open_new_set_modal" class="btn btn-primary btn-sm shrink-0">
               <.icon name="hero-plus" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Set")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New set")}
             </button>
           </div>
 
@@ -3574,16 +3646,28 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             :if={@show_new_set_modal}
             show={true}
             id="new-attribute-set-modal"
+            class="text-sm"
             on_close="close_new_set_modal"
             max_width="md"
           >
             <:title>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute set")}</:title>
             <form id="new-attribute-set-form" phx-submit="create_attribute_set" class="flex flex-col gap-4">
-              <label class="input w-full">
-                <span class="label">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}</span>
-                <input type="text" name="name" required autocomplete="off" class="grow" />
-              </label>
-              <p class="text-xs text-base-content/60">
+              <div>
+                <label class="label mb-2" for="new-attribute-set-name">
+                  <span class="font-semibold">
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
+                  </span>
+                </label>
+                <input
+                  id="new-attribute-set-name"
+                  type="text"
+                  name="name"
+                  required
+                  autocomplete="off"
+                  class="input w-full"
+                />
+              </div>
+              <p class="block text-xs text-base-content/50">
                 {Gettext.gettext(
                   PhoenixKitCatalogue.Gettext,
                   "You'll be taken straight to adding the set's values in Entities."
@@ -3625,7 +3709,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <:actions>
             <.link navigate={Paths.attribute_group_new()} class="btn btn-primary btn-sm">
               <.icon name="hero-plus" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Attribute Group")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute group")}
             </.link>
           </:actions>
         </.table_toolbar>
@@ -3717,10 +3801,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         show={match?({"catalogue", _}, @confirm_delete)}
         on_confirm="permanently_delete_catalogue"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Catalogue")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete catalogue")}
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this catalogue, all its categories, and all items. This cannot be undone.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
 
@@ -3728,10 +3812,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         show={match?({"folder", _}, @confirm_delete)}
         on_confirm="permanently_delete_folder"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Folder")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete folder")}
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this folder. Only empty folders can be deleted. This cannot be undone.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
 
@@ -3739,10 +3823,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         show={match?({"legacy_folder", _}, @confirm_delete)}
         on_confirm="permanently_delete_legacy_folder"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Folder")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete folder")}
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this folder. Subfolders are moved to root and catalogues filed here are unfiled — neither is deleted. This cannot be undone.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
 
@@ -3750,7 +3834,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         show={match?({"attribute_group", _}, @confirm_delete)}
         on_confirm="delete_attribute_group"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Attribute Group")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete attribute group")}
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this group with all its attributes and values. Groups used by items cannot be deleted — archive them instead.")}]}
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete")}
@@ -3838,7 +3922,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <button type="button" phx-click="cancel_move" class="btn btn-ghost btn-sm">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
             </button>
-            <button type="submit" phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")} class="btn btn-primary btn-sm">
+            <button type="submit" phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")} class="btn btn-primary btn-sm">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
             </button>
           </div>
@@ -3863,6 +3947,28 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         scope={active_scope(assigns)}
         selected={current_cfg(assigns).columns}
       />
+
+      <ProductCard.product_card
+        id="catalogue-index-card"
+        show={@card_open}
+        item_name={@card_name}
+        images={@card_images}
+        fields={@card_fields}
+        files={@card_files}
+        target={nil}
+        on_close="card_close"
+      >
+        <:extra_actions>
+          <.link
+            :if={@card_edit_path}
+            id="catalogue-index-card-edit"
+            navigate={@card_edit_path}
+            class="btn btn-primary"
+          >
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
+          </.link>
+        </:extra_actions>
+      </ProductCard.product_card>
       </div>
 
     </PhoenixKitWeb.Components.LayoutWrapper.app_layout>
@@ -4051,11 +4157,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <thead>
           <tr>
             <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}</th>
-            <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")}</th>
-            <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")}</th>
-            <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")}</th>
-            <th>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}</th>
-            <th class="text-right">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Actions")}</th>
+            <th class="w-px whitespace-nowrap">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")}</th>
+            <th class="w-px whitespace-nowrap">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")}</th>
+            <th class="w-px whitespace-nowrap">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")}</th>
+            <th class="w-px whitespace-nowrap">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}</th>
+            <.actions_header_cell />
           </tr>
         </thead>
         <tbody>
@@ -4068,13 +4174,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 {item.name}
               </.link>
             </td>
-            <td class="font-mono text-xs">{item.sku}</td>
-            <td>{item.catalogue && item.catalogue.name}</td>
-            <td class="text-base-content/70">
+            <td class="font-mono text-xs whitespace-nowrap">{item.sku}</td>
+            <td class="whitespace-nowrap">{item.catalogue && item.catalogue.name}</td>
+            <td class="text-base-content/70 whitespace-nowrap">
               {(item.category && item.category.name) ||
                 Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uncategorized")}
             </td>
-            <td><.status_badge status={item.status} size={:sm} /></td>
+            <td class="whitespace-nowrap"><.status_badge status={item.status} size={:sm} /></td>
             <td class="text-right whitespace-nowrap">
               <.table_row_menu mode="auto" id={"item-result-menu-#{item.uuid}"}>
                 <.table_row_menu_link
@@ -4125,7 +4231,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     ~H"""
     <%!-- Two coherent groups instead of one flat flex-wrap: search+filters
          left, view tools + create actions right. A flat wrap broke lines
-         between arbitrary neighbors (a stray "New Folder" alone on row 1,
+         between arbitrary neighbors (a stray "New folder" alone on row 1,
          the primary action stranded bottom-left…); grouped, a narrow
          screen drops the whole right group under the left one as a unit,
          so every width renders an intentional-looking toolbar. --%>
@@ -4139,7 +4245,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               name="query"
               value={@cfg[:search] || ""}
               phx-debounce="300"
-              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search...")}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search…")}
               class="grow"
             />
           </label>
@@ -4257,7 +4363,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
           <.table_default_header_cell
             :for={c <- @cols}
-            class={c.align == :right && "text-right"}
+            class={[column_fit_class(c.id), c.align == :right && "text-right"]}
           >
             <.sort_header
               :if={c.sortable?}
@@ -4269,9 +4375,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             />
             <span :if={!c.sortable?}>{c.label.()}</span>
           </.table_default_header_cell>
-          <.table_default_header_cell class="text-right">
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Actions")}
-          </.table_default_header_cell>
+          <.actions_header_cell />
         </.table_default_row>
       </.table_default_header>
       <.sortable_tbody :if={@draggable} id={"#{@scope}-table-body"} enabled={@reorderable?} event="reorder_catalogues">
@@ -4292,7 +4396,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               has_files={Map.get(@file_counts, row.uuid, 0) > 0}
             />
           </.table_default_cell>
-          <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
+          <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
             {render_cell(@scope, c.id, row)}
           </.table_default_cell>
           <.table_default_cell class="text-right whitespace-nowrap">
@@ -4316,7 +4420,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               has_files={Map.get(@file_counts, row.uuid, 0) > 0}
             />
           </.table_default_cell>
-          <.table_default_cell :for={c <- @cols} class={c.align == :right && "text-right"}>
+          <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
             {render_cell(@scope, c.id, row)}
           </.table_default_cell>
           <.table_default_cell class="text-right whitespace-nowrap">
@@ -4384,22 +4488,23 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     assigns = %{row: row}
 
     ~H"""
-    <.link :if={@row.status != "deleted"} navigate={Paths.catalogue_detail(@row.uuid)} class="link link-hover font-medium">{@row.name}</.link>
-    <span :if={@row.status == "deleted"} class="font-medium text-base-content/50">{@row.name}</span>
+    <.link :if={@row.status != "deleted"} navigate={Paths.catalogue_detail(@row.uuid)} class={"link link-hover " <> Shared.name_cell_class()}>{@row.name}</.link>
+    <span :if={@row.status == "deleted"} class={Shared.name_cell_class() <> " text-base-content/50"}>{@row.name}</span>
     """
   end
 
   defp render_cell(:catalogues, "folder", row), do: text_or_dash(row[:folder_name])
 
-  # Truncated with the full text on hover — descriptions are prose, and
-  # one long one must not stretch every row on the page.
+  # Two lines at most, the full text on hover — descriptions are prose,
+  # and one long one must not stretch every row on the page. Same bound
+  # as the detail page's description column (`prose_cell_class/0`).
   defp render_cell(:catalogues, "description", row) do
     case row[:description] do
       desc when is_binary(desc) and desc != "" ->
         assigns = %{desc: desc}
 
         ~H"""
-        <span class="block max-w-md truncate text-base-content/70" title={@desc}>{@desc}</span>
+        <span class={[prose_cell_class(), "text-base-content/70"]} title={@desc}>{@desc}</span>
         """
 
       _ ->
@@ -4421,7 +4526,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     assigns = %{row: row}
 
     ~H"""
-    <.link navigate={Paths.attribute_group_edit(@row.uuid)} class="link link-hover font-medium">{@row.name}</.link>
+    <.link navigate={Paths.attribute_group_edit(@row.uuid)} class={"link link-hover " <> Shared.name_cell_class()}>{@row.name}</.link>
     """
   end
 

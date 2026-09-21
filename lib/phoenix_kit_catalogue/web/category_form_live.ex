@@ -88,7 +88,13 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           # query was thrown away on every render.
           cat = %Category{catalogue_uuid: catalogue_uuid, parent_uuid: parent_uuid}
 
-          {cat, Catalogue.change_category(cat), catalogue_uuid}
+          # The catalogue in the URL is checked first: an unknown one — or
+          # a hand-edited path that is not a UUID — would otherwise reach a
+          # query further down the mount and raise instead of saying
+          # "not found".
+          if Catalogue.get_catalogue(catalogue_uuid),
+            do: {cat, Catalogue.change_category(cat), catalogue_uuid},
+            else: {nil, nil, nil}
 
         :edit ->
           case Catalogue.get_category(params["uuid"]) do
@@ -101,10 +107,15 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           end
       end
 
-    if is_nil(category) and action == :edit do
+    if is_nil(category) do
+      message =
+        if action == :edit,
+          do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found."),
+          else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue not found.")
+
       {:ok,
        socket
-       |> put_flash(:error, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found."))
+       |> put_flash(:error, message)
        |> push_navigate(to: Paths.index())}
     else
       socket
@@ -128,7 +139,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
      |> assign(
        page_title:
          if(action == :new,
-           do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Category"),
+           do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New category"),
            else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: category.name)
          ),
        action: action,
@@ -626,7 +637,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         _ = Attachments.maybe_rename_pending_folder(socket, category)
 
         # "Save" (stay) continues on the new category's edit form, with the
-        # original return_to riding along for its Cancel. "Save & Exit"
+        # original return_to riding along for its Cancel. "Save & exit"
         # opens the saved category, as the catalogue form opens the saved
         # catalogue (Max, 2026-09-14); Cancel is what returns to where the
         # form was opened.
@@ -737,7 +748,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         mode={@media_selection_mode}
         file_type_filter={@media_filter}
         lock_file_type
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select Featured Image")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select featured image")}
         selected_uuids={@media_selected_uuids}
         scope_folder_id={@files_folder_uuid}
         phoenix_kit_current_user={assigns[:phoenix_kit_current_user]}
@@ -763,7 +774,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           class={"tab #{if @current_tab == :files, do: "tab-active"}"}
         >
           <.icon name="hero-paper-clip" class="w-4 h-4 mr-1" />
-          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Photos and Files")}
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Photos and files")}
           <span :if={@files_state.files != []} class="badge badge-sm badge-ghost ml-2">
             {length(@files_state.files)}
           </span>
@@ -820,7 +831,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
                 schema_field={:description} multilang_enabled={@multilang_enabled}
                 current_lang={@current_lang} primary_language={@primary_language}
                 lang_data={@lang_data} label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Description")} type="textarea"
-                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "What kinds of items belong in this category...")}
+                placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "What kinds of items belong in this category…")}
                 class="w-full"
               />
 
@@ -845,7 +856,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <div class="card-body flex flex-col gap-5 pt-0">
             <div class="divider my-0"></div>
 
-            <div :if={@action == :new} class="fieldset">
+            <div :if={@action == :new}>
               <.select
                 field={@form[:parent_uuid]}
                 label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Parent category")}
@@ -853,7 +864,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
                 options={@parent_options}
                 class="transition-colors focus-within:select-primary"
               />
-              <span class="fieldset-label text-base-content/50 mt-1">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick a parent to nest this category inside, or leave blank to keep it at the top level. You can move it later.")}</span>
+              <span class="block text-xs text-base-content/50 mt-1">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick a parent to nest this category inside, or leave blank to keep it at the top level. You can move it later.")}</span>
             </div>
 
             <%!-- No manual Position field: a new category appends to its
@@ -918,7 +929,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
              tab; disabled while uploads are mid-flight so the save
              can't race the post-upload write. "Save" keeps you on the
              form (also the Enter-key submitter, being first in the
-             DOM); "Save & Exit" opens the saved category; Cancel returns to
+             DOM); "Save & exit" opens the saved category; Cancel returns to
              where the form was opened from. "Save" keeps `class="btn-outline"` — a style modifier
              that composes with the component's default btn-primary,
              where `variant="outline"` would replace the colour. --%>
@@ -932,15 +943,15 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
             value="stay"
             class="btn-outline"
             disabled={@uploads.attachment_files.entries != []}
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving…")}
           >{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save")}</.button>
           <.button
             type="submit"
             name="save_action"
             value="exit"
             disabled={@uploads.attachment_files.entries != []}
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
-          >{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save & Exit")}</.button>
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving…")}
+          >{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save & exit")}</.button>
         </div>
       </.form>
 
@@ -968,14 +979,14 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <%!-- Move to a different parent — within the same catalogue --%>
           <div class="flex flex-col gap-3">
             <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Parent")}</p>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to another parent")}</p>
               <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Reparent this category within its catalogue. Its subtree comes along.")}</p>
             </div>
             <div class="flex items-end gap-3">
               <form
                 id="category-parent-move-form"
                 phx-change="select_parent_move_target"
-                class="fieldset flex-1"
+                class="flex-1"
               >
                 <.select
                   name="parent_uuid"
@@ -989,7 +1000,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
               <.button
                 type="button"
                 phx-click="move_under_parent"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")}
                 disabled={@parent_move_target == @category.parent_uuid}
                 variant="outline"
                 size="sm"
@@ -1002,16 +1013,16 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <%!-- Move to another catalogue — only when other catalogues exist --%>
           <div :if={@other_catalogues != []} class="flex flex-col gap-3">
             <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to Another Catalogue")}</p>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to another catalogue")}</p>
               <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this category and all its items to a different catalogue — at its top level or under one of its categories.")}</p>
             </div>
             <div class="flex items-end gap-3">
-              <form id="category-move-form" phx-change="select_move_target" class="fieldset flex-1">
+              <form id="category-move-form" phx-change="select_move_target" class="flex-1">
                 <.select
                   name="move_target"
                   id="category-move-target"
                   value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "-- Select destination --")}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select destination —")}
                   options={@other_catalogues}
                   class="select-sm transition-colors focus-within:select-primary"
                 />
@@ -1019,7 +1030,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
               <.button
                 type="button"
                 phx-click="move_category"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving...")}
+                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")}
                 disabled={is_nil(@move_target)}
                 variant="outline"
                 size="sm"
@@ -1042,14 +1053,14 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       >
         <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
           <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error" />
-          <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Danger Zone")}</h3>
+          <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Danger zone")}</h3>
           <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
         </summary>
 
         <div class="card-body pt-0 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Category")}</p>
+              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete category")}</p>
               <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this category and all its items. This cannot be undone.")}</p>
             </div>
             <%!-- `variant="error"`, not `class="btn-error"` — the class form
@@ -1061,7 +1072,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
               class="btn-outline shrink-0"
             >
               <.icon name="hero-trash" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
             </.button>
           </div>
         </div>
@@ -1071,10 +1082,10 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
         show={@confirm_delete_all}
         on_confirm="delete_category"
         on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently Delete Category")}
+        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete category")}
         title_icon="hero-trash"
         messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this category and all its items.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete Forever")}
+        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
       </div>

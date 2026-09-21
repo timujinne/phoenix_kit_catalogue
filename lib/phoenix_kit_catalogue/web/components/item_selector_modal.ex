@@ -304,6 +304,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   use Phoenix.LiveComponent
   use Gettext, backend: PhoenixKitCatalogue.Gettext
 
+  import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
+
   import PhoenixKitWeb.Components.Core.Modal, only: [modal: 1]
 
   import PhoenixKitWeb.Components.Core.TableDefault,
@@ -1350,7 +1352,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     <Shared.featured_thumb resource={tile} />
                   </button>
                 </.table_default_cell>
-                <.table_default_cell class="font-medium">
+                <.table_default_cell class={Shared.name_cell_class()}>
                   <div class="flex items-center gap-2 min-w-0">
                     <button
                       type="button"
@@ -1363,10 +1365,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     </button>
                     <span
                       :if={tile_children(@tree, @browse, tile.uuid) != []}
-                      class="badge badge-ghost badge-xs"
-                      title={gettext("Has subcategories")}
+                      class="badge badge-ghost badge-sm font-normal whitespace-nowrap"
                     >
-                      <span class="hero-rectangle-stack w-3 h-3"></span>
+                      {Shared.subcategories_label(length(tile_children(@tree, @browse, tile.uuid)))}
                     </span>
                   </div>
                 </.table_default_cell>
@@ -1394,7 +1395,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     </span>
                   </button>
                 </.table_default_cell>
-                <.table_default_cell class="font-medium">
+                <.table_default_cell class={Shared.name_cell_class()}>
                   <button
                     type="button"
                     phx-click="browse_category"
@@ -3014,7 +3015,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
               }
               class="text-center py-12"
             >
-              <div class="text-4xl mb-3 opacity-40">🔍</div>
+              <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-3 opacity-40" />
               <p class="text-base-content/60">{gettext("No items match your search.")}</p>
             </div>
 

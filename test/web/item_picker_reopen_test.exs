@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.Web.Components.ItemPickerReopenTest do
   @moduledoc """
   L027: reopening the picker for a *pre-selected* item must show a
-  non-empty replacement list — not "No items found", and (per the PR #63
+  non-empty replacement list — not "No items found.", and (per the PR #63
   review follow-up) not a one-row name search for the item that's already
   chosen: the reopen browses the empty-query first page while the input
   keeps showing the item's name. Uses a fresh LiveView mount (no prior
@@ -52,7 +52,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerReopenTest do
     view |> element("#host-picker-input") |> render_focus()
 
     html = render(view)
-    refute html =~ "No items found"
+    refute html =~ "No items found."
     assert html =~ ~s(id="host-picker-listbox")
 
     # The reopen is a BROWSE, not a name search: the sibling must be in

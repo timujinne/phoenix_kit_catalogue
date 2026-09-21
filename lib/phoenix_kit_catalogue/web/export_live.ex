@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   use Phoenix.LiveView
 
   import PhoenixKitWeb.Components.Core.Checkbox, only: [checkbox: 1]
+  import PhoenixKitWeb.Components.Core.FormFieldLabel, only: [label: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
@@ -51,16 +52,16 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
         <div class="card-body gap-6">
           <h2 class="card-title">
             <.icon name="hero-arrow-up-tray" class="w-5 h-5" />
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export Items")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export items")}
           </h2>
 
           <form id="export-form" phx-change="change_form" class="flex flex-col gap-5">
             <%!-- Catalogues checkbox list --%>
-            <div class="fieldset w-full max-w-lg">
+            <div class="w-full max-w-lg">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium">
+                <span class="label"><span class="font-semibold">
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
-                </span>
+                </span></span>
                 <span class="badge badge-ghost badge-sm">
                   {length(@selected_catalogue_uuids)} / {length(@catalogues)}
                 </span>
@@ -82,10 +83,10 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
             </div>
 
             <%!-- Destination select --%>
-            <div class="fieldset w-full max-w-lg">
-              <span class="block mb-2 text-sm font-medium">
+            <div class="w-full max-w-lg">
+              <.label class="block">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Destination")}
-              </span>
+              </.label>
               <.select
                 name="destination"
                 id="export-destination"
@@ -95,15 +96,15 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
             </div>
 
             <%!-- Format select --%>
-            <div class="fieldset w-full max-w-lg">
-              <span class="block mb-2 text-sm font-medium">
+            <div class="w-full max-w-lg">
+              <.label class="block">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Format")}
-              </span>
+              </.label>
               <.select
                 name="format"
                 id="export-format"
                 value={@selected_format}
-                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select a format...")}
+                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a format —")}
                 options={
                   if @selected_destination do
                     Enum.map(@selected_destination.formats(), fn {k, label} ->
@@ -119,7 +120,7 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
             <%!-- PRO100 option: prefix each item name with its catalogue name --%>
             <div
               :if={@selected_destination && @selected_destination.key() == :pro100}
-              class="fieldset w-full max-w-lg"
+              class="w-full max-w-lg"
             >
               <.checkbox
                 name="prefix_catalogue"

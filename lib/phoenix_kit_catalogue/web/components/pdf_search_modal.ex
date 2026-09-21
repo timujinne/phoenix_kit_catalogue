@@ -12,6 +12,15 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
   Each hit row links to `PdfDetailLive` with `?page=N` so PDF.js
   scrolls the embedded viewer to that page.
 
+  ## Inline
+
+  `variant: :inline` renders the same search as a page section instead of
+  a modal — the item form's PDFs tab (boss, 2026-09-19: the search gets its
+  own tab, with a real search bar in case the exact name doesn't match).
+  The box starts with the item's name and searches every translated name;
+  edit it and it searches the library for whatever you typed; put the name
+  back and it is the item search again. Pass `show: true`.
+
   ## Layout
 
   Results are grouped by PDF — every matching PDF gets a header row
@@ -46,8 +55,10 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
        expanding: MapSet.new(),
        error: nil,
        last_item_uuid: nil,
+       last_item_titles: nil,
        per_pdf: @per_pdf,
        mode: :item,
+       variant: :modal,
        query: "",
        searched: false
      )}
@@ -64,13 +75,22 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
     socket = assign(socket, assigns)
 
     socket =
-      if show and socket.assigns.last_item_uuid != item.uuid do
+      if show and stale_item_search?(socket, item) do
         run_search(socket, item)
       else
         socket
       end
 
     {:ok, socket}
+  end
+
+  # A different item, or — while the results are still the item search —
+  # this item saved under a new name (the inline tab outlives a save). A
+  # query the operator typed is theirs and is left alone.
+  defp stale_item_search?(socket, item) do
+    socket.assigns.last_item_uuid != item.uuid or
+      (socket.assigns.mode == :item and
+         socket.assigns.last_item_titles != PdfLibrary.item_titles(item))
   end
 
   defp run_search(socket, item) do
@@ -94,7 +114,11 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
       loading: false,
       expanding: MapSet.new(),
       error: nil,
-      last_item_uuid: item.uuid
+      last_item_uuid: item.uuid,
+      last_item_titles: titles,
+      mode: :item,
+      query: item.name || "",
+      searched: true
     )
   rescue
     # Narrowed: only catch DB-side and known query errors. Anything
@@ -120,7 +144,8 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
             PhoenixKitCatalogue.Gettext,
             "Search is temporarily unavailable. Please try again in a moment."
           ),
-        last_item_uuid: item.uuid
+        last_item_uuid: item.uuid,
+        last_item_titles: PdfLibrary.item_titles(item)
       )
   end
 
@@ -130,7 +155,28 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
   @impl true
   def handle_event("library_query", %{"q" => raw}, socket) do
     query = Helpers.trim_param(raw)
+    item = socket.assigns[:item]
 
+    # Inline, the box starts as the item's name: while it still reads
+    # that, the search is the item search (every translated name).
+    if socket.assigns.variant == :inline and item != nil and
+         query == Helpers.trim_param(item.name || "") do
+      {:noreply, run_search(socket, item)}
+    else
+      library_search(socket, raw, query)
+    end
+  end
+
+  def handle_event("close", _params, socket) do
+    send(self(), {:pdf_search_modal_closed})
+    {:noreply, socket}
+  end
+
+  def handle_event("show_more", %{"pdf_uuid" => pdf_uuid}, socket) do
+    show_more(socket, pdf_uuid)
+  end
+
+  defp library_search(socket, raw, query) do
     if String.length(query) < 2 do
       {:noreply,
        assign(socket,
@@ -140,7 +186,8 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
          trigram_query: nil,
          searched: false,
          error: nil,
-         expanding: MapSet.new()
+         expanding: MapSet.new(),
+         mode: :library
        )}
     else
       groups = Catalogue.search_pdf_contents(query, per_pdf: @per_pdf)
@@ -159,7 +206,8 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
          trigram_query: trigram_query,
          searched: true,
          error: nil,
-         expanding: MapSet.new()
+         expanding: MapSet.new(),
+         mode: :library
        )}
     end
   rescue
@@ -178,20 +226,17 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
        )}
   end
 
-  def handle_event("close", _params, socket) do
-    send(self(), {:pdf_search_modal_closed})
-    {:noreply, socket}
-  end
+  defp show_more(socket, pdf_uuid) do
+    group = Enum.find(socket.assigns.groups, &(&1.pdf.uuid == pdf_uuid))
 
-  def handle_event("show_more", %{"pdf_uuid" => pdf_uuid}, socket) do
-    if MapSet.member?(socket.assigns.expanding, pdf_uuid) do
+    # No group: the click came from results a newer search has replaced
+    # (typed while the old list was still on screen).
+    if group == nil or MapSet.member?(socket.assigns.expanding, pdf_uuid) do
       {:noreply, socket}
     else
       socket = assign(socket, :expanding, MapSet.put(socket.assigns.expanding, pdf_uuid))
 
       try do
-        group = Enum.find(socket.assigns.groups, &(&1.pdf.uuid == pdf_uuid))
-
         opts =
           [offset: length(group.hits), limit: @more_batch_size] ++
             trigram_opt(socket.assigns.trigram_query)
@@ -287,6 +332,43 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
   end
 
   @impl true
+  def render(%{variant: :inline} = assigns) do
+    ~H"""
+    <div id={@id} class="flex flex-col gap-4">
+      <form
+        id={@id <> "-query-form"}
+        phx-change="library_query"
+        phx-submit="library_query"
+        phx-target={@myself}
+      >
+        <label class="input w-full">
+          <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-50" />
+          <input
+            type="search"
+            name="q"
+            value={@query}
+            placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search inside every PDF…")}
+            aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search inside every PDF…")}
+            class="grow"
+            phx-debounce="300"
+            autocomplete="off"
+          />
+        </label>
+      </form>
+      <.results
+        myself={@myself}
+        loading={@loading}
+        error={@error}
+        mode={@mode}
+        searched={@searched}
+        groups={@groups}
+        titles={@titles}
+        expanding={@expanding}
+      />
+    </div>
+    """
+  end
+
   def render(assigns) do
     ~H"""
     <div id={@id}>
@@ -350,113 +432,17 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
             </form>
 
             <div class="mt-4">
-              <%= cond do %>
-                <% @loading -> %>
-                  <div class="flex items-center gap-2 text-sm text-base-content/60">
-                    <span class="loading loading-spinner loading-sm"></span>
-                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Searching…")}
-                  </div>
-                <% @error -> %>
-                  <div class="alert alert-error">
-                    <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
-                    <span>{@error}</span>
-                  </div>
-                <% @mode == :library and not @searched -> %>
-                  <div class="text-center py-8 text-base-content/50">
-                    <.icon name="hero-document-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-50" />
-                    <p class="text-sm">
-                      {Gettext.gettext(
-                        PhoenixKitCatalogue.Gettext,
-                        "Type at least 2 characters to search the text of every PDF."
-                      )}
-                    </p>
-                  </div>
-                <% @groups == [] -> %>
-                  <div class="text-center py-8 text-base-content/60">
-                    <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-50" />
-                    <p class="text-sm">
-                      <%= if @mode == :library do %>
-                        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No pages match your search.")}
-                      <% else %>
-                        {Gettext.gettext(
-                          PhoenixKitCatalogue.Gettext,
-                          "No PDF mentions this item by name."
-                        )}
-                      <% end %>
-                    </p>
-                  </div>
-                <% true -> %>
-                  <ul class="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
-                    <%= for group <- @groups do %>
-                      <li>
-                        <a
-                          href={Paths.pdf_detail(group.pdf.uuid)}
-                          target="_blank"
-                          rel="noopener"
-                          class="flex items-center gap-1.5 font-medium text-sm link link-hover mb-2"
-                        >
-                          <.icon name="hero-document-text" class="w-4 h-4 text-base-content/60" />
-                          {group.pdf.original_filename}
-                          <.icon
-                            name="hero-arrow-top-right-on-square"
-                            class="w-3 h-3 text-base-content/40"
-                          />
-                          <span class="text-xs text-base-content/50 font-normal">
-                            ({group.total_matches})
-                          </span>
-                        </a>
-                        <ul class="flex flex-col gap-1 pl-5 border-l-2 border-base-200">
-                          <%= for hit <- group.hits do %>
-                            <li class="border border-base-200 rounded-lg px-3 py-2 hover:bg-base-200 transition-colors">
-                              <a
-                                href={Paths.pdf_detail(hit.pdf.uuid, hit.page_number)}
-                                target="_blank"
-                                rel="noopener"
-                                class="flex flex-col gap-0.5"
-                              >
-                                <div class="text-xs text-base-content/60">
-                                  {Gettext.gettext(
-                                    PhoenixKitCatalogue.Gettext,
-                                    "page %{n}",
-                                    n: hit.page_number
-                                  )}
-                                </div>
-                                <div class="text-xs text-base-content/70 italic line-clamp-2">
-                                  …{highlight_snippet(hit.snippet, @titles)}…
-                                </div>
-                              </a>
-                            </li>
-                          <% end %>
-
-                          <%= if length(group.hits) < group.total_matches do %>
-                            <li class="pt-1">
-                              <button
-                                type="button"
-                                phx-click="show_more"
-                                phx-value-pdf_uuid={group.pdf.uuid}
-                                phx-target={@myself}
-                                disabled={MapSet.member?(@expanding, group.pdf.uuid)}
-                                class="btn btn-ghost btn-xs"
-                              >
-                                <%= if MapSet.member?(@expanding, group.pdf.uuid) do %>
-                                  <span class="loading loading-spinner loading-xs"></span>
-                                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…")}
-                                <% else %>
-                                  <.icon name="hero-chevron-down" class="w-3 h-3" />
-                                  {Gettext.gettext(
-                                    PhoenixKitCatalogue.Gettext,
-                                    "Show %{n} more",
-                                    n: group.total_matches - length(group.hits)
-                                  )}
-                                <% end %>
-                              </button>
-                            </li>
-                          <% end %>
-                        </ul>
-                      </li>
-                    <% end %>
-                  </ul>
-              <% end %>
+              <.results
+                myself={@myself}
+                loading={@loading}
+                error={@error}
+                mode={@mode}
+                searched={@searched}
+                groups={@groups}
+                titles={@titles}
+                expanding={@expanding}
+                list_class="max-h-[60vh] overflow-y-auto pr-1"
+              />
             </div>
 
             <div class="modal-action">
@@ -476,6 +462,129 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
         </div>
       <% end %>
     </div>
+    """
+  end
+
+  attr(:myself, :any, required: true)
+  attr(:loading, :boolean, required: true)
+  attr(:error, :any, required: true)
+  attr(:mode, :atom, required: true)
+  attr(:searched, :boolean, required: true)
+  attr(:groups, :list, required: true)
+  attr(:titles, :list, required: true)
+  attr(:expanding, :any, required: true)
+  attr(:list_class, :string, default: nil)
+
+  # The hits, grouped by PDF — shared by the modal and the inline tab.
+  defp results(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @loading -> %>
+        <div class="flex items-center gap-2 text-sm text-base-content/60">
+          <span class="loading loading-spinner loading-sm"></span>
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Searching…")}
+        </div>
+      <% @error -> %>
+        <div class="alert alert-error">
+          <.icon name="hero-exclamation-triangle" class="w-4 h-4" />
+          <span>{@error}</span>
+        </div>
+      <% @mode == :library and not @searched -> %>
+        <div class="text-center py-8 text-base-content/50">
+          <.icon name="hero-document-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p class="text-sm">
+            {Gettext.gettext(
+              PhoenixKitCatalogue.Gettext,
+              "Type at least 2 characters to search the text of every PDF."
+            )}
+          </p>
+        </div>
+      <% @groups == [] -> %>
+        <div class="text-center py-8 text-base-content/60">
+          <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p class="text-sm">
+            <%= if @mode == :library do %>
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No pages match your search.")}
+            <% else %>
+              {Gettext.gettext(
+                PhoenixKitCatalogue.Gettext,
+                "No PDF mentions this item by name."
+              )}
+            <% end %>
+          </p>
+        </div>
+      <% true -> %>
+        <ul class={["flex flex-col gap-4", @list_class]}>
+          <%= for group <- @groups do %>
+            <li>
+              <a
+                href={Paths.pdf_detail(group.pdf.uuid)}
+                target="_blank"
+                rel="noopener"
+                class="flex items-center gap-1.5 font-medium text-sm link link-hover mb-2"
+              >
+                <.icon name="hero-document-text" class="w-4 h-4 text-base-content/60" />
+                {group.pdf.original_filename}
+                <.icon
+                  name="hero-arrow-top-right-on-square"
+                  class="w-3 h-3 text-base-content/40"
+                />
+                <span class="text-xs text-base-content/50 font-normal">
+                  ({group.total_matches})
+                </span>
+              </a>
+              <ul class="flex flex-col gap-1 pl-5 border-l-2 border-base-200">
+                <%= for hit <- group.hits do %>
+                  <li class="border border-base-200 rounded-lg px-3 py-2 hover:bg-base-200 transition-colors">
+                    <a
+                      href={Paths.pdf_detail(hit.pdf.uuid, hit.page_number)}
+                      target="_blank"
+                      rel="noopener"
+                      class="flex flex-col gap-0.5"
+                    >
+                      <div class="text-xs text-base-content/60">
+                        {Gettext.gettext(
+                          PhoenixKitCatalogue.Gettext,
+                          "page %{n}",
+                          n: hit.page_number
+                        )}
+                      </div>
+                      <div class="text-xs text-base-content/70 italic line-clamp-2">
+                        …{highlight_snippet(hit.snippet, @titles)}…
+                      </div>
+                    </a>
+                  </li>
+                <% end %>
+
+                <%= if length(group.hits) < group.total_matches do %>
+                  <li class="pt-1">
+                    <button
+                      type="button"
+                      phx-click="show_more"
+                      phx-value-pdf_uuid={group.pdf.uuid}
+                      phx-target={@myself}
+                      disabled={MapSet.member?(@expanding, group.pdf.uuid)}
+                      class="btn btn-ghost btn-xs"
+                    >
+                      <%= if MapSet.member?(@expanding, group.pdf.uuid) do %>
+                        <span class="loading loading-spinner loading-xs"></span>
+                        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…")}
+                      <% else %>
+                        <.icon name="hero-chevron-down" class="w-3 h-3" />
+                        {Gettext.gettext(
+                          PhoenixKitCatalogue.Gettext,
+                          "Show %{n} more",
+                          n: group.total_matches - length(group.hits)
+                        )}
+                      <% end %>
+                    </button>
+                  </li>
+                <% end %>
+              </ul>
+            </li>
+          <% end %>
+        </ul>
+    <% end %>
     """
   end
 end

@@ -174,7 +174,7 @@ defmodule PhoenixKitCatalogue.Import.Executor do
     # `broadcast: false` to keep open detail LVs responsive during the
     # import. One `:catalogue` event here lets every subscriber refresh
     # their slice once, after all rows have landed. We broadcast even on
-    # zero-created imports so any in-progress UI ("Importing..." flash,
+    # zero-created imports so any in-progress UI ("Importing…" flash,
     # etc.) gets a definitive "done" signal.
     PubSub.broadcast(:catalogue, catalogue_uuid, catalogue_uuid)
 

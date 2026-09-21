@@ -118,7 +118,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
        |> assign(
          page_title:
            if(action == :new,
-             do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New Attribute Group"),
+             do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute group"),
              else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: group.name)
            ),
          action: action,
@@ -799,17 +799,15 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
             <div :if={@action == :edit} class="card-body flex flex-col gap-4 pt-4">
               <div class="divider my-0"></div>
 
-              <div class="flex items-center gap-2">
-                <.icon name="hero-swatch" class="w-5 h-5 text-base-content/60" />
-                <h3 class="font-semibold text-base">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attributes")}
-                </h3>
-              </div>
+              <h2 class="text-base font-semibold text-base-content/80 flex items-center gap-2">
+                <.icon name="hero-swatch" class="w-4 h-4" />
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attributes")}
+              </h2>
 
               <p :if={@group.attributes == []} class="text-sm text-base-content/60">
                 {Gettext.gettext(
                   PhoenixKitCatalogue.Gettext,
-                  "No attributes yet. Add one below — e.g. Color, Trim, Surface."
+                  "No attributes yet. Add one below — e.g., Color, Trim, Surface."
                 )}
               </p>
 
@@ -960,7 +958,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
                         id={"add-value-input-#{attribute.uuid}-g#{draft_gen(@draft_generation, attribute.uuid)}"}
                         type="text"
                         name="value"
-                        placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add value...")}
+                        placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add value…")}
                         class="input input-xs input-bordered bg-base-100 w-28"
                         phx-mounted={@refocus_key == attribute.uuid && JS.focus()}
                       />
@@ -995,7 +993,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
                   id={"add-attribute-input-g#{draft_gen(@draft_generation, "attr")}"}
                   type="text"
                   name="attr_name"
-                  placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute name...")}
+                  placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute name…")}
                   class="input input-sm input-bordered flex-1 min-w-0"
                   phx-mounted={@refocus_key == "attr" && JS.focus()}
                 />
@@ -1026,7 +1024,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
         </div>
 
         <%!-- Bottom action bar — outside the card, wired back via form=.
-             "Save" stays; "Save & Exit" returns to the groups list. --%>
+             "Save" stays; "Save & exit" returns to the groups list. --%>
         <div class="flex justify-end gap-3">
           <.button navigate={exit_target(assigns)} variant="ghost">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cancel")}
@@ -1041,7 +1039,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
             name="save_action"
             value="stay"
             class="btn-outline"
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving…")}
           >
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save")}
           </.button>
@@ -1050,9 +1048,9 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
             type="submit"
             name="save_action"
             value="exit"
-            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving...")}
+            phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Saving…")}
           >
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save & Exit")}
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Save & exit")}
           </.button>
         </div>
 

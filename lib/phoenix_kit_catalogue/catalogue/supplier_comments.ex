@@ -16,7 +16,9 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierComments do
   removing the supplier closes the current row. So each row carries a
   **thread uuid** in `metadata["comment_thread_uuid"]`:
 
-    * minted once, on the pair's first `create/2`;
+    * set on the pair's first `create/2` — derived from the item and the
+      supplier (`thread_for_pair/2`), so the item form can show the thread,
+      and take comments, for a supplier it has staged but not yet saved;
     * copied to the successor on every `revise_unit_cost/3`;
     * kept when the supplier is removed (the row is closed, not deleted);
     * inherited when the same supplier is attached to the same item again,
@@ -83,6 +85,44 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierComments do
   def stamp_changeset(%Ecto.Changeset{} = changeset, thread) do
     metadata = Ecto.Changeset.get_field(changeset, :metadata)
     Ecto.Changeset.put_change(changeset, :metadata, stamp(metadata, thread))
+  end
+
+  @doc """
+  The thread an item/supplier pair's row is created with: the one the pair
+  already has (`inherited_thread/2`), else the pair's own name-based uuid
+  (`pair_thread/2`). The same answer before the row exists as after — which
+  is what lets the item form open the thread of a supplier it has only
+  staged. `nil` when either uuid is missing.
+  """
+  @spec thread_for_pair(Ecto.UUID.t() | nil, Ecto.UUID.t() | nil) :: Ecto.UUID.t() | nil
+  def thread_for_pair(item_uuid, supplier_uuid)
+      when is_binary(item_uuid) and is_binary(supplier_uuid) do
+    inherited_thread(item_uuid, supplier_uuid) || pair_thread(item_uuid, supplier_uuid)
+  end
+
+  def thread_for_pair(_item_uuid, _supplier_uuid), do: nil
+
+  # A fixed namespace for the pair uuids below; changing it would give every
+  # pair without history a different thread.
+  @pair_namespace Ecto.UUID.dump!("2d659bc5-f471-4431-a77c-fe3e2b7da1c5")
+
+  @doc """
+  A name-based (RFC 9562 version 5) uuid for an item/supplier pair: the
+  same pair always gets the same one. A supplier staged on the form and
+  commented on, then dropped without saving, gets the same thread — and its
+  comments back — when it is added again. `nil` for a non-uuid input.
+  """
+  @spec pair_thread(term(), term()) :: Ecto.UUID.t() | nil
+  def pair_thread(item_uuid, supplier_uuid) do
+    with {:ok, item} <- Ecto.UUID.dump(item_uuid),
+         {:ok, supplier} <- Ecto.UUID.dump(supplier_uuid) do
+      <<a::48, _::4, b::12, _::2, c::62, _::binary>> =
+        :crypto.hash(:sha, @pair_namespace <> item <> supplier)
+
+      Ecto.UUID.load!(<<a::48, 5::4, b::12, 2::2, c::62>>)
+    else
+      _ -> nil
+    end
   end
 
   @doc """

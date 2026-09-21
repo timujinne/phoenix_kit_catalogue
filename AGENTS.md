@@ -11,7 +11,7 @@ and import/export. Admin-only LiveView UI; no public API surface. Deep feature
 semantics live in module `@moduledoc`s and `dev_docs/` — this file holds
 conventions, contracts and non-obvious boundaries.
 
-- **Depends on:** `phoenix_kit` `>= 2.13.11 and < 3.0.0` (Hex, patch-precise
+- **Depends on:** `phoenix_kit` `>= 2.34.0 and < 3.0.0` (Hex, patch-precise
   floor — see the comment in `mix.exs` and `test/core_pin_conformance_test.exs`),
   `phoenix_kit_ai` `~> 0.18` (hard dep; the AI-translate integration is
   duck-typed through `ai_translatables/0`), `phoenix_kit_entities` `~> 0.4`
@@ -27,10 +27,13 @@ conventions, contracts and non-obvious boundaries.
   side declares a dependency on the other. A few siblings reference the module
   name behind `Code.ensure_loaded?/1` guards only.
 - **Admin surface:** parent tab `:admin_catalogue` at `/admin/catalogue`, with
-  subtabs Catalogues, Attributes, Import, Export, Events, PDFs, Translations,
-  plus hidden form/detail tabs. One stateless HTTP route:
+  subtabs All catalogues, Attributes, Import, Export, Events, PDFs,
+  Translations, plus hidden form/detail tabs. One stateless HTTP route:
   `GET /admin/catalogue/export/download`.
-- **Module key** `"catalogue"`; settings prefix `catalogue_`.
+- **Module key** `"catalogue"`; settings prefix `catalogue_`. The module's
+  NAME is "Catalogues" everywhere a person reads it — `module_name/0`, the
+  permission label, the sidebar parent, the header's section, page
+  subtitles. A singular "Catalogue" means one catalogue, never the module.
 
 ## What this module does NOT do
 
@@ -81,6 +84,18 @@ PHOENIX_KIT_PATH=../phoenix_kit mix deps.get && PHOENIX_KIT_PATH=../phoenix_kit 
 PHOENIX_KIT_AI_PATH=../phoenix_kit_ai mix test
 PHOENIX_KIT_ENTITIES_PATH=../phoenix_kit_entities mix test
 PHOENIX_KIT_COMMENTS_PATH=../phoenix_kit_comments mix test
+```
+
+⚠️ **`dialyzer` does not notice a recompiled dep.** The PLT is built with
+`check_plt: false`, so after core changes underneath (a `<APP>_PATH` run while
+that repo is being worked on) dialyzer keeps answering from the old core and
+reports `call_to_missing` for functions that plainly exist — the code
+compiles and the suite passes, so the only wrong thing is dialyzer. Clear the
+PLT and let it rebuild:
+
+```bash
+rm -f _build/dev/dialyxir_*.plt _build/dev/dialyxir_*.plt.hash
+PHOENIX_KIT_PATH=../phoenix_kit mix precommit
 ```
 
 Repo-local aliases:
@@ -226,6 +241,12 @@ Repo-local aliases:
   `handle_url_state`, so a "did it change?" check against them never fires; keep
   `prior_*` trackers.
 - `<style>{@css}</style>` in HEEx ships the literal text — use `<%= raw %>`.
+- A key read from the URL (a path `:uuid`, `?category=`, `?folder=`) goes
+  through the context's getters, which answer "not found" for a string that
+  is not a UUID. A raw `repo().get` or a `where: x.uuid == ^param` on it
+  raises `Ecto.Query.CastError` instead — and in a UrlState LiveView, which
+  loads only once connected, that is a page that renders, crashes, reloads
+  and crashes again: an endless spinner, not an error page.
 
 ## Architecture
 
@@ -395,6 +416,20 @@ Pointers, not docs — the moduledocs are the contract.
   `duplicate_data/2`, asked even while it is disabled, so an external id
   never ends up on two rows. Copies get no slug: slugs are unique
   across the whole table.
+- **UI conventions** — sentence case everywhere but acronyms and names;
+  unset values "— X not set —", prompts "— Select X —"; every field label is
+  core's, and no field is wrapped in daisyUI's `.fieldset` (it shrinks the
+  label to 12px). Enforced by `test/web/ui_conventions_test.exs`; the rules:
+  `dev_docs/guides/ui-conventions.md`.
+- **Item form: place and suppliers wait for Save** — an item form event
+  handler never moves the item or writes a supplier row. The place is picked
+  in the Details tab's Location section (`Web.ItemLocation`: a folder ›
+  catalogue › category tree of the item's kind) and moved on Save through the
+  move functions; the payload's `category_uuid` is dropped. Supplier changes
+  (add, cost, remove, primary, the row dialog) are staged in
+  `Web.SupplierDraft`, keyed by supplier because a price revision replaces the
+  row's uuid, and applied after the item saves; a value that would not save
+  blocks the whole save.
 - **Pricing** — chain is `base → markup → discount`.
   `Catalogue.item_pricing/1` is the one-stop API for UIs; pure helpers live on
   `Item`.
@@ -458,7 +493,10 @@ Pointers, not docs — the moduledocs are the contract.
 - **Supplier comments** — one `phoenix_kit_comments` thread per item × supplier
   row (`"catalogue_item_supplier"`), keyed on the thread uuid in
   `item_supplier_info.metadata["comment_thread_uuid"]`. Server-owned, survives
-  price revisions and removal — removal CLOSES the row, never deletes it. Never
+  price revisions and removal — removal CLOSES the row, never deletes it. A
+  pair's thread is known before its row exists (`thread_for_pair/2`: the
+  inherited one, else a name-based uuid of the pair), which is how the item
+  form takes comments on a supplier it has only staged. Never
   the CRM company's thread. The admin/activity back-link resolver self-registers
   via `resource_links/0`, so no host config is needed. See
   `Catalogue.SupplierComments`.

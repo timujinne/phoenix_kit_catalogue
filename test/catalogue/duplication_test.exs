@@ -122,6 +122,10 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
 
       refute Catalogue.supplier_comment_thread_uuid(copied) in source_threads
 
+      # The copy's own pair thread — what its item form shows for the pair.
+      assert Catalogue.supplier_comment_thread_uuid(copied) ==
+               Catalogue.supplier_comment_thread_for_pair(copy.uuid, supplier.uuid)
+
       assert Repo.aggregate(from(i in ItemSupplierInfo, where: i.item_uuid == ^copy.uuid), :count) ==
                1
     end

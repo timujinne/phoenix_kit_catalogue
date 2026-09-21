@@ -116,7 +116,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
 
   @doc "Fetches a supplier-info row by UUID. Returns `nil` if not found."
   @spec get(Ecto.UUID.t()) :: ItemSupplierInfo.t() | nil
-  def get(uuid), do: repo().get(ItemSupplierInfo, uuid)
+  def get(uuid), do: Helpers.get_by_uuid(ItemSupplierInfo, uuid)
 
   @doc """
   Creates a supplier-info row.
@@ -176,14 +176,14 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
   defp already_linked_violation?(_other), do: false
 
   # The comment thread is stamped here, never taken from attrs: a pair that
-  # was attached before resumes its thread (see SupplierComments), a new
-  # pair gets a fresh one, and neither an import nor a form can point the
-  # row at somebody else's.
+  # was attached before resumes its thread, a new pair gets its own
+  # name-based one (see SupplierComments.thread_for_pair/2), and neither an
+  # import nor a form can point the row at somebody else's.
   defp do_create(attrs, opts) do
     changeset = ItemSupplierInfo.changeset(%ItemSupplierInfo{}, attrs)
 
     thread =
-      SupplierComments.inherited_thread(
+      SupplierComments.thread_for_pair(
         Ecto.Changeset.get_field(changeset, :item_uuid),
         Ecto.Changeset.get_field(changeset, :supplier_uuid)
       ) || UUIDv7.generate()
@@ -198,11 +198,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
             actor_uuid: opts[:actor_uuid],
             resource_type: "item_supplier_info",
             resource_uuid: info.uuid,
-            metadata: %{
-              "item_uuid" => info.item_uuid,
-              "supplier_uuid" => info.supplier_uuid,
-              "supplier_source" => info.supplier_source
-            }
+            metadata: Map.put(identity_metadata(info), "supplier_source", info.supplier_source)
           }
         end
       )
@@ -259,7 +255,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
             actor_uuid: opts[:actor_uuid],
             resource_type: "item_supplier_info",
             resource_uuid: updated.uuid,
-            metadata: %{"item_uuid" => updated.item_uuid}
+            metadata: identity_metadata(updated)
           }
         end
       )
@@ -305,12 +301,11 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
             actor_uuid: opts[:actor_uuid],
             resource_type: "item_supplier_info",
             resource_uuid: closed.uuid,
-            metadata: %{
-              "item_uuid" => closed.item_uuid,
-              "supplier_uuid" => closed.supplier_uuid,
-              "closed" => true,
-              "valid_to" => Date.to_iso8601(closed.valid_to)
-            }
+            metadata:
+              Map.merge(identity_metadata(closed), %{
+                "closed" => true,
+                "valid_to" => Date.to_iso8601(closed.valid_to)
+              })
           }
         end
       )
@@ -395,7 +390,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
           actor_uuid: opts[:actor_uuid],
           resource_type: "item_supplier_info",
           resource_uuid: updated.uuid,
-          metadata: %{"item_uuid" => updated.item_uuid}
+          metadata: identity_metadata(updated)
         })
 
         PubSub.broadcast(
@@ -607,17 +602,76 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemSupplierInfos do
       resource_type: "item_supplier_info",
       resource_uuid: successor.uuid,
       metadata:
-        Map.merge(
-          %{
-            "item_uuid" => current.item_uuid,
-            "supplier_uuid" => current.supplier_uuid,
-            "old_cost" => old_cost_str,
-            "new_cost" => Decimal.to_string(new_cost, :normal),
-            "source" => opts[:source],
-            "source_uuid" => opts[:source_uuid]
-          },
-          currency_meta
-        )
+        identity_metadata(current)
+        |> Map.merge(%{
+          "source" => opts[:source],
+          "source_uuid" => opts[:source_uuid],
+          # The price move, in the one shape every surface renders as an
+          # arrow. `old_cost`/`new_cost` said the same thing in keys only a
+          # reader of this module would think to pair up.
+          "changes" => %{
+            "unit_cost" => %{
+              "from" => old_cost_str,
+              "to" => Decimal.to_string(new_cost, :normal)
+            }
+          }
+        })
+        |> Map.merge(currency_meta)
     })
   end
+
+  # ── Activity identity ────────────────────────────────────────────
+  #
+  # A supplier row is a JOIN: on its own it is three uuids and means nothing
+  # to a reader. The owner's activity feed showed exactly that — "closed:
+  # true, item_uuid: 019da71b…, supplier_uuid: 01a01fe3…" (boss via Max,
+  # 2026-09-20). Every row now carries the pair it is ABOUT, named:
+  #
+  #   name:     "Häfele Eesti OÜ — Soft-close hinge"   (the row's title)
+  #   supplier: {uuid, label}                          (snapshotted)
+  #   item:     {uuid, label}                          (snapshotted)
+  #
+  # The supplier's name comes off the row itself (`supplier_name_snapshot`),
+  # which is what makes this cheap AND correct: suppliers are hard-delete
+  # only, so a read-time lookup is precisely what stops working.
+  defp identity_metadata(info) do
+    supplier = supplier_label(info)
+    item = item_label(info.item_uuid)
+
+    %{
+      "name" => [supplier, item] |> Enum.reject(&is_nil/1) |> Enum.join(" — "),
+      "supplier" =>
+        ActivityLog.ref(
+          info.supplier_uuid,
+          supplier,
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unknown supplier")
+        ),
+      "item" =>
+        ActivityLog.ref(
+          info.item_uuid,
+          item,
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unknown item")
+        ),
+      # The scalar stays beside the ref: the deep-link template builds the
+      # URL from `:metadata.item_uuid`, and a template can only read a flat
+      # value — it cannot reach into the ref map.
+      "item_uuid" => info.item_uuid
+    }
+  end
+
+  defp supplier_label(%{supplier_name_snapshot: name}) when is_binary(name) and name != "",
+    do: name
+
+  defp supplier_label(_info), do: nil
+
+  defp item_label(uuid) when is_binary(uuid) do
+    case Helpers.get_by_uuid(PhoenixKitCatalogue.Schemas.Item, uuid) do
+      %{name: name} -> name
+      _ -> nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp item_label(_uuid), do: nil
 end

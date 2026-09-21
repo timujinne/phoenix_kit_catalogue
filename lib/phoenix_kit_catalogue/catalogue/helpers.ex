@@ -10,6 +10,31 @@ defmodule PhoenixKitCatalogue.Catalogue.Helpers do
 
   alias PhoenixKitCatalogue.Schemas.Item
 
+  @doc """
+  `Repo.get/2` for a key that may have come from outside — a URL, a form, a
+  `phx-value`. A string that is not a UUID names no row, so it answers
+  `nil`. Ecto itself raises `Ecto.Query.CastError` on one instead, and a
+  LiveView that reads the key from its URL only once connected then renders
+  fine, crashes on the connected mount, reloads, and crashes again: an
+  endless spinner (a hand-typed `?category=<uuid>?page=5`, 2026-09-19).
+  """
+  @spec get_by_uuid(module(), term()) :: struct() | nil
+  def get_by_uuid(schema, uuid) do
+    if uuid?(uuid), do: PhoenixKit.RepoHelper.repo().get(schema, uuid)
+  end
+
+  @doc "`get_by_uuid/2` that raises `Ecto.NoResultsError` on a miss — a non-UUID key included — like `Repo.get!/2`."
+  @spec get_by_uuid!(module(), term()) :: struct()
+  def get_by_uuid!(schema, uuid) do
+    if uuid?(uuid),
+      do: PhoenixKit.RepoHelper.repo().get!(schema, uuid),
+      else: raise(Ecto.NoResultsError, queryable: schema)
+  end
+
+  @doc "True for anything `Ecto.UUID` would accept as a key."
+  @spec uuid?(term()) :: boolean()
+  def uuid?(value), do: match?({:ok, _}, Ecto.UUID.cast(value))
+
   @doc "True when `attrs` has the key as either an atom or its string form."
   @spec has_attr?(map(), atom()) :: boolean()
   def has_attr?(attrs, key) when is_map(attrs) and is_atom(key) do

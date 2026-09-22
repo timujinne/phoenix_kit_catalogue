@@ -2981,12 +2981,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     target={@myself}
                   >
                     <:qty>
+                      <%!-- A granted :unit column carries the unit, so the
+                      stepper drops its suffix: every input is then the same
+                      width and the quantities stand in one straight column
+                      instead of shifting with "pc" / "m" (boss, 2026-09-22).
+                      Same grant test as the price cell's inline_unit. --%>
                       <.qty_stepper
                         :if={stepper?(assigns, item.uuid)}
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(decimal_qty?(@qty_precision), do: Browse.unit_label(item))}
+                        unit={
+                          if(decimal_qty?(@qty_precision) and :unit not in @columns,
+                            do: Browse.unit_label(item)
+                          )
+                        }
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}

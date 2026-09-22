@@ -335,6 +335,40 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
       assert html =~ "/ pc"
     end
+
+    # The table's qty stepper used to carry the unit as a suffix even with a
+    # :unit column granted — "pc" / "m" of different widths shifted every
+    # input, so a column of quantities zig-zagged (boss, 2026-09-22).
+    test "with a granted :unit column the table's qty stepper has no unit suffix", %{
+      conn: conn,
+      cat: cat
+    } do
+      {:ok, _view, html} =
+        open(conn, "c=#{cat.uuid}&precision=any&min=0&view=table&cols=name,price,qty,unit")
+
+      doc = LazyHTML.from_fragment(html)
+      steppers = LazyHTML.query(doc, ~s(#picker-table [role="group"]))
+
+      refute Enum.empty?(steppers), "expected the quantity steppers in the table"
+      assert Enum.empty?(LazyHTML.query(steppers, "span.join-item"))
+      assert Enum.any?(LazyHTML.query(doc, "#picker-table td span"), &(LazyHTML.text(&1) == "pc"))
+    end
+
+    test "without a :unit column the table's qty stepper keeps its unit suffix", %{
+      conn: conn,
+      cat: cat
+    } do
+      {:ok, _view, html} =
+        open(conn, "c=#{cat.uuid}&precision=any&min=0&view=table&cols=name,price,qty")
+
+      suffixes =
+        html
+        |> LazyHTML.from_fragment()
+        |> LazyHTML.query(~s(#picker-table [role="group"] span.join-item))
+
+      refute Enum.empty?(suffixes)
+      assert Enum.all?(suffixes, &(String.trim(LazyHTML.text(&1)) == "pc"))
+    end
   end
 
   describe "confirm payload follows the catalogue's own tree order (2026-09-17)" do

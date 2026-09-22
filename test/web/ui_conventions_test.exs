@@ -138,4 +138,89 @@ defmodule PhoenixKitCatalogue.Web.UIConventionsTest do
                "down from #{expected} — a name went back to inheriting table-sm's 12px"
     end
   end
+
+  # ── One look for the whole module (boss via Max, 2026-09-21) ────────
+  #
+  # The owner's complaint was that the same furniture rendered differently
+  # from screen to screen: the search box was four widths, a status choice
+  # was underline tabs here / a daisyUI `join` on the PDF library / `btn-xs`
+  # chips reading "Missing: 4" on translations, and some tabs carried a
+  # count while their siblings did not. Each check below states the shared
+  # component and names the shapes that were replaced, so a new screen that
+  # hand-rolls one fails here instead of reaching the owner.
+
+  # Every event that picks which rows a list shows. Sourced from the LVs'
+  # handle_event clauses, NOT from the markup, so a screen that adds a
+  # fourth tab idiom is still caught.
+  @status_events ~w(switch_view switch_catalogue_view set_filter filter_state)
+
+  test "a status choice is rendered by status_tab/1, never hand-rolled" do
+    offenders =
+      for file <- @web_sources,
+          source = File.read!(file),
+          event <- @status_events,
+          [tag] <-
+            Regex.scan(~r/<([\w.]+)[^>]*phx-click="#{event}"/, source, capture: :all_but_first),
+          tag not in ~w(.status_tab Shared.status_tab),
+          do: "#{file}: <#{tag}> fires #{event}"
+
+    assert offenders == [],
+           "a status choice must render through status_tab/1 — it carries the " <>
+             "underline, the active colour and the mandatory count:\n" <>
+             Enum.join(offenders, "\n")
+  end
+
+  test "status_tab/1 cannot render a tab without its count" do
+    # The index shipped a bare "Active" beside a "Deleted (19)". The count
+    # is a required attr, so the compiler is the check; this pins that it
+    # stays required and that the label is not just concatenated in.
+    assert {:status_tab, 1} in Components.__info__(:functions)
+
+    attrs =
+      Components.__components__()
+      |> Map.fetch!(:status_tab)
+      |> Map.fetch!(:attrs)
+      |> Map.new(&{&1.name, &1.required})
+
+    assert attrs[:count] == true
+    assert attrs[:label] == true
+  end
+
+  test "every page search box takes the shared width" do
+    dead_widths = ~r/sm:w-64|basis-64|sm:max-w-72|sm:max-w-xl/
+
+    offenders =
+      for file <- @web_sources,
+          {line, number} <- file |> File.read!() |> String.split("\n") |> Enum.with_index(1),
+          # A doc that NAMES a replaced width is the record of why the
+          # helper exists, not a use of it, so backticked spans drop out.
+          # Everything else counts, including a bare string returned from a
+          # helper — that is how a fifth width would arrive.
+          Regex.match?(dead_widths, String.replace(line, ~r/`[^`]*`/, "")),
+          do: "#{file}:#{number}: #{String.trim(line)}"
+
+    assert offenders == [],
+           "search boxes size themselves through Components.search_width_class/0:\n" <>
+             Enum.join(offenders, "\n")
+  end
+
+  test "search_width_class/0 is one fixed width, not a grow rule" do
+    # A `grow` rule reads as consistent in the markup and renders a
+    # different width on every page, because what sits beside the box
+    # differs. That is how the four widths happened.
+    refute Components.search_width_class() =~ ~r/\bgrow\b|\bflex-1\b|\bbasis-/
+  end
+
+  test "every sort selector says what it sorts" do
+    bare =
+      for file <- @web_sources,
+          source = File.read!(file),
+          [tag] <- Regex.scan(~r/<\.sort_selector\b[^>]*\/>/, source),
+          not Regex.match?(~r/\slabel\b/, tag),
+          do: "#{file}: #{tag |> String.split("\n") |> Enum.map_join(" ", &String.trim/1)}"
+
+    assert bare == [],
+           ~s(a dropdown reading "Manual" does not say what it does — pass `label`:\n) <>
+             Enum.join(bare, "\n")
+  end
 end

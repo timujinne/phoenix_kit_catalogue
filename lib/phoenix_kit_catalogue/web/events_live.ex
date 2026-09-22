@@ -318,37 +318,37 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       current_locale={assigns[:current_locale]}
     >
     <div class="flex flex-col w-full px-4 py-6 gap-4">
-      <%!-- Filters --%>
-      <div class="bg-base-200 rounded-lg p-3 text-sm">
-        <.form for={%{}} id="events-filter" phx-change="filter" class="flex flex-wrap gap-3 items-end">
-          <div>
-            <.select
-              name="filter[action]"
-              id="events-filter-action"
-              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Action")}
-              value={@filter_action}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All actions")}
-              options={Enum.map(@action_types, &{&1, &1})}
-              class="select-sm"
-            />
-          </div>
+      <%!-- Filters left, the page's action right — the same row every other
+           catalogue list opens with (boss via Max, 2026-09-21). The
+           `bg-base-200` panel and the stacked labels went with it: each
+           select already names itself through its "All …" prompt, as the
+           index's filters do. --%>
+      <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <.form for={%{}} id="events-filter" phx-change="filter" class="flex flex-wrap items-center gap-2">
+          <.select
+            name="filter[action]"
+            id="events-filter-action"
+            value={@filter_action}
+            prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All actions")}
+            options={Enum.map(@action_types, &{&1, &1})}
+            class="select-sm"
+            aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Action")}
+          />
 
-          <div>
-            <.select
-              name="filter[resource_type]"
-              id="events-filter-resource"
-              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Resource")}
-              value={@filter_resource_type}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All types")}
-              options={Enum.map(@resource_types, &{humanize_resource_type(&1), &1})}
-              class="select-sm"
-            />
-          </div>
-
-          <button type="button" phx-click="clear_filters" class="btn btn-ghost btn-sm">
-            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
-          </button>
+          <.select
+            name="filter[resource_type]"
+            id="events-filter-resource"
+            value={@filter_resource_type}
+            prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All types")}
+            options={Enum.map(@resource_types, &{humanize_resource_type(&1), &1})}
+            class="select-sm"
+            aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Resource")}
+          />
         </.form>
+
+        <button type="button" phx-click="clear_filters" class="btn btn-ghost btn-sm">
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Clear")}
+        </button>
       </div>
 
       <%!-- Events Feed --%>

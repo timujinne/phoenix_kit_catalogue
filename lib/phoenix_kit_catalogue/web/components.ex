@@ -450,12 +450,24 @@ defmodule PhoenixKitCatalogue.Web.Components do
         "the thumb inert."
   )
 
+  attr(:letter, :boolean,
+    default: false,
+    doc:
+      "With no image and no files, show the item picker's first-letter tile " <>
+        "instead of nothing. The admin lists pass it: they always carry a " <>
+        "preview column now, so a row without a picture gets a tile in it " <>
+        "rather than an empty gap (boss via Max, 2026-09-21)."
+  )
+
   def featured_thumb(assigns) do
-    assigns = assign(assigns, :uuid, featured_image_uuid(assigns.resource))
+    assigns =
+      assigns
+      |> assign(:uuid, featured_image_uuid(assigns.resource))
+      |> assign(:initial, assigns.letter && thumb_initial(assigns.resource))
 
     ~H"""
     <button
-      :if={(@uuid || @has_files) && @on_click}
+      :if={(@uuid || @has_files || @initial) && @on_click}
       type="button"
       phx-click={@on_click}
       phx-value-uuid={@resource.uuid}
@@ -465,20 +477,54 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <.thumb_visual
         uuid={@uuid}
         has_files={@has_files}
+        initial={@initial}
         class={@class}
         variant={@variant}
         comfy_scale={@comfy_scale}
       />
     </button>
     <.thumb_visual
-      :if={(@uuid || @has_files) && !@on_click}
+      :if={(@uuid || @has_files || @initial) && !@on_click}
       uuid={@uuid}
       has_files={@has_files}
+      initial={@initial}
       class={@class}
       variant={@variant}
       comfy_scale={@comfy_scale}
     />
     """
+  end
+
+  @doc """
+  A preview-column tile for a row that is not a picture of anything — a
+  folder, the Uncategorized bucket. Exactly a thumbnail's size (compact and
+  comfy), so every row in a list keeps its name at the same place.
+  """
+  attr(:icon, :string, required: true)
+  attr(:icon_class, :string, default: "text-base-content/40")
+
+  def thumb_icon_tile(assigns) do
+    ~H"""
+    <span
+      class="relative block shrink-0 w-10 h-10 [.pk-comfy_&]:w-18 [.pk-comfy_&]:h-18"
+      aria-hidden="true"
+    >
+      <span class="w-full h-full rounded bg-base-200 flex items-center justify-center">
+        <.icon name={@icon} class={"w-5 h-5 " <> @icon_class} />
+      </span>
+    </span>
+    """
+  end
+
+  # The picker's rule (`Browse`): an item's SKU initial, else its name's;
+  # a category's or catalogue's name. Always one visible character.
+  defp thumb_initial(resource) do
+    text = Map.get(resource, :sku) || Map.get(resource, :name) || ""
+
+    case String.trim(to_string(text)) do
+      "" -> "?"
+      t -> t |> String.first() |> String.upcase()
+    end
   end
 
   attr(:options, :list, required: true)
@@ -758,6 +804,121 @@ defmodule PhoenixKitCatalogue.Web.Components do
   one place so the bands cannot drift apart page by page.
   """
   def card_media_band, do: "relative h-40 bg-base-200 overflow-hidden"
+
+  @doc """
+  What a sortable column header is given as its `sort`: the current sort as
+  core's `sort_header_cell/1` wants it — or `nil` in Manual order, which
+  renders the header as a plain label.
+
+  Headers sort by a click only once the list is already sorted by a column
+  (boss via Max, 2026-09-21). In Manual order a click would silently leave
+  the order someone arranged by hand and take the drag handles with it, so
+  there the dropdown is the one way out, and the arrows appear once you are
+  out. Takes the atom (`:position`) the catalogue page uses and the string
+  (`"position"`) the index uses.
+  """
+  @spec header_sort(atom() | String.t(), :asc | :desc) :: map() | nil
+  def header_sort(by, _dir) when by in [:position, "position"], do: nil
+  def header_sort(by, dir), do: %{by: by, dir: dir}
+
+  @doc """
+  The width every search box in the module uses.
+
+  There were four rules — `flex-1`, `w-full sm:w-64`,
+  `grow basis-64 sm:max-w-72` and `grow basis-64 sm:max-w-xl` — so the field
+  rendered a different size on every screen, which is what the owner saw
+  (boss via Max, 2026-09-21).
+
+  Fixed rather than growing, deliberately: a `grow` rule gives a different
+  rendered width on each page, because what sits beside the box differs —
+  filters and two create buttons on the index, one toggle inside a
+  catalogue. The same rule that reads as "consistent" in the markup is what
+  produced the inconsistency on screen.
+  """
+  def search_width_class, do: "w-full sm:w-80"
+
+  @doc """
+  The row that carries a list's status tabs on the left and the controls that
+  belong to the table on the right — sort, Reorder all, Columns, the view
+  toggle.
+
+  One component because the screens disagreed and the owner noticed: inside a
+  catalogue these controls sat on the tabs row, while the index put them up on
+  the search row with the tabs alone underneath, so the same page furniture
+  landed in two places depending on where you were (boss via Max,
+  2026-09-21). The tabs row is the agreed home — the controls act on the table
+  the tabs choose, so they read as one thing.
+
+  Both slots are optional: a screen with no trash renders the row with only
+  its controls, and the controls stay right-aligned either way.
+  """
+  attr(:id, :string, default: nil)
+  attr(:class, :string, default: nil)
+  slot(:tabs)
+  slot(:controls)
+
+  def list_controls_row(assigns) do
+    ~H"""
+    <%!-- `ignore_attributes(["style"])`: this row is what a bulk-select
+         scope REPLACES — the hook hides it with an inline
+         `style="display: none"` while a selection is open. Nothing here
+         renders a style from the server, so LiveView's patcher would strip
+         that one on the next re-render of this row and the controls would
+         come back UNDER the bulk bar, pushing every table row down again
+         (grok, 2026-09-21 — the shift this mechanism exists to prevent).
+         Handing `style` to the client is the same fix core's collapse pad
+         uses. --%>
+    <div
+      :if={@tabs != [] or @controls != []}
+      id={@id}
+      phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["style"])}
+      class={["flex flex-wrap items-center gap-2", @class]}
+    >
+      <div :if={@tabs != []} class="flex items-center gap-0.5 flex-wrap">
+        {render_slot(@tabs)}
+      </div>
+      <div :if={@controls != []} class="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {render_slot(@controls)}
+      </div>
+    </div>
+    """
+  end
+
+  @doc """
+  One status tab — "Active (24)", "Deleted (39)".
+
+  The count is not optional. The index showed a bare "Active" beside a
+  "Deleted (19)" while the catalogue pages counted both, and the owner circled
+  exactly that (boss via Max, 2026-09-21): a tab that omits its count reads as
+  though it has none to give.
+  """
+  attr(:label, :string, required: true)
+  attr(:count, :integer, required: true)
+  attr(:active, :boolean, required: true)
+  attr(:variant, :atom, default: :primary, values: [:primary, :error])
+  # `phx-*` is a global prefix, so the click event and whatever
+  # `phx-value-…` the screen keys its tabs on (mode, filter, state) pass
+  # through without being listed here.
+  attr(:rest, :global)
+
+  def status_tab(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class={[
+        "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap",
+        cond do
+          not @active -> "border-transparent text-base-content/50 hover:text-base-content"
+          @variant == :error -> "border-error text-error"
+          true -> "border-primary text-primary"
+        end
+      ]}
+      {@rest}
+    >
+      {@label} ({@count})
+    </button>
+    """
+  end
 
   @doc """
   Classes for a NAME cell in the catalogue's listing tables — the item's
@@ -1107,22 +1268,43 @@ defmodule PhoenixKitCatalogue.Web.Components do
         "and pass down; see that function's doc."
   )
 
+  attr(:sort, :map,
+    default: nil,
+    doc:
+      "`header_sort/2` of the categories' sort: the Items and Updated headers " <>
+        "(the two sortable category columns) sort by a click when it is a map, " <>
+        "and are plain labels when nil (Manual order)."
+  )
+
+  attr(:sort_event, :string, default: "toggle_sort_categories")
+
   def category_header_cells(assigns) do
     ~H"""
     <%= for col <- category_cell_ids(@columns, @extension_columns) do %>
       <%= case col do %>
         <% "items" -> %>
-          <.table_default_header_cell class="text-right w-px whitespace-nowrap">
+          <.sort_header_cell
+            field={:items}
+            sort={@sort}
+            event={@sort_event}
+            align={:right}
+            class="text-right w-px whitespace-nowrap"
+          >
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")}
-          </.table_default_header_cell>
+          </.sort_header_cell>
         <% "image" -> %>
           <.table_default_header_cell class="w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Image")}
           </.table_default_header_cell>
         <% "updated" -> %>
-          <.table_default_header_cell class="w-px whitespace-nowrap">
+          <.sort_header_cell
+            field={:updated}
+            sort={@sort}
+            event={@sort_event}
+            class="w-px whitespace-nowrap"
+          >
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Updated")}
-          </.table_default_header_cell>
+          </.sort_header_cell>
         <% "subcategories" -> %>
           <.table_default_header_cell class="text-right w-px whitespace-nowrap">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Subcategories")}
@@ -1235,6 +1417,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   # stay aligned across rows either way.
   attr(:uuid, :string, default: nil)
   attr(:has_files, :boolean, required: true)
+  attr(:initial, :any, default: nil)
   attr(:class, :any, required: true)
   attr(:variant, :string, default: "thumbnail")
   attr(:comfy_scale, :boolean, default: true)
@@ -1255,11 +1438,21 @@ defmodule PhoenixKitCatalogue.Web.Components do
         class="w-full h-full rounded object-cover bg-base-200"
       />
       <span
-        :if={!@uuid}
+        :if={!@uuid and @has_files}
         class="w-full h-full rounded bg-base-200 flex items-center justify-center"
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Files")}
       >
         <.icon name="hero-paper-clip" class="w-4 h-4 rotate-45 text-base-content/50" />
+      </span>
+      <%!-- The item picker's no-photo tile, so a list row without a
+           picture looks like the picker's does. --%>
+      <span
+        :if={!@uuid and !@has_files and @initial}
+        data-thumb-letter
+        aria-hidden="true"
+        class="w-full h-full rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
+      >
+        {@initial}
       </span>
       <span
         :if={@uuid && @has_files}
@@ -1274,20 +1467,23 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   @doc """
   The managed "Image" column's cell content (`TableConfig.columns/1`'s
-  `"image"` id): the item/category's `featured_image_uuid`, or empty
-  space — never a broken-image glyph — when it has none.
+  `"image"` id): the item/category's `featured_image_uuid`, else the same
+  letter tile the automatic column shows, so a row without a picture keeps
+  the offset either way — never a broken-image glyph.
 
   A plain, opt-in twin of `featured_thumb/1`'s automatic photo column:
-  that one appears on its own whenever some row on the level has a
-  picture (or an attached file) and isn't listed in the Columns modal;
-  this one is an ordinary managed column an admin turns on/off/reorders
-  like any other, and always shows the "small" storage variant with no
-  paperclip/attachment badge.
+  that one is on whenever a list has rows and the Columns modal does not
+  list this one; this one is an ordinary managed column an admin turns
+  on/off/reorders like any other, and always shows the "small" storage
+  variant with no paperclip/attachment badge.
   """
   attr(:resource, :any, required: true)
 
   def image_column_cell(assigns) do
-    assigns = assign(assigns, :uuid, featured_image_uuid(assigns.resource))
+    assigns =
+      assigns
+      |> assign(:uuid, featured_image_uuid(assigns.resource))
+      |> assign(:initial, thumb_initial(assigns.resource))
 
     ~H"""
     <img
@@ -1298,6 +1494,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
       onerror="this.style.display='none'"
       class="w-10 h-10 rounded object-cover bg-base-200"
     />
+    <span
+      :if={!@uuid}
+      data-thumb-letter
+      aria-hidden="true"
+      class="w-10 h-10 rounded bg-base-200 flex items-center justify-center text-base-content/40 font-bold"
+    >
+      {@initial}
+    </span>
     """
   end
 
@@ -1580,8 +1784,12 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:class, :string, default: "")
 
   attr(:id, :string,
-    default: "catalogue-search-input",
-    doc: "Form id — LiveView warns without one and cannot recover the form after a disconnect."
+    required: true,
+    doc:
+      "Form id — LiveView warns without one and cannot recover the form after " <>
+        "a disconnect. Required rather than defaulted: a default is the same " <>
+        "id on every caller, so two search boxes on one page would silently " <>
+        "share it and break recovery for both (zai, 2026-09-21)."
   )
 
   def search_input(assigns) do
@@ -1592,14 +1800,25 @@ defmodule PhoenixKitCatalogue.Web.Components do
     assigns = assign(assigns, :placeholder, placeholder)
 
     ~H"""
+    <%!-- One search box for the whole module. There were three: this one
+         (`flex-1`, no icon), the index's fixed `sm:w-64` label+icon, and
+         the PDF library's `grow basis-64 sm:max-w-72` — so the field was a
+         different size and shape depending on the screen, which the owner
+         noticed (boss via Max, 2026-09-21). A search box earns its width
+         from what it searches, so it still grows to fill its group; what
+         is shared is the height, the magnifier and the clear button. --%>
     <div class={["flex gap-2", @class]}>
       <form id={@id} phx-change={@on_search} phx-submit={@on_search} class="flex-1 relative">
+        <.icon
+          name="hero-magnifying-glass"
+          class="w-4 h-4 opacity-50 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+        />
         <input
           type="text"
           name="query"
           value={@query}
           placeholder={@placeholder}
-          class="input input-sm w-full pr-8"
+          class="input input-sm w-full pl-9 pr-8"
           phx-debounce={@debounce}
           autocomplete="off"
         />
@@ -2435,6 +2654,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   attr(:selected_uuids, :any, default: nil, doc: "MapSet of selected item UUIDs")
 
+  attr(:context_menu, :boolean,
+    default: false,
+    doc:
+      "Right-click a row or card for the menu in its actions slot. Threaded " <>
+        "from the page: one setting, and a hundred rows would otherwise be a " <>
+        "hundred settings reads per render."
+  )
+
   attr(:on_toggle_select, :string,
     default: nil,
     doc:
@@ -2451,7 +2678,11 @@ defmodule PhoenixKitCatalogue.Web.Components do
       # (inline-left of the name made rows jagged); it only exists when at
       # least one row would render a thumb or a paperclip.
       |> then(
-        &assign(&1, :photo_col?, any_featured_thumb?(&1.items) or map_size(&1.file_counts) > 0)
+        # Always a preview column when there are rows: an image, the files
+        # tile, or the picker's letter — never a column that comes and goes
+        # with whether some row happens to have a picture (boss via Max,
+        # 2026-09-21).
+        &assign(&1, :photo_col?, &1.items != [])
       )
 
     ~H"""
@@ -2465,6 +2696,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       view_mode={@view_mode}
       view_event={@view_event}
       {card_media_frame()}
+      card_context_menu={@context_menu}
       items={@items}
       on_reorder={@on_reorder}
       reorder_scope={@reorder_scope}
@@ -2547,6 +2779,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       >
         <.table_default_row
           :for={item <- @items}
+          data-row-menu-context={@context_menu}
           class={
             [
               if(@on_reorder, do: "sortable-item"),
@@ -2592,6 +2825,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
               resource={item}
               on_click={@photo_click}
               has_files={Map.get(@file_counts, item.uuid, 0) > 0}
+              letter
             />
           </.table_default_cell>
           <.item_cell

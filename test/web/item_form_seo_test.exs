@@ -14,10 +14,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSeoTest do
   alias PhoenixKit.Modules.Languages
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.Translations
+  alias PhoenixKitCatalogue.Web.Settings
 
   @base "/en/admin/catalogue"
 
   defp edit_item_url(item_uuid), do: "#{@base}/items/#{item_uuid}/edit"
+
+  # These tests drive the slug and SEO inputs, which the item form shows
+  # only while Settings → Catalogue's switch is on (off by default; the off
+  # side is pinned in test/web/item_seo_fields_test.exs).
+  setup do
+    {:ok, _} = Settings.update_seo_fields_visible(true)
+    :ok
+  end
 
   defp enable_multilang! do
     {:ok, _} = Languages.enable_system()

@@ -1,3 +1,63 @@
+## 0.43.0 - 2026-09-21
+
+Review: `dev_docs/pull_requests/2026/131-one-look-settings-tree-sorts/`.
+
+**Built against `phoenix_kit` 2.35.0.** Right-click on a *card* (the PDF
+library and card views) and the sort selector's label use `table_default`'s
+`card_context_menu` and `sort_selector`'s `label`, which first ship in core
+2.35.0. The floor stays at 2.34.0: on 2.34 those two quietly fall back (the
+browser's own menu on a card, an unlabelled sort selector) and nothing else
+changes.
+
+### Added
+
+- **Settings → Catalogue** (#131). One page for everything the module stores
+  that a person can change: right-click row menus, the item form's slug and
+  SEO fields, and the AI-translation sweep (on/off, interval, jobs per run,
+  languages), which until now could only be switched on from a console.
+- **Right-click a row** for the same menu its `⋮` button opens, at the
+  pointer, on every catalogue list and card (#131). Off from the settings page.
+- **Sortable column headers** outside Manual order (#131).
+- Renaming a folder from inside it, and distinct names for new folders
+  (#131).
+- The current place's picture beside its description, and a catalogue's
+  View card opened from its picture at the top level (#131).
+
+### Changed
+
+- **One look for every catalogue screen** (#131): one tabs + controls row,
+  one search box, and counted status tabs, the same on the index, inside a
+  catalogue, and on the PDF, Translations and Events pages.
+- **Trees keep their shape under every sort** (#131). The folder and category
+  trees stay nested outside Manual order. Dragging is only offered, and only
+  accepted, in Manual order.
+- Edit forms open on the language the page is viewed in (#131).
+- The item form hides its URL slug and SEO fields unless Settings → Catalogue
+  shows them. Hidden values are still carried through a save (#131).
+- The catalogue and category edit screens no longer carry a delete. Deleting
+  is done from the lists (#131).
+- The page's Edit button edits the place you are in (#131).
+
+### Fixed
+
+- Delete forever no longer removes a catalogue, category or item that was
+  restored in another tab since the page showed it (#131).
+- A rename landing on a folder removed while its field was open, the blur
+  after Enter renaming a folder twice, a pushed Manual-order header click
+  changing the shared sort, a sort flattening the trees, the preview column
+  coming and going, and the Image column leaving a pictureless row blank
+  (#131).
+- SEO text is no longer erased by the next save on a single-language install
+  (#131).
+- The Active tab counted the trashed catalogues while the Deleted view was
+  showing.
+- "Reorder all" was offered in the Deleted view, where it renumbered only the
+  trashed catalogues into positions the live ones already held.
+- A new item's slug froze on the name's first keystroke ("Birch board" saved
+  as `bi`). It now follows the name until someone types a slug.
+- A Folder sort left each level of the folder tree in no particular order. It
+  now sorts that level by name.
+
 ## 0.42.0 - 2026-09-20
 
 Review: `dev_docs/pull_requests/2026/130-view-cards-readable-activity/`.

@@ -46,7 +46,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailImageColumnTest do
     assert updated =~ item.data["featured_image_uuid"]
   end
 
-  test "an item with no featured image renders empty space, not a broken image", %{conn: conn} do
+  test "an item with no featured image shows its letter tile, not a broken image or a gap",
+       %{conn: conn} do
+    # The automatic preview column steps aside once this one is on, so this
+    # cell is the row's only preview: it keeps the offset the same way
+    # (boss via Max, 2026-09-21: previews, or no offset at all).
     catalogue = fixture_catalogue(%{name: "Img item empty"})
     fixture_item(%{name: "Widget", catalogue_uuid: catalogue.uuid})
 
@@ -58,6 +62,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailImageColumnTest do
 
     assert updated =~ "Widget"
     refute updated =~ "/small/"
+    assert has_element?(view, "#level-items-active td [data-thumb-letter]")
   end
 
   test "adding it renders the category's featured image via the small storage variant",

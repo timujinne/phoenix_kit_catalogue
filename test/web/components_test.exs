@@ -54,14 +54,23 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
 
   describe "search_input/1" do
     test "renders an input with the query prefilled" do
-      html = render_component(&search_input/1, query: "oak", placeholder: "Search…")
+      html =
+        render_component(&search_input/1, id: "t-search", query: "oak", placeholder: "Search…")
+
       assert html =~ "oak"
       assert html =~ "Search…"
     end
 
     test "renders without a query" do
-      html = render_component(&search_input/1, query: "", placeholder: "Search…")
+      html = render_component(&search_input/1, id: "t-search", query: "", placeholder: "Search…")
       assert html =~ "Search…"
+    end
+
+    test "the form id is the caller's, never a shared default" do
+      # Two boxes on one page sharing an id breaks LiveView's form recovery
+      # for both, and a default is the same id on every caller.
+      html = render_component(&search_input/1, id: "pdf-library-search", query: "")
+      assert html =~ ~s(id="pdf-library-search")
     end
   end
 

@@ -1008,6 +1008,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     * `:actor_uuid` — UUID to attribute on the activity log
     * `:force` — when `true`, deletes even if smart-rule references exist
+    * `:only_trashed` — pass `true` from a Deleted-tab action: the call
+      then refuses with `{:error, :not_in_trash}` when the catalogue,
+      re-read under the lock, is no longer trashed (restored in another
+      tab meanwhile)
 
   ## Examples
 
@@ -1026,6 +1030,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
       repo().transaction(fn ->
         lock_catalogue!(catalogue.uuid)
         lock_catalogue_rows!(catalogue.uuid)
+
+        if opts[:only_trashed] == true and
+             not match?(%{status: "deleted"}, repo().get(Catalogue, catalogue.uuid)),
+           do: repo().rollback(:not_in_trash)
 
         # Counted under the lock: a rule added between a pre-flight count
         # and the delete would be wiped by V102's ON DELETE CASCADE.
@@ -3156,7 +3164,10 @@ defmodule PhoenixKitCatalogue.Catalogue do
     query =
       from(c in Category,
         where: c.catalogue_uuid == ^catalogue_uuid,
-        order_by: [asc: :position, asc: :name]
+        # uuid last: two siblings sharing a position and a name would
+        # otherwise come back in either order, and a sort that keeps ties
+        # in input order (or reverses them) would swap them between renders.
+        order_by: [asc: :position, asc: :name, asc: :uuid]
       )
 
     query =
@@ -3338,7 +3349,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   # rewriting `parent_uuid` to nil — so a child never vanishes when its
   # parent is trashed (trash is non-cascading, parity with categories).
   defp normalized_folder_rows(mode, exclude_uuids) do
-    base = from(f in Folder, order_by: [asc: f.position, asc: f.name])
+    # uuid last — see `normalized_category_rows/3`.
+    base = from(f in Folder, order_by: [asc: f.position, asc: f.name, asc: f.uuid])
 
     query =
       case mode do

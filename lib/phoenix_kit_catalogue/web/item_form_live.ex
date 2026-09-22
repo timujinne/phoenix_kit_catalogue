@@ -39,6 +39,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
+      open_on_viewing_language: 2,
       log_operation_error: 3,
       narrow_new_data: 2,
       actor_opts: 1,
@@ -72,6 +73,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.ItemLocation
+  alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.SupplierDraft
 
   # Admin-defined extra fields on supplier rows (the entities-backed
@@ -189,6 +191,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         {:ok,
          socket
          |> assign(:return_to, safe_return_to(params["return_to"]))
+         # Read once per mount: a page view, not a per-render lookup.
+         |> assign(:seo_fields_visible, CatalogueSettings.seo_fields_visible?())
          |> mount_form(action, item, changeset, catalogue_uuid)
          # `?tab=` deep-links land on a tab (the Comments admin's back-links
          # open the Suppliers tab); parse_tab/1 is an allowlist, anything
@@ -331,6 +335,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     |> assign_changeset(changeset)
     |> assign_rule_state(item, kind, catalogue_uuid)
     |> mount_multilang()
+    |> open_on_viewing_language(action)
     |> adjust_multilang_for_item(item)
     |> assign_attribute_state(item, action)
     |> assign_ai_translation("catalogue_item", if(action == :edit, do: item, else: nil))
@@ -355,14 +360,31 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # a collision); a blank submission is treated as "no change" rather
   # than clearing the language's existing slug, then `Slugs.maybe_generate/3`
   # fills any language present in `data` that still has no slug at all.
+  #
+  # A slug THIS form generated is not the user's: it follows the name until
+  # someone types one. `:derived_slug` remembers what was generated, per
+  # language, and such an entry — in the changeset or echoed back by the
+  # slug input (hidden by default, so always echoed) — is dropped before
+  # generating again. Without it the first debounced keystroke froze the
+  # slug: "Oa" → `oa`, and saving "Oak panel" kept `oa`.
+  #
+  # Returns `{params, derived_slug}`; the caller assigns the latter.
   defp apply_slug(params, socket) do
-    existing_slug = Ecto.Changeset.get_field(socket.assigns.changeset, :slug) || %{}
+    derived = socket.assigns[:derived_slug] || %{}
+    user_value? = fn {lang, value} -> Map.get(derived, lang) != value end
+
+    existing_slug =
+      (Ecto.Changeset.get_field(socket.assigns.changeset, :slug) || %{})
+      |> Enum.filter(user_value?)
+      |> Map.new()
 
     merged_slug =
       case params["slug"] do
         incoming when is_map(incoming) ->
           incoming
-          |> Enum.filter(fn {_lang, value} -> is_binary(value) and value != "" end)
+          |> Enum.filter(fn {_lang, value} = entry ->
+            is_binary(value) and value != "" and user_value?.(entry)
+          end)
           |> Enum.into(existing_slug)
 
         _ ->
@@ -384,7 +406,26 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       )
       |> Ecto.Changeset.get_field(:slug)
 
-    Map.put(params, "slug", generated_slug || merged_slug)
+    slug = generated_slug || merged_slug
+
+    derived =
+      for {lang, value} <- slug, not Map.has_key?(merged_slug, lang), into: %{}, do: {lang, value}
+
+    {Map.put(params, "slug", slug), derived}
+  end
+
+  # What an SEO field holds, for the form to show (and, hidden, to post
+  # back). Core's `get_lang_data/3` answers %{} whenever multilang is off, so
+  # on a single-language install these fields always read blank however
+  # much they held — while `merge_seo_params/2` stores them flat under
+  # `data["_seo_title"]`. A save then posted the blank back and erased them.
+  # Off multilang, read where they are stored.
+  defp seo_value(%{multilang_enabled: true} = assigns, field),
+    do: Map.get(assigns.lang_data, "_" <> field) || ""
+
+  defp seo_value(assigns, field) do
+    data = Ecto.Changeset.get_field(assigns.changeset, :data) || %{}
+    Map.get(Multilang.get_primary_data(data), "_" <> field) || ""
   end
 
   # The language key the slug input is rendered/submitted under: the
@@ -693,8 +734,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         preserve_fields: @preserve_fields
       )
       |> merge_seo_params(socket)
-      |> apply_slug(socket)
 
+    {item_params, derived_slug} = apply_slug(item_params, socket)
     {item_params, extension_error} = absorb_item_extensions(item_params, socket)
 
     changeset =
@@ -703,7 +744,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       |> Map.put(:action, :validate)
       |> add_extension_error(extension_error)
 
-    {:noreply, assign_changeset(socket, changeset)}
+    {:noreply, socket |> assign(:derived_slug, derived_slug) |> assign_changeset(changeset)}
   end
 
   def handle_event("save", params, socket) do
@@ -726,8 +767,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         preserve_fields: @preserve_fields
       )
       |> merge_seo_params(socket)
-      |> apply_slug(socket)
 
+    {item_params, derived_slug} = apply_slug(item_params, socket)
+    socket = assign(socket, :derived_slug, derived_slug)
     {item_params, extension_error} = absorb_item_extensions(item_params, socket)
 
     case extension_error do
@@ -2836,6 +2878,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: item.name)
     )
     |> assign(:needs_primary_translation, false)
+    # A saved slug is stored, no longer derived: it stops following the name.
+    |> assign(:derived_slug, %{})
     |> assign(location_target: nil, location_target_path: [])
     |> assign_location(item)
     |> assign_changeset(Catalogue.change_item(item))
@@ -3284,7 +3328,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 class="w-full"
               />
 
+              <%!-- Slug and SEO fields: shown only when Settings → Catalogue
+                   asks for them (boss via Max, 2026-09-21: "hidden for now").
+                   Hidden, they still post their current values — on the
+                   primary language the multilang merge REPLACES the stored
+                   fields with what the form sends, so leaving them out would
+                   erase the SEO text on the next save. --%>
               <.input
+                :if={@seo_fields_visible}
                 field={@form[:slug]}
                 name={"item[slug][#{slug_lang(assigns)}]"}
                 value={Map.get(@form[:slug].value || %{}, slug_lang(assigns), "")}
@@ -3292,6 +3343,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 label={gettext("URL slug")}
                 placeholder={gettext("auto-generated from the name")}
                 class="w-full"
+              />
+              <input
+                :if={!@seo_fields_visible}
+                type="hidden"
+                name={"item[slug][#{slug_lang(assigns)}]"}
+                value={Map.get(@form[:slug].value || %{}, slug_lang(assigns), "")}
               />
 
               <.translatable_field
@@ -3314,21 +3371,34 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 class="w-full"
               />
 
-              <.input
-                type="text"
-                name={translatable_param_name(assigns, "item", "seo_title")}
-                value={Map.get(@lang_data, "_seo_title") || ""}
-                label={gettext("SEO title")}
-                class="w-full"
-              />
+              <%= if @seo_fields_visible do %>
+                <.input
+                  type="text"
+                  name={translatable_param_name(assigns, "item", "seo_title")}
+                  value={seo_value(assigns, "seo_title")}
+                  label={gettext("SEO title")}
+                  class="w-full"
+                />
 
-              <.input
-                type="text"
-                name={translatable_param_name(assigns, "item", "seo_description")}
-                value={Map.get(@lang_data, "_seo_description") || ""}
-                label={gettext("SEO description")}
-                class="w-full"
-              />
+                <.input
+                  type="text"
+                  name={translatable_param_name(assigns, "item", "seo_description")}
+                  value={seo_value(assigns, "seo_description")}
+                  label={gettext("SEO description")}
+                  class="w-full"
+                />
+              <% else %>
+                <input
+                  type="hidden"
+                  name={translatable_param_name(assigns, "item", "seo_title")}
+                  value={seo_value(assigns, "seo_title")}
+                />
+                <input
+                  type="hidden"
+                  name={translatable_param_name(assigns, "item", "seo_description")}
+                  value={seo_value(assigns, "seo_description")}
+                />
+              <% end %>
             </div>
           </.multilang_fields_wrapper>
 

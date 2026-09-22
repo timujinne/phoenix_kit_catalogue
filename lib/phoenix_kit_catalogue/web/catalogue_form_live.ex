@@ -10,7 +10,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   import PhoenixKitWeb.Components.Core.Button, only: [button: 1]
   import PhoenixKitWeb.Components.Core.DecimalInput, only: [decimal_input: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
-  import PhoenixKitWeb.Components.Core.Modal, only: [confirm_modal: 1]
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
   import PhoenixKitCatalogue.Web.Components,
@@ -18,6 +17,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
+      open_on_viewing_language: 2,
       narrow_new_data: 2,
       actor_opts: 1,
       assign_ai_translation: 3,
@@ -101,7 +101,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
            ),
          action: action,
          catalogue: catalogue,
-         confirm_delete: false,
          current_tab: :details,
          meta_state: Metadata.build_state(:catalogue, catalogue)
        )
@@ -109,6 +108,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
        |> Attachments.allow_attachment_upload()
        |> assign_changeset(changeset)
        |> mount_multilang()
+       |> open_on_viewing_language(action)
        |> assign_ai_translation("catalogue", if(action == :edit, do: catalogue, else: nil))}
     end
   end
@@ -252,39 +252,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   def handle_event("clear_featured_image", _params, socket),
     do: Attachments.clear_featured_image(socket)
-
-  def handle_event("show_delete_confirm", _params, socket) do
-    {:noreply, assign(socket, :confirm_delete, true)}
-  end
-
-  def handle_event("delete_catalogue", _params, socket) do
-    case Catalogue.permanently_delete_catalogue(socket.assigns.catalogue, actor_opts(socket)) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           Gettext.gettext(
-             PhoenixKitCatalogue.Gettext,
-             "Catalogue and all its contents permanently deleted."
-           )
-         )
-         |> push_navigate(to: Paths.index())}
-
-      {:error, _} ->
-        {:noreply,
-         socket
-         |> assign(:confirm_delete, false)
-         |> put_flash(
-           :error,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to delete catalogue.")
-         )}
-    end
-  end
-
-  def handle_event("cancel_delete", _params, socket) do
-    {:noreply, assign(socket, :confirm_delete, false)}
-  end
 
   # {:ai_translation, ...} events folded into the form by `use ...AITranslate.Embed`.
   @impl true
@@ -678,51 +645,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
       <%!-- AI translate modal — outside the form (its selectors are their
            own <form>; nested forms are invalid). --%>
       <.ai_translate_modal ai_translate={ai_translate_config(assigns)} />
-
-      <%!-- Danger zone — collapsed by default to match the integrations
-           page pattern; user clicks to reveal the destructive action. --%>
-      <details :if={@action == :edit} class="card bg-base-100 border-2 border-error/30">
-        <summary class="card-body py-3 cursor-pointer flex-row items-center gap-2 select-none">
-          <.icon name="hero-exclamation-triangle" class="w-4 h-4 text-error" />
-          <h3 class="font-semibold text-error text-base">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Danger zone")}</h3>
-          <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
-        </summary>
-
-        <div class="card-body pt-0 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete catalogue")}</p>
-              <p class="text-xs text-base-content/60">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this catalogue, all its categories, and all items within them. This cannot be undone.")}
-              </p>
-            </div>
-            <%!-- `variant="error"` rather than `class="btn-error"`: variant
-                 REPLACES the base colour, so the class form would leave both
-                 btn-primary and btn-error on the element and let stylesheet
-                 order pick the winner. --%>
-            <.button
-              phx-click="show_delete_confirm"
-              variant="error"
-              size="sm"
-              class="btn-outline shrink-0"
-            >
-              <.icon name="hero-trash" class="w-4 h-4" />
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
-            </.button>
-          </div>
-        </div>
-      </details>
-
-      <.confirm_modal
-        show={@confirm_delete}
-        on_confirm="delete_catalogue"
-        on_cancel="cancel_delete"
-        title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete catalogue")}
-        title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this catalogue, all its categories, and all items within them.")}]}
-        confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
-        danger={true}
-      />
       </div>
     </PhoenixKitWeb.Components.LayoutWrapper.app_layout>
     """

@@ -86,6 +86,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components.ProductCard
   alias PhoenixKitCatalogue.Web.LevelSwitchers
+  alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.TableConfig
   alias PhoenixKitCatalogue.Web.ViewConfig
 
@@ -126,6 +127,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     socket =
       assign(socket,
         page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Loading…"),
+        # One settings read per mount, threaded down to the rows and cards.
+        row_context_menu: CatalogueSettings.context_menu_enabled?(),
         catalogue_uuid: uuid,
         catalogue: nil,
         # ── Drill-down position ──
@@ -841,6 +844,28 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   def handle_event("show_category_card", _params, socket), do: {:noreply, socket}
 
+  # The catalogue's own card, from its picture at the top of the page —
+  # always the page's catalogue, so nothing is read from the payload.
+  def handle_event("show_catalogue_card", _params, socket) do
+    case Catalogue.get_catalogue(socket.assigns.catalogue_uuid) do
+      %{} = catalogue ->
+        locale = socket.assigns[:current_locale] || "en"
+
+        {:noreply,
+         assign(socket,
+           card_open: true,
+           card_name: ProductCard.resolve_name(catalogue, locale),
+           card_images: ProductCard.resolve_images(catalogue),
+           card_fields: ProductCard.build_catalogue_fields(catalogue, locale, admin: true),
+           card_files: ProductCard.resolve_files(catalogue),
+           card_edit_path: catalogue.status != "deleted" && Paths.catalogue_edit(catalogue.uuid)
+         )}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   def handle_event("card_close", _params, socket) do
     {:noreply, assign(socket, :card_open, false)}
   end
@@ -1542,6 +1567,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         socket
       )
       when is_binary(uuid) do
+    # Nesting, not ordering: under any sort the moved category lands where
+    # the sort puts it, which is what nesting means. Reachable under a sort
+    # only by a drag that started in Manual order before someone changed the
+    # shared sort — and the index files a catalogue the same way (its
+    # `move_to_folder` is also the row menu's Move), so the two pages agree
+    # (codex, 2026-09-21). Edge drops (`drop_row`) write sibling order and
+    # stay Manual-only.
     with true <- categories_tree_mode?(socket.assigns),
          {:ok, _} <- Ecto.UUID.cast(uuid),
          {:ok, target_uuid} <- resolve_tree_target(socket, target) do
@@ -1564,7 +1596,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         socket
       )
       when is_binary(uuid) and is_list(entries) do
-    with true <- categories_tree_mode?(socket.assigns),
+    with true <- categories_reorderable?(socket.assigns),
          {:ok, _} <- Ecto.UUID.cast(uuid),
          {:ok, target_uuid} <- resolve_tree_target(socket, parent),
          {:ok, ordered_uuids} <- parse_category_entries(entries),
@@ -1648,17 +1680,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         _ -> socket.assigns.categories_sort_dir
       end
 
-    socket =
-      socket
-      |> assign(categories_sort_by: field, categories_sort_dir: dir)
-      |> persist_detail_sort(:detail_categories)
-
-    {:noreply,
-     assign(
-       socket,
-       :child_categories,
-       sort_categories(socket.assigns.child_categories, socket.assigns.child_counts, field, dir)
-     )}
+    {:noreply, apply_categories_sort(socket, field, dir)}
   end
 
   # Sortable column header click — toggles direction on the active field,
@@ -1705,8 +1727,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     {:noreply, socket}
   end
 
+  # A header click; like the categories' below, a push naming Manual order
+  # is ignored — headers never offer it.
   def handle_event("toggle_sort_items", %{"by" => field_str}, socket)
-      when field_str in @items_sort_field_strs do
+      when field_str in @items_sort_field_strs and field_str != "position" do
     field = String.to_existing_atom(field_str)
 
     dir =
@@ -1720,6 +1744,26 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   end
 
   def handle_event("toggle_sort_items", _params, socket), do: {:noreply, socket}
+
+  # A category column header: the same field flips the direction, another
+  # field starts ascending. Headers only sort once the list is out of Manual
+  # order (`header_sort/2`), so a click never lands here from Manual — and a
+  # push naming :position (or anything unknown) is ignored rather than
+  # quietly putting the list back into drag mode.
+  def handle_event("toggle_sort_categories", %{"by" => by}, socket)
+      when by in ~w(name items updated) do
+    field = String.to_existing_atom(by)
+
+    dir =
+      if field == socket.assigns.categories_sort_by and
+           socket.assigns.categories_sort_dir == :asc,
+         do: :desc,
+         else: :asc
+
+    {:noreply, apply_categories_sort(socket, field, dir)}
+  end
+
+  def handle_event("toggle_sort_categories", _params, socket), do: {:noreply, socket}
 
   # Open the strategy-reorder modal. Captures the client-side selection
   # (via the BulkSelectScope hook payload). A 0–1 selection collapses to
@@ -3873,8 +3917,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     ]
   end
 
-  defp status_tab_active_class("deleted"), do: "border-error text-error"
-  defp status_tab_active_class(_), do: "border-primary text-primary"
+  defp status_tab_variant("deleted"), do: :error
+  defp status_tab_variant(_), do: :primary
 
   # The level identity the current view_mode was chosen for. `current` is a
   # %Category{}, the :uncategorized sentinel (the Uncategorized drill), or
@@ -4031,11 +4075,34 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                top, clamped to ONE line so its cost is fixed no matter how
                long the field is — the full text is in the hover tooltip. --%>
           <% level_desc = level_description(@current_category, @catalogue) %>
+          <% level_img = level_image(@current_category, @catalogue) %>
           <% show_search_input = @view_mode in ["active", "deleted"] or @search_results != nil or @search_loading %>
-          <div :if={show_search_input or level_desc} class="flex flex-col gap-3 mb-3">
-            <p :if={level_desc} class="text-sm text-base-content/60 truncate" title={level_desc}>
-              {level_desc}
-            </p>
+          <div :if={show_search_input || level_desc || level_img} class="flex flex-col gap-3 mb-3">
+            <%!-- The place's own picture beside its description. Inside a
+                 category there was no way to see the image attached to it
+                 (boss via Max, 2026-09-21); the catalogue's top level shows
+                 the catalogue's the same way. Either opens its View card,
+                 which holds every picture it has. --%>
+            <div :if={level_img || level_desc} class="flex items-center gap-3 min-w-0">
+              <button
+                :if={level_img}
+                type="button"
+                id="level-image"
+                phx-click={
+                  if match?(%Category{}, level_img),
+                    do: "show_category_card",
+                    else: "show_catalogue_card"
+                }
+                phx-value-uuid={level_img.uuid}
+                class="shrink-0 cursor-pointer"
+                title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "View")}
+              >
+                <.featured_thumb resource={level_img} class="w-16 h-16" comfy_scale={false} />
+              </button>
+              <p :if={level_desc} class="text-sm text-base-content/60 truncate" title={level_desc}>
+                {level_desc}
+              </p>
+            </div>
             <%!-- flex-wrap, not flex-col: on narrow screens the search takes
                  the line (grow + wide basis) and the actions wrap under it,
                  still right-aligned via ml-auto — same edge the controls row
@@ -4043,7 +4110,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             <div class="flex flex-wrap items-center gap-3">
               <.search_input
                 :if={show_search_input}
-                class="grow basis-64 min-w-0 sm:max-w-xl"
+                id="catalogue-level-search"
+                class={search_width_class()}
                 query={@search_query}
                 placeholder={search_placeholder(@current_category)}
               />
@@ -4100,8 +4168,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 <.link navigate={new_item_path(assigns)} class="btn btn-primary btn-sm">
                   <.icon name="hero-plus" class="w-4 h-4" /> {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Add item")}
                 </.link>
-                <.link navigate={Paths.catalogue_edit(@catalogue.uuid)} class="btn btn-ghost btn-sm">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")}
+                <%!-- Edits the place you are standing in: the category when
+                     drilled into one, the catalogue otherwise. It always
+                     edited the catalogue, which is not what "Edit" on a
+                     category's page reads as (boss via Max, 2026-09-21).
+                     The label names which, so the two cannot be confused. --%>
+                <.link
+                  id="level-edit-button"
+                  navigate={level_edit_path(assigns)}
+                  class="btn btn-ghost btn-sm"
+                >
+                  {level_edit_label(@current_category)}
                 </.link>
               </div>
             </div>
@@ -4209,6 +4286,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
           <div :if={@search_results not in [nil, []]} class={["transition-opacity", @search_loading && "opacity-50"]}>
             <.item_table
+              context_menu={@row_context_menu}
               photo_click="show_product_card"
               file_counts={@file_counts}
               attribute_map={@attribute_map}
@@ -4251,38 +4329,35 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                status tabs, columns and the view toggle are all unusable
                while a selection is open anyway. Both scopes below name this
                id, and it stays hidden while either holds a selection. --%>
-          <div
+          <.list_controls_row
             :if={
               @child_categories != [] or length(@status_tabs) > 1 or
                 (@show_items_section and
                    (@items != [] or @search_results not in [nil, []]))
             }
             id="detail-level-controls"
-            class="flex flex-wrap items-center gap-2"
           >
             <%!-- One tab per populated status — sharing the row with the
                  sort/columns/view controls (no dedicated tab row). The
                  tabs stay even though the Active tab is now a pure
                  category browser: they are also the way into the
                  inactive/discontinued views and the trash. --%>
-            <div :if={length(@status_tabs) > 1} class="flex items-center gap-0.5 flex-wrap">
-              <button
+            <%!-- A lone tab is not a choice — one populated status means the
+                 row carries its controls alone. `:if` on the slot ENTRY
+                 drops it from the slot list, so the wrapper div does not
+                 render empty either. --%>
+            <:tabs :if={length(@status_tabs) > 1}>
+              <.status_tab
                 :for={{status, label, count} <- @status_tabs}
-                type="button"
+                label={label}
+                count={count}
+                active={@view_mode == status}
+                variant={status_tab_variant(status)}
                 phx-click="switch_view"
                 phx-value-mode={status}
-                class={[
-                  "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer whitespace-nowrap",
-                  if(@view_mode == status,
-                    do: status_tab_active_class(status),
-                    else: "border-transparent text-base-content/50 hover:text-base-content"
-                  )
-                ]}
-              >
-                {label} ({count})
-              </button>
-            </div>
-            <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
+              />
+            </:tabs>
+            <:controls>
             <.sort_selector
               :if={@child_categories != []}
               sort_by={@categories_sort_by}
@@ -4291,6 +4366,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               manual_field={:position}
               event="sort_categories"
               id="categories-sort-selector"
+              label
             />
             <%!-- Item-only levels put the items sort here too — same row,
                  same order as the catalogues index. Mixed levels keep the
@@ -4304,6 +4380,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               manual_field={:position}
               event="sort_items"
               id="items-header-sort-selector"
+              label
             />
             <button
               :if={
@@ -4345,8 +4422,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               </span>
             </button>
               <.view_toggle_instant view={@view_mode_pref} id="detail-view-pref" />
-            </div>
-          </div>
+            </:controls>
+          </.list_controls_row>
 
           <.reorder_modal
             id="categories-reorder-modal"
@@ -4381,7 +4458,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             swap="#detail-level-controls"
             class="flex flex-col gap-2"
           >
-            <div :if={@view_mode == "active"} data-bulk-show="has-selection" style="display: none;">
+            <%!-- Reorder rewrites the manual order, which a sort hides — so,
+                 like the item list's, it is offered only in Manual order
+                 (codex, 2026-09-21; the item bar uses the same rule). --%>
+            <div
+              :if={@view_mode == "active"}
+              data-bulk-show="has-selection"
+              style="display: none;"
+              class={
+                @categories_sort_by != :position && "[&_[data-bulk-action*=reorder]]:!hidden"
+              }
+            >
               <.bulk_actions_toolbar
                 on_open_reorder="open_categories_reorder_modal"
                 reorder_dialog_id="categories-reorder-modal"
@@ -4451,19 +4538,23 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             data-storage-key={view_storage_key()}
           >
             <div data-table-view class="hidden md:block">
-              <%!-- Manual order gets the collapsible tree (the index's
-                   folder browser one level down — Max, 2026-08-29); any
-                   other sort falls back to the flat sortable table, the
-                   same split the index makes. --%>
+              <%!-- The active categories are always the collapsible tree
+                   (the index's folder browser one level down — Max,
+                   2026-08-29); a sort orders each sibling group inside it
+                   and takes the drag handles away. The flat table is for
+                   the other status tabs, which keep no tree. --%>
               <.categories_tree_table
+                context_menu={@row_context_menu}
+                sort={header_sort(@categories_sort_by, @categories_sort_dir)}
                 :if={categories_tree_mode?(assigns)}
                 rows={
                   category_tree_rows(
-                    @category_tree_children,
+                    sorted_tree_children(@category_tree_children, assigns),
                     normalize_category_key(@current_category_uuid),
                     @expanded_categories
                   )
                 }
+                reorderable={categories_reorderable?(assigns)}
                 catalogue={@catalogue}
                 current_uuid={normalize_category_key(@current_category_uuid)}
                 return_to={current_level_path(assigns)}
@@ -4476,6 +4567,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 uncategorized_active_count={@uncategorized_active_count}
               />
               <.categories_table
+                context_menu={@row_context_menu}
+                sort={header_sort(@categories_sort_by, @categories_sort_dir)}
                 :if={not categories_tree_mode?(assigns)}
                 categories_sort_by={@categories_sort_by}
                 categories_columns={tab_columns(@categories_columns, @view_mode)}
@@ -4499,6 +4592,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                    down — the index's card-level idiom. Same
                    CatalogueTreeDnD contract as the tree table. --%>
               <.categories_card_level
+                context_menu={@row_context_menu}
                 catalogue={@catalogue}
                 tree_children={card_tree_children(assigns)}
                 root_uuid={normalize_category_key(@current_category_uuid)}
@@ -4529,6 +4623,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
           <%!-- The current node's own direct items --%>
           <.level_items
+                context_menu={@row_context_menu}
             view_mode_pref={@view_mode_pref}
             attribute_map={@attribute_map}
             supplier_costs={@supplier_costs}
@@ -5017,6 +5112,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   attr(:return_to, :string, default: nil)
 
+  # Threaded from the page, not read per row: one setting, and a hundred
+  # rows would otherwise be a hundred settings reads per render.
+  attr(:context_menu, :boolean, default: false)
+
+  attr(:sort, :map,
+    default: nil,
+    doc: "`header_sort/2` of the categories' sort — nil in Manual order (plain headers)."
+  )
+
   defp categories_table(assigns) do
     assigns =
       assigns
@@ -5032,7 +5136,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         # both on, a row gets the same picture twice. The managed
         # column wins once it's turned on; this one is the fallback for
         # everyone who hasn't opted in (owner's call, 2026-09-09).
-        any_media_thumb?(assigns.child_categories, assigns.file_counts) and
+        # Always there when there are rows (boss via Max, 2026-09-21: a
+        # preview column that comes and goes with whether some row has a
+        # picture left names jumping level to level) — a row without one
+        # gets the picker's letter tile.
+        assigns.child_categories != [] and
           "image" not in assigns.categories_columns
       )
       |> assign(:extension_columns, TableConfig.extension_columns(:detail_categories))
@@ -5057,10 +5165,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           />
           <.table_default_header_cell :if={@view_mode not in ["active", "deleted"]} class="w-8"></.table_default_header_cell>
           <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
-          <.table_default_header_cell>
+          <.sort_header_cell field={:name} sort={@sort} event="toggle_sort_categories">
             {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
-          </.table_default_header_cell>
-          <.category_header_cells columns={@categories_columns} extension_columns={@extension_columns} />
+          </.sort_header_cell>
+          <.category_header_cells
+            columns={@categories_columns}
+            extension_columns={@extension_columns}
+            sort={@sort}
+          />
           <.actions_header_cell />
         </.table_default_row>
       </.table_default_header>
@@ -5069,7 +5181,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         enabled={@draggable?}
         event="reorder_categories"
       >
-        <.sortable_row :for={cat <- @child_categories} item_id={cat.uuid}>
+        <.sortable_row
+          :for={cat <- @child_categories}
+          item_id={cat.uuid}
+          data-row-menu-context={@context_menu}
+        >
           <.drag_handle_cell :if={@draggable? and cat.status == "active"} />
           <td :if={@draggable? and cat.status != "active"} class="w-8"></td>
           <.table_default_cell class="w-8">
@@ -5086,12 +5202,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             (boss, 2026-08-31); a deleted row keeps the bare thumb like
             its name stays unlinked. --%>
             <.link :if={cat.status != "deleted"} patch={Paths.category_browse(@catalogue.uuid, cat.uuid)}>
-              <.featured_thumb resource={cat} has_files={Map.get(@file_counts, cat.uuid, 0) > 0} />
+              <.featured_thumb resource={cat} has_files={Map.get(@file_counts, cat.uuid, 0) > 0} letter />
             </.link>
             <.featured_thumb
               :if={cat.status == "deleted"}
               resource={cat}
               has_files={Map.get(@file_counts, cat.uuid, 0) > 0}
+              letter
             />
           </.table_default_cell>
           <.table_default_cell class={name_cell_class()}>
@@ -5106,9 +5223,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               <span :if={cat.status == "deleted"} class="font-medium">
                 {cat.name}
               </span>
-              <%!-- Same words as the tree's toggle (a bare icon here only
-                   moved the tree's puzzle to the sorted view); no toggle,
-                   since a sorted table has no outline to open. --%>
+              <%!-- Same words as the tree's toggle, but no toggle: this table
+                   only renders for the status tabs (the trash among them),
+                   which keep no tree to open. It used to render for every
+                   non-manual sort too, where these words looked like the
+                   tree's button and did nothing (boss via Max, 2026-09-21). --%>
               <span
                 :if={MapSet.member?(@children_with_subs, cat.uuid)}
                 class="badge badge-ghost badge-sm font-normal whitespace-nowrap"
@@ -5134,13 +5253,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
           </.table_default_cell>
         </.sortable_row>
-        <tr :if={@show_uncat}>
+        <tr :if={@show_uncat} data-row-menu-context={@context_menu}>
           <td :if={@draggable?} class="w-8"></td>
           <td class="w-8"></td>
           <td :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
-            <span class="w-8 h-8 rounded bg-base-200 flex items-center justify-center">
-              <.icon name="hero-folder-open" class="w-4 h-4 text-base-content/40" />
-            </span>
+            <.thumb_icon_tile icon="hero-folder-open" />
           </td>
           <td class={name_cell_class()}>
             <.link patch={Paths.uncategorized_browse(@catalogue.uuid)} class="link link-hover">
@@ -5258,6 +5375,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   attr(:return_to, :string, default: nil)
 
+  # Threaded from the page, not read per row: one setting, and a hundred
+  # rows would otherwise be a hundred settings reads per render.
+  attr(:context_menu, :boolean, default: false)
+
+  attr(:reorderable, :boolean,
+    default: true,
+    doc:
+      "Manual order: drag handles on. Off under any other sort, where a drop " <>
+        "would land wherever the sort puts it and write a position nobody chose."
+  )
+
+  attr(:sort, :map,
+    default: nil,
+    doc: "`header_sort/2` of the categories' sort — nil in Manual order (plain headers)."
+  )
+
   defp categories_tree_table(assigns) do
     cats = Enum.map(assigns.rows, fn {cat, _d, _h, _e} -> cat end)
 
@@ -5267,7 +5400,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         :photo_col?,
         # See the matching comment on `categories_table/1` above — same
         # managed-"Image"-column-suppresses-the-automatic-one rule.
-        any_media_thumb?(cats, assigns.file_counts) and
+        (cats != [] or assigns.show_uncat) and
           "image" not in assigns.categories_columns
       )
       |> assign(:extension_columns, TableConfig.extension_columns(:detail_categories))
@@ -5311,10 +5444,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               aria_label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Select all categories")}
             />
             <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
-            <.table_default_header_cell>
+            <.sort_header_cell field={:name} sort={@sort} event="toggle_sort_categories">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
-            </.table_default_header_cell>
-            <.category_header_cells columns={@categories_columns} extension_columns={@extension_columns} />
+            </.sort_header_cell>
+            <.category_header_cells
+              columns={@categories_columns}
+              extension_columns={@extension_columns}
+              sort={@sort}
+            />
             <.actions_header_cell />
           </.table_default_row>
         </.table_default_header>
@@ -5328,6 +5465,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <.table_default_row
             :for={{cat, depth, child_count, expanded?} <- @rows}
             id={"category-tree-row-" <> cat.uuid}
+            data-row-menu-context={@context_menu}
             phx-mounted={
               depth > 0 &&
                 Phoenix.LiveView.JS.transition({"ease-out duration-150", "opacity-0", "opacity-100"})
@@ -5337,8 +5475,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             data-tree-parent={tree_parent_key(cat, @current_uuid)}
             data-tree-drop={cat.uuid}
           >
+            <%!-- The cell stays under any sort so the columns do not shift;
+                 only the handle goes. It is the drag source, so without it
+                 nothing in this row can be dragged. --%>
             <.table_default_cell class="w-8 !pr-0">
               <span
+                :if={@reorderable}
                 data-tree-item={"category:" <> cat.uuid}
                 class="pk-drag-handle cursor-grab text-base-content/30 hover:text-base-content/60"
                 title={gettext("Drag to reorder or nest")}
@@ -5356,7 +5498,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             </.table_default_cell>
             <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
               <.link patch={Paths.category_browse(@catalogue.uuid, cat.uuid)}>
-                <.featured_thumb resource={cat} has_files={Map.get(@file_counts, cat.uuid, 0) > 0} />
+                <.featured_thumb resource={cat} has_files={Map.get(@file_counts, cat.uuid, 0) > 0} letter />
               </.link>
             </.table_default_cell>
             <.category_tree_name_cell
@@ -5383,10 +5525,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             />
             </.table_default_cell>
           </.table_default_row>
-          <tr :if={@show_uncat}>
+          <tr :if={@show_uncat} data-row-menu-context={@context_menu}>
             <td class="w-8"></td>
             <td class="w-8"></td>
-            <td :if={@photo_col?} class="w-12"></td>
+            <td :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
+              <.thumb_icon_tile icon="hero-folder-open" />
+            </td>
             <td class={name_cell_class()}>
               <.link patch={Paths.uncategorized_browse(@catalogue.uuid)} class="link link-hover">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Uncategorized")}
@@ -5481,11 +5625,41 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp tree_parent_key(%{parent_uuid: parent}, _current_uuid), do: parent
 
-  # The browser shows the tree when there is a manual order to stand on
-  # — same rule as the index's folder tree. Any other sort falls back to
-  # the flat sortable table.
+  # The active categories are ALWAYS the tree. A sort orders each sibling
+  # group within it; it never swaps the structure for a flat table. It used
+  # to: any sort but Manual order dropped the subcategories and left a
+  # "2 subcategories" badge that looked like the tree's toggle and did
+  # nothing — and since the sort is one shared setting pushed live, one
+  # person's "Name" flattened everyone's tree (boss via Max, 2026-09-21:
+  # "sometimes it's just a flat list, or you can't even open the
+  # subcategories"). The flat table is the trash's now, and only the trash's.
   defp categories_tree_mode?(assigns) do
-    assigns.view_mode == "active" and assigns.categories_sort_by == :position
+    assigns.view_mode == "active"
+  end
+
+  # Dragging writes manual positions, so it exists only in Manual order.
+  # Under any other sort a drop would put a row where the SORT, not the user,
+  # decides — and write a position nobody chose. The drop handlers check
+  # this server-side: a hook push can arrive under any sort, or be forged.
+  defp categories_reorderable?(assigns) do
+    categories_tree_mode?(assigns) and assigns.categories_sort_by == :position
+  end
+
+  # The tree's sibling groups, each ordered by the current sort. One index
+  # serves the tree table and the card boxes, so the two views cannot order
+  # the same level differently (card view used to ignore the sort). Items
+  # sorts by the same `child_counts` the Items column shows, so the column
+  # always reads as sorted.
+  defp sorted_tree_children(index, assigns) do
+    Map.new(index, fn {parent, siblings} ->
+      {parent,
+       sort_categories(
+         siblings,
+         assigns.child_counts,
+         assigns.categories_sort_by,
+         assigns.categories_sort_dir
+       )}
+    end)
   end
 
   # The root's loose items presented like any subcategory (Max,
@@ -5683,6 +5857,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   attr(:uncategorized_active_count, :integer, default: 0)
 
   attr(:return_to, :string, default: nil)
+  attr(:context_menu, :boolean, default: false)
 
   defp categories_card_level(assigns) do
     assigns =
@@ -5710,6 +5885,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         {gettext("Drop here to move to this level")}
       </div>
       <.category_card_entries
+        context_menu={@context_menu}
         entries={@roots}
         parent_key="root"
         catalogue={@catalogue}
@@ -5760,6 +5936,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # strip lifts.
   attr(:return_to, :string, default: nil)
 
+  # Threaded from the page, not read per row: one setting, and a hundred
+  # rows would otherwise be a hundred settings reads per render.
+  attr(:context_menu, :boolean, default: false)
+
   defp category_card_entries(assigns) do
     ~H"""
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -5787,6 +5967,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             data-tree-type="category"
             data-tree-parent={@parent_key}
             data-tree-drop={cat.uuid}
+            data-row-menu-context={@context_menu}
             class="col-span-full rounded-lg border border-base-300 bg-base-200/40 p-3 flex flex-col gap-2"
           >
             <div class="flex items-center gap-2 min-w-0">
@@ -5844,6 +6025,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               </div>
             </div>
             <.category_card_entries
+              context_menu={@context_menu}
               entries={Map.get(@tree_children, cat.uuid, [])}
               parent_key={cat.uuid}
               catalogue={@catalogue}
@@ -6022,6 +6204,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         "drag there would interleave unrelated sequences."
   )
 
+  # Threaded from the page, not read per row: one setting, and a hundred
+  # rows would otherwise be a hundred settings reads per render.
+  attr(:context_menu, :boolean, default: false)
+
   defp level_items(assigns) do
     # `draggable?` controls the handle *column* (manual sort, not the deleted
     # list); `reorderable?` controls the actual grip + DnD, which needs ≥2
@@ -6047,7 +6233,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       # wins once it's turned on (owner's call, 2026-09-09).
       |> assign(
         :photo_col?,
-        any_media_thumb?(assigns.items, assigns.file_counts) and
+        assigns.items != [] and
           "image" not in assigns.items_columns
       )
       |> assign(:extension_columns, TableConfig.extension_columns(:detail_items))
@@ -6098,6 +6284,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               options={item_sort_options()}
               manual_field={:position}
               event="sort_items"
+              label
             />
             <%!-- Move isn't a built-in toolbar action (core ships
                  Reorder/Delete/Clear), so it's a custom client-side
@@ -6157,6 +6344,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           show_toggle={false}
           items={@items}
           storage_key={view_storage_key()}
+          card_context_menu={@context_menu}
           on_reorder={if @reorderable?, do: "reorder_items"}
           {card_media_frame()}
         >
@@ -6286,13 +6474,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                    of the name made rows jagged); only when some row on
                    this level actually has one. --%>
               <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
-              <.sort_header_cell field={:name} sort={%{by: @items_sort_by, dir: @items_sort_dir}} event="toggle_sort_items">
+              <.sort_header_cell field={:name} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items">
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
               </.sort_header_cell>
               <%= for col <- @items_columns do %>
                 <%= case col do %>
                   <% "sku" -> %>
-                    <.sort_header_cell field={:sku} sort={%{by: @items_sort_by, dir: @items_sort_dir}} event="toggle_sort_items" class="w-px whitespace-nowrap">
+                    <.sort_header_cell field={:sku} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items" class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")}
                     </.sort_header_cell>
                   <% "image" -> %>
@@ -6300,7 +6488,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Image")}
                     </.table_default_header_cell>
                   <% "price" -> %>
-                    <.sort_header_cell field={:base_price} sort={%{by: @items_sort_by, dir: @items_sort_dir}} event="toggle_sort_items" class="w-px whitespace-nowrap">
+                    <.sort_header_cell field={:base_price} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items" class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Price")}
                     </.sort_header_cell>
                   <% "supplier_price" -> %>
@@ -6312,7 +6500,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
                     </.table_default_header_cell>
                   <% "status" -> %>
-                    <.sort_header_cell field={:status} sort={%{by: @items_sort_by, dir: @items_sort_dir}} event="toggle_sort_items" class="w-px whitespace-nowrap">
+                    <.sort_header_cell field={:status} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items" class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
                     </.sort_header_cell>
                   <% "attributes" -> %>
@@ -6349,7 +6537,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             enabled={@reorderable?}
             event="reorder_items"
           >
-            <.sortable_row :for={item <- @items} item_id={item.uuid}>
+            <.sortable_row
+              :for={item <- @items}
+              item_id={item.uuid}
+              data-row-menu-context={@context_menu}
+            >
               <.drag_handle_cell :if={@reorderable?} />
               <%!-- Single-item list: keep the column width so the layout
                    doesn't jump when a delete drops the list to one row. --%>
@@ -6360,6 +6552,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   resource={item}
                   on_click="show_product_card"
                   has_files={Map.get(@file_counts, item.uuid, 0) > 0}
+                  letter
                 />
               </.table_default_cell>
               <.item_pricing_cell
@@ -6478,8 +6671,26 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     |> Enum.reverse()
   end
 
-  # Active-list sort dropdown options. `:position` is "Manual" (the DnD
-  # mode). gettext via the module backend so labels localize.
+  # Active-list sort dropdown options. `:position` is "Manual order" (the
+  # DnD mode) — the same wording the index's dropdown uses for the same
+  # thing; these two said "Manual" and "Manual order" side by side.
+  # gettext via the module backend so labels localize.
+  # One path for the dropdown and the headers: set, persist (it is the
+  # shared sort, so this also tells every other open page), re-sort the flat
+  # list; the tree re-sorts itself at render.
+  defp apply_categories_sort(socket, field, dir) do
+    socket
+    |> assign(categories_sort_by: field, categories_sort_dir: dir)
+    |> persist_detail_sort(:detail_categories)
+    |> then(fn s ->
+      assign(
+        s,
+        :child_categories,
+        sort_categories(s.assigns.child_categories, s.assigns.child_counts, field, dir)
+      )
+    end)
+  end
+
   # In-memory categories sort — the list is small and already loaded.
   # Manual (:position) mirrors the DB order and is what enables drag.
   defp sort_categories(categories, counts, sort_by, dir) do
@@ -6498,7 +6709,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp category_sort_options do
     [
-      {:position, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manual")},
+      {:position, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manual order")},
       {:name, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")},
       {:items, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items")},
       {:updated, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Updated")}
@@ -6507,7 +6718,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp item_sort_options do
     [
-      {:position, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manual")},
+      {:position, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manual order")},
       {:name, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")},
       {:sku, Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU")},
       {:base_price, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Price")},
@@ -6534,6 +6745,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # travels with you — the new-item/new-category forms prefill the
   # category/parent, and return_to brings save/cancel back HERE instead
   # of dumping everyone at the catalogue root.
+
+  # Where the level's Edit button goes: the drilled category's form (back to
+  # this level after saving), else the catalogue's. The Uncategorized bucket
+  # is the catalogue's own, so it edits the catalogue.
+  defp level_edit_path(%{current_category: %Category{uuid: uuid}} = assigns),
+    do: with_return_to(Paths.category_edit(uuid), current_level_path(assigns))
+
+  defp level_edit_path(assigns), do: Paths.catalogue_edit(assigns.catalogue_uuid)
+
+  defp level_edit_label(%Category{}), do: gettext("Edit category")
+  defp level_edit_label(_), do: gettext("Edit catalogue")
 
   defp current_level_path(assigns) do
     case assigns.current_category do
@@ -6568,7 +6790,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   defp card_tree_children(%{view_mode: "deleted"} = assigns),
     do: %{normalize_category_key(assigns.current_category_uuid) => assigns.child_categories}
 
-  defp card_tree_children(assigns), do: assigns.category_tree_children
+  defp card_tree_children(assigns),
+    do: sorted_tree_children(assigns.category_tree_children, assigns)
 
   # The Deleted tab always shows the Status column — it is what says a row
   # is in the trash now that the tab has no red styling of its own.
@@ -6753,6 +6976,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # Shown under the admin header: the catalogue's description at root, the
   # current category's when drilled. The :uncategorized pseudo node has none;
   # blank strings count as absent.
+  # The level's own picture: the drilled category's, or the catalogue's at the
+  # top. nil when it has none, or in the Uncategorized bucket, which is not a
+  # thing with a picture.
+  defp level_image(%Category{} = category, _catalogue),
+    do: if(featured_image_uuid(category), do: category)
+
+  defp level_image(nil, catalogue), do: if(featured_image_uuid(catalogue), do: catalogue)
+  defp level_image(_uncategorized, _catalogue), do: nil
+
   defp level_description(%Category{description: desc}, _catalogue), do: presence(desc)
   defp level_description(nil, catalogue), do: presence(catalogue.description)
   defp level_description(_uncategorized, _catalogue), do: nil

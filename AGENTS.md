@@ -319,16 +319,20 @@ Key invariants to preserve:
   live in `Catalogue` and `Catalogue.Tree` — reuse them, never hand-write
   recursive queries in LiveViews.
 
-Settings keys (`PhoenixKit.Settings`):
+Settings keys (`PhoenixKit.Settings`). Every key a person can change is on
+Settings → Catalogue (`Web.SettingsLive`), read and written through
+`Web.Settings`, except the two noted:
 
 | key | type | note |
 |---|---|---|
-| `catalogue_enabled` | bool | module enable flag |
+| `catalogue_enabled` | bool | module enable flag — Admin → Modules owns it, not the settings page |
+| `catalogue_row_context_menu_enabled` | bool | default `true`; right-click a list row for its `⋮` menu |
+| `catalogue_item_seo_fields_visible` | bool | default `false`; shows the item form's URL slug and SEO fields (hidden, their values are still carried through a save) |
 | `catalogue_translation_sweep_enabled` | bool | default `false`; seeds the worker chain |
 | `catalogue_translation_sweep_interval_minutes` | int | default `60` |
 | `catalogue_translation_sweep_langs` | json | `%{"codes" => [...]}`; a bare list is rejected by the `:map` column |
 | `catalogue_translation_sweep_max_per_run` | int | default `200` |
-| `catalogue_sort_catalogues` / `catalogue_sort_detail_items` / `catalogue_sort_detail_categories` | json | the module-global shared sort per scope (`%{"by" => …, "dir" => …}`), written by the admin sort selectors and read by the popup and widgets |
+| `catalogue_sort_catalogues` / `catalogue_sort_detail_items` / `catalogue_sort_detail_categories` | json | the module-global shared sort per scope (`%{"by" => …, "dir" => …}`), written by the admin sort selectors and read by the popup and widgets — not on the settings page |
 
 Not a Settings key: per-user table/view preferences live under
 `phoenix_kit_users.custom_fields["catalogue_view_configs"]` (`Web.ViewConfig`).
@@ -402,6 +406,13 @@ in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
 
 Pointers, not docs — the moduledocs are the contract.
 
+- **Right-click a row** — a row or card flagged `data-row-menu-context` opens
+  the `⋮` menu rendered inside it at the pointer (core's `RowMenu` hook; see
+  `TableRowMenu`'s "Right-click" section). Every file that renders a
+  `table_row_menu` either flags its rows or is named in
+  `test/web/row_context_menu_test.exs`'s `@unflagged` with a reason. The flag
+  is read once per mount (`@row_context_menu`) and threaded down; the
+  Settings → Catalogue switch turns it off by omitting the attribute.
 - **Trash and restore** — provenance stamps in `data["_trash"]`, the
   per-catalogue advisory lock, what a restore does and does not undo, what a
   Deleted tab lists and counts (a trashed category is one closed unit, and a

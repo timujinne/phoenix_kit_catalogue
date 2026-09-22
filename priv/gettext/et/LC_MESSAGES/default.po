@@ -3563,3 +3563,90 @@ msgstr "Mõned tarnija väärtused ei sobi."
 
 msgid "That location no longer exists. Choose another."
 msgstr "Seda asukohta pole enam. Vali mõni teine."
+
+msgid "A language turned off under Languages stops receiving sweep jobs whether or not it is ticked here."
+msgstr "Keel, mis on jaotises „Keeled“ välja lülitatud, ei saa enam taustatõlke töid, olgu see siin märgitud või mitte."
+
+msgid "AI translation sweep"
+msgstr "AI taustatõlge"
+
+msgid "Could not save that."
+msgstr "Salvestamine ebaõnnestus."
+
+msgid "Enter a whole number above 0."
+msgstr "Sisesta täisarv, mis on suurem kui 0."
+
+msgid "Enter a whole number of minutes above 0."
+msgstr "Sisesta minutite arv täisarvuna, suurem kui 0."
+
+msgid "How the catalogue's admin lists behave."
+msgstr "Kuidas kataloogi halduslehtede loendid käituvad."
+
+msgid "Languages to translate into"
+msgstr "Keeled, millesse tõlkida"
+
+msgid "Lists"
+msgstr "Loendid"
+
+msgid "Minutes between runs"
+msgstr "Minuteid käivituste vahel"
+
+msgid "Most jobs per run"
+msgstr "Kõige rohkem töid käivituse kohta"
+
+msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
+msgstr "Vaikimisi väljas. Sisselülitamisel käivitub ajakava kohe; iga käivitus paneb järjekorda tõlketööd kõige jaoks, mis on veel tõlkimata."
+
+msgid "Only the primary language is enabled, so there is nothing to sweep."
+msgstr "Sisse on lülitatud ainult põhikeel, seega pole midagi tõlkida."
+
+msgid "Right-click a row for its actions"
+msgstr "Rea toimingud paremklõpsuga"
+
+msgid "Right-clicking anywhere on a row opens the same menu its ⋮ button does, at the pointer. Turn this off to leave the browser's own menu — copy, open in a new tab, inspect — in place everywhere."
+msgstr "Paremklõps rea suvalises kohas avab kursori juures sama menüü, mis rea ⋮ nupp. Lülita see välja, et jätta kõikjale alles brauseri enda menüü — kopeerimine, uues vahekaardis avamine, uurimine."
+
+msgid "Run the sweep automatically"
+msgstr "Käivita taustatõlge automaatselt"
+
+msgid "Saved."
+msgstr "Salvestatud."
+
+msgid "Settings"
+msgstr "Seaded"
+
+msgid "Translates catalogue content in the background, on a timer."
+msgstr "Tõlgib kataloogi sisu taustal, ajakava järgi."
+
+msgid "See what is missing, or translate on demand."
+msgstr "Vaata, mis on puudu, või tõlgi kohe."
+
+msgid "Turn the whole module on or off under Modules."
+msgstr "Kogu mooduli sisse- ja väljalülitamine on jaotises „Moodulid“."
+
+msgid "Each list's sort is set from the list itself."
+msgstr "Iga loendi sortimine määratakse loendis endas."
+
+msgid "Enable more languages."
+msgstr "Lülita sisse rohkem keeli."
+
+msgid "Rename folder"
+msgstr "Nimeta kaust ümber"
+
+msgid "Folder name"
+msgstr "Kausta nimi"
+
+msgid "Edit category"
+msgstr "Muuda kategooriat"
+
+msgid "Edit catalogue"
+msgstr "Muuda kataloogi"
+
+msgid "Item form"
+msgstr "Toote vorm"
+
+msgid "Show the URL slug and SEO fields"
+msgstr "Näita URL-slugi ja SEO välju"
+
+msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
+msgstr "Välja lülitatuna on need toote vormist peidetud; nende senine sisu säilib, salvestatakse muutmata ja tuleb tagasi, kui selle sisse lülitate."

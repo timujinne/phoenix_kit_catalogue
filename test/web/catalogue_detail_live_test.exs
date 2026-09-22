@@ -342,7 +342,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   # ─────────────────────────────────────────────────────────────────
 
   describe "category browser" do
-    test "manual order shows a collapsible tree; other sorts flatten", %{conn: conn} do
+    test "manual order shows a collapsible tree; other sorts keep it", %{conn: conn} do
       catalogue = fixture_catalogue()
       parent = fixture_category(catalogue, %{name: "Chapter A"})
       _child = fixture_category(catalogue, %{name: "Nested A1", parent_uuid: parent.uuid})
@@ -365,11 +365,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       render_click(view, "toggle_category_expand", %{"uuid" => parent.uuid})
       assert view |> element("#catalogue-categories-tree") |> render() =~ "Nested A1"
 
-      # A real sort falls back to the flat table (its sortable tbody id
-      # is the marker — the wrapper renders no id in the plain path).
-      flat = render_change(view, "sort_categories", %{"sort_by" => "name"})
-      refute flat =~ "catalogue-categories-tree"
-      assert flat =~ "catalogue-child-categories"
+      # A real sort orders each sibling group and keeps the tree — the flat
+      # table it used to fall back to dropped the subcategories and showed a
+      # badge that looked like this toggle but did nothing (boss via Max,
+      # 2026-09-21). The open branch stays open; the drag handles go.
+      render_change(view, "sort_categories", %{"sort_by" => "name"})
+      tree = view |> element("#catalogue-categories-tree") |> render()
+      assert tree =~ "Nested A1"
+      refute tree =~ ~s(data-tree-item="category:#{parent.uuid}")
+      refute has_element?(view, "#catalogue-child-categories")
     end
 
     test "category card pictures are card-grade, framed, and link like the title",

@@ -1,17 +1,23 @@
 defmodule PhoenixKitCatalogue.Web.Settings do
   @moduledoc """
-  Read/write helpers for the catalogue AI-translation sweep's operational
-  settings (block-6 plan, Task 4). `PhoenixKitCatalogue.Workers.TranslationSweepWorker`
-  reads these on every tick. Nothing in this module's own UI writes them
-  yet — the `/admin/catalogue/translations` page has no settings panel —
-  so enabling the sweep is an operator (or host) call into `update_*`.
+  Read/write helpers for the catalogue's operational settings — the
+  AI-translation sweep the `PhoenixKitCatalogue.Workers.TranslationSweepWorker`
+  reads on every tick, and the admin-list preferences the web layer reads at
+  render time.
+
+  `PhoenixKitCatalogue.Web.SettingsLive` (Settings → Catalogue) is the page
+  that writes them. It arrived late: the sweep keys shipped with no UI at all,
+  so turning the sweep on was an operator call into `update_*` and nobody
+  could see it was off (boss via Max, 2026-09-21).
 
   Kept as a thin module rather than folding the keys into
-  `PhoenixKitCatalogue` itself: the worker only ever reads, a future page
-  only ever writes, and neither needs the other's concerns.
+  `PhoenixKitCatalogue` itself: the worker and the templates only ever read,
+  the settings page only ever writes, and neither needs the other's concerns.
 
   | key                                            | type | default        |
   |-------------------------------------------------|------|----------------|
+  | `catalogue_row_context_menu_enabled`             | bool | `true`         |
+  | `catalogue_item_seo_fields_visible`              | bool | `false`        |
   | `catalogue_translation_sweep_enabled`            | bool | `false`        |
   | `catalogue_translation_sweep_interval_minutes`   | int  | `60`           |
   | `catalogue_translation_sweep_langs`              | json | see below      |
@@ -31,6 +37,9 @@ defmodule PhoenixKitCatalogue.Web.Settings do
 
   @module_key "catalogue"
 
+  @context_menu_key "catalogue_row_context_menu_enabled"
+  @seo_fields_key "catalogue_item_seo_fields_visible"
+
   @enabled_key "catalogue_translation_sweep_enabled"
   @interval_key "catalogue_translation_sweep_interval_minutes"
   @langs_key "catalogue_translation_sweep_langs"
@@ -38,6 +47,44 @@ defmodule PhoenixKitCatalogue.Web.Settings do
 
   @default_interval_minutes 60
   @default_max_per_run 200
+
+  @doc """
+  Does a right-click on an admin list row open that row's menu at the pointer?
+
+  Default `true` — the gesture is what a desktop user expects of a list, and
+  a row that offers nothing on right-click reads as unfinished. Off leaves
+  the browser's own menu in place everywhere (Copy, Inspect, Open in new
+  tab), which is the reason to want it off.
+
+  Read at render time by the row components, which simply omit the
+  `data-row-menu-context` attribute when it is false — so turning it off
+  removes the wiring rather than disabling it in the browser.
+  """
+  @spec context_menu_enabled?() :: boolean()
+  def context_menu_enabled?, do: Settings.get_boolean_setting(@context_menu_key, true)
+
+  @doc """
+  Does the item form show its URL slug, SEO title and SEO description?
+
+  Default `false`: the current client has no use for them and they crowd
+  the form (boss via Max, 2026-09-21: "hidden for now"). Hidden is not
+  gone — the form still carries their stored values, so a save keeps them,
+  and turning this on brings the fields back with their contents.
+  """
+  @spec seo_fields_visible?() :: boolean()
+  def seo_fields_visible?, do: Settings.get_boolean_setting(@seo_fields_key, false)
+
+  @doc "Shows or hides the item form's slug and SEO fields."
+  @spec update_seo_fields_visible(boolean()) :: {:ok, struct()} | {:error, term()}
+  def update_seo_fields_visible(visible?) when is_boolean(visible?) do
+    Settings.update_boolean_setting_with_module(@seo_fields_key, visible?, @module_key)
+  end
+
+  @doc "Turns the right-click row menu on or off."
+  @spec update_context_menu_enabled(boolean()) :: {:ok, struct()} | {:error, term()}
+  def update_context_menu_enabled(enabled?) when is_boolean(enabled?) do
+    Settings.update_boolean_setting_with_module(@context_menu_key, enabled?, @module_key)
+  end
 
   @doc "Is the automatic sweep enabled?"
   @spec sweep_enabled?() :: boolean()

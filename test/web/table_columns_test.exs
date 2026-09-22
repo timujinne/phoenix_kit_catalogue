@@ -84,17 +84,24 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
       end
     end
 
-    test "the flat table (any sort but manual order)", %{conn: conn, catalogue: catalogue} do
+    # A sort no longer swaps in a flat table (boss via Max, 2026-09-21) — it
+    # keeps the tree and takes the drag handles away. The handle's CELL has
+    # to stay, or every row under a sort is one cell short of its header.
+    test "the tree table under a sort, with its drag handles gone", %{
+      conn: conn,
+      catalogue: catalogue
+    } do
       {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}")
       html = render_click(view, "sort_categories", %{"sort_by" => "name"})
 
-      assert_rectangular(html, "category-menu-uncategorized\"")
+      refute html =~ "data-tree-item"
+      assert_rectangular(html, "category-menu-uncategorized-tree")
 
       for ids <- @column_sets do
         html =
           render_click(view, "reorder_columns_detail_categories", %{"ordered_ids" => ids})
 
-        assert_rectangular(html, "category-menu-uncategorized\"")
+        assert_rectangular(html, "category-menu-uncategorized-tree")
       end
     end
 
@@ -176,13 +183,15 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
            th |> LazyHTML.text() |> String.trim()}
         end)
 
-      # Leading drag + checkbox columns are fixed (w-8); every header
-      # after Name must be too, or it shares the spare width with Name.
+      # Leading drag + checkbox columns (w-8) and the preview column (w-12,
+      # always there since 2026-09-21) are fixed; every header after Name
+      # must be too, or it shares the spare width with Name.
       {before, [{name_classes, "Name"} | rest]} =
         Enum.split_while(heads, fn {_c, text} -> text != "Name" end)
 
       refute name_classes =~ ~r/\bw-/
-      assert Enum.all?(before, fn {c, _} -> c =~ "w-8" end)
+      assert Enum.all?(before, fn {c, _} -> c =~ ~r/\bw-(8|12)\b/ end)
+      assert Enum.any?(before, fn {c, _} -> c =~ ~r/\bw-12\b/ end), "the preview column is there"
 
       assert Enum.map(rest, &elem(&1, 1)) == [
                "Items",

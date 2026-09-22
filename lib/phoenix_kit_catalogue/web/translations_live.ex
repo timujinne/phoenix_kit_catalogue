@@ -68,6 +68,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   alias PhoenixKitCatalogue.AITranslatable.Sets
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.TranslationStatus
+  alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Helpers
   alias PhoenixKitCatalogue.Web.Settings, as: SweepSettings
   alias PhoenixKitCatalogue.Web.TableQuery
@@ -579,9 +580,6 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   defp state_badge_class(:unknown), do: "badge-info"
   defp state_badge_class(:fresh), do: "badge-success"
 
-  defp state_chip_class(current, current), do: "btn btn-xs btn-primary"
-  defp state_chip_class(_current, _value), do: "btn btn-xs btn-ghost"
-
   defp bulk_confirm(counts, state) do
     gettext("Queue translation for %{count} row(s)?", count: Map.get(counts, state, 0))
   end
@@ -626,95 +624,104 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
       current_locale={assigns[:current_locale]}
     >
       <div class="flex flex-col w-full px-4 py-6 gap-4">
-        <%!-- Per-state counts --%>
-        <div class="flex flex-wrap gap-2" id="translations-state-counts">
-          <button
-            type="button"
-            phx-click="filter_state"
-            phx-value-state="all"
-            class={state_chip_class(@translation_state, "all")}
-          >
-            {state_label("all")}: {@total}
-          </button>
-          <button
-            :for={s <- all_states()}
-            type="button"
-            phx-click="filter_state"
-            phx-value-state={s}
-            class={state_chip_class(@translation_state, s)}
-          >
-            {state_label(s)}: {Map.get(@counts, String.to_existing_atom(s), 0)}
-          </button>
-        </div>
+        <%!-- Search and filters left, this page's actions right, then the
+             state tabs — the same two rows, in the same order, as every
+             other catalogue list (boss via Max, 2026-09-21). The filters
+             lost their `bg-base-200` panel and their stacked labels with
+             it: every select already names itself through its "All …"
+             prompt, the way the index's do. --%>
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <.form
+              for={%{}}
+              id="translations-filter"
+              phx-change="filter"
+              class="flex flex-wrap items-center gap-2"
+            >
+              <%!-- Not `search_input`: this field posts as `filter[search]`
+                   inside the filter form around it, and that component
+                   renders a form of its own. It takes the shared WIDTH so it
+                   still matches every other search box. --%>
+              <div class={Shared.search_width_class()}>
+                <label class="input input-sm w-full">
+                  <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-50" />
+                  <input
+                    type="text"
+                    name="filter[search]"
+                    value={@search}
+                    placeholder={gettext("Search by name…")}
+                    phx-debounce="300"
+                    class="grow"
+                  />
+                </label>
+              </div>
 
-        <%!-- Filters --%>
-        <div class="bg-base-200 rounded-lg p-3 text-sm">
-          <.form
-            for={%{}}
-            id="translations-filter"
-            phx-change="filter"
-            class="flex flex-wrap gap-3 items-end"
-          >
-            <div>
               <.select
                 name="filter[type]"
                 id="translations-filter-type"
-                label={gettext("Type")}
                 value={@type}
                 options={type_options()}
                 class="select-sm"
+                aria-label={gettext("Type")}
               />
-            </div>
 
-            <div>
               <.select
                 name="filter[lang]"
                 id="translations-filter-lang"
-                label={gettext("Language")}
                 value={@lang}
                 options={lang_options(@languages)}
                 class="select-sm"
+                aria-label={gettext("Language")}
               />
-            </div>
+            </.form>
 
-            <div class="grow basis-64">
-              <label class="input input-sm w-full">
-                <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-50" />
-                <input
-                  type="text"
-                  name="filter[search]"
-                  value={@search}
-                  placeholder={gettext("Search by name…")}
-                  phx-debounce="300"
-                  class="grow"
-                />
-              </label>
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                phx-click="bulk_translate_missing"
+                phx-disable-with={gettext("Working…")}
+                data-confirm={bulk_confirm(@counts, :missing)}
+                class="btn btn-sm btn-outline"
+                disabled={Map.get(@counts, :missing, 0) == 0}
+              >
+                {gettext("Translate all missing")}
+              </button>
+              <button
+                type="button"
+                phx-click="bulk_retranslate_stale"
+                phx-disable-with={gettext("Working…")}
+                data-confirm={bulk_confirm(@counts, :stale)}
+                class="btn btn-sm btn-outline"
+                disabled={Map.get(@counts, :stale, 0) == 0}
+              >
+                {gettext("Retranslate all stale")}
+              </button>
             </div>
-          </.form>
-        </div>
+          </div>
 
-        <%!-- Bulk actions --%>
-        <div class="flex flex-wrap gap-2">
-          <button
-            type="button"
-            phx-click="bulk_translate_missing"
-            phx-disable-with={gettext("Working…")}
-            data-confirm={bulk_confirm(@counts, :missing)}
-            class="btn btn-sm btn-outline"
-            disabled={Map.get(@counts, :missing, 0) == 0}
-          >
-            {gettext("Translate all missing")}
-          </button>
-          <button
-            type="button"
-            phx-click="bulk_retranslate_stale"
-            phx-disable-with={gettext("Working…")}
-            data-confirm={bulk_confirm(@counts, :stale)}
-            class="btn btn-sm btn-outline"
-            disabled={Map.get(@counts, :stale, 0) == 0}
-          >
-            {gettext("Retranslate all stale")}
-          </button>
+          <%!-- Per-state tabs. These were `btn-xs` chips reading
+               "Missing: 4", a third way of writing a counted tab in one
+               module; they are the same choice the Active/Deleted tabs are
+               elsewhere, so they render the same way. --%>
+          <Shared.list_controls_row id="translations-state-counts">
+            <:tabs>
+              <Shared.status_tab
+                label={state_label("all")}
+                count={@total}
+                active={@translation_state == "all"}
+                phx-click="filter_state"
+                phx-value-state="all"
+              />
+              <Shared.status_tab
+                :for={s <- all_states()}
+                label={state_label(s)}
+                count={Map.get(@counts, String.to_existing_atom(s), 0)}
+                active={@translation_state == s}
+                phx-click="filter_state"
+                phx-value-state={s}
+              />
+            </:tabs>
+          </Shared.list_controls_row>
         </div>
 
         <%!-- Table --%>

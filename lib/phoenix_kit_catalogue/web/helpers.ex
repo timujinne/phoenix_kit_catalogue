@@ -28,6 +28,7 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
 
   require Logger
 
+  alias PhoenixKit.Utils.Multilang
   alias PhoenixKit.Utils.Number
   alias PhoenixKitAI.Components.AITranslate.FormGlue
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
@@ -61,6 +62,51 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
       _ -> nil
     end
   end
+
+  @doc """
+  Starts an EDIT form on the language tab of the language the admin is
+  viewing the page in, instead of always the main one (boss via Max,
+  2026-09-21: "if you are in English and click edit, you would be editing
+  the English version, not switching in the edit screen").
+
+  Call right after `mount_multilang/1`. Edit only: a NEW record's main
+  language holds its required fields, so a new form still starts there.
+  A page language with no enabled content language to match leaves the
+  main tab.
+  """
+  @spec open_on_viewing_language(Phoenix.LiveView.Socket.t(), atom()) ::
+          Phoenix.LiveView.Socket.t()
+  def open_on_viewing_language(
+        %{assigns: %{multilang_enabled: true}} = socket,
+        :edit
+      ) do
+    case viewing_language(Multilang.enabled_languages(), Multilang.current_locale()) do
+      nil -> socket
+      lang -> Phoenix.Component.assign(socket, :current_lang, lang)
+    end
+  end
+
+  def open_on_viewing_language(socket, _action), do: socket
+
+  @doc """
+  The enabled content language that matches `locale`: the exact code, else
+  the first one sharing its base — the admin at `/en/…` edits `en-US` —
+  else nil. Pure, for its tests.
+  """
+  @spec viewing_language([String.t()], String.t() | nil) :: String.t() | nil
+  def viewing_language(_enabled, nil), do: nil
+
+  def viewing_language(enabled, locale) do
+    if locale in enabled do
+      locale
+    else
+      base = language_base(locale)
+      Enum.find(enabled, &(language_base(&1) == base))
+    end
+  end
+
+  defp language_base(code),
+    do: code |> to_string() |> String.split(["-", "_"]) |> hd() |> String.downcase()
 
   @doc """
   A trimmed string from an event param, or `""` for anything that is not

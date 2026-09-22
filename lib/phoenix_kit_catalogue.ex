@@ -532,4 +532,26 @@ defmodule PhoenixKitCatalogue do
       }
     ]
   end
+
+  @impl PhoenixKit.Module
+  def settings_tabs do
+    [
+      Tab.new!(
+        id: :admin_settings_catalogue,
+        label: "Catalogue",
+        gettext_backend: PhoenixKitCatalogue.Gettext,
+        gettext_domain: "default",
+        icon: "hero-rectangle-stack",
+        path: "catalogue",
+        # Between Posts (922) and Comments (924): Settings orders its module
+        # entries by priority, and this is where "Catalogue" reads in that
+        # run of names.
+        priority: 923,
+        level: :admin,
+        parent: :admin_settings,
+        permission: module_key(),
+        live_view: {PhoenixKitCatalogue.Web.SettingsLive, :settings}
+      )
+    ]
+  end
 end

@@ -3563,3 +3563,90 @@ msgstr ""
 
 msgid "That location no longer exists. Choose another."
 msgstr ""
+
+msgid "A language turned off under Languages stops receiving sweep jobs whether or not it is ticked here."
+msgstr ""
+
+msgid "AI translation sweep"
+msgstr ""
+
+msgid "Could not save that."
+msgstr ""
+
+msgid "Enter a whole number above 0."
+msgstr ""
+
+msgid "Enter a whole number of minutes above 0."
+msgstr ""
+
+msgid "How the catalogue's admin lists behave."
+msgstr ""
+
+msgid "Languages to translate into"
+msgstr ""
+
+msgid "Lists"
+msgstr ""
+
+msgid "Minutes between runs"
+msgstr ""
+
+msgid "Most jobs per run"
+msgstr ""
+
+msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
+msgstr ""
+
+msgid "Only the primary language is enabled, so there is nothing to sweep."
+msgstr ""
+
+msgid "Right-click a row for its actions"
+msgstr ""
+
+msgid "Right-clicking anywhere on a row opens the same menu its ⋮ button does, at the pointer. Turn this off to leave the browser's own menu — copy, open in a new tab, inspect — in place everywhere."
+msgstr ""
+
+msgid "Run the sweep automatically"
+msgstr ""
+
+msgid "Saved."
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Translates catalogue content in the background, on a timer."
+msgstr ""
+
+msgid "See what is missing, or translate on demand."
+msgstr ""
+
+msgid "Turn the whole module on or off under Modules."
+msgstr ""
+
+msgid "Each list's sort is set from the list itself."
+msgstr ""
+
+msgid "Enable more languages."
+msgstr ""
+
+msgid "Rename folder"
+msgstr ""
+
+msgid "Folder name"
+msgstr ""
+
+msgid "Edit category"
+msgstr ""
+
+msgid "Edit catalogue"
+msgstr ""
+
+msgid "Item form"
+msgstr ""
+
+msgid "Show the URL slug and SEO fields"
+msgstr ""
+
+msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
+msgstr ""

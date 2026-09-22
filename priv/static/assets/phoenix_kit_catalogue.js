@@ -10,7 +10,16 @@
       window.PhoenixKitCatalogueHooks = window.PhoenixKitCatalogueHooks || {};
       window.PhoenixKitCatalogueHooks.CatalogueTreeDnD = {
         mounted() { this.setupTreeDnD(); this.setupTreeMemory(); },
-        updated() { this.setupTreeDnD(); },
+        updated() {
+          // A patch mid-drag can take the handles away: the shared sort left
+          // Manual order (another user changed it) and the tree lost its drag
+          // sources. The source element is gone, so the browser never fires
+          // its dragend — end the drag here, or the root drop zone stays up
+          // and the dragged row stays half-transparent (codex + zai,
+          // 2026-09-21). A patch that keeps the handles leaves the drag alone.
+          if (this._drag && !this.el.querySelector("[data-tree-item]")) this.endDrag();
+          this.setupTreeDnD();
+        },
 
         // Which parents are open is browser-local state (Max, 2026-09-13):
         // the server pushes the open set after every change and it is

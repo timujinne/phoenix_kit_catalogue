@@ -222,8 +222,12 @@ defmodule PhoenixKitCatalogueTest do
       assert Map.has_key?(config, :enabled)
     end
 
-    test "settings_tabs/0 returns empty list" do
-      assert PhoenixKitCatalogue.settings_tabs() == []
+    test "settings_tabs/0 registers Settings → Catalogue" do
+      # It returned [] until the owner found /admin/settings had no Catalogue
+      # entry (boss via Max, 2026-09-21). The page itself is pinned in
+      # test/web/settings_live_test.exs.
+      assert [%{id: :admin_settings_catalogue, parent: :admin_settings}] =
+               PhoenixKitCatalogue.settings_tabs()
     end
 
     test "user_dashboard_tabs/0 returns empty list" do

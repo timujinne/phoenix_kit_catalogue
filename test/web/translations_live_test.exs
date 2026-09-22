@@ -262,11 +262,11 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLiveTest do
 
       html = render_change(view, "filter", %{"filter" => %{"lang" => ""}})
 
-      # The per-state chips always render the word "Missing" (as a static
+      # The per-state tabs always render the word "Missing" (as a static
       # label, count 0 or not) — assert the actual counts instead of the
       # word's mere presence, or this would pass even with the bug back.
-      assert html =~ "Fresh: 1"
-      assert html =~ "Missing: 0"
+      assert html =~ "Fresh (1)"
+      assert html =~ "Missing (0)"
     end
 
     test "clicking Translate after a blank lang filter still queues the job", %{conn: conn} do

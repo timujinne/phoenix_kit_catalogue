@@ -8,7 +8,6 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     * Tab + language switching
     * Metadata add/remove
     * Featured-image clear
-    * Delete confirm flow (show / cancel / commit)
     * Category move flows (move_category + move_under_parent)
   """
 
@@ -75,31 +74,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     end
   end
 
-  describe "CatalogueFormLive :edit — delete-confirm flow" do
-    test "show_delete_confirm + cancel_delete toggles flag", %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
-
-      render_click(view, "show_delete_confirm", %{})
-      assert :sys.get_state(view.pid).socket.assigns.confirm_delete == true
-
-      render_click(view, "cancel_delete", %{})
-      assert :sys.get_state(view.pid).socket.assigns.confirm_delete == false
-    end
-
-    test "delete_catalogue permanently deletes + navigates",
-         %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
-      render_click(view, "show_delete_confirm", %{})
-
-      result = render_click(view, "delete_catalogue", %{})
-      assert {:error, {:live_redirect, %{to: "/en/admin/catalogue" <> _}}} = result
-
-      # permanently_delete_catalogue hard-deletes — get_catalogue returns nil.
-      assert Catalogue.get_catalogue(cat.uuid) == nil
-    end
-  end
-
-  describe "CategoryFormLive :edit — language + delete" do
+  describe "CategoryFormLive :edit — language" do
     test "switch_language doesn't crash with multilang disabled",
          %{conn: conn, catalogue: cat} do
       cat_obj = fixture_category(cat, %{name: "C"})
@@ -107,33 +82,6 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
 
       render_click(view, "switch_language", %{"lang" => "fi"})
       assert Process.alive?(view.pid)
-    end
-
-    test "show_delete_confirm + cancel_delete toggles", %{conn: conn, catalogue: cat} do
-      cat_obj = fixture_category(cat, %{name: "DelCat"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/categories/#{cat_obj.uuid}/edit")
-
-      render_click(view, "show_delete_confirm", %{})
-      assert :sys.get_state(view.pid).socket.assigns.confirm_delete_all == true
-
-      render_click(view, "cancel_delete", %{})
-      assert :sys.get_state(view.pid).socket.assigns.confirm_delete_all == false
-    end
-
-    test "delete_category permanently deletes (cascades subtree)",
-         %{conn: conn, catalogue: cat} do
-      cat_obj = fixture_category(cat, %{name: "ToTrash"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/categories/#{cat_obj.uuid}/edit")
-
-      render_click(view, "show_delete_confirm", %{})
-
-      # delete_category triggers push_navigate. render_click returns
-      # the navigated-away redirect tuple — assert it directly.
-      result = render_click(view, "delete_category", %{})
-      assert {:error, {:live_redirect, %{to: "/en/admin/catalogue/" <> _}}} = result
-
-      # permanently_delete_category hard-deletes the row.
-      assert Catalogue.get_category(cat_obj.uuid) == nil
     end
   end
 
@@ -241,12 +189,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
       assert html =~ "Parent category not found."
     end
 
-    test "the danger zone and the metadata card own their open state too",
-         %{conn: conn, catalogue: cat} do
-      cat_obj = fixture_category(cat, %{name: "Danger"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/categories/#{cat_obj.uuid}/edit")
-      assert render(element(view, "#category-danger-zone")) =~ "ignore_attrs"
-
+    test "the metadata card owns its open state too", %{conn: conn, catalogue: cat} do
       item =
         fixture_item(%{
           catalogue_uuid: cat.uuid,

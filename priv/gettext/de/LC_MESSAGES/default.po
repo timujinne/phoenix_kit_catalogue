@@ -3563,3 +3563,90 @@ msgstr "Einige Lieferantenwerte sind ungültig."
 
 msgid "That location no longer exists. Choose another."
 msgstr "Diesen Ort gibt es nicht mehr. Wähle einen anderen."
+
+msgid "A language turned off under Languages stops receiving sweep jobs whether or not it is ticked here."
+msgstr "Eine unter „Sprachen“ deaktivierte Sprache erhält keine Übersetzungsaufträge mehr, auch wenn sie hier angehakt ist."
+
+msgid "AI translation sweep"
+msgstr "KI-Übersetzung im Hintergrund"
+
+msgid "Could not save that."
+msgstr "Speichern fehlgeschlagen."
+
+msgid "Enter a whole number above 0."
+msgstr "Gib eine ganze Zahl größer als 0 ein."
+
+msgid "Enter a whole number of minutes above 0."
+msgstr "Gib eine ganze Zahl an Minuten größer als 0 ein."
+
+msgid "How the catalogue's admin lists behave."
+msgstr "Wie sich die Admin-Listen des Katalogs verhalten."
+
+msgid "Languages to translate into"
+msgstr "Zielsprachen"
+
+msgid "Lists"
+msgstr "Listen"
+
+msgid "Minutes between runs"
+msgstr "Minuten zwischen den Durchläufen"
+
+msgid "Most jobs per run"
+msgstr "Maximale Aufträge pro Durchlauf"
+
+msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
+msgstr "Standardmäßig aus. Beim Einschalten startet der Zeitplan sofort; jeder Durchlauf stellt Übersetzungsaufträge für alles ein, was noch fehlt."
+
+msgid "Only the primary language is enabled, so there is nothing to sweep."
+msgstr "Nur die Hauptsprache ist aktiviert, es gibt also nichts zu übersetzen."
+
+msgid "Right-click a row for its actions"
+msgstr "Rechtsklick auf eine Zeile für ihre Aktionen"
+
+msgid "Right-clicking anywhere on a row opens the same menu its ⋮ button does, at the pointer. Turn this off to leave the browser's own menu — copy, open in a new tab, inspect — in place everywhere."
+msgstr "Ein Rechtsklick irgendwo auf einer Zeile öffnet am Mauszeiger dasselbe Menü wie ihr ⋮-Knopf. Schalte das aus, um überall das Browsermenü zu behalten — Kopieren, In neuem Tab öffnen, Untersuchen."
+
+msgid "Run the sweep automatically"
+msgstr "Hintergrundübersetzung automatisch ausführen"
+
+msgid "Saved."
+msgstr "Gespeichert."
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "Translates catalogue content in the background, on a timer."
+msgstr "Übersetzt Kataloginhalte im Hintergrund nach Zeitplan."
+
+msgid "See what is missing, or translate on demand."
+msgstr "Sieh nach, was fehlt, oder übersetze sofort."
+
+msgid "Turn the whole module on or off under Modules."
+msgstr "Das ganze Modul schaltest du unter „Module“ ein oder aus."
+
+msgid "Each list's sort is set from the list itself."
+msgstr "Die Sortierung jeder Liste wird in der Liste selbst festgelegt."
+
+msgid "Enable more languages."
+msgstr "Weitere Sprachen aktivieren."
+
+msgid "Rename folder"
+msgstr "Ordner umbenennen"
+
+msgid "Folder name"
+msgstr "Ordnername"
+
+msgid "Edit category"
+msgstr "Kategorie bearbeiten"
+
+msgid "Edit catalogue"
+msgstr "Katalog bearbeiten"
+
+msgid "Item form"
+msgstr "Artikelformular"
+
+msgid "Show the URL slug and SEO fields"
+msgstr "URL-Slug und SEO-Felder anzeigen"
+
+msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
+msgstr "Aus blendet sie im Artikelformular aus; was sie schon enthalten, bleibt erhalten, wird unverändert gespeichert und ist wieder da, sobald Sie dies einschalten."

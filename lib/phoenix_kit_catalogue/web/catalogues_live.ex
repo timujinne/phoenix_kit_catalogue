@@ -48,6 +48,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal
   alias PhoenixKitCatalogue.Web.Components.ProductCard
+  alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.{TableConfig, TableQuery, ViewConfig}
 
   # What the Duplicate dialog starts with (see `Catalogue.duplicate_catalogue/2`).
@@ -81,6 +82,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     {:ok,
      assign(socket,
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues"),
+       # One settings read per mount, threaded down to the rows. Reading it
+       # per row would be a hundred reads per render of one page-wide switch.
+       row_context_menu: CatalogueSettings.context_menu_enabled?(),
        catalogue_rows: [],
        attribute_group_rows: [],
        attribute_set_rows: [],
@@ -112,6 +116,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        sets_enabled: false,
        confirm_delete: nil,
        catalogue_view_mode: "active",
+       active_catalogues: [],
        deleted_catalogue_rows: [],
        deleted_catalogue_count: 0,
        deleted_folder_count: 0,
@@ -448,15 +453,15 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           mode: if(mode == "deleted", do: :restorable, else: :active)
         )
 
-      catalogues =
-        if mode == "deleted" do
-          deleted_catalogues
-        else
-          Catalogue.catalogues_by_folder()
-          |> Map.values()
-          |> List.flatten()
-          |> Catalogue.localize(socket.assigns[:current_locale])
-        end
+      # Loaded in BOTH views, like the deleted rows above: the Active tab
+      # counts them while the Deleted list is showing.
+      active_catalogues =
+        Catalogue.catalogues_by_folder()
+        |> Map.values()
+        |> List.flatten()
+        |> Catalogue.localize(socket.assigns[:current_locale])
+
+      catalogues = if mode == "deleted", do: deleted_catalogues, else: active_catalogues
 
       catalogue_rows = build_catalogue_rows(catalogues, folder_lookup, item_counts)
 
@@ -464,6 +469,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       |> assign(
         catalogue_rows: catalogue_rows,
         catalogue_file_counts: Catalogue.attached_file_counts(catalogue_rows),
+        active_catalogues: active_catalogues,
         deleted_catalogue_rows: deleted_catalogues,
         deleted_catalogue_count: deleted_cat_count,
         deleted_folder_count: deleted_folder_count,
@@ -748,6 +754,24 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
       length(TableQuery.search(assigns.deleted_catalogue_rows, query)) +
         length(matching_folders)
+    end
+  end
+
+  # What the Active tab answers for, counted the same way its sibling is so
+  # the two numbers are comparable: every live catalogue and folder, narrowed
+  # by any search. The tab used to carry no count at all while Deleted did,
+  # which is what the owner circled (boss via Max, 2026-09-21). Counted from
+  # `active_catalogues`, not `catalogue_rows`: in the Deleted view those rows
+  # are the trashed catalogues, and the tab read trashed + live folders.
+  defp active_tab_count(assigns) do
+    query = current_search(assigns)
+    rows = assigns.active_catalogues
+    folders = Enum.map(assigns.folder_tree, fn {folder, _depth} -> folder end)
+
+    if String.trim(query) == "" do
+      length(rows) + length(folders)
+    else
+      length(TableQuery.search(rows, query)) + length(TableQuery.search(folders, query))
     end
   end
 
@@ -1121,9 +1145,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   #
   # File-explorer view of the catalogues index: folders as collapsible
   # rows with catalogues nested under them (Core.TreeTable name cells
-  # inside table_default). Shown in Manual order with no search/status
-  # filter — any other sort or an active filter falls back to the flat
-  # sortable table. The drilled ?folder= sets the tree's root; the
+  # inside table_default). Shown under every sort with no search/status
+  # filter — a sort orders each level (`order_level/2`), and a search or
+  # an active filter falls back to the flat sortable table. The drilled
+  # ?folder= sets the tree's root; the
   # "__unfiled__" sentinel (reachable only via old URLs since the folder
   # select was removed) stays a flat filtered list.
 
@@ -1140,13 +1165,78 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     cfg.view == "card" and catalogues_structure_mode?(cfg, view_mode, lookup)
   end
 
+  # The folders stay under every sort: a sort orders each level, it never
+  # swaps the tree for a flat list of every catalogue. It used to, and since
+  # the sort is one shared setting pushed live, one person's "Name" dropped
+  # everyone's folders at once (boss via Max, 2026-09-21: "sometimes it's
+  # just a flat list"). A search or a filter still flattens — a result set
+  # is a list, and a tree with its non-matching parents cut out is worse.
   defp catalogues_structure_mode?(cfg, view_mode, lookup) do
     folder_filter = cfg.filters["folder"]
 
-    view_mode == "active" and cfg.sort_by == "position" and
+    view_mode == "active" and
       (cfg[:search] || "") == "" and Map.delete(cfg.filters, "folder") == %{} and
       (folder_filter == nil or Map.has_key?(lookup, folder_filter))
   end
+
+  # Dragging writes the manual order, so it exists only in Manual order.
+  # Under another sort a drop would land where the SORT puts it and write a
+  # position nobody chose. The drop handlers check this too: a hook push can
+  # arrive under any sort, or be forged.
+  # "Reorder all" re-indexes `catalogue_rows` into 1..N, so it is offered
+  # only where those rows are the whole live list: no folder tree, and the
+  # Active view. In the Deleted view the rows are the trashed catalogues, and
+  # numbering them alone collides with every live row's position.
+  defp reorder_all_offered?(assigns) do
+    assigns.folder_tree == [] and assigns.catalogue_view_mode == "active"
+  end
+
+  defp catalogues_reorderable?(cfg, view_mode, lookup) do
+    cfg.sort_by == "position" and catalogues_structure_mode?(cfg, view_mode, lookup)
+  end
+
+  # A folder has some of a catalogue's columns; for the rest it falls back
+  # to its name, ascending — the way a file explorer keeps folders readable
+  # under a sort that only means something for files.
+  @folder_sort_fields ~w(name updated created)
+
+  # One level of the tree, in display order.
+  #
+  # Manual order: one interleaved sequence of folders and catalogues
+  # (`drop_row` writes them into it together), so a catalogue dropped
+  # between two folders stays there. Ties (legacy per-type sequences) put
+  # folders first, then name.
+  #
+  # Any other sort: folders first, then catalogues — the file-explorer
+  # convention — each ordered by the chosen column, catalogues through the
+  # same `TableQuery.sort/4` the flat table uses so the two agree.
+  defp order_level(level, %{sort_by: "position"}) do
+    Enum.sort_by(level, fn
+      {:folder, f} -> {f.position, 0, String.downcase(f.name || "")}
+      {:catalogue, c} -> {c[:position], 1, String.downcase(c[:name] || "")}
+    end)
+  end
+
+  defp order_level(level, cfg) do
+    folders = for {:folder, f} <- level, do: f
+    catalogues = for {:catalogue, c} <- level, do: c
+
+    {folder_by, folder_dir} =
+      if cfg.sort_by in @folder_sort_fields,
+        do: {cfg.sort_by, cfg.sort_dir},
+        else: {"name", :asc}
+
+    Enum.map(TableQuery.sort(folders, :catalogues, folder_by, folder_dir), &{:folder, &1}) ++
+      Enum.map(
+        TableQuery.sort(catalogues, :catalogues, catalogue_level_sort(cfg.sort_by), cfg.sort_dir),
+        &{:catalogue, &1}
+      )
+  end
+
+  # Every catalogue on one level of the tree sits in the same folder, so a
+  # Folder sort there would order nothing: sort by name in that direction.
+  defp catalogue_level_sort("folder"), do: "name"
+  defp catalogue_level_sort(sort_by), do: sort_by
 
   # Folder is URL state (?folder=), set by navigating, and no longer a
   # filterable column — `filterable_ids/1` drops "folder" before this is
@@ -1195,7 +1285,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # child folders first, then the catalogues filed at that level.
   # `catalogue_rows` are the enriched (orphan-promoted) row maps, so a
   # catalogue in a trashed folder surfaces at the root.
-  defp build_catalogue_tree_rows(folder_tree, catalogue_rows, expanded, current) do
+  defp build_catalogue_tree_rows(folder_tree, catalogue_rows, expanded, current, cfg) do
     folders = Enum.map(folder_tree, fn {f, _depth} -> f end)
     folders_by_parent = Enum.group_by(folders, & &1.parent_uuid)
     cats_by_folder = Enum.group_by(catalogue_rows, & &1[:folder_uuid])
@@ -1206,32 +1296,28 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     walk_catalogue_level(
       current && current.uuid,
       0,
-      folders_by_parent,
-      cats_by_folder,
+      %{folders_by_parent: folders_by_parent, cats: cats_by_folder, cfg: cfg},
       with_children,
       expanded
     )
   end
 
-  defp walk_catalogue_level(parent, depth, folders_by_parent, cats, with_children, expanded) do
+  defp walk_catalogue_level(parent, depth, index, with_children, expanded) do
+    %{folders_by_parent: folders_by_parent, cats: cats} = index
+
     # `parent_key` identifies the sibling group for drag-reorder ("root"
     # at the top level). Both folders and the catalogues filed here share
     # this level's parent.
     parent_key = parent || "root"
 
-    # One merged manual order per level: both types sort together by
-    # `position` (drop_row writes one interleaved sequence), so a
-    # catalogue dropped between two folders STAYS between them. Ties
-    # (e.g. legacy per-type sequences) put folders first, then name.
+    # See `order_level/2`: one interleaved manual sequence, or folders then
+    # catalogues by the chosen column.
     level =
       (Map.get(folders_by_parent, parent, []) |> Enum.map(&{:folder, &1})) ++
         (Map.get(cats, parent, []) |> Enum.map(&{:catalogue, &1}))
 
     level
-    |> Enum.sort_by(fn
-      {:folder, f} -> {f.position, 0, String.downcase(f.name || "")}
-      {:catalogue, c} -> {c[:position], 1, String.downcase(c[:name] || "")}
-    end)
+    |> order_level(index.cfg)
     |> Enum.flat_map(fn
       {:folder, folder} ->
         count = length(Map.get(cats, folder.uuid, []))
@@ -1244,14 +1330,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         if expanded? do
           [
             row
-            | walk_catalogue_level(
-                folder.uuid,
-                depth + 1,
-                folders_by_parent,
-                cats,
-                with_children,
-                expanded
-              )
+            | walk_catalogue_level(folder.uuid, depth + 1, index, with_children, expanded)
           ]
         else
           [row]
@@ -1268,6 +1347,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:current, :any, default: nil)
   attr(:renaming_folder, :any, default: nil)
   attr(:file_counts, :map, default: %{})
+  attr(:row_context_menu, :boolean, default: false)
 
   # Card-view counterpart of the tree table, as GROUPS: each folder is a
   # visible box containing its catalogue cards (and nested folder boxes),
@@ -1285,7 +1365,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       cats_by_folder: Enum.group_by(assigns.catalogue_rows, & &1[:folder_uuid]),
       cfg: assigns.cfg,
       renaming_folder: assigns.renaming_folder,
-      file_counts: assigns.file_counts
+      file_counts: assigns.file_counts,
+      context_menu: assigns.row_context_menu
     }
 
     root = assigns.current && assigns.current.uuid
@@ -1331,10 +1412,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       (Map.get(ctx.folders_by_parent, parent_uuid, []) |> Enum.map(&{:folder, &1})) ++
         (Map.get(ctx.cats_by_folder, parent_uuid, []) |> Enum.map(&{:catalogue, &1}))
 
-    Enum.sort_by(level, fn
-      {:folder, f} -> {f.position, 0, String.downcase(f.name || "")}
-      {:catalogue, c} -> {c[:position], 1, String.downcase(c[:name] || "")}
-    end)
+    order_level(level, ctx.cfg)
   end
 
   attr(:entries, :list, required: true)
@@ -1390,10 +1468,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       data-tree-type="folder"
       data-tree-parent={@parent_key}
       data-tree-drop={@folder.uuid}
+      data-row-menu-context={@ctx.context_menu}
       class="rounded-lg border border-base-300 bg-base-100 p-3"
     >
       <div class="flex items-center gap-2 min-w-0">
         <span
+          :if={@ctx.cfg.sort_by == "position"}
           data-tree-item={"folder:" <> @folder.uuid}
           class="cursor-grab active:cursor-grabbing text-base-content/40 shrink-0"
           title={
@@ -1497,6 +1577,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       data-tree-uuid={@c_row.uuid}
       data-tree-type="catalogue"
       data-tree-parent={@parent_key}
+      data-row-menu-context={@ctx.context_menu}
       class="card card-sm bg-base-200 shadow-sm overflow-hidden"
     >
       <%!-- Same band as every other card in the module (boss via Max,
@@ -1511,6 +1592,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         >
           <:overlay>
             <span
+              :if={@ctx.cfg.sort_by == "position"}
               data-tree-item={"catalogue:" <> @c_row.uuid}
               class="pk-drag-handle cursor-grab active:cursor-grabbing absolute top-1.5 right-1.5 rounded bg-base-100/80 p-0.5 text-base-content/50 hover:text-base-content/80"
               title={
@@ -1595,7 +1677,19 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:renaming_folder, :any, default: nil)
   attr(:file_counts, :map, default: %{})
 
+  # Threaded from the page: one setting, not a read per row.
+  attr(:context_menu, :boolean, default: false)
+
   defp catalogues_tree_table(assigns) do
+    # Manual order only — see `catalogues_reorderable?/3`. The table is only
+    # rendered in structure mode, so the sort is the one condition left.
+    assigns = assign(assigns, :reorderable, assigns.cfg.sort_by == "position")
+
+    # The index keys its columns by string id, and core's sortable header
+    # compares `field` to the sort's `by` exactly — so the Name header gets
+    # the same kind of id the other columns do.
+    assigns = assign(assigns, :name_col_id, "name")
+
     assigns =
       assign(
         assigns,
@@ -1603,10 +1697,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         for(c <- visible_columns(:catalogues, assigns.cfg), c.id not in ["name", "folder"], do: c)
       )
 
-    catalogue_rows = for {:catalogue, c_row, _depth, _parent} <- assigns.rows, do: c_row
-
+    # Always, like every other list (boss via Max, 2026-09-21) — folders
+    # get a folder tile, catalogues their picture or the letter tile.
     assigns =
-      assign(assigns, :photo_col?, any_media_thumb?(catalogue_rows, assigns.file_counts))
+      assign(assigns, :photo_col?, assigns.rows != [])
 
     ~H"""
     <%!-- The location row (Up + folder name) is rendered by the parent —
@@ -1644,12 +1738,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
             >
             </.table_default_header_cell>
-            <.table_default_header_cell>
+            <%!-- The tree shows under every sort now, so it carries the same
+                 sortable headers as the flat table — plain in Manual order. --%>
+            <.sort_header_cell field={@name_col_id} sort={Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}>
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
-            </.table_default_header_cell>
-            <.table_default_header_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
+            </.sort_header_cell>
+            <.sort_header_cell
+              :for={c <- @cols}
+              field={c.id}
+              sort={c.sortable? && Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}
+              align={c.align}
+              class={[column_fit_class(c.id), c.align == :right && "text-right"]}
+            >
               {c.label.()}
-            </.table_default_header_cell>
+            </.sort_header_cell>
             <.actions_header_cell />
           </.table_default_row>
         </.table_default_header>
@@ -1662,18 +1764,31 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   data-tree-type="folder"
                   data-tree-parent={parent_key}
                   data-tree-drop={folder.uuid}
+                  data-row-menu-context={@context_menu}
                 >
+                  <%!-- The cell stays under any sort so the columns do not
+                       shift; the drag source (the attribute) and its icon
+                       exist only in Manual order. --%>
                   <td
-                    data-tree-item={"folder:" <> folder.uuid}
-                    class="w-8 cursor-grab active:cursor-grabbing text-base-content/40"
-                    title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag to reorder or move into a folder")}
+                    data-tree-item={@reorderable && "folder:" <> folder.uuid}
+                    class={["w-8 text-base-content/40", @reorderable && "cursor-grab active:cursor-grabbing"]}
+                    title={@reorderable && Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag to reorder or move into a folder")}
                   >
-                    <.icon name="hero-bars-3" class="w-4 h-4" />
+                    <.icon :if={@reorderable} name="hero-bars-3" class="w-4 h-4" />
                   </td>
+                  <%!-- The preview column says what the row is — a folder tile
+                       here, the catalogue's picture or letter below — so the
+                       small type icon before the name has gone: one visual
+                       per row, always in the same column (boss via Max,
+                       2026-09-21). --%>
                   <.table_default_cell
                     :if={@photo_col?}
                     class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"
                   >
+                    <Shared.thumb_icon_tile
+                      icon={if meta.expanded, do: "hero-folder-open", else: "hero-folder"}
+                      icon_class="text-warning"
+                    />
                   </.table_default_cell>
                   <.tree_name_cell
                     depth={depth}
@@ -1682,8 +1797,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                     expanded={meta.expanded}
                     toggle_event="toggle_folder_expand"
                     value={folder.uuid}
-                    icon={if meta.expanded, do: "hero-folder-open", else: "hero-folder"}
-                    icon_class="w-4 h-4 text-warning shrink-0"
                     toggle_label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Toggle folder")}
                   >
                     <%= if @renaming_folder == folder.uuid do %>
@@ -1765,13 +1878,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   data-tree-uuid={c_row.uuid}
                   data-tree-type="catalogue"
                   data-tree-parent={parent_key}
+                  data-row-menu-context={@context_menu}
                 >
                   <td
-                    data-tree-item={"catalogue:" <> c_row.uuid}
-                    class="w-8 cursor-grab active:cursor-grabbing text-base-content/40"
-                    title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag to reorder or move into a folder")}
+                    data-tree-item={@reorderable && "catalogue:" <> c_row.uuid}
+                    class={["w-8 text-base-content/40", @reorderable && "cursor-grab active:cursor-grabbing"]}
+                    title={@reorderable && Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drag to reorder or move into a folder")}
                   >
-                    <.icon name="hero-bars-3" class="w-4 h-4" />
+                    <.icon :if={@reorderable} name="hero-bars-3" class="w-4 h-4" />
                   </td>
                   <.table_default_cell
                     :if={@photo_col?}
@@ -1781,15 +1895,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                       <.featured_thumb
                         resource={c_row}
                         has_files={Map.get(@file_counts, c_row.uuid, 0) > 0}
+                        letter
                       />
                     </.link>
                   </.table_default_cell>
-                  <.tree_name_cell
-                    depth={depth}
-                    indent="1rem"
-                    icon="hero-document-text"
-                    icon_class="w-4 h-4 text-base-content/40 shrink-0"
-                  >
+                  <.tree_name_cell depth={depth} indent="1rem">
                     <.link
                       navigate={Paths.catalogue_detail(c_row.uuid)}
                       draggable="false"
@@ -1895,6 +2005,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   defp render_folder_cell("status", folder, _meta), do: status_badge_cell(folder.status)
   defp render_folder_cell("updated", folder, _meta), do: ts(folder.updated_at)
+  # Folders sort by Created too, so they show it — an empty cell under the
+  # column the list is sorted by reads as an arbitrary order.
+  defp render_folder_cell("created", folder, _meta), do: ts(folder.inserted_at)
 
   defp render_folder_cell(_id, _folder, _meta) do
     assigns = %{}
@@ -1902,6 +2015,29 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   end
 
   defp default_folder_name, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New folder")
+
+  # "New folder", then "New folder 2", "New folder 3"… — the first name no
+  # folder beside it already has. Every new folder used to be called the
+  # same thing (boss via Max, 2026-09-21). Siblings only, as a file explorer
+  # counts: the same name in another folder is no clash. The base is
+  # translated, the number is not, so it reads right in every language.
+  defp next_folder_name(socket, parent_uuid) do
+    base = default_folder_name()
+
+    taken =
+      for {folder, _depth} <- socket.assigns.folder_tree,
+          folder.parent_uuid == parent_uuid,
+          into: MapSet.new(),
+          do: folder.name
+
+    if MapSet.member?(taken, base) do
+      Stream.iterate(2, &(&1 + 1))
+      |> Stream.map(&"#{base} #{&1}")
+      |> Enum.find(&(not MapSet.member?(taken, &1)))
+    else
+      base
+    end
+  end
 
   # Move (no-op when the parent is unchanged) then write the level's
   # same-type order. A failed move skips the reorder — the flash carries
@@ -2029,11 +2165,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       case params["parent"] do
         parent when is_binary(parent) and parent != "" ->
           if Map.has_key?(socket.assigns.folder_lookup, parent),
-            do: %{name: default_folder_name(), parent_uuid: parent},
-            else: %{name: default_folder_name()}
+            do: %{name: next_folder_name(socket, parent), parent_uuid: parent},
+            else: %{name: next_folder_name(socket, nil)}
 
         _ ->
-          %{name: default_folder_name()}
+          %{name: next_folder_name(socket, nil)}
       end
 
     case Catalogue.create_folder(attrs, actor_opts(socket)) do
@@ -2055,7 +2191,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     # under a missing/trashed folder.
     if Map.has_key?(socket.assigns.folder_lookup, parent_uuid) do
       case Catalogue.create_folder(
-             %{name: default_folder_name(), parent_uuid: parent_uuid},
+             %{name: next_folder_name(socket, parent_uuid), parent_uuid: parent_uuid},
              actor_opts(socket)
            ) do
         {:ok, folder} ->
@@ -2094,12 +2230,16 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # Commits the inline rename and closes the field. Fired by Enter
   # (form submit → "name") and by clicking off (phx-blur → "value").
   # A blank name is treated as "no change" — the folder keeps its name.
+  # Only the folder whose field is open: Enter closes the field, and the
+  # blur its removal can fire afterwards must not write a second time. And
+  # only a live one — another admin may have removed it meanwhile.
   def handle_event("rename_folder", %{"uuid" => uuid} = params, socket) do
     name = trim_param(params["name"] || params["value"])
 
     socket =
-      with true <- name != "",
-           %{} = folder <- Catalogue.get_folder(uuid),
+      with true <- socket.assigns.renaming_folder == uuid,
+           true <- name != "",
+           %{status: "active"} = folder <- Catalogue.get_folder(uuid),
            {:ok, _} <- Catalogue.update_folder(folder, %{name: name}, actor_opts(socket)) do
         socket
       else
@@ -2199,7 +2339,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # feature's own comments describe as how the column got into that state the
   # first time; gating only the handles would have left the same door open.
   def handle_event("open_catalogues_reorder_modal", _params, socket) do
-    if socket.assigns.folder_tree == [] do
+    if reorder_all_offered?(socket.assigns) do
       {:noreply, assign(socket, :show_catalogues_reorder, true)}
     else
       {:noreply, socket}
@@ -2215,9 +2355,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # re-indexing into 1..N can't collide with unseen rows.
   def handle_event("apply_catalogues_reorder", %{"strategy" => strategy_str}, socket)
       when is_map_key(@catalogues_reorder_strategy_map, strategy_str) do
-    if socket.assigns.folder_tree != [] do
-      {:noreply, socket}
-    else
+    if reorder_all_offered?(socket.assigns) do
       strategy = Map.fetch!(@catalogues_reorder_strategy_map, strategy_str)
 
       ordered =
@@ -2237,6 +2375,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           log_operation_error(socket, "apply_catalogues_reorder", %{reason: reason})
           {:noreply, put_flash(socket, :error, gettext("Failed to reorder."))}
       end
+    else
+      {:noreply, socket}
     end
   end
 
@@ -2411,9 +2551,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   def handle_event("permanently_delete_catalogue", _params, socket) do
     case socket.assigns.confirm_delete do
       {"catalogue", uuid} ->
+        # Deleted tab only: a catalogue restored meanwhile (another tab, or
+        # a stale dialog) is live again and is not deleted forever.
         with %{} = catalogue <- Catalogue.get_catalogue(uuid),
              {:ok, _} <-
-               Catalogue.permanently_delete_catalogue(catalogue, actor_opts(socket)) do
+               Catalogue.permanently_delete_catalogue(
+                 catalogue,
+                 [only_trashed: true] ++ actor_opts(socket)
+               ) do
           {:noreply,
            socket
            |> put_flash(
@@ -2431,6 +2576,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                :error,
                Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue not found.")
              )
+             |> load_data(:index)}
+
+          {:error, :not_in_trash} ->
+            {:noreply,
+             socket
+             |> assign(:confirm_delete, nil)
+             |> put_flash(:error, Errors.message(:not_in_trash))
              |> load_data(:index)}
 
           {:error, reason} ->
@@ -2694,16 +2846,33 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     end
   end
 
-  def handle_event("flip_sort_dir", _p, socket) do
+  # Core's sort_selector sends the direction on the SAME event as the field,
+  # carrying only the control that moved. The button asks for an ABSOLUTE
+  # direction (`phx-value-sort_dir` is already the flipped one), and this
+  # applies what it asked for rather than flipping the server's value: two
+  # clicks queued before the first patch lands would otherwise flip twice
+  # and leave the user back where they started, having asked once (grok,
+  # 2026-09-21). Applying an absolute value makes a duplicate event a
+  # no-op. `sort_dir_for/2` still forces `:asc` under manual order.
+  def handle_event("set_sort", %{"sort_dir" => dir}, socket) when dir in ~w(asc desc) do
     scope = active_scope(socket.assigns)
     cfg = current_cfg(socket.assigns)
-    {:noreply, put_cfg(socket, scope, %{cfg | sort_dir: flip(cfg.sort_dir)})}
+    want = if dir == "desc", do: :desc, else: :asc
+    {:noreply, put_cfg(socket, scope, %{cfg | sort_dir: sort_dir_for(cfg.sort_by, want)})}
   end
 
+  # Anything else on this event — a direction that is not asc/desc, or a
+  # payload shape a future core sends — leaves the sort alone rather than
+  # raising in the user's face.
+  def handle_event("set_sort", _params, socket), do: {:noreply, socket}
+
+  # A header click. Headers only sort out of Manual order, so a push naming
+  # "position" is stale or forged and must not switch everyone's shared
+  # sort back to Manual.
   def handle_event("toggle_sort", %{"by" => by}, socket) do
     scope = active_scope(socket.assigns)
 
-    if MapSet.member?(known_sortable_ids(scope), by) do
+    if by != "position" and MapSet.member?(known_sortable_ids(scope), by) do
       cfg = current_cfg(socket.assigns)
       dir = if cfg.sort_by == by, do: flip(cfg.sort_dir), else: :asc
       {:noreply, put_cfg(socket, scope, %{cfg | sort_by: by, sort_dir: sort_dir_for(by, dir)})}
@@ -2777,7 +2946,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
     with {:ok, target} <- target,
          true <-
-           catalogues_structure_mode?(
+           catalogues_reorderable?(
              cfg,
              socket.assigns.catalogue_view_mode,
              socket.assigns.folder_lookup
@@ -2796,7 +2965,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       when is_list(ordered_ids) do
     cfg = current_cfg(socket.assigns)
 
-    if catalogues_structure_mode?(
+    if catalogues_reorderable?(
          cfg,
          socket.assigns.catalogue_view_mode,
          socket.assigns.folder_lookup
@@ -2945,6 +3114,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   def handle_event("table_search", %{"query" => q}, socket) do
     {:noreply, push_url_state(socket, [search_query: q], replace: true)}
+  end
+
+  # The shared search box's clear button, which the hand-rolled label input
+  # this replaced never had.
+  def handle_event("table_search_clear", _params, socket) do
+    {:noreply, push_url_state(socket, [search_query: ""], replace: true)}
   end
 
   def handle_event("load_more_items", _params, socket) do
@@ -3127,14 +3302,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <div :if={@active_tab == :index and @index_loaded} class="flex flex-col gap-4">
           <% cfg = @view_configs.catalogues %>
           <% items? = item_results?(assigns) %>
-          <.table_toolbar
-            scope={:catalogues}
-            cfg={cfg}
-            allow_flat_reorder={@folder_tree == []}
-          >
-            <:view_toggle>
-              <.view_toggle view={cfg.view} />
-            </:view_toggle>
+          <.table_toolbar scope={:catalogues} cfg={cfg}>
             <:filters>
               <%!-- No folder select here: search works where the user
                     stands — the drilled folder's subtree — and scope is
@@ -3197,39 +3365,52 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                it's a filter/menu-panel control, not a trash-visibility
                one. Items mode is a live view of items, so the trash
                toggle rests with it. --%>
-          <div
-            :if={deleted_count > 0 or @catalogue_view_mode == "deleted"}
-            class="flex items-center gap-0.5"
-          >
-            <button
-              type="button"
-              phx-click="switch_catalogue_view"
-              phx-value-mode="active"
-              class={[
-                "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer",
-                if(@catalogue_view_mode == "active",
-                  do: "border-primary text-primary",
-                  else: "border-transparent text-base-content/50 hover:text-base-content"
-                )
-              ]}
-            >
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")}
-            </button>
-            <button
-              type="button"
-              phx-click="switch_catalogue_view"
-              phx-value-mode="deleted"
-              class={[
-                "px-3 py-1.5 text-xs font-medium border-b-2 transition-colors cursor-pointer",
-                if(@catalogue_view_mode == "deleted",
-                  do: "border-error text-error",
-                  else: "border-transparent text-base-content/50 hover:text-base-content"
-                )
-              ]}
-            >
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")} ({deleted_count})
-            </button>
-          </div>
+          <%!-- Tabs left, the table's own controls right — the same row and
+               the same order as inside a catalogue. --%>
+          <Shared.list_controls_row>
+            <:tabs :if={deleted_count > 0 or @catalogue_view_mode == "deleted"}>
+              <Shared.status_tab
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Active")}
+                count={active_tab_count(assigns)}
+                active={@catalogue_view_mode == "active"}
+                phx-click="switch_catalogue_view"
+                phx-value-mode="active"
+              />
+              <Shared.status_tab
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Deleted")}
+                count={deleted_count}
+                active={@catalogue_view_mode == "deleted"}
+                variant={:error}
+                phx-click="switch_catalogue_view"
+                phx-value-mode="deleted"
+              />
+            </:tabs>
+            <:controls>
+              <.sort_controls
+                scope={:catalogues}
+                selected={["position", "name" | cfg.columns]}
+                sort_by={cfg.sort_by}
+                sort_dir={cfg.sort_dir}
+                manual_value="position"
+              />
+              <button
+                :if={cfg.sort_by == "position" and reorder_all_offered?(assigns)}
+                type="button"
+                phx-click="open_catalogues_reorder_modal"
+                class="btn btn-outline btn-sm"
+              >
+                <.icon name="hero-arrows-up-down" class="w-4 h-4" />
+                <span class="hidden sm:inline">{gettext("Reorder all")}</span>
+              </button>
+              <button type="button" phx-click="show_column_modal" class="btn btn-outline btn-sm">
+                <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
+                <span class="hidden sm:inline">
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
+                </span>
+              </button>
+              <.view_toggle view={cfg.view} />
+            </:controls>
+          </Shared.list_controls_row>
           <%!-- Location row: Up + current folder name, whenever drilled
                in — including the flat search/sorted table, where it is
                the only sign of WHERE the search is looking now that the
@@ -3246,20 +3427,58 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               <.icon name="hero-arrow-uturn-left" class="w-4 h-4" />
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Up")}
             </button>
+            <%!-- Rename where you stand: the folder you are inside has no
+                 row of its own on screen, so its ⋮ menu was one level up
+                 and renaming meant leaving (boss via Max, 2026-09-21). The
+                 same inline field the folder rows use — Enter or clicking
+                 away saves, a blank name keeps the old one. --%>
             <span class="flex items-center gap-1.5 text-sm font-medium min-w-0">
               <.icon name="hero-folder-open" class="w-4 h-4 text-warning shrink-0" />
-              <span class="truncate">{location.name}</span>
+              <%= if @renaming_folder == location.uuid do %>
+                <form
+                  id={"location-rename-#{location.uuid}"}
+                  phx-submit="rename_folder"
+                  phx-value-uuid={location.uuid}
+                  class="min-w-0"
+                >
+                  <input
+                    type="text"
+                    name="name"
+                    value={location.name}
+                    aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Folder name")}
+                    phx-mounted={Phoenix.LiveView.JS.focus()}
+                    phx-blur="rename_folder"
+                    phx-value-uuid={location.uuid}
+                    class="input input-sm w-full max-w-60"
+                  />
+                </form>
+              <% else %>
+                <span class="truncate">{location.name}</span>
+                <button
+                  type="button"
+                  id="location-rename-button"
+                  phx-click="start_rename_folder"
+                  phx-value-uuid={location.uuid}
+                  class="btn btn-ghost btn-xs btn-square shrink-0"
+                  title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Rename folder")}
+                  aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Rename folder")}
+                >
+                  <.icon name="hero-pencil" class="w-3.5 h-3.5" />
+                </button>
+              <% end %>
             </span>
           </div>
           <.catalogues_tree_table
             :if={tree?}
+            context_menu={@row_context_menu}
             file_counts={@catalogue_file_counts}
             rows={
               build_catalogue_tree_rows(
                 @folder_tree,
                 @catalogue_rows,
                 @expanded_folders,
-                current_tree_folder(cfg, @folder_lookup)
+                current_tree_folder(cfg, @folder_lookup),
+                cfg
               )
             }
             cfg={cfg}
@@ -3268,6 +3487,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           />
           <.catalogues_card_level
             :if={card_level?}
+            row_context_menu={@row_context_menu}
             folder_tree={@folder_tree}
             catalogue_rows={@catalogue_rows}
             cfg={cfg}
@@ -3296,11 +3516,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             total={@item_total}
             query={current_search(assigns)}
             loading={@item_loading}
+            context_menu={@row_context_menu}
           />
           <.simple_table
             :if={!tree? and !card_level?}
             scope={:catalogues}
             cfg={cfg}
+            context_menu={@row_context_menu}
             show_view_toggle={false}
             file_counts={@catalogue_file_counts}
             rows={derive_rows(@catalogue_rows, :catalogues, cfg, @folder_lookup)}
@@ -3556,6 +3778,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             show_toggle={false}
             storage_key={view_storage_key()}
             items={@attribute_set_rows}
+            card_context_menu={@row_context_menu}
             wrapper_class="overflow-x-auto rounded-lg border border-base-content/10 shadow-none"
           >
             <.table_default_header>
@@ -3567,7 +3790,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               </tr>
             </.table_default_header>
             <.table_default_body>
-              <.table_default_row :for={s <- @attribute_set_rows} id={"attr-set-#{s.uuid}"}>
+              <.table_default_row
+                :for={s <- @attribute_set_rows}
+                id={"attr-set-#{s.uuid}"}
+                data-row-menu-context={@row_context_menu}
+              >
                 <.table_default_cell class="align-top">
                   <.link
                     navigate={KitRoutes.path("/admin/entities/#{s.key}/data")}
@@ -3713,8 +3940,34 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             </.link>
           </:actions>
         </.table_toolbar>
+        <%!-- The table's own controls, on their own row — this list has no
+             status tabs, so the row carries only the right-hand group. It
+             used to get sort and Columns from `table_toolbar`, which now
+             renders search, filters and actions alone: without this the
+             legacy groups list would silently lose both (zai,
+             2026-09-21). --%>
+        <Shared.list_controls_row>
+          <:controls>
+            <.sort_controls
+              scope={:attribute_groups}
+              selected={["position", "name" | cfg.columns]}
+              sort_by={cfg.sort_by}
+              sort_dir={cfg.sort_dir}
+              manual_value="position"
+            />
+            <button type="button" phx-click="show_column_modal" class="btn btn-outline btn-sm">
+              <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
+              <span class="hidden sm:inline">
+                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
+              </span>
+            </button>
+            <.view_toggle view={cfg.view} />
+          </:controls>
+        </Shared.list_controls_row>
         <.simple_table
           scope={:attribute_groups}
+          show_view_toggle={false}
+          context_menu={@row_context_menu}
           cfg={cfg}
           rows={derive_rows(@attribute_group_rows, :attribute_groups, cfg)}
           total={length(@attribute_group_rows)}
@@ -4133,6 +4386,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:total, :integer, required: true)
   attr(:query, :string, required: true)
   attr(:loading, :boolean, default: false)
+  attr(:context_menu, :boolean, default: false)
 
   # Cross-catalogue item results. Each row leads with the item, then
   # says WHERE it lives (catalogue, then category) — a hit here can come
@@ -4165,7 +4419,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           </tr>
         </thead>
         <tbody>
-          <tr :for={item <- @items} id={"item-result-#{item.uuid}"} class="hover">
+          <tr
+            :for={item <- @items}
+            id={"item-result-#{item.uuid}"}
+            class="hover"
+            data-row-menu-context={@context_menu}
+          >
             <td>
               <.link
                 navigate={item_result_path(item)}
@@ -4221,72 +4480,32 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   attr(:scope, :atom, required: true)
   attr(:cfg, :map, required: true)
-  attr(:allow_flat_reorder, :boolean, default: true)
 
   slot(:filters)
   slot(:actions)
-  slot(:view_toggle)
 
   defp table_toolbar(assigns) do
     ~H"""
-    <%!-- Two coherent groups instead of one flat flex-wrap: search+filters
-         left, view tools + create actions right. A flat wrap broke lines
-         between arbitrary neighbors (a stray "New folder" alone on row 1,
-         the primary action stranded bottom-left…); grouped, a narrow
-         screen drops the whole right group under the left one as a unit,
-         so every width renders an intentional-looking toolbar. --%>
+    <%!-- Search and filters left, create actions right. The table's own
+         controls — sort, Reorder all, Columns, the view toggle — are NOT
+         here: they sit on the tabs row below, where the catalogue pages
+         have always kept them (boss via Max, 2026-09-21). Two groups
+         rather than one flat wrap, so a narrow screen drops the actions
+         under the search as a unit instead of scattering buttons. --%>
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
       <div class="flex flex-wrap items-center gap-2">
-        <form id={"#{@scope}-table-search"} phx-change="table_search" phx-submit="table_search" class="contents">
-          <label class="input input-sm w-full sm:w-64">
-            <.icon name="hero-magnifying-glass" class="h-4 w-4 opacity-50" />
-            <input
-              type="search"
-              name="query"
-              value={@cfg[:search] || ""}
-              phx-debounce="300"
-              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Search…")}
-              class="grow"
-            />
-          </label>
-        </form>
+        <Shared.search_input
+          id={"#{@scope}-table-search"}
+          query={@cfg[:search] || ""}
+          on_search="table_search"
+          on_clear="table_search_clear"
+          class={Shared.search_width_class()}
+        />
         {render_slot(@filters)}
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <%!-- Two wrap-as-a-unit clusters: view tools and create/folder
-             actions. At widths where both can't share a row, the actions
-             cluster drops to its OWN row instead of its buttons scattering
-             between rows. The inner flex-wrap is the ultra-narrow fallback. --%>
-        <div class="flex items-center gap-2">
-          <.sort_controls
-            scope={@scope}
-            selected={["position", "name" | @cfg.columns]}
-            sort_by={@cfg.sort_by}
-            sort_dir={@cfg.sort_dir}
-            manual_value="position"
-          />
-          <button
-            :if={@scope == :catalogues and @cfg.sort_by == "position" and @allow_flat_reorder}
-            type="button"
-            phx-click="open_catalogues_reorder_modal"
-            class="btn btn-outline btn-sm"
-          >
-            <.icon name="hero-arrows-up-down" class="w-4 h-4" />
-            <span class="hidden sm:inline">{gettext("Reorder all")}</span>
-          </button>
-          <button type="button" phx-click="show_column_modal" class="btn btn-outline btn-sm">
-            <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
-            <span class="hidden sm:inline">
-              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
-            </span>
-          </button>
-          {render_slot(@view_toggle)}
-        </div>
-        <div :if={@actions != []} class="w-px h-6 bg-base-300 mx-1 hidden md:block"></div>
-        <div :if={@actions != []} class="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {render_slot(@actions)}
-        </div>
+      <div :if={@actions != []} class="flex flex-wrap items-center gap-2">
+        {render_slot(@actions)}
       </div>
     </div>
     """
@@ -4308,6 +4527,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:file_counts, :map, default: %{})
   attr(:show_view_toggle, :boolean, default: true)
 
+  attr(:context_menu, :boolean,
+    default: false,
+    doc:
+      "Right-click a row or card for the menu in its actions slot. Threaded " <>
+        "from the page rather than read per row: it is one setting, and a " <>
+        "hundred rows would otherwise be a hundred settings reads per render."
+  )
+
   slot(:row_actions, required: true)
   slot(:card_actions, required: true)
 
@@ -4323,7 +4550,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         &assign(
           &1,
           :photo_col?,
-          &1.scope == :catalogues and any_media_thumb?(&1.rows, &1.file_counts)
+          &1.scope == :catalogues and &1.rows != []
         )
       )
 
@@ -4346,6 +4573,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       variant="zebra"
       size="sm"
       toggleable
+      card_context_menu={@context_menu}
       show_toggle={@show_view_toggle}
       view_mode={@cfg.view}
       view_event="set_view"
@@ -4361,25 +4589,24 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <.table_default_row>
           <.drag_handle_header_cell :if={@draggable} />
           <.table_default_header_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5"></.table_default_header_cell>
-          <.table_default_header_cell
+          <%!-- Core's sortable header, as every catalogue table uses: arrows
+               once the list is sorted by a column, a plain label in Manual
+               order (`Shared.header_sort/2`) and on a column that cannot
+               sort. --%>
+          <.sort_header_cell
             :for={c <- @cols}
+            field={c.id}
+            sort={c.sortable? && Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}
+            align={c.align}
             class={[column_fit_class(c.id), c.align == :right && "text-right"]}
           >
-            <.sort_header
-              :if={c.sortable?}
-              by={c.id}
-              label={c.label.()}
-              sort_by={@cfg.sort_by}
-              sort_dir={@cfg.sort_dir}
-              align={c.align}
-            />
-            <span :if={!c.sortable?}>{c.label.()}</span>
-          </.table_default_header_cell>
+            {c.label.()}
+          </.sort_header_cell>
           <.actions_header_cell />
         </.table_default_row>
       </.table_default_header>
       <.sortable_tbody :if={@draggable} id={"#{@scope}-table-body"} enabled={@reorderable?} event="reorder_catalogues">
-        <.sortable_row :for={row <- @rows} item_id={row.uuid}>
+        <.sortable_row :for={row <- @rows} item_id={row.uuid} data-row-menu-context={@context_menu}>
           <.drag_handle_cell :if={@reorderable?} />
           <td :if={!@reorderable?} class="w-8"></td>
           <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
@@ -4388,12 +4615,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               navigate={Paths.catalogue_detail(row.uuid)}
               draggable="false"
             >
-              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} letter />
             </.link>
             <.featured_thumb
               :if={@scope != :catalogues or row.status == "trashed"}
               resource={row}
               has_files={Map.get(@file_counts, row.uuid, 0) > 0}
+              letter
             />
           </.table_default_cell>
           <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
@@ -4405,19 +4633,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         </.sortable_row>
       </.sortable_tbody>
       <.table_default_body :if={!@draggable}>
-        <.table_default_row :for={row <- @rows}>
+        <.table_default_row :for={row <- @rows} data-row-menu-context={@context_menu}>
           <.table_default_cell :if={@photo_col?} class="w-12 !pr-0 !py-1 [.pk-comfy_&]:w-22 [.pk-comfy_&]:!py-1.5">
             <.link
               :if={@scope == :catalogues and row.status != "trashed"}
               navigate={Paths.catalogue_detail(row.uuid)}
               draggable="false"
             >
-              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} />
+              <.featured_thumb resource={row} has_files={Map.get(@file_counts, row.uuid, 0) > 0} letter />
             </.link>
             <.featured_thumb
               :if={@scope != :catalogues or row.status == "trashed"}
               resource={row}
               has_files={Map.get(@file_counts, row.uuid, 0) > 0}
+              letter
             />
           </.table_default_cell>
           <.table_default_cell :for={c <- @cols} class={[column_fit_class(c.id), c.align == :right && "text-right"]}>
@@ -4452,35 +4681,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   end
 
   # ── Sort header button ───────────────────────────────────────────
-
-  attr(:by, :string, required: true)
-  attr(:label, :string, required: true)
-  attr(:sort_by, :string, required: true)
-  attr(:sort_dir, :atom, required: true)
-  attr(:align, :atom, default: :left)
-
-  defp sort_header(assigns) do
-    assigns = assign(assigns, :active?, assigns.sort_by == assigns.by)
-
-    ~H"""
-    <button
-      type="button"
-      phx-click="toggle_sort"
-      phx-value-by={@by}
-      class={[
-        "inline-flex items-center gap-1 cursor-pointer select-none",
-        @align == :right && "justify-end w-full"
-      ]}
-    >
-      <span>{@label}</span>
-      <.icon
-        :if={@active?}
-        name={if @sort_dir == :asc, do: "hero-chevron-up-mini", else: "hero-chevron-down-mini"}
-        class="w-3.5 h-3.5"
-      />
-    </button>
-    """
-  end
 
   # ── Cell renderers ───────────────────────────────────────────────
 

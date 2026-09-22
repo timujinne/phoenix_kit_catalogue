@@ -99,22 +99,26 @@ defmodule PhoenixKitCatalogue.Web.CategoryTreeToggleTest do
     refute tree_html(html) =~ "Oak doors"
   end
 
-  test "the sorted (flat) table says the same thing in words", %{
+  # Under a sort the row keeps a WORKING toggle. It used to become a flat
+  # table whose badge wore these same words and did nothing — "you can't
+  # even open the subcategories" (boss via Max, 2026-09-21).
+  test "under a sort the words are still a button that opens the row", %{
     conn: conn,
-    catalogue: catalogue
+    catalogue: catalogue,
+    parent: parent
   } do
     {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}")
     html = render_click(view, "sort_categories", %{"sort_by" => "name"})
 
-    flat =
-      html
-      |> LazyHTML.from_fragment()
-      |> LazyHTML.query("table")
-      |> Enum.find(&(LazyHTML.to_html(&1) =~ "catalogue-child-categories"))
-      |> LazyHTML.to_html()
+    button = toggle(html, parent.uuid)
+    assert LazyHTML.text(button) =~ "2 subcategories"
 
-    assert flat =~ "2 subcategories"
-    refute flat =~ "hero-rectangle-stack"
+    opened =
+      view
+      |> element(~s(#category-tree-row-#{parent.uuid} button[phx-click="toggle_category_expand"]))
+      |> render_click()
+
+    assert tree_html(opened) =~ "Oak doors"
   end
 
   test "the Subcategories column is no longer on by default — the button carries the count" do

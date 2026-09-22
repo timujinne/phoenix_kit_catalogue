@@ -3576,3 +3576,90 @@ msgstr "Некоторые значения поставщиков некорр�
 
 msgid "That location no longer exists. Choose another."
 msgstr "Этого расположения больше нет. Выберите другое."
+
+msgid "A language turned off under Languages stops receiving sweep jobs whether or not it is ticked here."
+msgstr "Язык, отключённый в разделе «Языки», перестаёт получать задания фонового перевода, даже если он здесь отмечен."
+
+msgid "AI translation sweep"
+msgstr "Фоновый ИИ-перевод"
+
+msgid "Could not save that."
+msgstr "Не удалось сохранить."
+
+msgid "Enter a whole number above 0."
+msgstr "Введите целое число больше 0."
+
+msgid "Enter a whole number of minutes above 0."
+msgstr "Введите целое число минут больше 0."
+
+msgid "How the catalogue's admin lists behave."
+msgstr "Как ведут себя списки каталога в админке."
+
+msgid "Languages to translate into"
+msgstr "Языки для перевода"
+
+msgid "Lists"
+msgstr "Списки"
+
+msgid "Minutes between runs"
+msgstr "Минут между запусками"
+
+msgid "Most jobs per run"
+msgstr "Не больше заданий за запуск"
+
+msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
+msgstr "По умолчанию выключено. После включения расписание запускается сразу; каждый запуск ставит в очередь перевод всего, что ещё не переведено."
+
+msgid "Only the primary language is enabled, so there is nothing to sweep."
+msgstr "Включён только основной язык, поэтому переводить нечего."
+
+msgid "Right-click a row for its actions"
+msgstr "Действия по правому клику на строке"
+
+msgid "Right-clicking anywhere on a row opens the same menu its ⋮ button does, at the pointer. Turn this off to leave the browser's own menu — copy, open in a new tab, inspect — in place everywhere."
+msgstr "Правый клик в любом месте строки открывает у курсора то же меню, что и её кнопка ⋮. Выключите, чтобы везде оставить обычное меню браузера — копирование, открытие в новой вкладке, просмотр кода."
+
+msgid "Run the sweep automatically"
+msgstr "Запускать фоновый перевод автоматически"
+
+msgid "Saved."
+msgstr "Сохранено."
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Translates catalogue content in the background, on a timer."
+msgstr "Переводит содержимое каталога в фоне, по расписанию."
+
+msgid "See what is missing, or translate on demand."
+msgstr "Посмотреть, что не переведено, или перевести вручную."
+
+msgid "Turn the whole module on or off under Modules."
+msgstr "Модуль целиком включается и выключается в разделе «Модули»."
+
+msgid "Each list's sort is set from the list itself."
+msgstr "Сортировка каждого списка задаётся в самом списке."
+
+msgid "Enable more languages."
+msgstr "Включить другие языки."
+
+msgid "Rename folder"
+msgstr "Переименовать папку"
+
+msgid "Folder name"
+msgstr "Название папки"
+
+msgid "Edit category"
+msgstr "Редактировать категорию"
+
+msgid "Edit catalogue"
+msgstr "Редактировать каталог"
+
+msgid "Item form"
+msgstr "Форма позиции"
+
+msgid "Show the URL slug and SEO fields"
+msgstr "Показывать URL-слаг и SEO-поля"
+
+msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
+msgstr "Если выключено, они скрыты в форме позиции; то, что в них уже есть, сохраняется без изменений и вернётся, когда вы снова включите этот параметр."

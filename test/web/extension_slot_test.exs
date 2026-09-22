@@ -15,6 +15,7 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
   alias PhoenixKit.ModuleRegistry
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Test.FakeModule
+  alias PhoenixKitCatalogue.Web.Settings
 
   @base "/en/admin/catalogue"
 
@@ -54,6 +55,11 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
     test "the item form renders exactly as before the extension slot existed", %{conn: conn} do
       # Fresh, empty registry — no `catalogue_extensions/0` exporter.
       start_supervised!(PhoenixKit.ModuleRegistry)
+
+      # The fixture predates the Settings switch that hides the slug and SEO
+      # inputs; with it on, the form is still exactly that page. The hidden
+      # default is pinned in test/web/item_seo_fields_test.exs.
+      {:ok, _} = Settings.update_seo_fields_visible(true)
 
       catalogue = fixture_catalogue(%{name: "Snapshot Catalogue"})
 

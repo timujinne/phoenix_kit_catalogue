@@ -1,3 +1,38 @@
+## 0.44.0 - 2026-09-22
+
+Reviews: `dev_docs/pull_requests/2026/132-image-alt-text/` and
+`dev_docs/pull_requests/2026/133-tree-place-pickers/`.
+
+Built against `phoenix_kit` 2.37.1; the floor stays at 2.34.0.
+
+### Changed
+
+- **Every place is picked in a tree** (#133): folders › catalogues ›
+  categories, with search, instead of a flat or indented list. This covers
+  bulk moves of items and categories, the trash dialog's "move items to…",
+  the category form's parent and Move, the import's target catalogue and
+  category, the export's catalogues (a folder's box ticks everything in it),
+  and "Move to folder".
+- A new category can no longer be put under a trashed parent (#133).
+- Catalogue, category and item thumbnails, the Image column, the item
+  selector's tray, the attribute-set items list and archived attribute-value
+  chips now give their name as alt text (#132, closes #93).
+
+### Fixed
+
+- The New category form, opened from a link whose parent had since been
+  trashed, belonged to another catalogue or was not a UUID, did nothing on
+  Save. It now starts at the top level.
+- The New category form crashed when its catalogue was deleted forever
+  while it was open.
+- The move and trash trees offered a live category below a trashed one of
+  the category's own subtree, and the move then failed.
+- On Export, changing the destination or format right after ticking a
+  catalogue could undo the tick.
+- The item form's Location tree showed catalogue and category names in the
+  primary language rather than the page's.
+- The import's mapping step no longer runs a category query it never used.
+
 ## 0.43.0 - 2026-09-21
 
 Review: `dev_docs/pull_requests/2026/131-one-look-settings-tree-sorts/`.

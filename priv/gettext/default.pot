@@ -3656,3 +3656,30 @@ msgstr ""
 
 msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
 msgstr ""
+
+msgid "An existing category — pick it below"
+msgstr ""
+
+msgid "Destination:"
+msgstr ""
+
+msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
+msgstr ""
+
+msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
+msgstr ""
+
+msgid "Select all"
+msgstr ""
+
+msgid "Top level"
+msgstr ""
+
+msgid "top level"
+msgstr ""
+
+msgid "uncategorized"
+msgstr ""
+
+msgid "Pick the category to import into, or choose another option."
+msgstr ""

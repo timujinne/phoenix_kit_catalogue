@@ -320,5 +320,21 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
       html = render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
       assert html =~ "Close item"
     end
+
+    test "a row's thumbnail carries the item's name as alt text (#93)", %{conn: conn} do
+      {:ok, set} = Catalogue.create_attribute_set(%{name: "Popup alt"})
+
+      item = fixture_item(%{name: "Popup lamp"})
+
+      {:ok, _} =
+        Catalogue.update_item(item, %{data: %{"featured_image_uuid" => UUIDv7.generate()}})
+
+      {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
+
+      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      html = render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
+
+      assert html =~ ~s(alt="Popup lamp")
+    end
   end
 end

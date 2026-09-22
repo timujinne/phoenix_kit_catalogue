@@ -52,6 +52,7 @@ defmodule PhoenixKitCatalogue.Test.Router do
 
       # Import wizard (scoped to catalogue)
       live("/import", ImportLive, :index)
+      live("/export", ExportLive, :index)
 
       # Events / activity feed
       live("/events", EventsLive, :index)

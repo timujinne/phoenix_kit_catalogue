@@ -3663,3 +3663,30 @@ msgstr "Показывать URL-слаг и SEO-поля"
 
 msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
 msgstr "Если выключено, они скрыты в форме позиции; то, что в них уже есть, сохраняется без изменений и вернётся, когда вы снова включите этот параметр."
+
+msgid "An existing category — pick it below"
+msgstr "Существующая категория — выберите ниже"
+
+msgid "Destination:"
+msgstr "Куда:"
+
+msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
+msgstr "Выберите категорию, в которую вложить эту, или сам каталог — для его верхнего уровня. Переместить её можно и позже."
+
+msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
+msgstr "Выберите, куда её переместить: на верхний уровень каталога или внутрь категории. Подкатегории и позиции переместятся вместе с ней."
+
+msgid "Select all"
+msgstr "Выбрать все"
+
+msgid "Top level"
+msgstr "Верхний уровень"
+
+msgid "top level"
+msgstr "верхний уровень"
+
+msgid "uncategorized"
+msgstr "без категории"
+
+msgid "Pick the category to import into, or choose another option."
+msgstr "Выберите категорию для импорта или другой вариант."

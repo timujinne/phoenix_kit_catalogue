@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   import PhoenixKitWeb.Components.Core.Button, only: [button: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
-  import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
+  import PhoenixKitWeb.Components.Core.FormFieldLabel, only: [label: 1]
   import PhoenixKitCatalogue.Web.Components, only: [attachments_files_panel: 1]
 
   import PhoenixKitCatalogue.Web.Helpers,
@@ -42,6 +42,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   alias PhoenixKitCatalogue.Extensions
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Category
+  alias PhoenixKitCatalogue.Web.Components.PlacePicker
+  alias PhoenixKitCatalogue.Web.PlaceTree
 
   @translatable_fields ["name", "description", "seo_title", "seo_description"]
 
@@ -126,13 +128,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
 
   defp mount_category_form(socket, action, category, changeset, catalogue_uuid) do
     parent_catalogue = catalogue_uuid && Catalogue.get_catalogue(catalogue_uuid)
-
-    other_catalogues =
-      if action == :edit,
-        do: catalogue_move_options(parent_catalogue),
-        else: []
-
-    parent_options = parent_options_for(action, category, catalogue_uuid)
+    parent_tree = if action == :new, do: parent_tree(parent_catalogue, loc(socket)), else: []
 
     {:ok,
      socket
@@ -146,9 +142,10 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
        category: category,
        catalogue_uuid: catalogue_uuid,
        parent_catalogue_name: parent_catalogue && parent_catalogue.name,
-       other_catalogues: other_catalogues,
-       parent_options: parent_options,
-       parent_move_target: category && category.parent_uuid,
+       parent_tree: parent_tree,
+       parent_pick: offered_parent(parent_tree, parent_place(category.parent_uuid), action),
+       move_tree:
+         if(action == :edit, do: move_tree(category, parent_catalogue, loc(socket)), else: []),
        move_target: nil
      )
      |> assign(current_tab: :details, extensions: Extensions.sections(:category))
@@ -160,10 +157,6 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
      |> assign_ai_translation("catalogue_category", if(action == :edit, do: category, else: nil))}
   end
 
-  # Tree-flattened options for the parent picker. Root entry first,
-  # then each category prefixed with indentation that matches its
-  # depth. For edit mode, the category's own subtree is excluded so
-  # the user can't pick itself or one of its descendants.
   defp safe_return_to(rt) when is_binary(rt) do
     if Routes.local_path?(rt), do: rt
   end
@@ -226,53 +219,76 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   defp move_error_message(_reason),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Failed to move category.")
 
-  # Every other live catalogue of this one's kind, as a `<select>` group:
-  # its top level, then its categories (a category can land under one).
-  # Values say what they are — `"catalogue:<uuid>"` / `"category:<uuid>"`.
-  defp catalogue_move_options(nil), do: []
+  # Where a new category goes: under the catalogue's own row (its top
+  # level) or under one of its categories — a tree, never a flat list.
+  # A catalogue deleted forever while the form is open has no tree.
+  defp parent_tree(nil, _locale), do: []
 
-  defp catalogue_move_options(%{uuid: own_uuid, kind: kind}) do
-    categories = Enum.group_by(Catalogue.list_all_categories(), & &1.catalogue_uuid)
+  defp parent_tree(catalogue, locale),
+    do:
+      PlaceTree.categories(catalogue,
+        root: Gettext.gettext(PhoenixKitCatalogue.Gettext, "top level"),
+        locale: locale
+      )
 
-    [kind: kind]
-    |> Catalogue.list_catalogues()
-    |> Enum.reject(&(&1.uuid == own_uuid))
-    |> Enum.map(fn catalogue ->
-      top =
-        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{catalogue} — top level",
-           catalogue: catalogue.name
-         ), "catalogue:" <> catalogue.uuid}
+  defp parent_place(uuid) when is_binary(uuid) and uuid != "", do: "category:" <> uuid
+  defp parent_place(_uuid), do: PlaceTree.root_id()
 
-      under =
-        for cat <- Map.get(categories, catalogue.uuid, []),
-            do: {cat.name, "category:" <> cat.uuid}
+  # A parent the tree does not offer — `?parent_uuid=` naming a category
+  # trashed since the link was rendered, one of another catalogue, or not
+  # a UUID at all — falls back to the top level. Kept, the picker would
+  # show nothing picked while its hidden input still posted the uuid, and
+  # Save would fail on a field the form renders no error for.
+  defp offered_parent(tree, pick, :new),
+    do: if(PlaceTree.find(tree, pick), do: pick, else: PlaceTree.root_id())
 
-      {catalogue.name, [top | under]}
-    end)
+  defp offered_parent(_tree, pick, _action), do: pick
+
+  # Where this category can move: any live catalogue of its kind, at its
+  # top level or under a category — never into its own subtree.
+  defp move_tree(%Category{uuid: uuid}, %{kind: kind}, locale) do
+    kind
+    |> PlaceTree.places(
+      catalogue_hint: Gettext.gettext(PhoenixKitCatalogue.Gettext, "top level"),
+      locale: locale
+    )
+    # The database subtree, not the tree's: a live category under a
+    # trashed one of this subtree shows at the top level.
+    |> PlaceTree.prune(Enum.map(Catalogue.category_subtree_uuids([uuid]), &("category:" <> &1)))
   end
 
-  defp move_option_values(options) do
-    Enum.flat_map(options, fn {_group, entries} -> Enum.map(entries, &elem(&1, 1)) end)
+  defp move_tree(_category, _catalogue, _locale), do: []
+
+  defp loc(socket), do: socket.assigns[:current_locale]
+
+  # A pick the rebuilt tree no longer offers (its category was trashed or
+  # moved away meanwhile) is dropped, not kept on a row nobody can see.
+  defp refresh_trees(%{assigns: %{action: :new}} = socket) do
+    catalogue = Catalogue.get_catalogue(socket.assigns.catalogue_uuid)
+    tree = parent_tree(catalogue, loc(socket))
+
+    assign(socket,
+      parent_tree: tree,
+      parent_pick: offered_parent(tree, socket.assigns.parent_pick, :new)
+    )
   end
 
-  defp parent_options_for(:new, _category, catalogue_uuid) do
-    Catalogue.list_category_tree(catalogue_uuid)
-    |> format_parent_options()
+  defp refresh_trees(%{assigns: %{action: :edit, category: category}} = socket) do
+    catalogue = Catalogue.get_catalogue(category.catalogue_uuid)
+    tree = move_tree(category, catalogue, loc(socket))
+    target = socket.assigns.move_target
+
+    assign(socket,
+      move_tree: tree,
+      move_target: if(target && PlaceTree.find(tree, target), do: target)
+    )
   end
 
-  defp parent_options_for(:edit, %Category{uuid: uuid}, catalogue_uuid) do
-    catalogue_uuid
-    |> Catalogue.list_category_tree(exclude_subtree_of: uuid)
-    |> format_parent_options()
-  end
+  # Where the category is now, as the move tree names it.
+  defp current_place(%Category{parent_uuid: nil, catalogue_uuid: catalogue_uuid}),
+    do: "catalogue:" <> catalogue_uuid
 
-  defp parent_options_for(_, _, _), do: []
-
-  defp format_parent_options(entries) do
-    Enum.map(entries, fn {category, depth} ->
-      {String.duplicate("— ", depth) <> category.name, category.uuid}
-    end)
-  end
+  defp current_place(%Category{parent_uuid: parent_uuid}), do: "category:" <> parent_uuid
 
   defp assign_changeset(socket, changeset) do
     socket
@@ -471,43 +487,57 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   def handle_event("clear_featured_image", _params, socket),
     do: Attachments.clear_featured_image(socket)
 
-  # Only a value the select offered is kept (see catalogue_move_options/1).
-  def handle_event("select_move_target", params, socket) do
-    value = params["move_target"]
-
-    target =
-      if is_binary(value) and value in move_option_values(socket.assigns.other_catalogues),
-        do: value
-
-    {:noreply, assign(socket, :move_target, target)}
-  end
-
+  # One Move for both kinds of move (boss via Max, 2026-09-21: proper
+  # pickers, no flat lists): a place in this catalogue reparents, a place
+  # in another catalogue moves the category there. Applied at once — a
+  # subtree move is its own action, not part of the form's Save.
   def handle_event("move_category", _params, socket) do
     case socket.assigns.move_target do
       nil -> {:noreply, socket}
-      target -> move_to_other_catalogue(socket, target)
+      target -> move_to(socket, target)
     end
   end
 
-  def handle_event("select_parent_move_target", %{"parent_uuid" => uuid}, socket)
-      when is_binary(uuid) do
-    target = Values.blank_to_nil(uuid)
-    {:noreply, assign(socket, :parent_move_target, target)}
+  # Which branch is read from the category as it is NOW: someone may have
+  # moved it to another catalogue since the page loaded.
+  defp move_to(socket, target) do
+    case Catalogue.get_category(socket.assigns.category.uuid) do
+      %Category{} = category -> move_to(assign(socket, :category, category), target, category)
+      nil -> {:noreply, move_failed(socket, "move_category", :not_found)}
+    end
   end
 
-  # A forged non-string value would reach `move_category_under/3`, which
-  # has no clause for it.
-  def handle_event("select_parent_move_target", _params, socket), do: {:noreply, socket}
+  defp move_to(socket, target, %Category{catalogue_uuid: own}) do
+    case target do
+      "catalogue:" <> ^own ->
+        reparent(socket, nil)
 
-  def handle_event("move_under_parent", _params, socket) do
-    target = socket.assigns.parent_move_target
+      "category:" <> uuid ->
+        case Catalogue.get_category(uuid) do
+          %{catalogue_uuid: ^own} -> reparent(socket, uuid)
+          _ -> move_to_other_catalogue(socket, target)
+        end
 
+      "catalogue:" <> _ ->
+        move_to_other_catalogue(socket, target)
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  defp reparent(socket, target) do
     case Catalogue.move_category_under(socket.assigns.category, target, actor_opts(socket)) do
       {:ok, updated} ->
+        catalogue = Catalogue.get_catalogue(updated.catalogue_uuid)
+
         {:noreply,
          socket
-         |> assign(:category, updated)
-         |> assign(:parent_options, parent_options_for(:edit, updated, updated.catalogue_uuid))
+         |> assign(
+           category: updated,
+           move_target: nil,
+           move_tree: move_tree(updated, catalogue, loc(socket))
+         )
          |> put_flash(:info, moved_flash(socket, target))}
 
       {:error, :would_create_cycle} ->
@@ -545,15 +575,34 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
   def handle_info({:media_selector_closed}, socket),
     do: {:noreply, Attachments.close_media_selector(socket)}
 
+  # The New form's parent: shown by the picker, posted by its hidden input.
+  def handle_info({PlacePicker, "category-parent-picker", id}, socket),
+    do: {:noreply, assign(socket, :parent_pick, id)}
+
+  # Picking where the category already is takes a staged move back.
+  def handle_info({PlacePicker, "category-move-picker", id}, socket) do
+    target = if id == current_place(socket.assigns.category), do: nil, else: id
+    {:noreply, assign(socket, :move_target, target)}
+  end
+
   # This category changed elsewhere (an upload, a removal, a photo
-  # reorder in another tab): re-read the files grid, which is the one
-  # thing this form shows from the DB; typed fields stay as they are.
-  def handle_info(
-        {:catalogue_data_changed, :category, uuid, _parent},
-        %{assigns: %{category: %{uuid: category_uuid}}} = socket
-      )
-      when is_binary(uuid) and uuid == category_uuid do
-    {:noreply, Attachments.refresh_files(socket)}
+  # reorder in another tab): re-read the files grid; typed fields stay as
+  # they are. Any category, catalogue or folder change also re-reads the
+  # place trees, so a place created or removed meanwhile shows as it is.
+  def handle_info({:catalogue_data_changed, kind, uuid, _parent}, socket)
+      when kind in [:category, :catalogue, :folder] do
+    socket = refresh_trees(socket)
+
+    socket =
+      case socket.assigns.category do
+        %{uuid: ^uuid} when kind == :category and is_binary(uuid) ->
+          Attachments.refresh_files(socket)
+
+        _ ->
+          socket
+      end
+
+    {:noreply, socket}
   end
 
   # Catch-all so stray monitor signals or unrelated PubSub traffic
@@ -670,8 +719,8 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
 
   # In-place refresh after a stay-save: no remount, so the current
   # language tab and scroll position survive. Only category-derived
-  # assigns need re-deriving; parent_options is rebuilt in case the
-  # save renamed categories shown in the Move panel's picker.
+  # assigns need re-deriving; the Move tree is rebuilt in case the save
+  # renamed the category shown in it.
   defp refresh_after_edit(socket, category) do
     socket
     |> assign(:category, category)
@@ -679,7 +728,10 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
       :page_title,
       Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: category.name)
     )
-    |> assign(:parent_options, parent_options_for(:edit, category, category.catalogue_uuid))
+    |> assign(
+      :move_tree,
+      move_tree(category, Catalogue.get_catalogue(category.catalogue_uuid), loc(socket))
+    )
     |> assign_changeset(Catalogue.change_category(category))
   end
 
@@ -833,15 +885,19 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <div class="card-body flex flex-col gap-5 pt-0">
             <div class="divider my-0"></div>
 
-            <div :if={@action == :new}>
-              <.select
-                field={@form[:parent_uuid]}
-                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Parent category")}
-                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Top level (no parent) —")}
-                options={@parent_options}
-                class="transition-colors focus-within:select-primary"
+            <div :if={@action == :new} class="flex flex-col gap-2">
+              <.label>{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Parent category")}</.label>
+              <.live_component
+                module={PlacePicker}
+                id="category-parent-picker"
+                tree={@parent_tree}
+                value={@parent_pick}
+                pickable={[:root, :category]}
+                path_skip={[]}
+                field
+                name="category[parent_uuid]"
               />
-              <span class="block text-xs text-base-content/50 mt-1">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick a parent to nest this category inside, or leave blank to keep it at the top level. You can move it later.")}</span>
+              <span class="block text-xs text-base-content/50">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later.")}</span>
             </div>
 
             <%!-- No manual Position field: a new category appends to its
@@ -952,69 +1008,28 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormLive do
           <.icon name="hero-chevron-down" class="w-4 h-4 ml-auto text-base-content/40" />
         </summary>
 
-        <div class="card-body pt-0 space-y-6">
-          <%!-- Move to a different parent — within the same catalogue --%>
-          <div class="flex flex-col gap-3">
-            <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to another parent")}</p>
-              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Reparent this category within its catalogue. Its subtree comes along.")}</p>
-            </div>
-            <div class="flex items-end gap-3">
-              <form
-                id="category-parent-move-form"
-                phx-change="select_parent_move_target"
-                class="flex-1"
-              >
-                <.select
-                  name="parent_uuid"
-                  id="category-parent-move-target"
-                  value={@parent_move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Top level (no parent) —")}
-                  options={@parent_options}
-                  class="select-sm transition-colors focus-within:select-primary"
-                />
-              </form>
-              <.button
-                type="button"
-                phx-click="move_under_parent"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")}
-                disabled={@parent_move_target == @category.parent_uuid}
-                variant="outline"
-                size="sm"
-              >
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
-              </.button>
-            </div>
-          </div>
-
-          <%!-- Move to another catalogue — only when other catalogues exist --%>
-          <div :if={@other_catalogues != []} class="flex flex-col gap-3">
-            <div>
-              <p class="font-medium text-sm">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move to another catalogue")}</p>
-              <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move this category and all its items to a different catalogue — at its top level or under one of its categories.")}</p>
-            </div>
-            <div class="flex items-end gap-3">
-              <form id="category-move-form" phx-change="select_move_target" class="flex-1">
-                <.select
-                  name="move_target"
-                  id="category-move-target"
-                  value={@move_target}
-                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select destination —")}
-                  options={@other_catalogues}
-                  class="select-sm transition-colors focus-within:select-primary"
-                />
-              </form>
-              <.button
-                type="button"
-                phx-click="move_category"
-                phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")}
-                disabled={is_nil(@move_target)}
-                variant="outline"
-                size="sm"
-              >
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
-              </.button>
-            </div>
+        <div class="card-body pt-0 flex flex-col gap-3">
+          <p class="text-xs text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along.")}</p>
+          <.live_component
+            module={PlacePicker}
+            id="category-move-picker"
+            tree={@move_tree}
+            value={@move_target || current_place(@category)}
+            current={current_place(@category)}
+            field
+          />
+          <div class="flex justify-end">
+            <.button
+              type="button"
+              id="category-move-button"
+              phx-click="move_category"
+              phx-disable-with={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moving…")}
+              disabled={is_nil(@move_target)}
+              variant="outline"
+              size="sm"
+            >
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move")}
+            </.button>
           </div>
         </div>
       </details>

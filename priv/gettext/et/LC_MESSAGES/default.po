@@ -3650,3 +3650,30 @@ msgstr "Näita URL-slugi ja SEO välju"
 
 msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
 msgstr "Välja lülitatuna on need toote vormist peidetud; nende senine sisu säilib, salvestatakse muutmata ja tuleb tagasi, kui selle sisse lülitate."
+
+msgid "An existing category — pick it below"
+msgstr "Olemasolev kategooria — vali allpool"
+
+msgid "Destination:"
+msgstr "Sihtkoht:"
+
+msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
+msgstr "Vali kategooria, mille alla see paigutada, või kataloog ise selle ülemise taseme jaoks. Saad seda hiljem teisaldada."
+
+msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
+msgstr "Vali, kuhu see läheb: kataloogi ülemine tase või mõne kategooria alla. Alamkategooriad ja tooted tulevad kaasa."
+
+msgid "Select all"
+msgstr "Vali kõik"
+
+msgid "Top level"
+msgstr "Ülemine tase"
+
+msgid "top level"
+msgstr "ülemine tase"
+
+msgid "uncategorized"
+msgstr "kategoriseerimata"
+
+msgid "Pick the category to import into, or choose another option."
+msgstr "Vali kategooria, kuhu importida, või mõni muu valik."

@@ -77,15 +77,16 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   import PhoenixKitCatalogue.Web.Helpers,
     only: [trim_param: 1, actor_opts: 1, actor_uuid: 1, log_operation_error: 3]
 
-  alias PhoenixKit.Utils.Values
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Errors
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Category
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Web.Components.PlacePicker
   alias PhoenixKitCatalogue.Web.Components.ProductCard
   alias PhoenixKitCatalogue.Web.LevelSwitchers
+  alias PhoenixKitCatalogue.Web.PlaceTree
   alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.TableConfig
   alias PhoenixKitCatalogue.Web.ViewConfig
@@ -660,6 +661,32 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     Ecto.NoResultsError -> {:noreply, catalogue_gone(socket)}
   end
 
+  # Picks from the move dialogs' trees; a pick after its dialog closed
+  # falls through to the catch-all.
+  def handle_info(
+        {PlacePicker, "trash-target-picker", id},
+        %{assigns: %{trash_modal: %{} = modal}} = socket
+      ) do
+    target = modal |> picked_in(id, [:category]) |> PlaceTree.uuid()
+    {:noreply, assign(socket, :trash_modal, %{modal | target_uuid: target})}
+  end
+
+  def handle_info(
+        {PlacePicker, "bulk-move-items-picker", id},
+        %{assigns: %{bulk_move_modal: %{} = modal}} = socket
+      ) do
+    target = picked_in(modal, id, [:catalogue, :category])
+    {:noreply, assign(socket, :bulk_move_modal, %{modal | target: target})}
+  end
+
+  def handle_info(
+        {PlacePicker, "bulk-move-categories-picker", id},
+        %{assigns: %{bulk_move_categories_modal: %{} = modal}} = socket
+      ) do
+    target = picked_in(modal, id, [:catalogue, :category])
+    {:noreply, assign(socket, :bulk_move_categories_modal, %{modal | target: target})}
+  end
+
   def handle_info(msg, socket) do
     Logger.debug("CatalogueDetailLive ignored unhandled message: #{inspect(msg)}")
     {:noreply, socket}
@@ -1010,7 +1037,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            assign(
              socket,
              :trash_modal,
-             build_trash_modal_state(category, item_count, loc(socket))
+             build_trash_modal_state(socket, category, item_count)
            )}
         end
 
@@ -1043,17 +1070,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     {:noreply, assign(socket, :trash_modal, new_modal)}
   end
 
-  # A modal event after the modal closed (double click, second tab,
-  # stale client) is a no-op, not a KeyError on `%{}`.
-  def handle_event("select_trash_target", _params, %{assigns: %{trash_modal: nil}} = socket),
-    do: {:noreply, socket}
-
-  def handle_event("select_trash_target", %{"category_uuid" => uuid}, socket) do
-    modal = socket.assigns.trash_modal
-    target = accepted_picker_target(modal.targets, uuid)
-    {:noreply, assign(socket, :trash_modal, %{modal | target_uuid: target})}
-  end
-
   def handle_event("confirm_trash_category", _params, socket) do
     case socket.assigns.trash_modal do
       %{bulk: true} = modal ->
@@ -1064,9 +1080,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         |> assign(:trash_modal, nil)
         |> do_trash_category(category, items: :uncategorize)
 
-      %{category: category, disposition: :move_to, target_uuid: target, targets: targets}
+      %{category: category, disposition: :move_to, target_uuid: target, tree: tree}
       when not is_nil(target) ->
-        confirm_trash_move_to(socket, category, target, targets)
+        confirm_trash_move_to(socket, category, target, tree)
 
       %{category: category, disposition: :cascade} ->
         socket
@@ -1114,6 +1130,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     if uuids == [], do: {:noreply, socket}, else: do_bulk_restore_items(socket, uuids)
   end
 
+  # Bulk move: one tree of every live catalogue of this one's kind
+  # (boss via Max, 2026-09-21: proper pickers, no flat lists) — a
+  # catalogue's own row means uncategorized there, a category row into it.
   def handle_event("request_bulk_move_items", params, socket) do
     uuids = sanitize_uuids(params)
 
@@ -1124,92 +1143,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
        assign(socket, :bulk_move_modal, %{
          count: length(uuids),
          uuids: uuids,
-         catalogues: move_catalogue_choices(socket),
-         target_catalogue_uuid: socket.assigns.catalogue_uuid,
-         targets: item_move_targets(socket, socket.assigns.catalogue_uuid),
-         disposition: :uncategorize,
-         target_uuid: nil
+         tree: item_move_tree(socket),
+         target: nil
        })}
     end
   end
 
-  # A modal event after the modal closed (double click, second tab,
-  # stale client) is a no-op, not a KeyError on `%{}`.
-  def handle_event(
-        "set_bulk_move_disposition",
-        _params,
-        %{assigns: %{bulk_move_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_event("set_bulk_move_disposition", %{"disposition" => disp}, socket) do
-    modal = socket.assigns.bulk_move_modal || %{}
-
-    new_modal =
-      case disp do
-        "uncategorize" -> %{modal | disposition: :uncategorize, target_uuid: nil}
-        "move_to" -> %{modal | disposition: :move_to}
-        _ -> modal
-      end
-
-    {:noreply, assign(socket, :bulk_move_modal, new_modal)}
-  end
-
-  # A modal event after the modal closed (double click, second tab,
-  # stale client) is a no-op, not a KeyError on `%{}`.
-  def handle_event(
-        "select_bulk_move_target",
-        _params,
-        %{assigns: %{bulk_move_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_event("select_bulk_move_target", %{"category_uuid" => uuid}, socket) do
-    modal = socket.assigns.bulk_move_modal
-    target = accepted_picker_target(modal.targets, uuid)
-    {:noreply, assign(socket, :bulk_move_modal, %{modal | target_uuid: target})}
-  end
-
-  def handle_event(
-        "select_bulk_move_catalogue",
-        _params,
-        %{assigns: %{bulk_move_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  # Another catalogue re-lists its categories and forgets the category
-  # picked in the previous one; only a catalogue the modal offered counts.
-  def handle_event("select_bulk_move_catalogue", %{"catalogue_uuid" => uuid}, socket)
-      when is_binary(uuid) do
-    modal = socket.assigns.bulk_move_modal
-
-    if offered_catalogue?(modal.catalogues, uuid) do
-      {:noreply,
-       assign(socket, :bulk_move_modal, %{
-         modal
-         | target_catalogue_uuid: uuid,
-           targets: item_move_targets(socket, uuid),
-           target_uuid: nil
-       })}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  # A picker event without a catalogue (a stale or forged client) changes
-  # nothing.
-  def handle_event("select_bulk_move_catalogue", _params, socket), do: {:noreply, socket}
-
+  # The target is re-checked against the dialog's tree: only a row it
+  # offered is acted on, whatever put it there.
   def handle_event("confirm_bulk_move_items", _params, socket) do
-    case socket.assigns.bulk_move_modal do
-      %{disposition: :uncategorize, uuids: uuids, target_catalogue_uuid: catalogue_uuid} ->
+    case confirmed_move(socket.assigns.bulk_move_modal) do
+      %{uuids: uuids, target: "catalogue:" <> catalogue_uuid} ->
         do_bulk_move_items(socket, uuids, {:catalogue, catalogue_uuid})
 
-      %{disposition: :move_to, target_uuid: target_uuid, uuids: uuids, targets: targets}
-      when not is_nil(target_uuid) ->
-        if picker_has_target?(targets, target_uuid),
-          do: do_bulk_move_items(socket, uuids, {:category, target_uuid}),
-          else: {:noreply, socket}
+      %{uuids: uuids, target: "category:" <> category_uuid} ->
+        do_bulk_move_items(socket, uuids, {:category, category_uuid})
 
       _ ->
         {:noreply, socket}
@@ -1221,10 +1169,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   end
 
   # ── Bulk move categories (re-parent / promote to top level) ──────
-  # The selection arrives with the action (core BulkSelectScope). Targets
-  # are the catalogue's active categories minus every selected category's
-  # own subtree — a category cannot go under itself or a descendant — so
-  # the picker never offers a cycle; the context re-checks under a lock.
+  # The selection arrives with the action (core BulkSelectScope). The tree
+  # leaves out every selected category's own subtree — a category cannot
+  # go under itself or a descendant; the context re-checks under a lock.
+  # A catalogue's own row is its top level.
   def handle_event("request_bulk_move_categories", params, socket) do
     uuids = sanitize_uuids(params)
 
@@ -1235,94 +1183,30 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
        assign(socket, :bulk_move_categories_modal, %{
          count: length(uuids),
          uuids: uuids,
-         catalogues: move_catalogue_choices(socket),
-         target_catalogue_uuid: socket.assigns.catalogue_uuid,
-         targets: category_targets_in(socket, uuids, socket.assigns.catalogue_uuid),
-         disposition: :top_level,
-         target_uuid: nil
+         tree: category_move_tree(socket, uuids),
+         target: nil
        })}
     end
   end
-
-  # A modal event after the modal closed (double click, second tab,
-  # stale client) is a no-op, not a KeyError on `%{}`.
-  def handle_event(
-        "set_bulk_move_categories_disposition",
-        _params,
-        %{assigns: %{bulk_move_categories_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_event("set_bulk_move_categories_disposition", %{"disposition" => disp}, socket) do
-    modal = socket.assigns.bulk_move_categories_modal || %{}
-
-    new_modal =
-      case disp do
-        "top_level" -> %{modal | disposition: :top_level, target_uuid: nil}
-        "move_under" -> %{modal | disposition: :move_under}
-        _ -> modal
-      end
-
-    {:noreply, assign(socket, :bulk_move_categories_modal, new_modal)}
-  end
-
-  # A modal event after the modal closed (double click, second tab,
-  # stale client) is a no-op, not a KeyError on `%{}`.
-  def handle_event(
-        "select_bulk_move_categories_target",
-        _params,
-        %{assigns: %{bulk_move_categories_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_event("select_bulk_move_categories_target", %{"category_uuid" => uuid}, socket) do
-    modal = socket.assigns.bulk_move_categories_modal
-    target = accepted_picker_target(modal.targets, uuid)
-
-    {:noreply, assign(socket, :bulk_move_categories_modal, %{modal | target_uuid: target})}
-  end
-
-  def handle_event(
-        "select_bulk_move_categories_catalogue",
-        _params,
-        %{assigns: %{bulk_move_categories_modal: nil}} = socket
-      ),
-      do: {:noreply, socket}
-
-  def handle_event("select_bulk_move_categories_catalogue", %{"catalogue_uuid" => uuid}, socket)
-      when is_binary(uuid) do
-    modal = socket.assigns.bulk_move_categories_modal
-
-    if offered_catalogue?(modal.catalogues, uuid) do
-      {:noreply,
-       assign(socket, :bulk_move_categories_modal, %{
-         modal
-         | target_catalogue_uuid: uuid,
-           targets: category_targets_in(socket, modal.uuids, uuid),
-           target_uuid: nil
-       })}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("select_bulk_move_categories_catalogue", _params, socket),
-    do: {:noreply, socket}
 
   def handle_event("confirm_bulk_move_categories", _params, socket) do
-    case socket.assigns.bulk_move_categories_modal do
-      %{disposition: :top_level, uuids: uuids, target_catalogue_uuid: catalogue_uuid} ->
+    case confirmed_move(socket.assigns.bulk_move_categories_modal) do
+      %{uuids: uuids, target: "catalogue:" <> catalogue_uuid} ->
         do_bulk_move_categories(socket, uuids, catalogue_uuid, nil)
 
-      %{
-        disposition: :move_under,
-        target_uuid: target,
-        uuids: uuids,
-        targets: targets,
-        target_catalogue_uuid: catalogue_uuid
-      }
-      when is_binary(target) ->
-        confirm_bulk_move_categories_under(socket, uuids, catalogue_uuid, target, targets)
+      %{uuids: uuids, target: "category:" <> category_uuid} ->
+        case Catalogue.get_category(category_uuid) do
+          %{catalogue_uuid: catalogue_uuid} ->
+            do_bulk_move_categories(socket, uuids, catalogue_uuid, category_uuid)
+
+          nil ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Target category not found.")
+             )}
+        end
 
       _ ->
         {:noreply, socket}
@@ -1400,8 +1284,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            assign(socket, :trash_modal, %{
              category: category,
              item_count: bulk_subtree_item_count(uuids),
-             targets:
-               localize_targets(Catalogue.list_move_target_categories(category), loc(socket)),
+             tree: trash_tree(socket, uuids),
              disposition: :cascade,
              target_uuid: nil,
              bulk: true,
@@ -2175,7 +2058,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         broadcast_item_batch(socket)
 
         # Pages open on the destination catalogue gained the items.
-        other = get_in(socket.assigns, [:bulk_move_modal, :target_catalogue_uuid])
+        other = destination_catalogue(destination)
 
         if other && other != socket.assigns.catalogue_uuid,
           do: PubSub.broadcast(:item, nil, other)
@@ -2223,68 +2106,74 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  # The target must be one the picker offered: a forged uuid from inside
-  # the selection would be a cycle, from elsewhere a scope leak.
-  defp confirm_bulk_move_categories_under(socket, uuids, catalogue_uuid, target, targets) do
-    if picker_has_target?(targets, target),
-      do: do_bulk_move_categories(socket, uuids, catalogue_uuid, target),
-      else: {:noreply, socket}
+  # Every live catalogue of this one's kind (items and categories never
+  # cross kinds), in its folders, with its categories.
+  defp item_move_tree(socket) do
+    PlaceTree.places(socket.assigns.catalogue.kind,
+      catalogue_hint: Gettext.gettext(PhoenixKitCatalogue.Gettext, "uncategorized"),
+      locale: loc(socket)
+    )
   end
 
-  # Catalogues a move may land in: every live one of this catalogue's
-  # kind (items and categories never cross kinds), this one first.
-  defp move_catalogue_choices(socket) do
-    current = socket.assigns.catalogue_uuid
-
-    [kind: socket.assigns.catalogue.kind]
-    |> Catalogue.list_catalogues()
-    |> Catalogue.localize(loc(socket))
-    |> Enum.sort_by(&(&1.uuid != current))
+  defp category_move_tree(socket, uuids) do
+    socket.assigns.catalogue.kind
+    |> PlaceTree.places(
+      catalogue_hint: Gettext.gettext(PhoenixKitCatalogue.Gettext, "top level"),
+      locale: loc(socket)
+    )
+    |> PlaceTree.prune(subtree_places(uuids))
   end
 
-  defp offered_catalogue?(catalogues, uuid),
-    do: Enum.any?(catalogues, &(&1.uuid == uuid))
-
-  defp item_move_targets(socket, catalogue_uuid) do
-    catalogue_uuid
-    |> Catalogue.list_category_tree(mode: :active)
-    |> localize_targets(loc(socket))
+  # Where a category's items can go when it is trashed: this catalogue's
+  # other categories — every category being trashed, and all below it,
+  # left out.
+  defp trash_tree(socket, uuids) do
+    socket.assigns.catalogue
+    |> PlaceTree.categories(locale: loc(socket))
+    |> PlaceTree.prune(subtree_places(uuids))
   end
 
-  # In this catalogue a selected category cannot go under its own
-  # subtree; in another catalogue every live category can take them.
-  defp category_targets_in(socket, uuids, catalogue_uuid) do
-    if catalogue_uuid == socket.assigns.catalogue_uuid,
-      do: localize_targets(category_move_targets(uuids, catalogue_uuid), loc(socket)),
-      else: item_move_targets(socket, catalogue_uuid)
+  # The picked categories and everything below them in the database —
+  # including a live category under a trashed one, which the live tree
+  # shows at the top level rather than under the category being moved.
+  defp subtree_places(uuids),
+    do: uuids |> Catalogue.category_subtree_uuids() |> Enum.map(&("category:" <> &1))
+
+  defp tree_category?(tree, uuid) when is_binary(uuid),
+    do: PlaceTree.member?(tree, "category:" <> uuid, [:category])
+
+  defp tree_category?(_tree, _uuid), do: false
+
+  defp confirmed_move(%{target: target} = modal) when is_binary(target) do
+    if picked_in(modal, target, [:catalogue, :category]), do: modal
   end
 
-  # The three modal pickers store `{category, depth}` pairs. Empty string
-  # (the "-- Select --" option) and a uuid the picker did not offer both
-  # become nil, so confirm never acts on a forged target.
-  defp accepted_picker_target(targets, uuid) do
-    uuid = Values.blank_to_nil(uuid)
-    if picker_has_target?(targets, uuid), do: uuid, else: nil
+  defp confirmed_move(_modal), do: nil
+
+  # A pick from a modal's tree: only a row that tree offers.
+  defp picked_in(modal, id, types) do
+    if PlaceTree.member?(modal.tree, id, types), do: id, else: nil
   end
 
-  defp picker_has_target?(targets, uuid) when is_list(targets) and is_binary(uuid) do
-    Enum.any?(targets, fn
-      {%{uuid: ^uuid}, _depth} -> true
-      _ -> false
-    end)
-  end
+  # The catalogue a bulk move lands in, for the pages open on it.
+  defp destination_catalogue({:catalogue, uuid}), do: uuid
 
-  defp picker_has_target?(_, _), do: false
+  defp destination_catalogue({:category, uuid}) do
+    case Catalogue.get_category(uuid) do
+      %{catalogue_uuid: catalogue_uuid} -> catalogue_uuid
+      nil -> nil
+    end
+  end
 
   defp confirm_bulk_trash(socket, %{
          bulk_uuids: uuids,
          disposition: disp,
          target_uuid: target,
-         targets: targets
+         tree: tree
        }) do
     items_opt = disposition_to_items_opt(disp, target)
 
-    if trash_disposition_allowed?(items_opt, targets, target) do
+    if trash_disposition_allowed?(items_opt, tree, target) do
       socket
       |> assign(:trash_modal, nil)
       |> do_bulk_trash_categories_with(uuids, items_opt)
@@ -2293,15 +2182,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  defp trash_disposition_allowed?(nil, _targets, _target), do: false
+  defp trash_disposition_allowed?(nil, _tree, _target), do: false
 
-  defp trash_disposition_allowed?({:move_to, _}, targets, target),
-    do: picker_has_target?(targets, target)
+  defp trash_disposition_allowed?({:move_to, _}, tree, target),
+    do: tree_category?(tree, target)
 
-  defp trash_disposition_allowed?(_items_opt, _targets, _target), do: true
+  defp trash_disposition_allowed?(_items_opt, _tree, _target), do: true
 
-  defp confirm_trash_move_to(socket, category, target, targets) do
-    if picker_has_target?(targets, target) do
+  defp confirm_trash_move_to(socket, category, target, tree) do
+    if tree_category?(tree, target) do
       socket
       |> assign(:trash_modal, nil)
       |> do_trash_category(category, items: {:move_to, target})
@@ -2310,70 +2199,27 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  # The category picker the three modals share (trash → move items to…,
-  # move items, move categories). A form around the select is what makes
-  # `phx-change` reach the server (LiveView refuses bare inputs).
-  attr(:event, :string, required: true)
+  # Where a bulk move lands, spelled out under the tree: the row a
+  # catalogue stands for (uncategorized, its top level) is easy to misread.
+  attr(:id, :string, required: true)
+  attr(:tree, :list, required: true)
+  attr(:target, :string, default: nil)
 
-  attr(:id, :string,
-    default: nil,
-    doc: "form id — changes with the listed catalogue so the select re-renders fresh"
-  )
+  defp move_destination(assigns) do
+    node = PlaceTree.find(assigns.tree, assigns.target)
 
-  attr(:targets, :list, required: true, doc: "`{category, depth}` pairs")
-  attr(:target_uuid, :string, default: nil)
-  attr(:disabled, :boolean, default: false)
-  attr(:class, :string, default: "")
+    assigns =
+      assign(assigns,
+        path: PlaceTree.path_in(assigns.tree, assigns.target, [:folder]),
+        hint: node && node[:hint]
+      )
 
-  defp move_target_picker(assigns) do
     ~H"""
-    <form id={@id || "move-target-#{@event}"} phx-change={@event}>
-      <select
-        name="category_uuid"
-        disabled={@disabled}
-        class={["select select-sm w-full", @class]}
-      >
-        <option value="">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select category —")}</option>
-        <%= for {cat, depth} <- @targets do %>
-          <option value={cat.uuid} selected={@target_uuid == cat.uuid}>
-            {String.duplicate("— ", depth)}{cat.name}
-          </option>
-        <% end %>
-      </select>
-    </form>
-    """
-  end
-
-  # The destination catalogue for the bulk move modals. Hidden when this
-  # catalogue is the only one a move could reach.
-  attr(:event, :string, required: true)
-  attr(:catalogues, :list, required: true)
-  attr(:current_uuid, :string, required: true)
-  attr(:selected_uuid, :string, required: true)
-
-  defp move_catalogue_picker(assigns) do
-    ~H"""
-    <form
-      :if={length(@catalogues) > 1}
-      id={"move-catalogue-#{@event}"}
-      phx-change={@event}
-      class="mt-4"
-    >
-      <label class="text-xs font-medium text-base-content/70" for={"move-catalogue-#{@event}-select"}>
-        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")}
-      </label>
-      <select
-        id={"move-catalogue-#{@event}-select"}
-        name="catalogue_uuid"
-        class="select select-sm w-full mt-1"
-      >
-        <option :for={cat <- @catalogues} value={cat.uuid} selected={cat.uuid == @selected_uuid}>
-          {if cat.uuid == @current_uuid,
-            do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{name} (this catalogue)", name: cat.name),
-            else: cat.name}
-        </option>
-      </select>
-    </form>
+    <p :if={@path != []} id={@id} class="text-sm text-base-content/70">
+      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Destination:")}
+      <span class="font-medium text-base-content">{Enum.join(@path, " › ")}</span>
+      <span :if={@hint}>({@hint})</span>
+    </p>
     """
   end
 
@@ -2450,29 +2296,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         put_flash(socket, :error, err_msg)
       end
     end)
-  end
-
-  # Same-catalogue active categories that every selected category may go
-  # under: the intersection of each one's own target list (which excludes
-  # its subtree). Unknown uuids — and uuids from another catalogue, which
-  # a forged event could carry — contribute nothing and drop out.
-  defp category_move_targets(uuids, catalogue_uuid) do
-    uuids
-    |> Enum.map(&Catalogue.get_category/1)
-    |> Enum.reject(&(is_nil(&1) or &1.catalogue_uuid != catalogue_uuid))
-    |> Enum.map(&Catalogue.list_move_target_categories/1)
-    |> case do
-      [] ->
-        []
-
-      [first | rest] ->
-        allowed =
-          Enum.reduce(rest, MapSet.new(first, fn {c, _} -> c.uuid end), fn list, acc ->
-            MapSet.intersection(acc, MapSet.new(list, fn {c, _} -> c.uuid end))
-          end)
-
-        Enum.filter(first, fn {c, _} -> MapSet.member?(allowed, c.uuid) end)
-    end
   end
 
   defp do_bulk_move_categories(socket, uuids, catalogue_uuid, target_uuid) do
@@ -2621,11 +2444,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end
   end
 
-  defp build_trash_modal_state(%Category{} = category, item_count, locale) do
+  defp build_trash_modal_state(socket, %Category{} = category, item_count) do
     %{
       category: category,
       item_count: item_count,
-      targets: localize_targets(Catalogue.list_move_target_categories(category), locale),
+      tree: trash_tree(socket, [category.uuid]),
       # Trash the items with the category: the one choice a restore undoes.
       disposition: :cascade,
       target_uuid: nil
@@ -4032,11 +3855,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # routes — then records pass through untouched).
   defp loc(socket), do: socket.assigns[:current_locale]
 
-  # Move-target lists are {category, depth} tuples.
-  defp localize_targets(targets, locale) do
-    Enum.map(targets, fn {cat, depth} -> {Catalogue.localize_one(cat, locale), depth} end)
-  end
-
   # ── Render ──────────────────────────────────────────────────────
 
   @impl true
@@ -4836,21 +4654,23 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
                 )}
               </p>
-              <%= if @trash_modal[:targets] == [] do %>
-                <p class="text-xs text-warning">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No other categories available — use Uncategorized instead.")}
-                </p>
-              <% else %>
-                <.move_target_picker
-                  event="select_trash_target"
-                  targets={@trash_modal[:targets]}
-                  target_uuid={@trash_modal[:target_uuid]}
-                  disabled={@trash_modal[:disposition] != :move_to}
-                  class=""
-                />
-              <% end %>
             </div>
           </label>
+          <%!-- The tree sits outside the label: a click in it must not be
+               taken for a click on the radio. --%>
+          <div :if={@trash_modal[:disposition] == :move_to}>
+            <p :if={@trash_modal[:tree] == []} class="text-xs text-warning">
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No other categories available — use Uncategorized instead.")}
+            </p>
+            <.live_component
+              :if={@trash_modal[:tree] != []}
+              module={PlacePicker}
+              id="trash-target-picker"
+              tree={@trash_modal[:tree]}
+              value={@trash_modal[:target_uuid] && "category:" <> @trash_modal[:target_uuid]}
+              pickable={[:category]}
+            />
+          </div>
         </div>
       </.confirm_modal>
 
@@ -4880,76 +4700,25 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move selected items")}
         title_icon="hero-arrows-right-left"
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items")}
-        confirm_disabled={
-          @bulk_move_modal[:disposition] == :move_to and is_nil(@bulk_move_modal[:target_uuid])
-        }
+        confirm_disabled={is_nil(@bulk_move_modal[:target])}
       >
         <p class="text-sm text-base-content/70">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick where %{count} items should go.", count: @bulk_move_modal[:count])}
         </p>
 
-        <.move_catalogue_picker
-          event="select_bulk_move_catalogue"
-          catalogues={@bulk_move_modal[:catalogues]}
-          current_uuid={@catalogue_uuid}
-          selected_uuid={@bulk_move_modal[:target_catalogue_uuid]}
-        />
-
-        <div class="space-y-3 mt-4">
-          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
-            <input
-              type="radio"
-              name="bulk_move_disposition"
-              value="uncategorize"
-              checked={@bulk_move_modal[:disposition] == :uncategorize}
-              phx-click="set_bulk_move_disposition"
-              phx-value-disposition="uncategorize"
-              class="radio radio-sm radio-primary mt-0.5"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make items uncategorized")}
-              </p>
-              <p class="text-xs text-base-content/60">
-                {if @bulk_move_modal[:target_catalogue_uuid] == @catalogue_uuid,
-                  do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items keep their catalogue but lose their category."),
-                  else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Items go to the chosen catalogue without a category.")}
-              </p>
-            </div>
-          </label>
-
-          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
-            <input
-              type="radio"
-              name="bulk_move_disposition"
-              value="move_to"
-              checked={@bulk_move_modal[:disposition] == :move_to}
-              phx-click="set_bulk_move_disposition"
-              phx-value-disposition="move_to"
-              class="radio radio-sm radio-primary mt-0.5"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="font-medium text-sm">
-                {if @bulk_move_modal[:target_catalogue_uuid] == @catalogue_uuid,
-                  do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move items to another category"),
-                  else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Put items in a category there")}
-              </p>
-              <%= if @bulk_move_modal[:targets] == [] do %>
-                <p class="text-xs text-warning">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No categories available — use Uncategorized instead.")}
-                </p>
-              <% else %>
-                <.move_target_picker
-                  id={"select_bulk_move_target-#{@bulk_move_modal[:target_catalogue_uuid]}"}
-                  event="select_bulk_move_target"
-                  targets={@bulk_move_modal[:targets]}
-                  target_uuid={@bulk_move_modal[:target_uuid]}
-                  disabled={@bulk_move_modal[:disposition] != :move_to}
-                  class="mt-2"
-                />
-              <% end %>
-            </div>
-          </label>
+        <div class="mt-4 flex flex-col gap-3">
+          <.live_component
+            module={PlacePicker}
+            id="bulk-move-items-picker"
+            tree={@bulk_move_modal[:tree]}
+            value={@bulk_move_modal[:target]}
+            current={"catalogue:" <> @catalogue_uuid}
+          />
+          <.move_destination
+            id="bulk-move-items-destination"
+            tree={@bulk_move_modal[:tree]}
+            target={@bulk_move_modal[:target]}
+          />
         </div>
       </.confirm_modal>
 
@@ -4964,75 +4733,25 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move selected categories")}
         title_icon="hero-arrows-right-left"
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Move categories")}
-        confirm_disabled={
-          @bulk_move_categories_modal[:disposition] == :move_under and
-            is_nil(@bulk_move_categories_modal[:target_uuid])
-        }
+        confirm_disabled={is_nil(@bulk_move_categories_modal[:target])}
       >
         <p class="text-sm text-base-content/70">
           {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pick where %{count} categories should go. Each one brings its subcategories and items along.", count: @bulk_move_categories_modal[:count])}
         </p>
 
-        <.move_catalogue_picker
-          event="select_bulk_move_categories_catalogue"
-          catalogues={@bulk_move_categories_modal[:catalogues]}
-          current_uuid={@catalogue_uuid}
-          selected_uuid={@bulk_move_categories_modal[:target_catalogue_uuid]}
-        />
-
-        <div class="space-y-3 mt-4">
-          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
-            <input
-              type="radio"
-              name="bulk_move_categories_disposition"
-              value="top_level"
-              checked={@bulk_move_categories_modal[:disposition] == :top_level}
-              phx-click="set_bulk_move_categories_disposition"
-              phx-value-disposition="top_level"
-              class="radio radio-sm radio-primary mt-0.5"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Make them top-level categories")}
-              </p>
-              <p class="text-xs text-base-content/60">
-                {if @bulk_move_categories_modal[:target_catalogue_uuid] == @catalogue_uuid,
-                  do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "They leave their parent and sit at the root of this catalogue."),
-                  else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "They sit at the root of the chosen catalogue.")}
-              </p>
-            </div>
-          </label>
-
-          <label class="flex items-start gap-3 p-3 rounded-lg border border-base-300 cursor-pointer hover:bg-base-200/50">
-            <input
-              type="radio"
-              name="bulk_move_categories_disposition"
-              value="move_under"
-              checked={@bulk_move_categories_modal[:disposition] == :move_under}
-              phx-click="set_bulk_move_categories_disposition"
-              phx-value-disposition="move_under"
-              class="radio radio-sm radio-primary mt-0.5"
-            />
-            <div class="flex-1 min-w-0">
-              <p class="font-medium text-sm">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Nest them under another category")}
-              </p>
-              <%= if @bulk_move_categories_modal[:targets] == [] do %>
-                <p class="text-xs text-warning">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No category can take them — only the top level is left.")}
-                </p>
-              <% else %>
-                <.move_target_picker
-                  id={"select_bulk_move_categories_target-#{@bulk_move_categories_modal[:target_catalogue_uuid]}"}
-                  event="select_bulk_move_categories_target"
-                  targets={@bulk_move_categories_modal[:targets]}
-                  target_uuid={@bulk_move_categories_modal[:target_uuid]}
-                  disabled={@bulk_move_categories_modal[:disposition] != :move_under}
-                  class="mt-2"
-                />
-              <% end %>
-            </div>
-          </label>
+        <div class="mt-4 flex flex-col gap-3">
+          <.live_component
+            module={PlacePicker}
+            id="bulk-move-categories-picker"
+            tree={@bulk_move_categories_modal[:tree]}
+            value={@bulk_move_categories_modal[:target]}
+            current={"catalogue:" <> @catalogue_uuid}
+          />
+          <.move_destination
+            id="bulk-move-categories-destination"
+            tree={@bulk_move_categories_modal[:tree]}
+            target={@bulk_move_categories_modal[:target]}
+          />
         </div>
       </.confirm_modal>
 

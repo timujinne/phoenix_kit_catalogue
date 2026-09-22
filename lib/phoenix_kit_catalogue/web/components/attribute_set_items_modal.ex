@@ -244,7 +244,7 @@ defmodule PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal do
               <img
                 :if={row.thumb_url}
                 src={row.thumb_url}
-                alt=""
+                alt={row.name || ""}
                 class="w-12 h-12 rounded object-cover bg-base-200 shrink-0"
               />
               <div

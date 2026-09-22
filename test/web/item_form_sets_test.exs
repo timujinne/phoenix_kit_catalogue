@@ -257,6 +257,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
       # silently disappeared even though its chip still rendered).
       assert assigns(view).set_previews[set.uuid].thumbs[red.slug] == media_uuid
 
+      # The hidden chip's img is NOT inside a <label>/control (it sits
+      # next to the "Red" text and its own separate Remove button), so
+      # a screen reader browsing by graphic alone would hear nothing
+      # without a real alt (#93).
+      assert render(view) =~ ~s(alt="Red")
+
       # The × on the hidden chip un-selects it — detaching the WHOLE
       # set was, until now, the only way to drop a hidden pick.
       render_click(view, "toggle_value_selection", %{"set" => set.uuid, "key" => red.slug})
@@ -362,6 +368,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
 
       assert label_for.("Red") =~ "<img"
       refute label_for.("Blue") =~ "<img"
+      # alt="" is deliberate (#93): the img sits inside the <label> next
+      # to the checkbox and the "Red" text — the label's one computed
+      # accessible name already carries "Red", so a non-empty alt would
+      # announce it twice. Pinned so a future sweep doesn't "fix" it back.
+      assert label_for.("Red") =~ ~s(alt="")
     end
   else
     @tag :skip

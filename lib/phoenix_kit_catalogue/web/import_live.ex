@@ -45,6 +45,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   alias PhoenixKitCatalogue.Import.Source.Universal
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.{Category, Item, Manufacturer, Supplier}
+  alias PhoenixKitCatalogue.Web.Components.PlacePicker
+  alias PhoenixKitCatalogue.Web.PlaceTree
 
   @max_file_size 10_000_000
   @preview_rows 5
@@ -72,6 +74,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import"),
        step: :upload,
        catalogues: catalogues,
+       catalogue_tree:
+         catalogue_tree(
+           socket.assigns[:current_locale],
+           catalogue_item_counts,
+           catalogue_category_counts
+         ),
        catalogue_item_counts: catalogue_item_counts,
        catalogue_category_counts: catalogue_category_counts,
        manufacturers: manufacturers,
@@ -95,7 +103,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        category_match_across_languages: false,
        new_category: nil,
        new_category_changeset: nil,
-       catalogue_categories: [],
+       import_category_tree: [],
        import_manufacturer_mode: :none,
        import_manufacturer_uuid: nil,
        new_manufacturer: nil,
@@ -233,16 +241,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   def handle_event("continue_to_confirm", _params, socket) do
     cond do
-      not Enum.any?(socket.assigns.column_mappings, &(&1.target == :name)) ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(
-             PhoenixKitCatalogue.Gettext,
-             "You must map at least one column to 'Item Name'. Scroll down to the column mapping section and pick the column that holds item names."
-           )
-         )}
+      message = mapping_blocker(socket.assigns) ->
+        {:noreply, put_flash(socket, :error, message)}
 
       socket.assigns.import_category_mode == :create and
           not new_record_valid?(socket.assigns.new_category_changeset) ->
@@ -296,8 +296,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   # ── Step 4: Confirm ─────────────────────────────────────────────
 
+  # "An existing category" is picked in the catalogue's tree, whose
+  # hidden input posts it back here with every change of this form.
   def handle_event("select_import_category", params, socket) do
     {category_mode, category_uuid} = parse_picker_mode(params["category_mode"])
+
+    category_uuid =
+      if category_mode == :existing,
+        do: offered_category(socket, category_uuid || params["existing_category_uuid"]),
+        else: category_uuid
 
     socket =
       socket
@@ -372,39 +379,15 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     do: {:noreply, socket}
 
   def handle_event("execute_import", _params, socket) do
-    catalogue_uuid = socket.assigns.selected_catalogue.uuid
-    import_lang = if socket.assigns.multilang_enabled, do: socket.assigns.current_lang, else: nil
+    # Re-read at Run: the catalogue picked on the first step may have been
+    # trashed since, and nothing live is imported into the trash.
+    case Catalogue.get_catalogue(socket.assigns.selected_catalogue.uuid) do
+      %{status: status} when status != "deleted" ->
+        run_import(socket)
 
-    # Wrap the three :create-mode resolutions in a single transaction
-    # so a failure on the second or third doesn't leave the first as
-    # an orphan record. Modes other than :create are read-only inside
-    # the transaction (they just look up the picked uuid), so this is
-    # a no-op cost when nobody is creating anything.
-    txn =
-      PhoenixKit.RepoHelper.repo().transaction(fn ->
-        with {:ok, c_uuid, s1} <- resolve_import_category(socket, catalogue_uuid, import_lang),
-             {:ok, m_uuid, s2} <- resolve_import_manufacturer(s1),
-             {:ok, s_uuid, s3} <- resolve_import_supplier(s2) do
-          {c_uuid, m_uuid, s_uuid, s3}
-        else
-          {:error, message, socket} ->
-            PhoenixKit.RepoHelper.repo().rollback({:error, message, socket})
-        end
-      end)
-
-    case txn do
-      {:ok, {category_uuid, manufacturer_uuid, supplier_uuid, socket}} ->
-        start_import(
-          socket,
-          catalogue_uuid,
-          category_uuid,
-          manufacturer_uuid,
-          supplier_uuid,
-          import_lang
-        )
-
-      {:error, {:error, message, socket}} ->
-        {:noreply, put_flash(socket, :error, message)}
+      _ ->
+        {:noreply,
+         put_flash(socket, :error, PhoenixKitCatalogue.Errors.message(:catalogue_not_found))}
     end
   end
 
@@ -628,6 +611,22 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     end
   end
 
+  # The target catalogue, picked in the folder tree (boss via Max,
+  # 2026-09-21: proper pickers, no flat lists).
+  def handle_info({PlacePicker, "import-catalogue-picker", id}, socket),
+    do: {:noreply, maybe_update_catalogue(socket, %{"catalogue" => PlaceTree.uuid(id) || ""})}
+
+  def handle_info(
+        {PlacePicker, "import-category-picker", id},
+        %{assigns: %{import_category_mode: :existing}} = socket
+      ) do
+    {:noreply,
+     assign(socket,
+       import_category_mode: :existing,
+       import_category_uuid: offered_category(socket, PlaceTree.uuid(id))
+     )}
+  end
+
   def handle_info(msg, socket) do
     Logger.debug("ImportLive ignored unhandled message: #{inspect(msg)}")
     {:noreply, socket}
@@ -637,10 +636,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   defp continue_or_parse(socket) do
     if socket.assigns.filename do
-      catalogue_categories =
-        Catalogue.list_categories_for_catalogue(socket.assigns.selected_catalogue.uuid)
-
-      {:noreply, assign(socket, step: :map, catalogue_categories: catalogue_categories)}
+      {:noreply, socket |> assign(:step, :map) |> assign_import_category_tree()}
     else
       parse_uploaded_file(socket)
     end
@@ -773,16 +769,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         # Find unit column and extract unique values
         {unit_values, unit_map} = detect_unit_values(mappings, data.rows)
 
-        # Load existing categories for the selected catalogue
-        catalogue_categories =
-          if socket.assigns.selected_catalogue do
-            Catalogue.list_categories_for_catalogue(socket.assigns.selected_catalogue.uuid)
-          else
-            []
-          end
-
         {:noreply,
          socket
+         # The selected catalogue's existing categories, as a list and a tree.
+         |> assign_import_category_tree()
          |> assign(
            step: :map,
            headers: data.headers,
@@ -795,8 +785,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
            column_mappings: mappings,
            ets_table: ets_table,
            unit_values: unit_values,
-           unit_map: unit_map,
-           catalogue_categories: catalogue_categories
+           unit_map: unit_map
          )}
 
       {:error, reason} ->
@@ -922,6 +911,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp parse_picker_mode("none"), do: {:none, nil}
   defp parse_picker_mode("column"), do: {:column, nil}
   defp parse_picker_mode("create"), do: {:create, nil}
+  defp parse_picker_mode("existing"), do: {:existing, nil}
   defp parse_picker_mode("existing:" <> uuid), do: {:existing, uuid}
   defp parse_picker_mode(_), do: {:none, nil}
 
@@ -1082,6 +1072,65 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
      )}
   end
 
+  # What stops the mapping step before any record is created: no column
+  # for the item name, or "An existing category" with nothing picked (it
+  # would import everything uncategorized — not what the choice says).
+  defp mapping_blocker(assigns) do
+    cond do
+      not Enum.any?(assigns.column_mappings, &(&1.target == :name)) ->
+        Gettext.gettext(
+          PhoenixKitCatalogue.Gettext,
+          "You must map at least one column to 'Item Name'. Scroll down to the column mapping section and pick the column that holds item names."
+        )
+
+      assigns.import_category_mode == :existing and is_nil(assigns.import_category_uuid) ->
+        Gettext.gettext(
+          PhoenixKitCatalogue.Gettext,
+          "Pick the category to import into, or choose another option."
+        )
+
+      true ->
+        nil
+    end
+  end
+
+  defp run_import(socket) do
+    catalogue_uuid = socket.assigns.selected_catalogue.uuid
+    import_lang = if socket.assigns.multilang_enabled, do: socket.assigns.current_lang, else: nil
+
+    # Wrap the three :create-mode resolutions in a single transaction
+    # so a failure on the second or third doesn't leave the first as
+    # an orphan record. Modes other than :create are read-only inside
+    # the transaction (they just look up the picked uuid), so this is
+    # a no-op cost when nobody is creating anything.
+    txn =
+      PhoenixKit.RepoHelper.repo().transaction(fn ->
+        with {:ok, c_uuid, s1} <- resolve_import_category(socket, catalogue_uuid, import_lang),
+             {:ok, m_uuid, s2} <- resolve_import_manufacturer(s1),
+             {:ok, s_uuid, s3} <- resolve_import_supplier(s2) do
+          {c_uuid, m_uuid, s_uuid, s3}
+        else
+          {:error, message, socket} ->
+            PhoenixKit.RepoHelper.repo().rollback({:error, message, socket})
+        end
+      end)
+
+    case txn do
+      {:ok, {category_uuid, manufacturer_uuid, supplier_uuid, socket}} ->
+        start_import(
+          socket,
+          catalogue_uuid,
+          category_uuid,
+          manufacturer_uuid,
+          supplier_uuid,
+          import_lang
+        )
+
+      {:error, {:error, message, socket}} ->
+        {:noreply, put_flash(socket, :error, message)}
+    end
+  end
+
   # Resolves the category to pin imported items to, based on the
   # current `import_category_mode`. For `:create` mode this is where
   # the actual category record gets persisted — deferring creation to
@@ -1089,6 +1138,13 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   # leave an orphan category behind.
   defp resolve_import_category(socket, catalogue_uuid, import_lang) do
     case socket.assigns.import_category_mode do
+      :existing when is_nil(socket.assigns.import_category_uuid) ->
+        {:error,
+         Gettext.gettext(
+           PhoenixKitCatalogue.Gettext,
+           "Pick the category to import into, or choose another option."
+         ), socket}
+
       :existing ->
         {:ok, socket.assigns.import_category_uuid, socket}
 
@@ -1768,17 +1824,19 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             <.label class="block">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Target catalogue")}
             </.label>
-            <.select
+            <%!-- A tree of folders › catalogues, never a flat list; once one
+                 is picked it folds to its path and a Change button. --%>
+            <.live_component
+              :if={@catalogues != []}
+              module={PlacePicker}
+              id="import-catalogue-picker"
+              tree={@catalogue_tree}
+              value={@selected_catalogue && "catalogue:" <> @selected_catalogue.uuid}
+              pickable={[:catalogue]}
+              path_skip={[]}
+              field={@selected_catalogue != nil}
+              placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a catalogue —")}
               name="catalogue"
-              id="upload-catalogue"
-              value={@selected_catalogue && @selected_catalogue.uuid}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Select a catalogue —")}
-              options={
-                Enum.map(
-                  @catalogues,
-                  &{catalogue_picker_label(&1, @catalogue_item_counts, @catalogue_category_counts), &1.uuid}
-                )
-              }
             />
             <p :if={@catalogues == []} class="text-sm text-base-content/50 mt-1">
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No catalogues yet.")}
@@ -1981,20 +2039,31 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             <.select
               name="category_mode"
               id="import-category-mode"
-              value={
-                case @import_category_mode do
-                  :existing -> "existing:#{@import_category_uuid}"
-                  mode -> to_string(mode)
-                end
-              }
+              value={to_string(@import_category_mode)}
               options={
                 [
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "No category — import items without a category"), "none"},
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Use a column — create categories from column values"), "column"},
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create a new category — fill in the details below"), "create"}
                 ] ++
-                  Enum.map(@catalogue_categories, &{&1.name, "existing:#{&1.uuid}"})
+                  if(@import_category_tree != [],
+                    do: [{Gettext.gettext(PhoenixKitCatalogue.Gettext, "An existing category — pick it below"), "existing"}],
+                    else: []
+                  )
               }
+            />
+
+            <%!-- The catalogue's categories as a tree, not flat in the
+                 select above (boss via Max, 2026-09-21). --%>
+            <.live_component
+              :if={@import_category_mode == :existing}
+              module={PlacePicker}
+              id="import-category-picker"
+              tree={@import_category_tree}
+              value={@import_category_uuid && "category:" <> @import_category_uuid}
+              pickable={[:category]}
+              path_skip={[]}
+              name="existing_category_uuid"
             />
 
             <%!-- Column picker for category --%>
@@ -2674,13 +2743,62 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   # ── Private helpers ─────────────────────────────────────────────
 
-  # Builds the label shown for one catalogue in the Target Catalogue
-  # picker. Counts are passed in as separate `%{uuid => count}` maps so
-  # the picker stays a thin renderer over data the LiveView already
-  # has — no per-option DB lookups, no N+1.
-  defp catalogue_picker_label(cat, item_counts, category_counts) do
-    items = Map.get(item_counts, cat.uuid, 0)
-    categories = Map.get(category_counts, cat.uuid, 0)
+  # Folders › catalogues, each with its counts beside its name. The
+  # counts are passed in as `%{uuid => count}` maps the LiveView already
+  # has — no per-row DB lookups, no N+1.
+  defp catalogue_tree(locale, item_counts, category_counts) do
+    nil
+    |> PlaceTree.places(categories: false, locale: locale)
+    |> label_catalogues(item_counts, category_counts)
+  end
+
+  defp label_catalogues(nodes, item_counts, category_counts) do
+    Enum.map(nodes, fn
+      %{type: :catalogue, id: "catalogue:" <> uuid} = node ->
+        Map.put(node, :hint, counts_label(uuid, item_counts, category_counts))
+
+      node ->
+        %{node | children: label_catalogues(node.children, item_counts, category_counts)}
+    end)
+  end
+
+  # Back at the upload step with another catalogue picked, a category
+  # picked in the old one would send the items there (an item's catalogue
+  # follows its category) — so a pick the new tree lacks is dropped.
+  defp assign_import_category_tree(%{assigns: %{selected_catalogue: %{} = catalogue}} = socket) do
+    socket
+    |> assign(
+      import_category_tree:
+        PlaceTree.categories(catalogue, locale: socket.assigns[:current_locale])
+    )
+    |> drop_stale_category_pick()
+  end
+
+  defp assign_import_category_tree(socket) do
+    socket
+    |> assign(import_category_tree: [])
+    |> drop_stale_category_pick()
+  end
+
+  defp drop_stale_category_pick(%{assigns: %{import_category_mode: :existing}} = socket) do
+    if offered_category(socket, socket.assigns.import_category_uuid),
+      do: socket,
+      else: assign(socket, import_category_mode: :none, import_category_uuid: nil)
+  end
+
+  defp drop_stale_category_pick(socket), do: socket
+
+  # Only a category of the selected catalogue counts.
+  defp offered_category(socket, uuid) when is_binary(uuid) do
+    if PlaceTree.member?(socket.assigns.import_category_tree, "category:" <> uuid, [:category]),
+      do: uuid
+  end
+
+  defp offered_category(_socket, _uuid), do: nil
+
+  defp counts_label(uuid, item_counts, category_counts) do
+    items = Map.get(item_counts, uuid, 0)
+    categories = Map.get(category_counts, uuid, 0)
 
     items_label =
       Gettext.ngettext(PhoenixKitCatalogue.Gettext, "%{count} item", "%{count} items", items,
@@ -2696,7 +2814,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         count: categories
       )
 
-    "#{cat.name} · #{categories_label} · #{items_label}"
+    "#{categories_label} · #{items_label}"
   end
 
   defp translate_target("— Skip —"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "— Skip —")

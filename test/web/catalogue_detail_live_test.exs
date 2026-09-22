@@ -1077,6 +1077,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid))
 
       render_hook(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
+
+      view
+      |> element(~s(#bulk-move-items-picker [data-place="catalogue:#{catalogue.uuid}"]))
+      |> render_click()
+
       render_click(view, "confirm_bulk_move_items", %{})
 
       assert Catalogue.get_item(item.uuid).category_uuid == nil

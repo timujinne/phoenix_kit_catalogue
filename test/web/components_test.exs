@@ -530,6 +530,24 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
         refute html =~ "<img", "expected no img for #{inspect(resource)}"
       end
     end
+
+    test "alt carries the resource's name, so a screen reader announces it (#93)" do
+      html =
+        render_component(&featured_thumb/1,
+          resource: %Item{name: "Oak Door", data: %{"featured_image_uuid" => @uuid}}
+        )
+
+      assert html =~ ~s(alt="Oak Door")
+    end
+
+    test "alt falls back to empty when the resource carries no name" do
+      html =
+        render_component(&featured_thumb/1,
+          resource: %{data: %{"featured_image_uuid" => @uuid}}
+        )
+
+      assert html =~ ~s(alt="")
+    end
   end
 
   describe "featured_image_uuid/1 (sweep 2026-09-13)" do

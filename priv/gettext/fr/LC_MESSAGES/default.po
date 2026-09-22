@@ -3650,3 +3650,30 @@ msgstr "Afficher le slug d’URL et les champs SEO"
 
 msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
 msgstr "Désactivé, ils sont masqués dans le formulaire d’article ; ce qu’ils contiennent déjà est conservé, enregistré tel quel et réapparaît quand vous réactivez cette option."
+
+msgid "An existing category — pick it below"
+msgstr "Une catégorie existante — choisissez-la ci-dessous"
+
+msgid "Destination:"
+msgstr "Destination :"
+
+msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
+msgstr "Choisissez une catégorie où l’imbriquer, ou le catalogue lui-même pour son premier niveau. Vous pourrez la déplacer plus tard."
+
+msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
+msgstr "Choisissez où la placer : au premier niveau d’un catalogue ou sous une catégorie. Ses sous-catégories et articles suivent."
+
+msgid "Select all"
+msgstr "Tout sélectionner"
+
+msgid "Top level"
+msgstr "Premier niveau"
+
+msgid "top level"
+msgstr "premier niveau"
+
+msgid "uncategorized"
+msgstr "sans catégorie"
+
+msgid "Pick the category to import into, or choose another option."
+msgstr "Choisissez la catégorie d’import ou une autre option."

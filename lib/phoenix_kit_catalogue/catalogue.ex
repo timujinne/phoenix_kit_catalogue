@@ -1917,22 +1917,29 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
   # `FOR SHARE`: callers run inside a transaction, so the parent cannot
   # change catalogue between this check and their write.
+  # A parent being SET must be live: a new or moved category under a
+  # trashed one would be a live row inside the trash. A row that keeps its
+  # parent (a restore, an edit of other fields) is not re-checked for it.
   defp check_parent_catalogue(changeset, parent_uuid, catalogue_uuid) do
     case repo().one(from(c in Category, where: c.uuid == ^parent_uuid, lock: "FOR SHARE")) do
       nil ->
         Ecto.Changeset.add_error(changeset, :parent_uuid, "does not exist")
 
-      %Category{catalogue_uuid: ^catalogue_uuid} ->
-        changeset
+      %Category{status: "deleted"} = parent ->
+        if Ecto.Changeset.get_change(changeset, :parent_uuid),
+          do: Ecto.Changeset.add_error(changeset, :parent_uuid, "does not exist"),
+          else: check_same_catalogue(changeset, parent, catalogue_uuid)
 
-      %Category{} ->
-        Ecto.Changeset.add_error(
-          changeset,
-          :parent_uuid,
-          "must belong to the same catalogue"
-        )
+      %Category{} = parent ->
+        check_same_catalogue(changeset, parent, catalogue_uuid)
     end
   end
+
+  defp check_same_catalogue(changeset, %Category{catalogue_uuid: catalogue_uuid}, catalogue_uuid),
+    do: changeset
+
+  defp check_same_catalogue(changeset, _parent, _catalogue_uuid),
+    do: Ecto.Changeset.add_error(changeset, :parent_uuid, "must belong to the same catalogue")
 
   @doc "Hard-deletes a category. Prefer `trash_category/1` for soft-delete."
   @spec delete_category(Category.t(), keyword()) :: {:ok, Category.t()} | {:error, term()}
@@ -3058,6 +3065,21 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
   @spec list_category_ancestors(Ecto.UUID.t()) :: [Category.t()]
   defdelegate list_category_ancestors(category_uuid), to: Tree, as: :ancestors_in_order
+
+  @doc """
+  Returns the uuids of `category_uuids` and every category below them,
+  trashed rows included, as text. A move or trash picker prunes these:
+  a live category under a trashed one is still in the subtree, which a
+  tree of live rows alone cannot see (it shows such a row at the top).
+  Strings that are not UUIDs are ignored.
+  """
+  @spec category_subtree_uuids([String.t()]) :: [Ecto.UUID.t()]
+  def category_subtree_uuids(category_uuids) when is_list(category_uuids) do
+    category_uuids
+    |> Enum.filter(&match?({:ok, _}, Ecto.UUID.cast(&1)))
+    |> Tree.subtree_uuids_for()
+    |> Enum.map(&load_uuid/1)
+  end
 
   @doc """
   Returns same-catalogue active categories that can receive items from

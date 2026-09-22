@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
+  alias PhoenixKitCatalogue.Web.PlaceTree
 
   @base "/en/admin/catalogue"
 
@@ -21,6 +22,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
   end
 
   defp assigns(view), do: :sys.get_state(view.pid).socket.assigns
+
+  # The Move dialogs pick in a tree (boss via Max, 2026-09-21: no flat
+  # lists); this catalogue starts open in it.
+  defp pick(view, picker, id),
+    do: view |> element(~s(##{picker} [data-place="#{id}"])) |> render_click()
+
+  defp offered_categories(tree),
+    do:
+      tree
+      |> PlaceTree.ids_of([:category])
+      |> Enum.map(&String.replace_prefix(&1, "category:", ""))
 
   test "categories render inside a BulkSelectScope with client-side checkboxes and the same toolbar as items",
        %{conn: conn, catalogue: cat, a: a} do
@@ -114,7 +126,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
 
       html = render_click(view, "request_bulk_move_categories", %{"uuids" => [a.uuid, b.uuid]})
       modal = assigns(view).bulk_move_categories_modal
-      offered = modal.targets |> Enum.map(fn {c, _} -> c.uuid end)
+      offered = offered_categories(modal.tree)
 
       assert modal.count == 2
       assert html =~ "Move selected categories"
@@ -129,13 +141,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
 
       render_click(view, "request_bulk_move_categories", %{"uuids" => [a.uuid, b.uuid]})
-      render_click(view, "set_bulk_move_categories_disposition", %{"disposition" => "move_under"})
-      # Through the real form: a bare <select phx-change> throws in LiveView JS
-      # ("form events require the input to be inside a form") and never
-      # reaches the server — found on the box, so drive the DOM here.
-      view
-      |> element("form[phx-change=select_bulk_move_categories_target]")
-      |> render_change(%{"category_uuid" => c.uuid})
+      pick(view, "bulk-move-categories-picker", "category:" <> c.uuid)
 
       html = render_click(view, "confirm_bulk_move_categories", %{})
 
@@ -151,6 +157,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}?category=#{a.uuid}")
 
       render_click(view, "request_bulk_move_categories", %{"uuids" => [child.uuid]})
+      # Nothing is picked yet: confirm does nothing.
+      render_click(view, "confirm_bulk_move_categories", %{})
+      assert Catalogue.get_category(child.uuid).parent_uuid == a.uuid
+
+      # The catalogue's own row is its top level.
+      pick(view, "bulk-move-categories-picker", "catalogue:" <> cat.uuid)
       render_click(view, "confirm_bulk_move_categories", %{})
 
       assert Catalogue.get_category(child.uuid).parent_uuid == nil
@@ -161,10 +173,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
 
       render_click(view, "request_bulk_move_categories", %{"uuids" => [a.uuid, b.uuid]})
-      render_click(view, "set_bulk_move_categories_disposition", %{"disposition" => "move_under"})
-      # Bypass the picker: point the selection at one of its own members.
+
+      # Through the picker it cannot even be picked…
+      view
+      |> with_target("#bulk-move-categories-picker")
+      |> render_click("pick", %{"id" => "category:" <> a.uuid})
+
+      assert assigns(view).bulk_move_categories_modal.target == nil
+
+      # …and put there by any other route, confirm still checks the tree.
       :sys.replace_state(view.pid, fn state ->
-        put_in(state.socket.assigns.bulk_move_categories_modal.target_uuid, a.uuid)
+        put_in(state.socket.assigns.bulk_move_categories_modal.target, "category:" <> a.uuid)
       end)
 
       render_click(view, "confirm_bulk_move_categories", %{})
@@ -190,16 +209,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
 
       render_click(view, "request_bulk_move_categories", %{"uuids" => [foreign.uuid, a.uuid]})
-      # Targets come from THIS catalogue only (Alpha's own list: Beta, Gamma).
-      targets =
-        assigns(view).bulk_move_categories_modal.targets |> Enum.map(fn {x, _} -> x.uuid end)
+      # Every selected category is left out of the tree, the foreign one too.
+      targets = offered_categories(assigns(view).bulk_move_categories_modal.tree)
 
       assert c.uuid in targets
       refute foreign.uuid in targets
-      refute Enum.any?(targets, &(Catalogue.get_category(&1).catalogue_uuid != cat.uuid))
+      refute a.uuid in targets
 
-      render_click(view, "set_bulk_move_categories_disposition", %{"disposition" => "move_under"})
-      render_click(view, "select_bulk_move_categories_target", %{"category_uuid" => c.uuid})
+      pick(view, "bulk-move-categories-picker", "category:" <> c.uuid)
       html = render_click(view, "confirm_bulk_move_categories", %{})
 
       assert html =~ "Moved 1 categories."
@@ -228,12 +245,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
     test "modal events after the modal closed are no-ops", %{conn: conn, catalogue: cat} do
       {:ok, view, _html} = live(conn, "#{@base}/#{cat.uuid}")
 
-      render_click(view, "set_bulk_move_categories_disposition", %{"disposition" => "move_under"})
-      render_click(view, "select_bulk_move_categories_target", %{"category_uuid" => "x"})
-      render_click(view, "set_bulk_move_disposition", %{"disposition" => "move_to"})
-      render_click(view, "select_bulk_move_target", %{"category_uuid" => "x"})
+      render_click(view, "confirm_bulk_move_categories", %{})
+      render_click(view, "confirm_bulk_move_items", %{})
       render_click(view, "set_trash_disposition", %{"disposition" => "cascade"})
-      render_click(view, "select_trash_target", %{"category_uuid" => "x"})
+
+      for picker <- ~w(bulk-move-categories-picker bulk-move-items-picker trash-target-picker) do
+        send(view.pid, {PhoenixKitCatalogue.Web.Components.PlacePicker, picker, "category:x"})
+      end
 
       assert Process.alive?(view.pid)
       refute assigns(view).bulk_move_categories_modal
@@ -248,6 +266,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       CataloguePubSub.subscribe()
 
       render_click(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
+      pick(view, "bulk-move-items-picker", "catalogue:" <> cat.uuid)
       render_click(view, "confirm_bulk_move_items", %{})
 
       cat_uuid = cat.uuid

@@ -481,6 +481,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
         class={@class}
         variant={@variant}
         comfy_scale={@comfy_scale}
+        name={Map.get(@resource, :name)}
       />
     </button>
     <.thumb_visual
@@ -491,6 +492,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       class={@class}
       variant={@variant}
       comfy_scale={@comfy_scale}
+      name={Map.get(@resource, :name)}
     />
     """
   end
@@ -1421,6 +1423,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:class, :any, required: true)
   attr(:variant, :string, default: "thumbnail")
   attr(:comfy_scale, :boolean, default: true)
+  attr(:name, :string, default: nil)
 
   defp thumb_visual(assigns) do
     ~H"""
@@ -1432,7 +1435,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       <img
         :if={@uuid}
         src={URLSigner.signed_url(@uuid, @variant)}
-        alt=""
+        alt={@name || ""}
         loading="lazy"
         onerror="this.style.display='none'"
         class="w-full h-full rounded object-cover bg-base-200"
@@ -1489,7 +1492,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     <img
       :if={@uuid}
       src={URLSigner.signed_url(@uuid, "small")}
-      alt=""
+      alt={Map.get(@resource, :name) || ""}
       loading="lazy"
       onerror="this.style.display='none'"
       class="w-10 h-10 rounded object-cover bg-base-200"

@@ -16,6 +16,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Export
   alias PhoenixKitCatalogue.Paths
+  alias PhoenixKitCatalogue.Web.Components.PlacePicker
+  alias PhoenixKitCatalogue.Web.PlaceTree
 
   @impl true
   def mount(_params, _session, socket) do
@@ -30,6 +32,10 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
        destinations: destinations,
        selected_destination: selected_destination,
        catalogues: catalogues,
+       # Catalogues under their folders, never one flat list (boss via
+       # Max, 2026-09-21).
+       catalogue_tree:
+         PlaceTree.places(nil, categories: false, locale: socket.assigns[:current_locale]),
        selected_catalogue_uuids: [],
        selected_format: nil,
        selected_prefix_catalogue: false
@@ -43,6 +49,25 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   def handle_event("change_form", params, socket) do
     {:noreply, apply_form_params(socket, params)}
   end
+
+  # The catalogues ticked in the tree — the one source of the selection.
+  # Its hidden inputs also post them with every change of the form, but a
+  # destination or format change sent before a tick's re-render landed
+  # would post the previous ticks and undo it, so `change_form` ignores
+  # them.
+  @impl true
+  def handle_info({PlacePicker, "export-catalogue-picker", ids}, socket) when is_list(ids) do
+    known = MapSet.new(socket.assigns.catalogues, & &1.uuid)
+
+    uuids =
+      ids
+      |> Enum.map(&PlaceTree.uuid/1)
+      |> Enum.filter(&MapSet.member?(known, &1))
+
+    {:noreply, assign(socket, :selected_catalogue_uuids, uuids)}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do
@@ -66,19 +91,17 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
                   {length(@selected_catalogue_uuids)} / {length(@catalogues)}
                 </span>
               </div>
-              <div class="max-h-96 overflow-y-auto border border-base-300 rounded-box divide-y divide-base-200 bg-base-100">
-                <%= for catalogue <- @catalogues do %>
-                  <label class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-base-200 transition-colors">
-                    <input
-                      type="checkbox"
-                      name="catalogue_uuids[]"
-                      value={catalogue.uuid}
-                      checked={catalogue.uuid in @selected_catalogue_uuids}
-                      class="checkbox checkbox-sm checkbox-primary shrink-0"
-                    />
-                    <span class="text-sm truncate min-w-0">{catalogue.name}</span>
-                  </label>
-                <% end %>
+              <%!-- A folder's box ticks every catalogue in it. --%>
+              <div class="border border-base-300 rounded-box bg-base-100 p-2">
+                <.live_component
+                  module={PlacePicker}
+                  id="export-catalogue-picker"
+                  tree={@catalogue_tree}
+                  value={Enum.map(@selected_catalogue_uuids, &("catalogue:" <> &1))}
+                  pickable={[:catalogue]}
+                  multiple
+                  name="catalogue_uuids[]"
+                />
               </div>
             </div>
 
@@ -178,7 +201,6 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
 
   defp apply_form_params(socket, params) do
     destination_key = Map.get(params, "destination")
-    catalogue_uuids = Map.get(params, "catalogue_uuids", [])
     format_str = presence(Map.get(params, "format"))
 
     selected_destination =
@@ -189,14 +211,6 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
       else
         socket.assigns.selected_destination
       end
-
-    # Validate that the selected uuids are known catalogues
-    known_uuids = Enum.map(socket.assigns.catalogues, & &1.uuid)
-
-    selected_catalogue_uuids =
-      catalogue_uuids
-      |> List.wrap()
-      |> Enum.filter(fn uuid -> uuid in known_uuids end)
 
     # Reset format if the destination changed and the format is no longer valid
     selected_format =
@@ -218,7 +232,6 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
 
     assign(socket,
       selected_destination: selected_destination,
-      selected_catalogue_uuids: selected_catalogue_uuids,
       selected_format: selected_format,
       selected_prefix_catalogue: selected_prefix_catalogue
     )

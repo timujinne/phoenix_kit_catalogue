@@ -4721,6 +4721,24 @@ defmodule PhoenixKitCatalogue.CatalogueTest do
     end
   end
 
+  describe "category_subtree_uuids/1" do
+    test "walks through trashed rows, returns text uuids, ignores non-UUIDs" do
+      cat = create_catalogue()
+      root = create_category(cat, %{name: "Root"})
+      mid = create_category(cat, %{name: "Mid", parent_uuid: root.uuid})
+      low = create_category(cat, %{name: "Low", parent_uuid: mid.uuid})
+      sibling = create_category(cat, %{name: "Sibling"})
+      {:ok, _} = Catalogue.trash_category(mid)
+      {:ok, _} = Catalogue.restore_category(Catalogue.get_category(low.uuid))
+
+      uuids = Catalogue.category_subtree_uuids([root.uuid, "not-a-uuid"])
+
+      assert Enum.sort(uuids) == Enum.sort([root.uuid, mid.uuid, low.uuid])
+      refute sibling.uuid in uuids
+      assert Catalogue.category_subtree_uuids(["junk"]) == []
+    end
+  end
+
   describe "list_move_target_categories/1" do
     test "excludes the category itself" do
       cat = create_catalogue()

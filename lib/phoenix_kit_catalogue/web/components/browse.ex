@@ -649,7 +649,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       <img
         :if={@item.photo_url}
         src={@item.photo_url}
-        alt={@item.name}
+        alt={@item.name || ""}
         class="w-full h-full object-cover"
         decoding="async"
       />
@@ -1079,7 +1079,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
             <img
               :if={@item.thumb_url}
               src={@item.thumb_url}
-              alt=""
+              alt={@item.name || ""}
               class="w-8 h-8 max-w-none [.pk-comfy_&]:w-16 [.pk-comfy_&]:h-16 rounded object-cover bg-base-200"
             />
             <div
@@ -1197,6 +1197,17 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   defp col_responsive_class(:category), do: "hidden lg:table-cell"
   defp col_responsive_class(_), do: nil
 
+  # A zero clears itself on focus, as core's `decimal_input` does
+  # (BeamLabEU/phoenix_kit#859): a field showing 0 (0,00, 0.0) empties
+  # when it gains focus, so a typed 1 is 1 and not 10 — the caret used to
+  # land after the zero; leaving it still empty puts the zero back, and
+  # `qty_commit` then carries that zero as before. Inline handlers on the
+  # control, no hook; a programmatic value change fires no `input` event,
+  # so neither `qty_change` nor the row's selected-state hook sees the swap.
+  @zero_test "/^\\s*[-+]?(?:0+(?:[.,]0*)?|[.,]0+)\\s*$/.test(this.value)"
+  @zero_on_focus "if(#{@zero_test}){this.dataset.pkZero=this.value;this.value=''}"
+  @zero_on_blur "if(this.dataset.pkZero!=null){if(this.value.trim()==='')this.value=this.dataset.pkZero;delete this.dataset.pkZero}"
+
   @doc """
   Quantity input: a native `<input type="number">` — the browser's own
   spinner arrows, the same control the rest of the kit uses for numbers
@@ -1227,7 +1238,15 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   suffix. `precision: :any` is free text (`type="text"`,
   `inputmode="decimal"`, no spinner, no step/min/max): the browser's
   locale rules for number controls never get to reject a dot or a comma,
-  and the server takes the value unrounded. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
+  and the server takes the value unrounded.
+
+  A zero clears itself on focus: a field showing `0` (or `0.0`, and `0,00`
+  in free-text mode) empties when it gains focus, so a typed `8` is `8`
+  and not `08`; leaving it still empty puts the zero back. Typed text is
+  kept, a non-zero value is never touched. The swap is programmatic, so
+  `qty_change` and the row's selected-state hook never see it, and
+  `qty_commit` (blur) carries the restored zero as before; a host's own
+  `phx-focus` would see the emptied field. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
   form is `novalidate`, so they never gate the submit (a browser
   validation failure would leave Enter silently dead), and every limit
   is re-enforced server-side, exactly as before.
@@ -1266,6 +1285,11 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   attr(:size, :string, default: "sm", values: ~w(xs sm))
 
   def qty_stepper(assigns) do
+    assigns =
+      assigns
+      |> assign(:zero_on_focus, @zero_on_focus)
+      |> assign(:zero_on_blur, @zero_on_blur)
+
     ~H"""
     <%!-- The form wraps the join (Enter commits via phx-submit; phx-blur
          commits on focus loss). phx-change catches what blur never sees:
@@ -1357,6 +1381,8 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           phx-value-uuid={@uuid}
           phx-target={@target}
           aria-label={gettext("Quantity")}
+          onfocus={@zero_on_focus}
+          onblur={@zero_on_blur}
         />
         <span
           :if={@unit}

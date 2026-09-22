@@ -9,6 +9,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
   use PhoenixKitCatalogue.LiveCase, async: false
 
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Web.PlaceTree
 
   setup do
     cat = fixture_catalogue(%{name: "Detail Branches"})
@@ -185,7 +186,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       assert_push_event(view, "bulk_select:clear", %{})
     end
 
-    test "request_bulk_move_items opens the move modal with same-catalogue targets",
+    test "request_bulk_move_items opens the move modal with this catalogue's tree",
          %{conn: conn, catalogue: cat} do
       cat_a = fixture_category(cat, %{name: "Cat A"})
       _cat_b = fixture_category(cat, %{name: "Cat B"})
@@ -196,9 +197,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       modal = :sys.get_state(view.pid).socket.assigns.bulk_move_modal
       assert modal.count == 1
-      assert modal.disposition == :uncategorize
-      target_uuids = Enum.map(modal.targets, fn {c, _depth} -> c.uuid end)
-      assert cat_a.uuid in target_uuids
+      assert modal.target == nil
+      assert PlaceTree.find(modal.tree, "category:" <> cat_a.uuid)
     end
 
     test "confirm_bulk_move_items uncategorizes the selection",
@@ -208,6 +208,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
       render_click(view, "request_bulk_move_items", %{"uuids" => [a.uuid]})
+
+      # The catalogue's own row: uncategorized in it.
+      view
+      |> element(~s(#bulk-move-items-picker [data-place="catalogue:#{cat.uuid}"]))
+      |> render_click()
+
       render_click(view, "confirm_bulk_move_items", %{})
 
       assert Catalogue.get_item(a.uuid).category_uuid == nil

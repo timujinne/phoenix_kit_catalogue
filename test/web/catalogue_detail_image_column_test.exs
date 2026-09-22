@@ -44,6 +44,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailImageColumnTest do
 
     assert updated =~ "/small/"
     assert updated =~ item.data["featured_image_uuid"]
+    # The item's name, not "" — a screen reader must hear what the
+    # picture is of (#93).
+    assert updated =~ ~s(alt="Widget")
   end
 
   test "an item with no featured image shows its letter tile, not a broken image or a gap",
@@ -86,6 +89,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailImageColumnTest do
 
     assert updated =~ "/small/"
     assert updated =~ category.data["featured_image_uuid"]
+    assert updated =~ ~s(alt="Configurable")
   end
 
   describe "the managed Image column and the automatic photo column never both show the same picture" do

@@ -53,6 +53,9 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       refute html =~ ~s(loading="lazy")
       assert html =~ "aspect-square"
       assert html =~ "object-cover"
+      # The item's name, not "" — a screen reader must hear what the
+      # picture is of (#93).
+      assert html =~ ~s(alt="M8 Screw")
     end
 
     test "selected state rides data-selected; the badge stays server-drawn" do
@@ -344,6 +347,9 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       [img] = Regex.run(~r/<img[^>]*>/, html)
       assert img =~ "max-w-none"
       assert html =~ "w-full"
+      # The item's name, not "" — a screen reader must hear what the
+      # picture is of (#93).
+      assert img =~ ~s(alt="Widget")
     end
 
     test "item_table renders the checkbox header cell in lockstep" do
@@ -427,6 +433,81 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
   end
 
   describe "qty_stepper/1" do
+    test "a zero clears itself on focus and comes back when the field is left empty" do
+      html =
+        render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: 0)
+
+      # the attribute value is HTML-escaped in the markup (' → &#39;)
+      attr = fn name ->
+        [js] = Regex.run(~r/#{name}="([^"]*)"/, html, capture: :all_but_first)
+        String.replace(js, "&#39;", "'")
+      end
+
+      onfocus = attr.("onfocus")
+      onblur = attr.("onblur")
+
+      assert onfocus =~ "this.dataset.pkZero=this.value"
+      assert onfocus =~ "this.value=''"
+      [regex] = Regex.run(~r{^if\(/(.*)/\.test}, onfocus, capture: :all_but_first)
+      js_zero = ~r/#{regex}/
+      for zero <- ["0", "0,00", "0.0", " 0 ", "-0"], do: assert(zero =~ js_zero)
+      for other <- ["", "1", "0,5", "10", "2.5"], do: refute(other =~ js_zero)
+
+      assert onblur =~ "this.value.trim()===''"
+      assert onblur =~ "this.value=this.dataset.pkZero"
+      assert onblur =~ "delete this.dataset.pkZero"
+    end
+
+    # The handlers themselves, run in node on a stand-in `this` — the
+    # attribute strings above only prove the wiring. Skipped without node.
+    test "in a browser-like run: 0 clears on focus and returns on blur, typed text stays" do
+      case System.find_executable("node") do
+        nil ->
+          :ok
+
+        node ->
+          html =
+            render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: 0)
+
+          attr = fn name ->
+            [js] = Regex.run(~r/#{name}="([^"]*)"/, html, capture: :all_but_first)
+            String.replace(js, "&#39;", "'")
+          end
+
+          run = fn value, typed ->
+            script = """
+            const el = {value: #{Jason.encode!(value)}, dataset: {}};
+            const focus = new Function(#{Jason.encode!(attr.("onfocus"))});
+            const blur = new Function(#{Jason.encode!(attr.("onblur"))});
+            focus.call(el); const focused = el.value;
+            if (#{Jason.encode!(typed)} !== null) el.value = #{Jason.encode!(typed)};
+            blur.call(el);
+            process.stdout.write(JSON.stringify([focused, el.value]));
+            """
+
+            {out, 0} = System.cmd(node, ["-e", script])
+            Jason.decode!(out)
+          end
+
+          assert run.("0", nil) == ["", "0"]
+          assert run.("0", "8") == ["", "8"]
+          assert run.("0,00", nil) == ["", "0,00"]
+          assert run.("0,00", "15") == ["", "15"]
+          assert run.("2.5", nil) == ["2.5", "2.5"]
+          assert run.("2.5", "3") == ["2.5", "3"]
+          assert run.("", nil) == ["", ""]
+      end
+    end
+
+    test "the free-decimal text control carries the same zero handlers" do
+      html =
+        render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: :any)
+
+      assert html =~ ~s(type="text")
+      assert html =~ ~s(onfocus=")
+      assert html =~ ~s(onblur=")
+    end
+
     # 2026-08-30: a native <input type="number"> — browser spinner arrows,
     # no custom −/+ buttons.
     test "integer mode: native number control, step 1, numeric keyboard, no unit suffix" do

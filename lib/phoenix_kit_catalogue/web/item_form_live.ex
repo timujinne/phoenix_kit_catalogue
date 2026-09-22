@@ -866,7 +866,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # never move the item.
 
   def handle_event("open_location_picker", _params, socket) do
-    tree = ItemLocation.tree(socket.assigns.catalogue_kind)
+    tree = ItemLocation.tree(socket.assigns.catalogue_kind, socket.assigns[:current_locale])
 
     {:noreply,
      assign(socket, :location_picker, %{
@@ -3772,6 +3772,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                           class="checkbox checkbox-xs"
                         />
                         <% thumb = chip_thumb(preview, value) %>
+                        <%!-- alt="" is deliberate (#93): this img sits inside
+                             the <label> alongside the checkbox and
+                             {value.label} below — the label's one computed
+                             accessible name already carries the text, so a
+                             non-empty alt would announce it twice. --%>
                         <img
                           :if={thumb}
                           src={URLSigner.signed_url(thumb, "thumbnail")}
@@ -3809,7 +3814,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                         <img
                           :if={preview.thumbs[value.key]}
                           src={URLSigner.signed_url(preview.thumbs[value.key], "thumbnail")}
-                          alt=""
+                          alt={value.label || ""}
                           class="w-5 h-5 rounded object-cover"
                         />
                         <span class="text-sm">{value.label}</span>

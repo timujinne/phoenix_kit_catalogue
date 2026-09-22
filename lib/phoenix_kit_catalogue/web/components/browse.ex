@@ -1119,7 +1119,8 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           <% :unit -> %>
             <span class="text-base-content/70">{unit_label(@item)}</span>
           <% :price -> %>
-            <span :if={@item.price} class="font-semibold whitespace-nowrap">
+            <%!-- tabular-nums: prices right-align digit under digit. --%>
+            <span :if={@item.price} class="font-semibold whitespace-nowrap tabular-nums">
               {format_price(@item.price)}
               <span
                 :if={@inline_unit && @item.unit}
@@ -1142,7 +1143,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               {unit_label(@item)}
             </span>
           <% :base_price -> %>
-            <span class="whitespace-nowrap">{format_price(@item.base_price)}</span>
+            <span class="whitespace-nowrap tabular-nums">{format_price(@item.base_price)}</span>
           <% :qty -> %>
             <div class="flex justify-end">{render_slot(@qty)}</div>
         <% end %>

@@ -503,6 +503,23 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       for name <- ~w(onfocus onblur onkeydown), do: assert(html =~ ~s( #{name}="))
     end
 
+    # 2026-09-24: the field is named just "value", so the browser offered
+    # whatever was once typed into any other field of that name ("Saved
+    # info — Must") under the quantity the user was typing.
+    test "the browser's saved-input suggestions are off in every mode" do
+      for precision <- [0, 2, :any] do
+        html =
+          render_component(&Browse.qty_stepper/1,
+            id: "q1",
+            uuid: "u-1",
+            qty: "1",
+            precision: precision
+          )
+
+        assert html =~ ~s(autocomplete="off"), "precision #{inspect(precision)}"
+      end
+    end
+
     # 2026-08-30: a native <input type="number"> — browser spinner arrows,
     # no custom −/+ buttons.
     test "integer mode: native number control, step 1, numeric keyboard, no unit suffix" do

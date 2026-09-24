@@ -1393,6 +1393,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           max={@precision != :any && @max}
           step={qty_step(@precision)}
           inputmode={if decimal_precision?(@precision), do: "decimal", else: "numeric"}
+          autocomplete="off"
           class={["input join-item text-center pl-1 pr-2", qty_width(@size), input_size(@size)]}
           phx-debounce="400"
           phx-blur="qty_commit"

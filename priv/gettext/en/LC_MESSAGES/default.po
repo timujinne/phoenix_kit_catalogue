@@ -2672,6 +2672,72 @@ msgstr ""
 msgid "sheet"
 msgstr ""
 
+msgid "h"
+msgstr ""
+
+msgid "service"
+msgstr ""
+
+msgid "visit"
+msgstr ""
+
+msgid "km"
+msgstr ""
+
+msgid "pack"
+msgstr ""
+
+msgid "roll"
+msgstr ""
+
+msgid "kg"
+msgstr ""
+
+msgid "l"
+msgstr ""
+
+msgid "m³"
+msgstr ""
+
+msgid "Hour"
+msgstr ""
+
+msgid "Service (teenus)"
+msgstr ""
+
+msgid "Visit (väljasõit)"
+msgstr ""
+
+msgid "Kilometer"
+msgstr ""
+
+msgid "Pack"
+msgstr ""
+
+msgid "Roll"
+msgstr ""
+
+msgid "Kilogram"
+msgstr ""
+
+msgid "Litre"
+msgstr ""
+
+msgid "m³ (cubic meter)"
+msgstr ""
+
+msgid "Pair"
+msgstr ""
+
+msgid "Sheet"
+msgstr ""
+
+msgid "Units for goods"
+msgstr ""
+
+msgid "Units for services"
+msgstr ""
+
 msgid "unit"
 msgstr ""
 

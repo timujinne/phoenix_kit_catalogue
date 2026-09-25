@@ -134,6 +134,35 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
     end
   end
 
+  describe "new item — unit select" do
+    test "renders both optgroups with every unit code, including pair and sheet", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      {:ok, _view, html} = live(conn, new_item_url(catalogue.uuid))
+
+      document = LazyHTML.from_fragment(html)
+      unit_select = LazyHTML.query(document, "select#item_unit")
+
+      optgroup_labels =
+        unit_select
+        |> LazyHTML.query("optgroup")
+        |> LazyHTML.attribute("label")
+
+      assert length(optgroup_labels) == 2
+
+      option_values =
+        unit_select
+        |> LazyHTML.query("option")
+        |> LazyHTML.attribute("value")
+
+      for unit <- Item.allowed_units() do
+        assert unit in option_values, "expected #{unit} to be a selectable option"
+      end
+
+      assert "pair" in option_values
+      assert "sheet" in option_values
+    end
+  end
+
   describe "new item — validate" do
     test "shows name error when name is blank", %{conn: conn} do
       catalogue = fixture_catalogue()

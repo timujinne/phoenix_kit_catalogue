@@ -20,7 +20,9 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   @foreign_key_type UUIDv7
 
   @statuses ~w(active inactive discontinued deleted)
-  @units ~w(piece set pair sheet m2 running_meter)
+  @goods_units ~w(piece set pair sheet m2 running_meter pack roll kg litre m3)
+  @service_units ~w(hour service visit km)
+  @units @goods_units ++ @service_units
 
   # Mirrors the DB CHECK added in V179. Keep the two in step.
   @manufacturer_sources ~w(local crm_company)
@@ -28,6 +30,15 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
 
   @spec allowed_units() :: [String.t()]
   def allowed_units, do: @units
+
+  @doc """
+  Unit codes split into `{group_label, codes}` pairs — goods units, then
+  service units — for building a grouped `<optgroup>` select
+  (`Phoenix.HTML.Form.options_for_select/2` accepts `{label, options}`
+  tuples). Every code `allowed_units/0` returns appears exactly once.
+  """
+  @spec unit_groups() :: [{String.t(), [String.t()]}]
+  def unit_groups, do: [{"goods", @goods_units}, {"services", @service_units}]
 
   @spec allowed_default_units() :: [String.t()]
   def allowed_default_units, do: @default_units
@@ -48,6 +59,15 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   def unit_label("sheet"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "sheet")
   def unit_label("m2"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m²")
   def unit_label("running_meter"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "rm")
+  def unit_label("hour"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "h")
+  def unit_label("service"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "service")
+  def unit_label("visit"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "visit")
+  def unit_label("km"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "km")
+  def unit_label("pack"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "pack")
+  def unit_label("roll"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "roll")
+  def unit_label("kg"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "kg")
+  def unit_label("litre"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "l")
+  def unit_label("m3"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m³")
   def unit_label(other) when is_binary(other), do: other
   def unit_label(_), do: ""
 

@@ -2672,6 +2672,72 @@ msgstr "komplekt"
 msgid "sheet"
 msgstr "leht"
 
+msgid "h"
+msgstr "h"
+
+msgid "service"
+msgstr "teenus"
+
+msgid "visit"
+msgstr "väljasõit"
+
+msgid "km"
+msgstr "km"
+
+msgid "pack"
+msgstr "pakk"
+
+msgid "roll"
+msgstr "rull"
+
+msgid "kg"
+msgstr "kg"
+
+msgid "l"
+msgstr "l"
+
+msgid "m³"
+msgstr "m³"
+
+msgid "Hour"
+msgstr "Tund"
+
+msgid "Service (teenus)"
+msgstr "Teenus"
+
+msgid "Visit (väljasõit)"
+msgstr "Väljasõit"
+
+msgid "Kilometer"
+msgstr "Kilomeeter"
+
+msgid "Pack"
+msgstr "Pakk"
+
+msgid "Roll"
+msgstr "Rull"
+
+msgid "Kilogram"
+msgstr "Kilogramm"
+
+msgid "Litre"
+msgstr "Liiter"
+
+msgid "m³ (cubic meter)"
+msgstr "m³ (kuupmeeter)"
+
+msgid "Pair"
+msgstr "Paar"
+
+msgid "Sheet"
+msgstr "Leht"
+
+msgid "Units for goods"
+msgstr "Kaupade ühikud"
+
+msgid "Units for services"
+msgstr "Teenuste ühikud"
+
 msgid "unit"
 msgstr "ühik"
 

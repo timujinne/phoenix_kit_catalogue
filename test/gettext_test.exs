@@ -1113,4 +1113,62 @@ defmodule PhoenixKitCatalogue.GettextTest do
   after
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
   end
+
+  test "Item.unit_label/1 is translated for every unit code, in et/ru/en" do
+    alias PhoenixKitCatalogue.Schemas.Item
+
+    expected = %{
+      "piece" => %{"et" => "tk", "ru" => "шт", "en" => "pc"},
+      "set" => %{"et" => "komplekt", "ru" => "комплект", "en" => "set"},
+      "pair" => %{"et" => "paar", "ru" => "пара", "en" => "pair"},
+      "sheet" => %{"et" => "leht", "ru" => "лист", "en" => "sheet"},
+      "m2" => %{"et" => "m²", "ru" => "м²", "en" => "m²"},
+      "running_meter" => %{"et" => "jm", "ru" => "пог.м", "en" => "rm"},
+      "hour" => %{"et" => "h", "ru" => "ч", "en" => "h"},
+      "service" => %{"et" => "teenus", "ru" => "усл.", "en" => "service"},
+      "visit" => %{"et" => "väljasõit", "ru" => "выезд", "en" => "visit"},
+      "km" => %{"et" => "km", "ru" => "км", "en" => "km"},
+      "pack" => %{"et" => "pakk", "ru" => "уп.", "en" => "pack"},
+      "roll" => %{"et" => "rull", "ru" => "рулон", "en" => "roll"},
+      "kg" => %{"et" => "kg", "ru" => "кг", "en" => "kg"},
+      "litre" => %{"et" => "l", "ru" => "л", "en" => "l"},
+      "m3" => %{"et" => "m³", "ru" => "м³", "en" => "m³"}
+    }
+
+    for {unit, locales} <- expected, {locale, label} <- locales do
+      actual =
+        Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+          Item.unit_label(unit)
+        end)
+
+      assert actual == label, "unit #{unit} in #{locale} expected #{label}, got #{actual}"
+    end
+  end
+
+  test "the unit optgroup headings are translated in et/ru/de/fr" do
+    msgids = %{
+      "Units for goods" => %{
+        "et" => "Kaupade ühikud",
+        "ru" => "Единицы для товаров",
+        "de" => "Einheiten für Waren",
+        "fr" => "Unités pour marchandises"
+      },
+      "Units for services" => %{
+        "et" => "Teenuste ühikud",
+        "ru" => "Единицы для услуг",
+        "de" => "Einheiten für Leistungen",
+        "fr" => "Unités pour prestations"
+      }
+    }
+
+    for {msgid, locales} <- msgids, {locale, translation} <- locales do
+      actual =
+        Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid)
+        end)
+
+      assert actual == translation,
+             "#{msgid} in #{locale} expected #{translation}, got #{actual}"
+    end
+  end
 end

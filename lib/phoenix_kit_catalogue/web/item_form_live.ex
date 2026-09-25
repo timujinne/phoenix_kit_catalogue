@@ -3329,14 +3329,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                     field={@form[:unit]}
                     label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
                     class="transition-colors focus-within:select-primary"
-                    options={[
-                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Piece"), "piece"},
-                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "m² (square meter)"), "m2"},
-                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Running meter"), "running_meter"},
-                      # kmpl = the Estonian set/komplekt (boss, 2026-08-31);
-                      # stored as "set", the vocabulary unit_label/1 knows.
-                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set (kmpl)"), "set"}
-                    ]}
+                    options={unit_select_options()}
                   />
                 </div>
                 <div>
@@ -4662,4 +4655,51 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       _ -> code
     end
   end
+
+  # `<optgroup>`-grouped unit options: `Phoenix.HTML.Form.options_for_select/2`
+  # (used inside the core `.select`) accepts `{group_label, options}` tuples.
+  defp unit_select_options do
+    for {group, codes} <- Item.unit_groups() do
+      {unit_group_label(group), Enum.map(codes, &{unit_option_label(&1), &1})}
+    end
+  end
+
+  defp unit_group_label("goods"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Units for goods")
+
+  defp unit_group_label("services"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Units for services")
+
+  defp unit_option_label("piece"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Piece")
+
+  defp unit_option_label("m2"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m² (square meter)")
+
+  defp unit_option_label("running_meter"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Running meter")
+
+  # kmpl = the Estonian set/komplekt (boss, 2026-08-31); stored as "set",
+  # the vocabulary unit_label/1 knows.
+  defp unit_option_label("set"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Set (kmpl)")
+  defp unit_option_label("pair"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pair")
+  defp unit_option_label("sheet"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Sheet")
+  defp unit_option_label("pack"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Pack")
+  defp unit_option_label("roll"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Roll")
+  defp unit_option_label("kg"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Kilogram")
+  defp unit_option_label("litre"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Litre")
+
+  defp unit_option_label("m3"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m³ (cubic meter)")
+
+  defp unit_option_label("hour"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Hour")
+  # Bare "Service" is reserved for the item-type select (B1b) — this option
+  # carries the Estonian abbreviation instead, same pattern as "Set (kmpl)".
+  defp unit_option_label("service"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Service (teenus)")
+
+  defp unit_option_label("visit"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Visit (väljasõit)")
+
+  defp unit_option_label("km"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Kilometer")
+  defp unit_option_label(code), do: Item.unit_label(code)
 end

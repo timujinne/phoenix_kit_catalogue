@@ -2682,6 +2682,72 @@ msgstr "комплект"
 msgid "sheet"
 msgstr "лист"
 
+msgid "h"
+msgstr "ч"
+
+msgid "service"
+msgstr "усл."
+
+msgid "visit"
+msgstr "выезд"
+
+msgid "km"
+msgstr "км"
+
+msgid "pack"
+msgstr "уп."
+
+msgid "roll"
+msgstr "рулон"
+
+msgid "kg"
+msgstr "кг"
+
+msgid "l"
+msgstr "л"
+
+msgid "m³"
+msgstr "м³"
+
+msgid "Hour"
+msgstr "Час"
+
+msgid "Service (teenus)"
+msgstr "Услуга"
+
+msgid "Visit (väljasõit)"
+msgstr "Выезд"
+
+msgid "Kilometer"
+msgstr "Километр"
+
+msgid "Pack"
+msgstr "Упаковка"
+
+msgid "Roll"
+msgstr "Рулон"
+
+msgid "Kilogram"
+msgstr "Килограмм"
+
+msgid "Litre"
+msgstr "Литр"
+
+msgid "m³ (cubic meter)"
+msgstr "м³ (кубометр)"
+
+msgid "Pair"
+msgstr "Пара"
+
+msgid "Sheet"
+msgstr "Лист"
+
+msgid "Units for goods"
+msgstr "Единицы для товаров"
+
+msgid "Units for services"
+msgstr "Единицы для услуг"
+
 msgid "unit"
 msgstr "ед."
 

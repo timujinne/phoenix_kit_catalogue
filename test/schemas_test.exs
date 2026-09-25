@@ -264,6 +264,35 @@ defmodule PhoenixKitCatalogue.SchemasTest do
       end
     end
 
+    test "allowed_units/0 has exactly the 15 goods+services codes" do
+      assert Enum.sort(Item.allowed_units()) ==
+               Enum.sort(
+                 ~w(piece set pair sheet m2 running_meter pack roll kg litre m3 hour service visit km)
+               )
+    end
+  end
+
+  describe "Item.unit_groups/0" do
+    test "covers every allowed unit exactly once, split into goods and services" do
+      groups = Item.unit_groups()
+      assert Enum.map(groups, &elem(&1, 0)) == ["goods", "services"]
+
+      all_grouped = groups |> Enum.flat_map(&elem(&1, 1))
+      assert Enum.sort(all_grouped) == Enum.sort(Item.allowed_units())
+      assert length(all_grouped) == length(Enum.uniq(all_grouped))
+    end
+
+    test "goods group holds the non-service units, services group holds the rest" do
+      groups = Item.unit_groups()
+      assert {"goods", goods} = List.keyfind(groups, "goods", 0)
+      assert {"services", services} = List.keyfind(groups, "services", 0)
+
+      assert Enum.sort(goods) ==
+               Enum.sort(~w(piece set pair sheet m2 running_meter pack roll kg litre m3))
+
+      assert Enum.sort(services) == Enum.sort(~w(hour service visit km))
+    end
+
     test "rejects negative base_price" do
       cs =
         Item.changeset(%Item{}, %{

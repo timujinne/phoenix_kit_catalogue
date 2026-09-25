@@ -164,6 +164,51 @@ defmodule PhoenixKitCatalogue.Import.MapperTest do
       assert Mapper.normalize_unit("tk") == "piece"
       assert Mapper.normalize_unit("Tk") == "piece"
     end
+
+    test "maps the new service-unit aliases" do
+      for alias_value <- ~w(h tund tundi ч час) do
+        assert Mapper.normalize_unit(alias_value) == "hour", "#{alias_value} should map to hour"
+      end
+
+      for alias_value <- ["teenus", "усл", "усл.", "услуга"] do
+        assert Mapper.normalize_unit(alias_value) == "service",
+               "#{alias_value} should map to service"
+      end
+
+      for alias_value <- ["väljasõit", "выезд"] do
+        assert Mapper.normalize_unit(alias_value) == "visit",
+               "#{alias_value} should map to visit"
+      end
+
+      for alias_value <- ["km", "км"] do
+        assert Mapper.normalize_unit(alias_value) == "km", "#{alias_value} should map to km"
+      end
+    end
+
+    test "maps the new goods-unit aliases" do
+      for alias_value <- ["pakk", "pk", "уп", "уп.", "упак", "упаковка"] do
+        assert Mapper.normalize_unit(alias_value) == "pack",
+               "#{alias_value} should map to pack"
+      end
+
+      for alias_value <- ["rull", "рулон"] do
+        assert Mapper.normalize_unit(alias_value) == "roll",
+               "#{alias_value} should map to roll"
+      end
+
+      for alias_value <- ["kg", "кг"] do
+        assert Mapper.normalize_unit(alias_value) == "kg", "#{alias_value} should map to kg"
+      end
+
+      for alias_value <- ["l", "liiter", "л", "литр"] do
+        assert Mapper.normalize_unit(alias_value) == "litre",
+               "#{alias_value} should map to litre"
+      end
+
+      for alias_value <- ["m3", "m³", "м3", "м³", "kuupmeeter"] do
+        assert Mapper.normalize_unit(alias_value) == "m3", "#{alias_value} should map to m3"
+      end
+    end
   end
 
   describe "build_import_plan/3" do

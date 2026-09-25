@@ -56,7 +56,39 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
     "jm" => "running_meter",
     "rm" => "running_meter",
     "lm" => "running_meter",
-    "running_meter" => "running_meter"
+    "running_meter" => "running_meter",
+    "h" => "hour",
+    "tund" => "hour",
+    "tundi" => "hour",
+    "ч" => "hour",
+    "час" => "hour",
+    "teenus" => "service",
+    "усл" => "service",
+    "усл." => "service",
+    "услуга" => "service",
+    "väljasõit" => "visit",
+    "выезд" => "visit",
+    "km" => "km",
+    "км" => "km",
+    "pakk" => "pack",
+    "pk" => "pack",
+    "уп" => "pack",
+    "уп." => "pack",
+    "упак" => "pack",
+    "упаковка" => "pack",
+    "rull" => "roll",
+    "рулон" => "roll",
+    "kg" => "kg",
+    "кг" => "kg",
+    "l" => "litre",
+    "liiter" => "litre",
+    "л" => "litre",
+    "литр" => "litre",
+    "m3" => "m3",
+    "m³" => "m3",
+    "м3" => "m3",
+    "м³" => "m3",
+    "kuupmeeter" => "m3"
   }
 
   @header_patterns %{
@@ -331,7 +363,7 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
   @doc """
   Resolves a PRO100 unit label to a canonical unit, or `:unknown` if it has no
   mapping. Unlike `normalize_unit/2`, never coerces unknown labels to "piece"
-  (PRO100's `m³` has no equivalent and must surface in the report).
+  — a label with no alias must surface in the report.
   """
   @spec resolve_pro100_unit(String.t() | nil) :: {:ok, String.t()} | :unknown
   def resolve_pro100_unit(label) when is_binary(label) do

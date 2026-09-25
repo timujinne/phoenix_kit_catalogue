@@ -247,6 +247,10 @@ Item.final_price(item, catalogue.markup_percentage, catalogue.discount_percentag
 Item.discount_amount(item, catalogue.markup_percentage, catalogue.discount_percentage)
 Item.effective_markup(item, catalogue.markup_percentage)
 Item.effective_discount(item, catalogue.discount_percentage)
+Item.effective_type(item, catalogue.item_type)   # "goods" | "service" — the item's own type, else the catalogue's
+Item.effective_type(item)                        # same, reading the preloaded catalogue (raises if nothing is loaded)
+Item.service?(item)
+Catalogue.effective_item_type(item)              # never raises: loads the catalogue itself when it is not preloaded
 Catalogue.swap_category_positions(cat_a, cat_b)    # atomic position swap
 
 # ── Manufacturers ─────────────────────────────────────
@@ -273,6 +277,7 @@ Catalogue.search_items("oak", limit: 100, offset: 100)           # paging
 Catalogue.search_items("oak", catalogue_uuids: [a, b])           # only these catalogues
 Catalogue.search_items("oak", category_uuids: [c1, c2])          # only these categories
 Catalogue.search_items("oak", catalogue_uuids: [a], category_uuids: [c1])  # AND
+Catalogue.search_items("oak", item_types: ["goods"])            # by effective type (item's own, else its catalogue's)
 Catalogue.search_items_in_catalogue(cat_uuid, "panel")           # convenience wrapper
 Catalogue.search_items_in_category(cat_uuid, "oak")              # convenience wrapper
 
@@ -332,6 +337,10 @@ stacked item details, per-user view/column memory.
 />
 ```
 
+`scope` also takes `item_types: ["goods"]` (or `["service"]`): only items of
+that effective type are listed, counted and selectable — e.g. a warehouse
+document that must never receive a service.
+
 **It is live while open.** A relay process holds the catalogue PubSub
 subscription for the component and pushes a debounced refresh through
 `send_update/3`, so a price corrected elsewhere, an item another user
@@ -380,7 +389,7 @@ Data-driven item table with opt-in columns, actions, and card view:
 />
 ```
 
-Available columns: `:name`, `:sku`, `:base_price`, `:price` (post-markup), `:discount`, `:final_price` (post-discount), `:unit`, `:status`, `:category`, `:catalogue`, `:manufacturer`. Pass `markup_percentage={@cat.markup_percentage}` when using `:price` or `:final_price`; pass `discount_percentage={@cat.discount_percentage}` when using `:discount` or `:final_price`.
+Available columns: `:name`, `:sku`, `:base_price`, `:price` (post-markup), `:discount`, `:final_price` (post-discount), `:unit`, `:status`, `:category`, `:catalogue`, `:manufacturer`, `:item_type`. Pass `markup_percentage={@cat.markup_percentage}` when using `:price` or `:final_price`; pass `discount_percentage={@cat.discount_percentage}` when using `:discount` or `:final_price`; pass `catalogue_item_type={@cat.item_type}` for `:item_type` and the "Service" badge when the items are not loaded with their catalogue.
 
 Unknown columns render as "—" with a logger warning. Unloaded associations, nil values, and invalid markup types are handled gracefully — the component never crashes the page.
 

@@ -3719,3 +3719,18 @@ msgstr "sans catégorie"
 
 msgid "Pick the category to import into, or choose another option."
 msgstr "Choisissez la catégorie d’import ou une autre option."
+
+msgid "Item type"
+msgstr "Type d'article"
+
+msgid "Default item type"
+msgstr "Type d'article par défaut"
+
+msgid "Goods"
+msgstr "Marchandise"
+
+msgid "Service"
+msgstr "Service"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Comme dans le catalogue (%{type}) —"

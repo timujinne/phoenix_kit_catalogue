@@ -257,7 +257,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
       {Keyword.get(opts, :include_sku, true), {gettext("SKU"), item.sku}},
       {Keyword.get(opts, :include_price, true),
        {gettext("Price"), format_price(item) || fee_value(item)}},
-      {true, {gettext("Unit"), unit_value(item)}}
+      {true, {gettext("Unit"), unit_value(item)}},
+      {true, {gettext("Item type"), service_value(item)}}
     ]
     |> Enum.filter(fn {include, _field} -> include end)
     |> Enum.map(fn {_include, field} -> field end)
@@ -672,6 +673,17 @@ defmodule PhoenixKitCatalogue.Web.Components.ProductCard do
     # behind the card prices items on an unrescued path, so the two
     # surfaces disagreeing IS the visible symptom pointing at the rule.
     _ -> nil
+  end
+
+  # Client-visible, services only: the owner asked for the service mark, and
+  # "Item type: Goods" on every product would be noise. Items reach the card
+  # without a preload (get_item/1 on the catalogue page, the warehouse stock
+  # page), hence the context call that loads what it needs.
+  defp service_value(%Item{} = item) do
+    case Catalogue.effective_item_type(item) do
+      "service" -> Item.item_type_label("service")
+      _ -> nil
+    end
   end
 
   defp unit_value(%Item{unit: unit}) do

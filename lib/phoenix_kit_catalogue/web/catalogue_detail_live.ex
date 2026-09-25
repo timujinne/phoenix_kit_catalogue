@@ -4118,6 +4118,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               items={@search_results}
               columns={[:name, :sku, :price, :unit, :status]}
               markup_percentage={@catalogue.markup_percentage}
+              catalogue_item_type={@catalogue.item_type}
               edit_path={if @view_mode != "deleted", do: @edit_path_fn}
               preview_event="show_product_card"
               on_restore={if @view_mode == "deleted", do: "restore_item"}
@@ -6123,6 +6124,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               >
                 <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
               </span>
+              <.item_type_badge item={item} catalogue_item_type={@catalogue.item_type} />
             </div>
             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm flex-1">
               <%= for col <- @items_columns do %>
@@ -6151,6 +6153,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   <% "unit" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}</div>
                     <div>{Item.unit_label(item.unit)}</div>
+                  <% "item_type" -> %>
+                    <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}</div>
+                    <div>{Item.item_type_label(Item.effective_type(item, @catalogue.item_type))}</div>
                   <% "status" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}</div>
                     <div><.status_badge status={item.status || "unknown"} size={:xs} /></div>
@@ -6232,6 +6237,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                     <.table_default_header_cell class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
                     </.table_default_header_cell>
+                  <% "item_type" -> %>
+                    <.table_default_header_cell class="w-px whitespace-nowrap">
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}
+                    </.table_default_header_cell>
                   <% "status" -> %>
                     <.sort_header_cell field={:status} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items" class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
@@ -6290,6 +6299,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               </.table_default_cell>
               <.item_pricing_cell
                 item={item}
+                catalogue_item_type={@catalogue.item_type}
                 edit_path={if @view_mode != "deleted", do: @edit_path_fn}
                 has_attributes={Map.has_key?(@attribute_map, item.uuid)}
                 attribute_text={

@@ -3719,3 +3719,18 @@ msgstr "kategoriseerimata"
 
 msgid "Pick the category to import into, or choose another option."
 msgstr "Vali kategooria, kuhu importida, või mõni muu valik."
+
+msgid "Item type"
+msgstr "Liik"
+
+msgid "Default item type"
+msgstr "Vaikimisi liik"
+
+msgid "Goods"
+msgstr "Kaup"
+
+msgid "Service"
+msgstr "Teenus"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Nagu kataloogis (%{type}) —"

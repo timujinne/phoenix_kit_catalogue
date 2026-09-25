@@ -37,6 +37,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
+  alias PhoenixKitCatalogue.Schemas.Item
 
   @translatable_fields ["name", "description"]
 
@@ -59,6 +60,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
     "description" => :description,
     "status" => :status,
     "kind" => :kind,
+    "item_type" => :item_type,
     "markup_percentage" => :markup_percentage,
     "discount_percentage" => :discount_percentage
   }
@@ -520,6 +522,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Standard catalogues hold items priced directly — each item has its own base price, markup, and discount. This is the normal flow for materials, products, or anything with a fixed price tag.")}
                 <% end %>
               </span>
+            </div>
+
+            <div>
+              <.select
+                field={@form[:item_type]}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Default item type")}
+                class="transition-colors focus-within:select-primary"
+                options={Enum.map(Item.allowed_item_types(), &{Item.item_type_label(&1), &1})}
+              />
             </div>
 
             <div>

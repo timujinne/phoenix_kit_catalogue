@@ -2488,11 +2488,46 @@ defmodule PhoenixKitCatalogue.Web.Components do
   defp kind_label(%{kind: "smart"}), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Smart")
   defp kind_label(_), do: nil
 
+  @doc """
+  The "Service" badge for an item whose EFFECTIVE type is service — nothing
+  for goods (every product saying "Goods" would be noise). Styled like the
+  "Smart" catalogue badge.
+
+  The catalogue's type comes from the item's preloaded `:catalogue` when
+  there is one, else from `catalogue_item_type` (what a single-catalogue
+  list passes, like `markup_percentage`). Function components must not
+  query, so an item with neither reads as its own type or goods.
+  """
+  attr(:item, :any, required: true)
+  attr(:catalogue_item_type, :string, default: nil)
+
+  def item_type_badge(assigns) do
+    ~H"""
+    <span
+      :if={display_item_type(@item, @catalogue_item_type) == "service"}
+      class="badge badge-outline badge-xs"
+      data-item-type-badge={@item.uuid}
+    >
+      {Item.item_type_label("service")}
+    </span>
+    """
+  end
+
+  defp display_item_type(item, catalogue_item_type) do
+    catalogue_type =
+      case Map.get(item, :catalogue) do
+        %{item_type: type} -> type
+        _ -> catalogue_item_type
+      end
+
+    Item.effective_type(item, catalogue_type)
+  end
+
   # ═══════════════════════════════════════════════════════════════════
   # Item table
   # ═══════════════════════════════════════════════════════════════════
 
-  @all_columns ~w(name sku base_price price discount final_price unit status category catalogue manufacturer)a
+  @all_columns ~w(name sku base_price price discount final_price unit item_type status category catalogue manufacturer)a
 
   @doc """
   Renders a configurable item table with optional card view toggle.
@@ -2516,6 +2551,10 @@ defmodule PhoenixKitCatalogue.Web.Components do
     * `discount_percentage` — catalogue discount for `:discount` and `:final_price`
       columns (required when either is listed; ignored otherwise). The `:discount`
       column honors per-item overrides via `Item.effective_discount/2`.
+    * `catalogue_item_type` — the catalogue's item type, for the `:item_type`
+      column and the "Service" badge beside the status, used when an item's
+      `:catalogue` is not preloaded (a preloaded one wins, so a list spanning
+      catalogues needs no attr)
     * `edit_path` — 1-arity function `(uuid -> path)` to enable edit links
     * `on_delete` — event name for soft-delete button (e.g. `"delete_item"`)
     * `on_restore` — event name for restore button (e.g. `"restore_item"`)
@@ -2599,6 +2638,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
   attr(:markup_percentage, :any, default: nil)
   attr(:discount_percentage, :any, default: nil)
+  attr(:catalogue_item_type, :string, default: nil)
   attr(:edit_path, :any, default: nil)
 
   attr(:name_path, :any,
@@ -2706,7 +2746,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
       reorder_group={@reorder_group}
       item_id={fn item -> item.uuid end}
       card_fields={
-        &card_fields(&1, @card_columns, @markup_percentage, @discount_percentage, @catalogue_path)
+        &card_fields(
+          &1,
+          @card_columns,
+          @markup_percentage,
+          @discount_percentage,
+          @catalogue_path,
+          @catalogue_item_type
+        )
       }
     >
       <%!-- The picture leads the card, the way the categories grid has
@@ -2757,6 +2804,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
           >
             <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
           </span>
+          <.item_type_badge item={item} catalogue_item_type={@catalogue_item_type} />
         </div>
       </:card_header>
       <.table_default_header>
@@ -2837,6 +2885,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
             item={item}
             markup_percentage={@markup_percentage}
             discount_percentage={@discount_percentage}
+            catalogue_item_type={@catalogue_item_type}
             catalogue_path={@catalogue_path}
             edit_path={@edit_path}
             name_path={@name_path}
@@ -2964,6 +3013,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
   )
 
   attr(:file_count, :integer, default: 0)
+
+  attr(:catalogue_item_type, :string,
+    default: nil,
+    doc:
+      "The catalogue's item type — drives the Service badge and the item_type column " <>
+        "when the item's `:catalogue` is not preloaded."
+  )
+
   attr(:columns, :list, default: ["sku", "price", "unit", "status"])
 
   attr(:supplier_costs, :list,
@@ -3022,9 +3079,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
           </.table_default_cell>
         <% "unit" -> %>
           <.table_default_cell class="text-sm whitespace-nowrap">{format_unit(@item.unit)}</.table_default_cell>
+        <% "item_type" -> %>
+          <.table_default_cell class="text-sm whitespace-nowrap">
+            {Item.item_type_label(display_item_type(@item, @catalogue_item_type))}
+          </.table_default_cell>
         <% "status" -> %>
           <.table_default_cell class="whitespace-nowrap">
             <.status_badge status={@item.status || "unknown"} size={:xs} />
+            <.item_type_badge item={@item} catalogue_item_type={@catalogue_item_type} />
           </.table_default_cell>
         <% "attributes" -> %>
           <.table_default_cell>
@@ -3167,12 +3229,28 @@ defmodule PhoenixKitCatalogue.Web.Components do
     |> String.downcase()
   end
 
-  defp card_fields(item, columns, markup_percentage, discount_percentage, catalogue_path) do
-    Enum.flat_map(columns, fn col ->
-      case card_field_value(item, col, markup_percentage, discount_percentage, catalogue_path) do
-        nil -> []
-        value -> [%{label: column_label(col), value: value}]
-      end
+  defp card_fields(
+         item,
+         columns,
+         markup_percentage,
+         discount_percentage,
+         catalogue_path,
+         catalogue_item_type
+       ) do
+    Enum.flat_map(columns, fn
+      :item_type ->
+        [
+          %{
+            label: column_label(:item_type),
+            value: Item.item_type_label(display_item_type(item, catalogue_item_type))
+          }
+        ]
+
+      col ->
+        case card_field_value(item, col, markup_percentage, discount_percentage, catalogue_path) do
+          nil -> []
+          value -> [%{label: column_label(col), value: value}]
+        end
     end)
   end
 
@@ -3280,6 +3358,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:item, :any, required: true)
   attr(:markup_percentage, :any, default: nil)
   attr(:discount_percentage, :any, default: nil)
+  attr(:catalogue_item_type, :string, default: nil)
   attr(:catalogue_path, :any, default: nil)
   attr(:edit_path, :any, default: nil)
 
@@ -3359,10 +3438,19 @@ defmodule PhoenixKitCatalogue.Web.Components do
     """
   end
 
+  defp item_cell(%{column: :item_type} = assigns) do
+    ~H"""
+    <.table_default_cell class="text-sm whitespace-nowrap">
+      {Item.item_type_label(display_item_type(@item, @catalogue_item_type))}
+    </.table_default_cell>
+    """
+  end
+
   defp item_cell(%{column: :status} = assigns) do
     ~H"""
     <.table_default_cell class="whitespace-nowrap">
       <.status_badge status={@item.status || "unknown"} size={:xs} />
+      <.item_type_badge item={@item} catalogue_item_type={@catalogue_item_type} />
     </.table_default_cell>
     """
   end
@@ -3624,6 +3712,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   defp column_label(:discount), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Discount")
   defp column_label(:final_price), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Final price")
   defp column_label(:unit), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")
+  defp column_label(:item_type), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")
   defp column_label(:status), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")
   defp column_label(:category), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")
   defp column_label(:catalogue), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogue")

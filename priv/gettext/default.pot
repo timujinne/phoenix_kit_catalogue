@@ -3725,3 +3725,18 @@ msgstr ""
 
 msgid "Pick the category to import into, or choose another option."
 msgstr ""
+
+msgid "Item type"
+msgstr ""
+
+msgid "Default item type"
+msgstr ""
+
+msgid "Goods"
+msgstr ""
+
+msgid "Service"
+msgstr ""
+
+msgid "— As in catalogue (%{type}) —"
+msgstr ""

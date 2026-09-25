@@ -136,6 +136,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     "default_value" => :default_value,
     "default_unit" => :default_unit,
     "unit" => :unit,
+    "item_type" => :item_type,
     "status" => :status,
     "category_uuid" => :category_uuid,
     "manufacturer_uuid" => :manufacturer_uuid
@@ -289,6 +290,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         parent_catalogue &&
           Catalogue.localize_one(parent_catalogue, socket.assigns[:current_locale]).name,
       catalogue_kind: kind,
+      catalogue_item_type: item_type_from_catalogue(parent_catalogue),
       catalogue_markup: markup_from_catalogue(parent_catalogue),
       catalogue_discount: discount_from_catalogue(parent_catalogue),
       manufacturers: Catalogue.list_all_manufacturers(status: "active"),
@@ -608,6 +610,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp catalogue_kind(%{kind: kind}) when is_binary(kind), do: kind
   defp catalogue_kind(_), do: "standard"
 
+  defp item_type_from_catalogue(%{item_type: type}) when is_binary(type), do: type
+  defp item_type_from_catalogue(_), do: "goods"
+
   defp markup_from_catalogue(%{markup_percentage: markup}), do: markup
   defp markup_from_catalogue(_), do: nil
 
@@ -876,8 +881,12 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   def handle_event("close_location_picker", _params, socket),
     do: {:noreply, assign(socket, :location_picker, nil)}
 
-  def handle_event("reset_location", _params, socket),
-    do: {:noreply, assign(socket, location_target: nil, location_target_path: [])}
+  def handle_event("reset_location", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(location_target: nil, location_target_path: [])
+     |> assign_catalogue_item_type()}
+  end
 
   # ── Suppliers: staged until Save (SupplierDraft) ─────────────────────
   #
@@ -1471,6 +1480,19 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # The place the section shows: the one picked, else where the item is.
   defp location_shown(assigns), do: assigns.location_target || assigns.location_current
 
+  # The item type select's "As in catalogue (…)" names the type of the
+  # catalogue the item will be saved in — the place Location shows, picked
+  # or current. A place that no longer resolves keeps the last answer.
+  defp assign_catalogue_item_type(socket) do
+    with {:ok, {catalogue_uuid, _category_uuid}} <-
+           ItemLocation.resolve(location_shown(socket.assigns), socket.assigns.catalogue_kind),
+         %{item_type: type} <- Catalogue.get_catalogue(catalogue_uuid) do
+      assign(socket, :catalogue_item_type, type)
+    else
+      _ -> socket
+    end
+  end
+
   defp assign_location(socket, item) do
     current = ItemLocation.target_of(item)
 
@@ -1926,7 +1948,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           socket
       end
 
-    {:noreply, assign(socket, :location_picker, nil)}
+    {:noreply, socket |> assign(:location_picker, nil) |> assign_catalogue_item_type()}
   end
 
   # ── Attachments handle_info (delegated to Attachments module) ────
@@ -3373,6 +3395,22 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                   </span>
                 </div>
               </div>
+            </div>
+
+            <%!-- Outside the pricing block above: a smart catalogue's items
+                 are goods or services too. --%>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <.select
+                field={@form[:item_type]}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}
+                class="transition-colors focus-within:select-primary"
+                prompt={
+                  Gettext.gettext(PhoenixKitCatalogue.Gettext, "— As in catalogue (%{type}) —",
+                    type: Item.item_type_label(@catalogue_item_type)
+                  )
+                }
+                options={Enum.map(Item.allowed_item_types(), &{Item.item_type_label(&1), &1})}
+              />
             </div>
 
             <%!-- Smart-catalogue rules (only for kind: "smart") --%>

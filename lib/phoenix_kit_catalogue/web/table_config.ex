@@ -192,6 +192,9 @@ defmodule PhoenixKitCatalogue.Web.TableConfig do
       col("price", fn -> g("Price") end, default?: true),
       col("supplier_price", fn -> g("Supplier price") end, default?: true),
       col("unit", fn -> g("Unit") end, default?: true),
+      # No filter (no :detail_items column has one); off by default — the
+      # "Service" badge beside the status already marks services.
+      col("item_type", fn -> g("Item type") end, []),
       col("status", fn -> g("Status") end, default?: true, sortable?: true),
       col("attributes", fn -> g("Attributes") end, []),
       col("files", fn -> g("Files") end, []),

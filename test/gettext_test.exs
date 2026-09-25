@@ -2,6 +2,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components
 
   setup do
@@ -1194,5 +1195,49 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert actual == translation,
              "#{msgid} in #{locale} expected #{translation}, got #{actual}"
     end
+  end
+
+  test "the item type strings are translated in et/ru/de/fr and present in en" do
+    msgids = %{
+      "Item type" => %{
+        "et" => "Liik",
+        "ru" => "Вид",
+        "de" => "Artikelart",
+        "fr" => "Type d'article"
+      },
+      "Default item type" => %{
+        "et" => "Vaikimisi liik",
+        "ru" => "Вид позиций по умолчанию",
+        "de" => "Standard-Artikelart",
+        "fr" => "Type d'article par défaut"
+      },
+      "Goods" => %{"et" => "Kaup", "ru" => "Товар", "de" => "Ware", "fr" => "Marchandise"},
+      "Service" => %{
+        "et" => "Teenus",
+        "ru" => "Услуга",
+        "de" => "Dienstleistung",
+        "fr" => "Service"
+      },
+      "— As in catalogue (%{type}) —" => %{
+        "et" => "— Nagu kataloogis (%{type}) —",
+        "ru" => "— Как в каталоге (%{type}) —",
+        "de" => "— Wie im Katalog (%{type}) —",
+        "fr" => "— Comme dans le catalogue (%{type}) —"
+      }
+    }
+
+    for {msgid, locales} <- msgids do
+      # en falls back to the msgid, so read the entry itself.
+      assert po_msgstr("en", msgid) == "", "#{msgid} missing from en.po"
+
+      for {locale, translation} <- locales do
+        assert po_msgstr(locale, msgid) == translation,
+               "#{msgid} in #{locale} expected #{translation}"
+      end
+    end
+
+    Gettext.with_locale(PhoenixKitCatalogue.Gettext, "et", fn ->
+      assert Item.item_type_label("service") == "Teenus"
+    end)
   end
 end

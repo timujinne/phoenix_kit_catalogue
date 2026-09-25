@@ -1124,15 +1124,39 @@ defmodule PhoenixKitCatalogue.GettextTest do
       "sheet" => %{"et" => "leht", "ru" => "лист", "en" => "sheet"},
       "m2" => %{"et" => "m²", "ru" => "м²", "en" => "m²"},
       "running_meter" => %{"et" => "jm", "ru" => "пог.м", "en" => "rm"},
-      "hour" => %{"et" => "h", "ru" => "ч", "en" => "h"},
-      "service" => %{"et" => "teenus", "ru" => "усл.", "en" => "service"},
-      "visit" => %{"et" => "väljasõit", "ru" => "выезд", "en" => "visit"},
-      "km" => %{"et" => "km", "ru" => "км", "en" => "km"},
-      "pack" => %{"et" => "pakk", "ru" => "уп.", "en" => "pack"},
-      "roll" => %{"et" => "rull", "ru" => "рулон", "en" => "roll"},
-      "kg" => %{"et" => "kg", "ru" => "кг", "en" => "kg"},
-      "litre" => %{"et" => "l", "ru" => "л", "en" => "l"},
-      "m3" => %{"et" => "m³", "ru" => "м³", "en" => "m³"}
+      "hour" => %{"et" => "h", "ru" => "ч", "en" => "h", "de" => "Std.", "fr" => "h"},
+      "service" => %{
+        "et" => "teenus",
+        "ru" => "усл.",
+        "en" => "service",
+        "de" => "Leistung",
+        "fr" => "prestation"
+      },
+      "visit" => %{
+        "et" => "väljasõit",
+        "ru" => "выезд",
+        "en" => "visit",
+        "de" => "Anfahrt",
+        "fr" => "déplacement"
+      },
+      "km" => %{"et" => "km", "ru" => "км", "en" => "km", "de" => "km", "fr" => "km"},
+      "pack" => %{
+        "et" => "pakk",
+        "ru" => "уп.",
+        "en" => "pack",
+        "de" => "Pkg.",
+        "fr" => "paquet"
+      },
+      "roll" => %{
+        "et" => "rull",
+        "ru" => "рулон",
+        "en" => "roll",
+        "de" => "Rolle",
+        "fr" => "rouleau"
+      },
+      "kg" => %{"et" => "kg", "ru" => "кг", "en" => "kg", "de" => "kg", "fr" => "kg"},
+      "litre" => %{"et" => "l", "ru" => "л", "en" => "l", "de" => "l", "fr" => "l"},
+      "m3" => %{"et" => "m³", "ru" => "м³", "en" => "m³", "de" => "m³", "fr" => "m³"}
     }
 
     for {unit, locales} <- expected, {locale, label} <- locales do

@@ -54,8 +54,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       `"inactive"`, `"discontinued"`); `nil` or `[]` = all non-deleted.
       Forwards to `Catalogue.search_items/2`'s `:statuses` opt — the same
       scope vocabulary `ItemSelectorModal` accepts.
+    * `:item_types` — item types to include (`"goods"`, `"service"`),
+      matched on the EFFECTIVE type; `nil` or `[]` = all. Forwards to
+      `Catalogue.search_items/2`'s `:item_types` opt.
     * Changing any scope attr (`:category_uuids`, `:catalogue_uuids`,
-      `:include_descendants`, `:only`, `:statuses`) from the parent
+      `:include_descendants`, `:only`, `:statuses`, `:item_types`) from the parent
       invalidates the current option list and closes the dropdown — a
       result set fetched under the old scope is never left selectable.
     * `:selected_item` — the `%Item{}` currently chosen (or `nil`).
@@ -204,6 +207,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
        include_descendants: true,
        only: nil,
        statuses: nil,
+       item_types: nil,
        placeholder: nil,
        empty_query_limit: @default_empty_query_limit,
        page_size: @default_page_size,
@@ -236,7 +240,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
   # the option list fetched under the OLD scope is invalidated — otherwise
   # a still-open dropdown keeps offering (and `select` keeps accepting)
   # items the new scope would never return.
-  @scope_assigns [:category_uuids, :catalogue_uuids, :include_descendants, :only, :statuses]
+  @scope_assigns [
+    :category_uuids,
+    :catalogue_uuids,
+    :include_descendants,
+    :only,
+    :statuses,
+    :item_types
+  ]
 
   @impl true
   def update(assigns, socket) do
@@ -492,6 +503,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       include_descendants: include_descendants,
       only: only,
       statuses: statuses,
+      item_types: item_types,
       page_size: page_size,
       empty_query_limit: empty_query_limit
     } = socket.assigns
@@ -510,6 +522,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
       |> maybe_put(:catalogue_uuids, catalogue_uuids)
       |> maybe_put(:only, only)
       |> maybe_put(:statuses, statuses)
+      |> maybe_put(:item_types, item_types)
       |> maybe_put(:order, browse_order(query))
 
     options = Catalogue.search_items(query || "", opts)

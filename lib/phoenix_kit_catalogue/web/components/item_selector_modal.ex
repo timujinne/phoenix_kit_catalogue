@@ -262,8 +262,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   ## Scope
 
   `scope` fixes what the user may browse: any of `:catalogue_uuids`,
-  `:category_uuids`, `:only`, `:statuses`, `:include_descendants` (the
-  `Catalogue.search_items/2` vocabulary). It is enforced in `BrowseState`
+  `:category_uuids`, `:only`, `:statuses`, `:include_descendants`,
+  `:item_types` (the `Catalogue.search_items/2` vocabulary; `item_types:
+  ["goods"]` keeps services out of a warehouse picker, and the level
+  counters count by it too). It is enforced in `BrowseState`
   — every fetch re-derives from it, and client events can only narrow
   within it, so a crafted event cannot browse or select outside what the
   host allowed. Selection events are additionally accepted only for uuids
@@ -893,6 +895,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
        when is_list(uuids) and length(uuids) > 1 do
     catalogue_uuids = Enum.map(uuids, &normalize_uuid/1)
     base = category_tree_base(catalogue_uuids, scope, original, locale)
+    type_opts = item_type_opts(scope)
 
     # Catalogue-first drill (Max, 2026-08-31: "for multiple catalogues we
     # should first have the user choose a catalogue"): the ROOT level
@@ -917,7 +920,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       catalogue_uuids
       |> Enum.flat_map(fn catalogue_uuid ->
         catalogue_uuid
-        |> Catalogue.item_counts_by_category_for_catalogue()
+        |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
         |> Map.to_list()
       end)
       |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end)
@@ -926,7 +929,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     # category tiles read — uuids never collide.
     catalogue_counts =
       Map.new(catalogue_uuids, fn catalogue_uuid ->
-        {catalogue_uuid, Catalogue.count_items_for_catalogue(catalogue_uuid)}
+        {catalogue_uuid, Catalogue.count_items_for_catalogue(catalogue_uuid, type_opts)}
       end)
 
     Map.merge(base, %{
@@ -940,7 +943,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         if offer_uncategorized?(scope) do
           Map.new(
             catalogue_uuids,
-            &{&1, Catalogue.uncategorized_count_for_catalogue(&1)}
+            &{&1, Catalogue.uncategorized_count_for_catalogue(&1, type_opts)}
           )
         else
           %{}
@@ -952,15 +955,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   defp do_build_category_tree(%{catalogue_uuids: [catalogue_uuid]} = scope, original, locale) do
     base = category_tree_base([catalogue_uuid], scope, original, locale)
+    type_opts = item_type_opts(scope)
 
     Map.merge(base, %{
       counts:
         catalogue_uuid
-        |> Catalogue.item_counts_by_category_for_catalogue()
+        |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
         |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end),
       uncategorized:
         if(offer_uncategorized?(scope),
-          do: Catalogue.uncategorized_count_for_catalogue(catalogue_uuid)
+          do: Catalogue.uncategorized_count_for_catalogue(catalogue_uuid, type_opts)
         )
     })
   rescue
@@ -968,6 +972,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   end
 
   defp do_build_category_tree(_scope, _original, _locale), do: @empty_cat_tree
+
+  # The level counters count what the browse can list: a scope's
+  # `:item_types` narrows them too, so a category holding only services
+  # does not read as non-empty in a goods-only picker.
+  defp item_type_opts(scope), do: [item_types: scope[:item_types]]
 
   # The level maps both tree shapes build identically: translated
   # categories, the uuid index, the children grouping, and the root
@@ -1664,7 +1673,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       allowed?(scope[:catalogue_uuids], item.catalogue_uuid) and
       category_in_scope?(expanded_categories, item.category_uuid) and
       allowed?(scope[:statuses], item.status) and
-      only_ok?(scope[:only], item)
+      only_ok?(scope[:only], item) and
+      item_type_ok?(scope[:item_types], item)
   end
 
   # The search joins exclude items under a soft-deleted catalogue or
@@ -1709,6 +1719,13 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         MapSet.new(Enum.map(raw, &normalize_uuid/1))
     end
   end
+
+  # By the EFFECTIVE type, as the fetch layer filters. Hydrated rows come
+  # from `list_items_by_uuids/2` with the catalogue preloaded.
+  defp item_type_ok?(types, _item) when types in [nil, []], do: true
+
+  defp item_type_ok?(types, item),
+    do: Catalogue.effective_item_type(item) in Enum.map(types, &to_string/1)
 
   defp only_ok?(:uncategorized_only, item), do: is_nil(item.category_uuid)
   defp only_ok?(:categorized_only, item), do: not is_nil(item.category_uuid)
@@ -2274,7 +2291,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # or `:close` (the grant-change rebuild — a detail materialized under
   # OLD grants must not survive a failed refresh; 2026-08-31 sweep).
   defp open_detail(socket, uuid, on_miss \\ :keep) do
-    case Catalogue.list_items_by_uuids([uuid]) do
+    # Re-checked against the scope's item types: a listed row can have
+    # changed type since it was rendered, and its detail is exactly what
+    # the scope excludes.
+    types = socket.assigns.browse.scope[:item_types]
+
+    case Enum.filter(Catalogue.list_items_by_uuids([uuid]), &item_type_ok?(types, &1)) do
       [item] ->
         locale = socket.assigns.locale
 

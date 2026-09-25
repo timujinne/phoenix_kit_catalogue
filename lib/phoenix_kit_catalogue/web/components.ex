@@ -3549,6 +3549,12 @@ defmodule PhoenixKitCatalogue.Web.Components do
     doc: "Item statuses to include (`nil`/`[]` = all non-deleted) — search_items/2's :statuses."
   )
 
+  attr(:item_types, :any,
+    default: nil,
+    doc:
+      "Item types to include by EFFECTIVE type (`[\"goods\"]`; `nil`/`[]` = all) — search_items/2's :item_types."
+  )
+
   attr(:selected_item, :any, default: nil)
   attr(:excluded_uuids, :list, default: [])
   # Optional, like the LiveComponent it wraps: omitted, the process gettext
@@ -3580,6 +3586,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       include_descendants={@include_descendants}
       only={@only}
       statuses={@statuses}
+      item_types={@item_types}
       selected_item={@selected_item}
       excluded_uuids={@excluded_uuids}
       locale={@locale}

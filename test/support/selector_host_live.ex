@@ -30,6 +30,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
     * `clocale`   — passed to the component as its `locale` attr
     * `iq`        — "true" passes inline_qty (the legacy check+stepper opt-in)
     * `rs`        — "true" passes root_switcher (the opt-in root either-or)
+    * `types`     — comma list for `scope.item_types`, e.g. "goods"
   """
 
   use Phoenix.LiveView
@@ -98,6 +99,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
     |> maybe_put_category(params["cat_scope"])
     |> maybe_put_only(params["only"])
     |> maybe_put_statuses(params["statuses"])
+    |> maybe_put_item_types(params["types"])
   end
 
   defp maybe_put_catalogue(scope, nil, _second), do: scope
@@ -130,6 +132,11 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
 
   defp maybe_put_statuses(scope, raw),
     do: Map.put(scope, :statuses, String.split(raw, ",", trim: true))
+
+  defp maybe_put_item_types(scope, nil), do: scope
+
+  defp maybe_put_item_types(scope, raw),
+    do: Map.put(scope, :item_types, String.split(raw, ",", trim: true))
 
   @impl true
   def handle_event("toggle_prices", _params, socket),

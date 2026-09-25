@@ -822,6 +822,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     :base_price,
     :markup_percentage,
     :unit,
+    :item_type,
     :category,
     :manufacturer,
     :supplier
@@ -2341,6 +2342,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                 <th :if={has_mapping?(@column_mappings, :base_price)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Price")}</th>
                 <th :if={has_mapping?(@column_mappings, :markup_percentage)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Markup %")}</th>
                 <th :if={has_mapping?(@column_mappings, :unit)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}</th>
+                <th :if={has_mapping?(@column_mappings, :item_type)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}</th>
                 <th :if={has_mapping?(@column_mappings, :category)} class="bg-base-200">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category")}</th>
               </tr>
             </thead>
@@ -2352,6 +2354,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                 <td :if={has_mapping?(@column_mappings, :base_price)}>{item[:base_price]}</td>
                 <td :if={has_mapping?(@column_mappings, :markup_percentage)}>{item[:markup_percentage]}</td>
                 <td :if={has_mapping?(@column_mappings, :unit)}>{item[:unit]}</td>
+                <td :if={has_mapping?(@column_mappings, :item_type)}>{Item.item_type_label(item[:item_type])}</td>
                 <td :if={has_mapping?(@column_mappings, :category)}>{item[:_category_name]}</td>
               </tr>
             </tbody>
@@ -2838,6 +2841,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp translate_target("Unit of measure"),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit of measure")
 
+  defp translate_target("Item type"),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")
+
   defp translate_target("Manufacturer"),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manufacturer")
 
@@ -2931,6 +2937,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp target_to_string(:base_price), do: "base_price"
   defp target_to_string(:markup_percentage), do: "markup_percentage"
   defp target_to_string(:unit), do: "unit"
+  defp target_to_string(:item_type), do: "item_type"
   defp target_to_string(:category), do: "category"
   defp target_to_string(:manufacturer), do: "manufacturer"
   defp target_to_string(:supplier), do: "supplier"
@@ -2957,6 +2964,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       :base_price,
       :markup_percentage,
       :unit,
+      :item_type,
       :category
     ]
 
@@ -2992,6 +3000,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   defp parse_target("base_price"), do: :base_price
   defp parse_target("markup_percentage"), do: :markup_percentage
   defp parse_target("unit"), do: :unit
+  defp parse_target("item_type"), do: :item_type
   defp parse_target("category"), do: :category
   defp parse_target("manufacturer"), do: :manufacturer
   defp parse_target("supplier"), do: :supplier

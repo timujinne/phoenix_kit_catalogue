@@ -32,6 +32,8 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
   # `{:error, _}` branches that the form's error display didn't
   # already handle.
 
+  alias PhoenixKitCatalogue.Schemas.Item
+
   @module_key "catalogue"
 
   @doc """
@@ -111,12 +113,19 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
       cond do
         equal_values?(old, new) -> acc
         field in @flag_only_fields -> Map.put(acc, to_string(field), %{"changed" => true})
-        true -> Map.put(acc, to_string(field), diff_pair(old, new))
+        true -> Map.put(acc, to_string(field), diff_pair(field, old, new))
       end
     end)
   end
 
-  defp diff_pair(old, new), do: %{"from" => display_value(old), "to" => display_value(new)}
+  # The item type is stored as a code; the log shows the word a person
+  # reads on the form ("Goods → Service"), not `goods → service`. An
+  # item's nil ("as in the catalogue") shows blank, like any unset field.
+  defp diff_pair(:item_type, old, new),
+    do: %{"from" => Item.item_type_label(old), "to" => Item.item_type_label(new)}
+
+  defp diff_pair(_field, old, new),
+    do: %{"from" => display_value(old), "to" => display_value(new)}
 
   # A bulk row records which rows it touched, but not an unbounded list of
   # them: a 500-item move would put 18KB of uuids into every reader's page,

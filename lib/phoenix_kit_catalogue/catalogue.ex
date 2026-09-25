@@ -90,6 +90,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
     :markup_percentage,
     :discount_percentage,
     :unit,
+    :item_type,
     :status,
     :default_value,
     :default_unit,
@@ -139,6 +140,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   @catalogue_logged_fields [
     :name,
     :kind,
+    :item_type,
     :status,
     :markup_percentage,
     :discount_percentage,
@@ -1171,6 +1173,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
     * `:limit` — default `50`
     * `:preload` — extra associations appended to the default
       `[:catalogue]`.
+    * `:item_types` — only items of these EFFECTIVE types
+      (`filter_by_item_types/2`); `nil`/`[]` = all.
   """
   @spec list_items_for_category_paged(Ecto.UUID.t(), keyword()) :: [Item.t()]
   def list_items_for_category_paged(category_uuid, opts \\ []) do
@@ -1190,6 +1194,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> apply_item_order(opts)
     |> repo().all()
@@ -1226,6 +1231,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> maybe_outside_trashed_categories(opts)
     |> apply_catalogue_item_order(opts)
@@ -1240,6 +1246,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     from(i in Item, as: :item, where: i.catalogue_uuid == ^catalogue_uuid)
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> maybe_outside_trashed_categories(opts)
     |> repo().aggregate(:count)
@@ -1383,6 +1390,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> repo().aggregate(:count)
   end
@@ -1426,6 +1434,41 @@ defmodule PhoenixKitCatalogue.Catalogue do
   end
 
   @doc """
+  Narrows an item query (it must carry the `:item` named binding) to the
+  items whose EFFECTIVE type is one of `opts[:item_types]` — the item's own
+  `item_type`, or its catalogue's when it has none (an item without a
+  catalogue counts as goods). The SQL twin of `Item.effective_type/2`.
+
+  Pass `item_types: ["goods"]` (strings or atoms) to the listings, the
+  search and the counts; `nil` or `[]` is no filter.
+  """
+  @spec filter_by_item_types(Ecto.Query.t(), keyword()) :: Ecto.Query.t()
+  def filter_by_item_types(query, opts) do
+    case opts |> Keyword.get(:item_types) |> List.wrap() |> Enum.map(&to_string/1) do
+      [] ->
+        query
+
+      types ->
+        orphan_goods? = "goods" in types
+
+        catalogue_has_type =
+          from(c in Catalogue,
+            where: c.uuid == parent_as(:item).catalogue_uuid and c.item_type in ^types,
+            select: 1
+          )
+
+        where(
+          query,
+          [item: i],
+          i.item_type in ^types or
+            (is_nil(i.item_type) and
+               (exists(subquery(catalogue_has_type)) or
+                  (is_nil(i.catalogue_uuid) and type(^orphan_goods?, :boolean))))
+        )
+    end
+  end
+
+  @doc """
   Counts items in a single category (ignoring its catalogue scope).
 
   Used by the infinite-scroll detail view to show the total under each
@@ -1448,6 +1491,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> repo().aggregate(:count)
   end
@@ -1506,6 +1550,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query =
       from(i in Item,
+        as: :item,
         where: i.catalogue_uuid == ^catalogue_uuid and not is_nil(i.category_uuid),
         group_by: i.category_uuid,
         select: {i.category_uuid, count(i.uuid)}
@@ -1518,6 +1563,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
       end
 
     query
+    |> filter_by_item_types(opts)
     |> repo().all()
     |> Map.new()
   end
@@ -5267,6 +5313,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
     * `:status` — filter by status (e.g. `"active"`, `"inactive"`).
       When nil (default), returns all non-deleted items.
     * `:limit` — max results to return (default: no limit)
+    * `:item_types` — only items of these EFFECTIVE types, e.g.
+      `["goods"]` (`filter_by_item_types/2`); `nil`/`[]` = all.
 
   ## Examples
 
@@ -5278,6 +5326,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   def list_items(opts \\ []) do
     query =
       from(i in Item,
+        as: :item,
         left_join: cat in Catalogue,
         on: i.catalogue_uuid == cat.uuid,
         left_join: c in Category,
@@ -5306,7 +5355,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
         limit -> limit(query, ^limit)
       end
 
-    query |> repo().all() |> Manufacturers.hydrate()
+    query |> filter_by_item_types(opts) |> repo().all() |> Manufacturers.hydrate()
   end
 
   @doc """
@@ -7181,6 +7230,34 @@ defmodule PhoenixKitCatalogue.Catalogue do
       final_price: Item.final_price(item, catalogue_markup, catalogue_discount)
     }
   end
+
+  @doc """
+  The item type that actually applies to `item` — goods or service. The
+  UI's entry point: unlike `Item.effective_type/1` it never raises and needs
+  no preload. The item's own `item_type` answers without a query; otherwise
+  a preloaded catalogue (or `category.catalogue`) is used, and failing that
+  the catalogue's type is read. An item without a (live) catalogue reads as
+  goods.
+  """
+  @spec effective_item_type(Item.t()) :: String.t()
+  def effective_item_type(%Item{item_type: type}) when is_binary(type), do: type
+
+  def effective_item_type(%Item{} = item),
+    do: Item.effective_type(item, catalogue_item_type(item))
+
+  defp catalogue_item_type(%Item{catalogue: %Catalogue{item_type: type}}), do: type
+  defp catalogue_item_type(%Item{catalogue: nil}), do: nil
+
+  defp catalogue_item_type(%Item{category: %Category{catalogue: %Catalogue{item_type: type}}}),
+    do: type
+
+  defp catalogue_item_type(%Item{catalogue_uuid: uuid}) when is_binary(uuid) do
+    repo().one(from(c in Catalogue, where: c.uuid == ^uuid, select: c.item_type))
+  rescue
+    _ -> nil
+  end
+
+  defp catalogue_item_type(_item), do: nil
 
   # Returns {markup, discount} from the item's catalogue. Preloads
   # the catalogue association if needed; falls back to {0, 0} on any

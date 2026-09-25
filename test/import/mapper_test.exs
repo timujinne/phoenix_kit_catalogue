@@ -475,4 +475,48 @@ defmodule PhoenixKitCatalogue.Import.MapperTest do
       assert Mapper.item_matches_existing?(import_item, existing)
     end
   end
+
+  describe "item type" do
+    test "normalize_item_type/1 maps the goods and service aliases, case-insensitively" do
+      for raw <- ["kaup", "Kaup", "товар", "Товар", "goods", " GOODS "] do
+        assert Mapper.normalize_item_type(raw) == "goods", "#{inspect(raw)} should be goods"
+      end
+
+      for raw <- ["teenus", "Teenus", "услуга", "Услуга", "service", "Service"] do
+        assert Mapper.normalize_item_type(raw) == "service", "#{inspect(raw)} should be service"
+      end
+    end
+
+    test "a blank or unknown value leaves the item as in its catalogue" do
+      assert Mapper.normalize_item_type("") == nil
+      assert Mapper.normalize_item_type("widget") == nil
+      assert Mapper.normalize_item_type(nil) == nil
+    end
+
+    test "is an import target" do
+      assert {:item_type, "Item type"} in Mapper.available_targets()
+    end
+
+    test "headers are detected without stealing the unit column" do
+      mappings = Mapper.auto_detect_mappings(["Name", "Item type", "Unit type"])
+      assert Enum.find(mappings, &(&1.header == "Item type")).target == :item_type
+      assert Enum.find(mappings, &(&1.header == "Unit type")).target == :unit
+
+      [liik] = Mapper.auto_detect_mappings(["Liik"])
+      assert liik.target == :item_type
+    end
+
+    test "build_import_plan/2 carries the normalized type, and none for a blank cell" do
+      mappings = [
+        %{column_index: 0, header: "Name", target: :name},
+        %{column_index: 1, header: "Liik", target: :item_type}
+      ]
+
+      plan = Mapper.build_import_plan(mappings, [["Transport", "Teenus"], ["Panel", ""]])
+      [transport, panel] = plan.items
+
+      assert transport.item_type == "service"
+      refute Map.has_key?(panel, :item_type)
+    end
+  end
 end

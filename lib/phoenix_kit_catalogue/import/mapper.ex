@@ -13,6 +13,7 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
           | :base_price
           | :markup_percentage
           | :unit
+          | :item_type
           | :category
           | :manufacturer
           | :supplier
@@ -91,6 +92,17 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
     "kuupmeeter" => "m3"
   }
 
+  # Item-type cell values. Anything else (and a blank cell) leaves the item
+  # without a type of its own — as in the catalogue.
+  @item_type_aliases %{
+    "goods" => "goods",
+    "kaup" => "goods",
+    "товар" => "goods",
+    "service" => "service",
+    "teenus" => "service",
+    "услуга" => "service"
+  }
+
   @header_patterns %{
     sku: ~w(sku artikkel article code kood nr number art artikelnr item_code product_code),
     name: ~w(name nimi nimetus kirjeldus description bezeichnung toode product),
@@ -98,6 +110,9 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
     markup_percentage:
       ~w(markup margin naceenka juurdehindlus aufschlag markup_percentage markup_percent markup%),
     unit: ~w(unit uhik einheit masseinheit measure uom),
+    # Specific on purpose: headers are matched by substring, so a bare
+    # "type" would claim "Unit type" before :unit is tried.
+    item_type: ["item_type", "item type", "itemtype", "liik"],
     manufacturer:
       ~w(manufacturer hersteller tootja brand bra_nd vendor maker producer firma manufacturer_name),
     supplier: ~w(supplier tarnija lieferant distributor reseller wholesaler supplier_name)
@@ -118,6 +133,7 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
       {:base_price, "Base price"},
       {:markup_percentage, "Markup override (%)"},
       {:unit, "Unit of measure"},
+      {:item_type, "Item type"},
       {:category, "Create categories"},
       {:manufacturer, "Manufacturer"},
       {:supplier, "Supplier"}
@@ -361,6 +377,17 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
   end
 
   @doc """
+  Normalizes an item-type cell (`kaup`/`товар`/`goods` → `"goods"`,
+  `teenus`/`услуга`/`service` → `"service"`, case-insensitive). A blank or
+  unknown value is `nil` — the item keeps its catalogue's type.
+  """
+  @spec normalize_item_type(String.t() | nil) :: String.t() | nil
+  def normalize_item_type(value) when is_binary(value),
+    do: Map.get(@item_type_aliases, value |> String.trim() |> String.downcase())
+
+  def normalize_item_type(_), do: nil
+
+  @doc """
   Resolves a PRO100 unit label to a canonical unit, or `:unknown` if it has no
   mapping. Unlike `normalize_unit/2`, never coerces unknown labels to "piece"
   — a label with no alias must surface in the report.
@@ -524,6 +551,13 @@ defmodule PhoenixKitCatalogue.Import.Mapper do
     acc
     |> Map.put(:unit, normalized)
     |> Map.put(:data, Map.put(data, "original_unit", String.trim(value)))
+  end
+
+  defp apply_mapping(acc, :item_type, value, _unit_map) do
+    case normalize_item_type(value) do
+      nil -> acc
+      type -> Map.put(acc, :item_type, type)
+    end
   end
 
   defp apply_mapping(acc, :category, value, _unit_map),

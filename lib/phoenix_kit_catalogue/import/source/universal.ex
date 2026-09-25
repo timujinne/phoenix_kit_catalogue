@@ -22,7 +22,7 @@ defmodule PhoenixKitCatalogue.Import.Source.Universal do
   defp parse_json(binary) do
     case Jason.decode(binary) do
       {:ok, %{"items" => items}} when is_list(items) ->
-        headers = ~w(name sku base_price unit catalogue)
+        headers = ~w(name sku base_price unit item_type catalogue)
         rows = Enum.map(items, fn it -> Enum.map(headers, &to_string(Map.get(it, &1, ""))) end)
         {:ok, %{sheets: [], headers: headers, rows: rows, row_count: length(rows)}}
 

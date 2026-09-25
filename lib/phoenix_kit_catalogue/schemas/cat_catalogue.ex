@@ -12,6 +12,8 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
 
   @statuses ~w(active archived deleted)
   @kinds ~w(standard smart)
+  # Mirrors the V4 CHECK; `Item.allowed_item_types/0` is the same list.
+  @item_types ~w(goods service)
 
   def allowed_kinds, do: @kinds
 
@@ -19,6 +21,10 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
     field(:name, :string)
     field(:description, :string)
     field(:kind, :string, default: "standard")
+    # The type this catalogue's items take unless they name their own —
+    # see `Item.effective_type/2`. Independent of `kind`: smart is how an
+    # item is priced, service is what it is.
+    field(:item_type, :string, default: "goods")
     field(:markup_percentage, :decimal, default: Decimal.new("0"))
     field(:discount_percentage, :decimal, default: Decimal.new("0"))
     field(:status, :string, default: "active")
@@ -46,6 +52,7 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
   @optional_fields [
     :description,
     :kind,
+    :item_type,
     :markup_percentage,
     :discount_percentage,
     :status,
@@ -57,10 +64,12 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
   def changeset(catalogue, attrs) do
     catalogue
     |> cast(attrs, @required_fields ++ @optional_fields)
-    |> validate_required(@required_fields)
+    # The column is NOT NULL, and `cast` turns a submitted "" into nil.
+    |> validate_required(@required_fields ++ [:item_type])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:kind, @kinds)
+    |> validate_inclusion(:item_type, @item_types)
     |> validate_number(:markup_percentage,
       greater_than_or_equal_to: 0,
       less_than_or_equal_to: 1000

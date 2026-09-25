@@ -40,6 +40,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
       `"inactive"`, `"discontinued"`). `nil` or `[]` = all non-deleted
       (the historical default). Soft-deleted rows stay excluded even if
       `"deleted"` is listed. Atoms are accepted and stringified.
+    * `:item_types` — list of item types (`"goods"`, `"service"`) to
+      include, matched on the EFFECTIVE type — the item's own, else its
+      catalogue's (`Catalogue.filter_by_item_types/2`). `nil` or `[]` =
+      all. Atoms are accepted and stringified.
     * `:trashed` — when `true`, matches the catalogue's soft-deleted items
       instead (the admin's Deleted tab): `status = "deleted"` whatever
       their category's status, still only in live catalogues. `:statuses`
@@ -331,6 +335,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     # Same `value_slugs:` the level listings take, so a search inside an
     # attribute filter stays inside it.
     |> PhoenixKitCatalogue.Catalogue.filter_by_attribute_values(opts)
+    |> PhoenixKitCatalogue.Catalogue.filter_by_item_types(opts)
   end
 
   # Live items outside trashed categories, or — for the admin's Deleted tab —

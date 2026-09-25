@@ -645,6 +645,166 @@ defmodule PhoenixKitCatalogue.SchemasTest do
     end
   end
 
+  # ═══════════════════════════════════════════════════════════════════
+  # Item type (goods / service, V4)
+  # ═══════════════════════════════════════════════════════════════════
+
+  describe "Catalogue.changeset/2 — item_type" do
+    test "defaults to goods" do
+      cs = Catalogue.changeset(%Catalogue{}, %{name: "X"})
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :item_type) == "goods"
+    end
+
+    test "accepts service" do
+      cs = Catalogue.changeset(%Catalogue{}, %{name: "Services", item_type: "service"})
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :item_type) == "service"
+    end
+
+    test "a blank submission falls back to the default, goods" do
+      cs =
+        Catalogue.changeset(%Catalogue{item_type: "service"}, %{"name" => "X", "item_type" => ""})
+
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :item_type) == "goods"
+    end
+
+    test "nil is refused — the column is NOT NULL" do
+      cs = Catalogue.changeset(%Catalogue{}, %{name: "X", item_type: nil})
+      refute cs.valid?
+      assert errors_on(cs)[:item_type]
+    end
+
+    test "rejects an unknown type" do
+      cs = Catalogue.changeset(%Catalogue{}, %{name: "X", item_type: "widget"})
+      refute cs.valid?
+      assert errors_on(cs)[:item_type]
+    end
+  end
+
+  describe "Item.changeset/2 — item_type" do
+    @attrs %{name: "Transport", catalogue_uuid: "019a0000-0000-7000-8000-000000000001"}
+
+    test "defaults to nil (as in the catalogue)" do
+      cs = Item.changeset(%Item{}, @attrs)
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :item_type) == nil
+    end
+
+    test "accepts goods and service" do
+      for type <- Item.allowed_item_types() do
+        cs = Item.changeset(%Item{}, Map.put(@attrs, :item_type, type))
+        assert cs.valid?, "expected #{type} to be accepted"
+      end
+    end
+
+    test "a blank value clears the override back to nil" do
+      cs =
+        Item.changeset(
+          %Item{item_type: "service"},
+          %{"name" => "Transport", "catalogue_uuid" => @attrs.catalogue_uuid, "item_type" => ""}
+        )
+
+      assert cs.valid?
+      assert Ecto.Changeset.get_field(cs, :item_type) == nil
+    end
+
+    test "rejects an unknown type" do
+      cs = Item.changeset(%Item{}, Map.put(@attrs, :item_type, "widget"))
+      refute cs.valid?
+      assert errors_on(cs)[:item_type]
+    end
+  end
+
+  describe "Item.allowed_item_types/0" do
+    test "is goods then service" do
+      assert Item.allowed_item_types() == ~w(goods service)
+    end
+  end
+
+  describe "Item.effective_type/2" do
+    test "the item's own type wins over the catalogue's" do
+      assert Item.effective_type(%Item{item_type: "service"}, "goods") == "service"
+      assert Item.effective_type(%Item{item_type: "goods"}, "service") == "goods"
+    end
+
+    test "an item without a type inherits the catalogue's" do
+      assert Item.effective_type(%Item{item_type: nil}, "service") == "service"
+      assert Item.effective_type(%Item{item_type: nil}, "goods") == "goods"
+    end
+
+    test "no type anywhere reads as goods" do
+      assert Item.effective_type(%Item{item_type: nil}, nil) == "goods"
+    end
+  end
+
+  describe "Item.effective_type/1" do
+    test "reads the preloaded catalogue" do
+      item = %Item{item_type: nil, catalogue: %Catalogue{item_type: "service"}}
+      assert Item.effective_type(item) == "service"
+    end
+
+    test "the item's own type wins over the preloaded catalogue" do
+      item = %Item{item_type: "goods", catalogue: %Catalogue{item_type: "service"}}
+      assert Item.effective_type(item) == "goods"
+    end
+
+    test "with the catalogue not loaded, reads it through the category" do
+      item = %Item{
+        item_type: nil,
+        category: %Category{catalogue: %Catalogue{item_type: "service"}}
+      }
+
+      assert %Ecto.Association.NotLoaded{} = item.catalogue
+      assert Item.effective_type(item) == "service"
+    end
+
+    test "an item with no catalogue reads as goods" do
+      assert Item.effective_type(%Item{item_type: nil, catalogue: nil}) == "goods"
+      assert Item.effective_type(%Item{item_type: "service", catalogue: nil}) == "service"
+    end
+
+    test "a category without a catalogue reads as goods" do
+      item = %Item{item_type: nil, category: %Category{catalogue: nil}}
+      assert Item.effective_type(item) == "goods"
+    end
+
+    test "raises when neither the catalogue nor the category's catalogue is loaded" do
+      assert_raise ArgumentError, fn -> Item.effective_type(%Item{item_type: nil}) end
+
+      # Strict even when the item names its own type: the contract is
+      # "preloaded", and a caller that forgot the preload must learn it on
+      # the first item, not on the first inheriting one.
+      assert_raise ArgumentError, fn -> Item.effective_type(%Item{item_type: "service"}) end
+
+      assert_raise ArgumentError, fn ->
+        Item.effective_type(%Item{item_type: nil, category: %Category{}})
+      end
+
+      assert_raise ArgumentError, fn ->
+        Item.effective_type(%Item{item_type: nil, category: nil})
+      end
+    end
+  end
+
+  describe "Item.service?/1" do
+    test "true only for an effective service" do
+      assert Item.service?(%Item{item_type: nil, catalogue: %Catalogue{item_type: "service"}})
+      refute Item.service?(%Item{item_type: "goods", catalogue: %Catalogue{item_type: "service"}})
+      refute Item.service?(%Item{item_type: nil, catalogue: %Catalogue{item_type: "goods"}})
+    end
+  end
+
+  describe "Item.item_type_label/1" do
+    test "labels both types, blank for nil" do
+      Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+      assert Item.item_type_label("goods") == "Goods"
+      assert Item.item_type_label("service") == "Service"
+      assert Item.item_type_label(nil) == ""
+    end
+  end
+
   describe "Item.changeset/2 — default_value / default_unit" do
     test "defaults to nil/nil" do
       cs = Item.changeset(%Item{}, %{name: "Delivery", catalogue_uuid: UUIDv7.generate()})

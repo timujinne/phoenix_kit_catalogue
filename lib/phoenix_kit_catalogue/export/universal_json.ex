@@ -65,6 +65,9 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
       "sku" => item.sku,
       "base_price" => Pro100.format_price(item.base_price),
       "unit" => item.unit,
+      # The item's OWN type: "" means "as in the catalogue", so an import
+      # back leaves it inheriting rather than freezing today's default.
+      "item_type" => Map.get(item, :item_type) || "",
       "catalogue" => catalogue_name
     }
   end

@@ -106,6 +106,18 @@ defmodule PhoenixKitCatalogue.Migrations do
   to emit (it deletes only projection rows it is about to
   re-insert — never a base table row).
 
+  ## What V4 is
+
+  V4 adds the item type — goods or service, the 1C "nomenclature kind" —
+  on the same two core-known tables: `phoenix_kit_cat_catalogues.item_type
+  varchar(20) NOT NULL DEFAULT 'goods'` (the catalogue's default) and
+  `phoenix_kit_cat_items.item_type varchar(20)` (NULL = as in the
+  catalogue), each with a guarded CHECK. Like V2's `slug`, an extra column
+  on a manifested table is outside what core's `ExpectedSchema` looks at,
+  so no core release is needed. V1's `CREATE TABLE` DDL is deliberately
+  left alone (V2's precedent): `up/1` replays V1..V4, so a fresh install
+  gets the columns from this version.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker; it NEVER drops any of the
@@ -122,7 +134,7 @@ defmodule PhoenixKitCatalogue.Migrations do
 
   use Ecto.Migration
 
-  @current_version 3
+  @current_version 4
   @marker_prefix "pkc_schema:"
   @version_table "phoenix_kit_cat_catalogues"
 
@@ -205,7 +217,8 @@ defmodule PhoenixKitCatalogue.Migrations do
   `current_version/0`): `1` is the pure V1 adoption step (the owned
   tables/keys/checks/indexes below); `2` additionally adds V2's
   per-language `slug` column, its trigger projections, and the
-  attribute-set GIN index. Mirrors `phoenix_kit_billing`'s version-aware
+  attribute-set GIN index; `3` the one-time view-preference copy; `4` the
+  item-type columns and their CHECKs. Mirrors `phoenix_kit_billing`'s version-aware
   `up_statements/2` — the wrapper migration core's update task generates
   calls this with an explicit `:version`, and a stale wrapper asking for
   `1` must not receive `2`'s objects.
@@ -220,11 +233,13 @@ defmodule PhoenixKitCatalogue.Migrations do
 
     v2 = if target >= 2, do: v2_statements(p), else: []
     v3 = if target >= 3, do: v3_statements(prefix, p), else: []
+    v4 = if target >= 4, do: v4_statements(prefix, p), else: []
 
     List.flatten([
       v1_statements(prefix, p),
       v2,
       v3,
+      v4,
       "COMMENT ON TABLE #{p}#{@version_table} IS '#{@marker_prefix}#{target}'"
     ])
   end
@@ -236,6 +251,31 @@ defmodule PhoenixKitCatalogue.Migrations do
       foreign_keys(prefix, p),
       checks(prefix, p),
       indexes(p)
+    ]
+  end
+
+  # ── V4: item type (goods / service) ────────────────────────────────
+  #
+  # The catalogue carries the default for its items; an item either
+  # inherits it (NULL) or names its own. Existing rows come out as goods
+  # catalogues with inheriting items. Both CHECKs go through the same
+  # guard as V1's, so a replay finds them in place and skips them.
+  defp v4_statements(prefix, p) do
+    [
+      "ALTER TABLE #{p}phoenix_kit_cat_catalogues ADD COLUMN IF NOT EXISTS item_type character varying(20) DEFAULT 'goods'::character varying NOT NULL",
+      "ALTER TABLE #{p}phoenix_kit_cat_items ADD COLUMN IF NOT EXISTS item_type character varying(20)",
+      guarded_constraint(
+        prefix,
+        "phoenix_kit_cat_catalogues",
+        "phoenix_kit_cat_catalogues_item_type_check",
+        "ALTER TABLE #{p}phoenix_kit_cat_catalogues ADD CONSTRAINT phoenix_kit_cat_catalogues_item_type_check CHECK (((item_type)::text = ANY ((ARRAY['goods'::character varying, 'service'::character varying])::text[])))"
+      ),
+      guarded_constraint(
+        prefix,
+        "phoenix_kit_cat_items",
+        "phoenix_kit_cat_items_item_type_check",
+        "ALTER TABLE #{p}phoenix_kit_cat_items ADD CONSTRAINT phoenix_kit_cat_items_item_type_check CHECK (((item_type IS NULL) OR ((item_type)::text = ANY ((ARRAY['goods'::character varying, 'service'::character varying])::text[]))))"
+      )
     ]
   end
 

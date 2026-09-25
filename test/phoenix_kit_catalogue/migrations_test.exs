@@ -25,8 +25,8 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_item_attribute_sets
   )
 
-  test "chain is V3 and marks phoenix_kit_cat_catalogues" do
-    assert Migrations.current_version() == 3
+  test "chain is V4 and marks phoenix_kit_cat_catalogues" do
+    assert Migrations.current_version() == 4
     assert Migrations.version_table() == "phoenix_kit_cat_catalogues"
   end
 
@@ -39,7 +39,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     end
 
     assert List.last(stmts) ==
-             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:3'"
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:4'"
   end
 
   test "no statement can destroy data, in either direction" do
@@ -138,7 +138,8 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_item_attribute_sets_selected_values_gin
   )
 
-  # Same source, all 50 constraint names (18 PKs + 19 FKs + 13 CHECKs).
+  # Same source, all 50 constraint names (18 PKs + 19 FKs + 13 CHECKs),
+  # plus V4's two item-type CHECKs.
   @constraints ~w(
     phoenix_kit_cat_catalogues_pkey
     phoenix_kit_cat_folders_pkey
@@ -190,6 +191,8 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_attributes_kind_check
     phoenix_kit_cat_attributes_status_check
     phoenix_kit_cat_attribute_values_status_check
+    phoenix_kit_cat_catalogues_item_type_check
+    phoenix_kit_cat_items_item_type_check
   )
 
   test "every pinned index name appears inside a CREATE ... IF NOT EXISTS statement" do
@@ -249,7 +252,49 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
              "CREATE INDEX IF NOT EXISTS phoenix_kit_cat_item_attribute_sets_selected_values_gin ON public.phoenix_kit_cat_item_attribute_sets USING gin ((data -> 'selected_value_slugs'))"
 
     assert List.last(Migrations.up_statements("public")) ==
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:4'"
+  end
+
+  test "V4 adds the item-type columns and their guarded CHECKs" do
+    stmts = Migrations.up_statements("public")
+
+    assert "ALTER TABLE public.phoenix_kit_cat_catalogues ADD COLUMN IF NOT EXISTS item_type character varying(20) DEFAULT 'goods'::character varying NOT NULL" in stmts
+
+    assert "ALTER TABLE public.phoenix_kit_cat_items ADD COLUMN IF NOT EXISTS item_type character varying(20)" in stmts
+
+    catalogue_check = Enum.find(stmts, &(&1 =~ "phoenix_kit_cat_catalogues_item_type_check"))
+    assert catalogue_check =~ ~r/DO \$\$/
+    assert catalogue_check =~ "'goods'::character varying, 'service'::character varying"
+    refute catalogue_check =~ "IS NULL"
+
+    item_check = Enum.find(stmts, &(&1 =~ "phoenix_kit_cat_items_item_type_check"))
+    assert item_check =~ ~r/DO \$\$/
+    assert item_check =~ "(item_type IS NULL) OR"
+    assert item_check =~ "'goods'::character varying, 'service'::character varying"
+  end
+
+  test "V4 leaves the V1 CREATE TABLE DDL alone" do
+    for t <- ~w(phoenix_kit_cat_catalogues phoenix_kit_cat_items) do
+      create =
+        Enum.find(
+          Migrations.up_statements("public"),
+          &(&1 =~ "CREATE TABLE IF NOT EXISTS public.#{t} (")
+        )
+
+      refute create =~ "item_type"
+    end
+  end
+
+  test "up_statements(prefix, 3) stops before V4" do
+    joined = Enum.join(Migrations.up_statements("public", 3), "\n")
+    refute joined =~ "item_type"
+    assert joined =~ "pkc_schema:3"
+  end
+
+  test "down from V4 to V3 only re-stamps the marker" do
+    assert Migrations.down_statements("public", 3) == [
              "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:3'"
+           ]
   end
 
   test "down to 1 only re-stamps the marker" do
@@ -271,13 +316,14 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     for tr <- @v2_triggers, do: refute(joined =~ tr)
     refute joined =~ "ADD COLUMN IF NOT EXISTS slug"
     refute joined =~ "phoenix_kit_cat_item_attribute_sets_selected_values_gin"
+    refute joined =~ "item_type"
 
     assert List.last(stmts) ==
              "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:1'"
   end
 
   test "up_statements/2 defaults target to current_version/0" do
-    assert Migrations.up_statements("public") == Migrations.up_statements("public", 3)
+    assert Migrations.up_statements("public") == Migrations.up_statements("public", 4)
   end
 
   test "the module registers the chain" do

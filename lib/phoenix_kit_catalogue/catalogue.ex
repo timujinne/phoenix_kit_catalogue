@@ -1324,6 +1324,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
     * `:limit` — default `50`
     * `:preload` — extra associations appended to the default
       `[:catalogue]`.
+    * `:item_types` — only items of these EFFECTIVE types
+      (`filter_by_item_types/2`); `nil`/`[]` = all.
   """
   @spec list_uncategorized_items_paged(Ecto.UUID.t(), keyword()) :: [Item.t()]
   def list_uncategorized_items_paged(catalogue_uuid, opts \\ []) do
@@ -1343,6 +1345,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
 
     query
     |> filter_by_attribute_values(opts)
+    |> filter_by_item_types(opts)
     |> apply_item_status_filter(opts, mode)
     |> apply_item_order(opts)
     |> repo().all()
@@ -1377,6 +1380,12 @@ defmodule PhoenixKitCatalogue.Catalogue do
   Counts non-deleted uncategorized items for a catalogue (items with
   `category_uuid IS NULL`). Used to decide whether the infinite-scroll
   detail view needs to show an "Uncategorized" card at all.
+
+  ## Options
+
+    * `:mode` — `:active` (default) or `:deleted`
+    * `:item_types` — only items of these EFFECTIVE types
+      (`filter_by_item_types/2`); `nil`/`[]` = all.
   """
   @spec uncategorized_count_for_catalogue(Ecto.UUID.t(), keyword()) :: non_neg_integer()
   def uncategorized_count_for_catalogue(catalogue_uuid, opts \\ []) do
@@ -1482,6 +1491,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   ## Options
 
     * `:mode` — `:active` (default) or `:deleted`
+    * `:item_types` — only items of these EFFECTIVE types
+      (`filter_by_item_types/2`); `nil`/`[]` = all.
   """
   @spec item_count_for_category(Ecto.UUID.t(), keyword()) :: non_neg_integer()
   def item_count_for_category(category_uuid, opts \\ []) do
@@ -1541,6 +1552,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   ## Options
 
     * `:mode` — `:active` (default) or `:deleted`
+    * `:item_types` — only items of these EFFECTIVE types
+      (`filter_by_item_types/2`); `nil`/`[]` = all.
   """
   @spec item_counts_by_category_for_catalogue(Ecto.UUID.t(), keyword()) :: %{
           Ecto.UUID.t() => non_neg_integer()

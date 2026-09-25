@@ -8,9 +8,11 @@ defmodule PhoenixKitCatalogue.Web.ItemTypeUITest do
   """
   use PhoenixKitCatalogue.LiveCase
 
+  alias PhoenixKit.Users.Auth
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.Components
   alias PhoenixKitCatalogue.Web.Components.ProductCard
+  alias PhoenixKitCatalogue.Web.ViewConfig
   alias PhoenixKitWeb.Components.TreePicker
 
   @base "/en/admin/catalogue"
@@ -32,6 +34,25 @@ defmodule PhoenixKitCatalogue.Web.ItemTypeUITest do
     |> LazyHTML.query("select##{select_id} option")
     |> Enum.map(&LazyHTML.text/1)
     |> List.first()
+  end
+
+  # The open product card only — the page itself prints "Service" in badges.
+  defp card_fields(view) do
+    view |> element("#catalogue-detail-product-card") |> render()
+  end
+
+  defp item_row_text(view, item) do
+    view |> element("#level-items-active tr[data-id='#{item.uuid}']") |> render()
+  end
+
+  # A card carries no per-item id; find it by the name link.
+  defp item_card_text(view, item) do
+    view
+    |> render()
+    |> LazyHTML.from_fragment()
+    |> LazyHTML.query("#level-items-active [data-card-view] > div")
+    |> Enum.map(&LazyHTML.text/1)
+    |> Enum.find(&(&1 =~ item.name))
   end
 
   describe "catalogue form" do
@@ -156,13 +177,61 @@ defmodule PhoenixKitCatalogue.Web.ItemTypeUITest do
       %{catalogue: catalogue, shelf: shelf, service: service, goods: goods}
     end
 
-    test "the View button opens a service's card with the type row", ctx do
+    test "the View button opens a service's card with the type row", %{conn: conn} do
+      # The item inherits "service" from its catalogue, so the card has to
+      # look the catalogue up (the page loads the item without a preload).
+      services = fixture_catalogue(%{name: "Teenused", item_type: "service"})
+      visits = fixture_category(services, %{name: "Visits"})
+
+      transport =
+        fixture_item(%{
+          name: "Transport",
+          catalogue_uuid: services.uuid,
+          category_uuid: visits.uuid
+        })
+
+      {:ok, view, _html} = live(conn, "#{@base}/#{services.uuid}?category=#{visits.uuid}")
+
+      render_click(view, "show_product_card", %{"uuid" => transport.uuid})
+      assert card_fields(view) =~ "Item type"
+      assert card_fields(view) =~ "Service"
+    end
+
+    test "a goods item's card has no type row", ctx do
       {:ok, view, _html} =
         live(ctx.conn, "#{@base}/#{ctx.catalogue.uuid}?category=#{ctx.shelf.uuid}")
 
-      html = render_click(view, "show_product_card", %{"uuid" => ctx.service.uuid})
-      assert html =~ "Item type"
-      assert html =~ "Service"
+      render_click(view, "show_product_card", %{"uuid" => ctx.goods.uuid})
+      assert card_fields(view) =~ ctx.goods.name
+      refute card_fields(view) =~ "Item type"
+    end
+
+    test "the Item type column shows the effective type in the table and card views", ctx do
+      user = Auth.get_user!(ctx.scope.user.uuid)
+      {:ok, _} = ViewConfig.save_columns(user, :detail_items, ["sku", "item_type"])
+
+      {:ok, view, _html} =
+        ctx.conn
+        |> with_scope(ctx.scope)
+        |> live("#{@base}/#{ctx.catalogue.uuid}?category=#{ctx.shelf.uuid}")
+
+      render_click(view, "set_view", %{"mode" => "table"})
+      assert has_element?(view, "#level-items-active th", "Item type")
+      assert item_row_text(view, ctx.goods) =~ "Goods"
+      assert item_row_text(view, ctx.service) =~ "Service"
+
+      render_click(view, "set_view", %{"mode" => "card"})
+      assert item_card_text(view, ctx.goods) =~ "Item type"
+      assert item_card_text(view, ctx.goods) =~ "Goods"
+    end
+
+    test "without the column, no Goods label anywhere on the goods row", ctx do
+      {:ok, view, _html} =
+        live(ctx.conn, "#{@base}/#{ctx.catalogue.uuid}?category=#{ctx.shelf.uuid}")
+
+      render_click(view, "set_view", %{"mode" => "table"})
+      refute has_element?(view, "#level-items-active th", "Item type")
+      refute item_row_text(view, ctx.goods) =~ "Goods"
     end
 
     test "services carry the Service badge in the table and card views, goods don't", ctx do

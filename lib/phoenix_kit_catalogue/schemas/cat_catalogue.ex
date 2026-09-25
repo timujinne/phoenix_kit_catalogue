@@ -64,7 +64,7 @@ defmodule PhoenixKitCatalogue.Schemas.Catalogue do
   def changeset(catalogue, attrs) do
     catalogue
     |> cast(attrs, @required_fields ++ @optional_fields)
-    # The column is NOT NULL, and `cast` turns a submitted "" into nil.
+    # The column is NOT NULL; `cast` maps "" to the default, this guards an explicit nil.
     |> validate_required(@required_fields ++ [:item_type])
     |> validate_length(:name, min: 1, max: 255)
     |> validate_inclusion(:status, @statuses)

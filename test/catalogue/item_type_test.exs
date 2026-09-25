@@ -206,6 +206,39 @@ defmodule PhoenixKitCatalogue.Catalogue.ItemTypeTest do
              ) == 0
     end
 
+    test "the uncategorized listing filters the same way as its counter", ctx do
+      loose_service =
+        fixture_item(%{
+          name: "Loose service",
+          catalogue_uuid: ctx.goods_cat.uuid,
+          item_type: "service"
+        })
+
+      for types <- [["goods"], ["service"]] do
+        listed = Catalogue.list_uncategorized_items_paged(ctx.goods_cat.uuid, item_types: types)
+
+        assert length(listed) ==
+                 Catalogue.uncategorized_count_for_catalogue(ctx.goods_cat.uuid,
+                   item_types: types
+                 )
+      end
+
+      assert names(
+               Catalogue.list_uncategorized_items_paged(ctx.goods_cat.uuid,
+                 item_types: ["goods"]
+               )
+             ) == [ctx.loose_goods.name]
+
+      assert names(
+               Catalogue.list_uncategorized_items_paged(ctx.goods_cat.uuid,
+                 item_types: ["service"]
+               )
+             ) == [loose_service.name]
+
+      assert names(Catalogue.list_uncategorized_items_paged(ctx.goods_cat.uuid)) ==
+               Enum.sort([ctx.loose_goods.name, loose_service.name])
+    end
+
     test "changing the catalogue's type moves its inheriting items, not its overrides", ctx do
       {:ok, _} = Catalogue.update_catalogue(ctx.services_cat, %{item_type: "goods"})
 

@@ -254,7 +254,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   names its own type).
 
   For callers that GUARANTEE the preload (`Catalogue.list_items_by_uuids/2`
-  loads both): with neither loaded it raises `ArgumentError`, even for an
+  loads `:catalogue`): with neither loaded it raises `ArgumentError`, even for an
   item that names its own type, so a missing preload fails on the first
   item rather than on the first inheriting one. UI code that cannot
   guarantee it uses `PhoenixKitCatalogue.Catalogue.effective_item_type/1`,

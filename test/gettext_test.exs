@@ -2,6 +2,7 @@ defmodule PhoenixKitCatalogue.GettextTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components
 
   setup do
@@ -138,6 +139,9 @@ defmodule PhoenixKitCatalogue.GettextTest do
            "Käivita taustatõlge automaatselt"},
           {"Enter a whole number above 0.", "Введите целое число больше 0.",
            "Sisesta täisarv, mis on suurem kui 0."},
+          # The sweep's cap became a ceiling on queued jobs (2026-09-22).
+          {"Most jobs queued at once", "Не больше заданий в очереди одновременно",
+           "Kõige rohkem töid korraga järjekorras"},
           # Rename-from-inside, the level's own Edit button and the item
           # form's SEO switch (boss via Max, 2026-09-21).
           {"Rename folder", "Переименовать папку", "Nimeta kaust ümber"},
@@ -326,6 +330,27 @@ defmodule PhoenixKitCatalogue.GettextTest do
           do: {locale, msgid}
 
     assert untranslated == []
+  end
+
+  test "the category form's place strings are translated, and English reads as written" do
+    msgids = ["The chosen parent is no longer available. Pick another place.", "New subcategory"]
+
+    untranslated =
+      for locale <- ["de", "et", "fr", "ru"],
+          msgid <- msgids,
+          Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+            Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid)
+          end) == msgid,
+          do: {locale, msgid}
+
+    assert untranslated == []
+
+    # A fuzzy English entry is served too: this one rendered "New Category".
+    for msgid <- msgids do
+      assert Gettext.with_locale(PhoenixKitCatalogue.Gettext, "en", fn ->
+               Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid)
+             end) == msgid
+    end
   end
 
   test "Tab.localized_label/1 returns Russian translation for Catalogues" do
@@ -929,23 +954,22 @@ defmodule PhoenixKitCatalogue.GettextTest do
   end
 
   test "the duplicate-upload notice interpolates both names in ru and et" do
-    # Client, 2026-09-12: "uploaded three PDFs, two show" — a runtime-form
-    # call like the rest, so no extractor ever saw it; pinned with real
-    # bindings so interpolation is exercised, not just the msgid.
-    msgid = "%{name} is identical to %{existing}, which is already attached — nothing was added."
-    bindings = [name: "b.pdf", existing: "a.pdf"]
+    # Client, 2026-09-12: "uploaded three PDFs, two show". The notice is
+    # core's (`PhoenixKitWeb.Attachments`), so it is translated by core's
+    # backend; pinned with real bindings so interpolation is exercised.
+    existing = %{original_file_name: "a.pdf"}
 
-    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+    Gettext.put_locale(PhoenixKitWeb.Gettext, "ru")
 
-    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, bindings) ==
+    assert PhoenixKitCatalogue.Attachments.duplicate_notice("b.pdf", existing) ==
              "b.pdf совпадает с уже прикреплённым файлом a.pdf — ничего не добавлено."
 
-    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+    Gettext.put_locale(PhoenixKitWeb.Gettext, "et")
 
-    assert Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid, bindings) ==
+    assert PhoenixKitCatalogue.Attachments.duplicate_notice("b.pdf", existing) ==
              "b.pdf on identne juba manustatud failiga a.pdf — midagi ei lisatud."
   after
-    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+    Gettext.put_locale(PhoenixKitWeb.Gettext, "en")
   end
 
   test "the permanent-delete scope and race strings are translated in ru and et" do
@@ -1089,5 +1113,157 @@ defmodule PhoenixKitCatalogue.GettextTest do
     end
   after
     Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+  end
+
+  test "Item.unit_label/1 is translated for every unit code in et/ru/en, and the new codes in de/fr too" do
+    alias PhoenixKitCatalogue.Schemas.Item
+
+    expected = %{
+      "piece" => %{"et" => "tk", "ru" => "шт", "en" => "pc"},
+      "set" => %{"et" => "komplekt", "ru" => "комплект", "en" => "set"},
+      "pair" => %{"et" => "paar", "ru" => "пара", "en" => "pair"},
+      "sheet" => %{"et" => "leht", "ru" => "лист", "en" => "sheet"},
+      "m2" => %{"et" => "m²", "ru" => "м²", "en" => "m²"},
+      "running_meter" => %{"et" => "jm", "ru" => "пог.м", "en" => "rm"},
+      "hour" => %{"et" => "h", "ru" => "ч", "en" => "h", "de" => "Std.", "fr" => "h"},
+      "service" => %{
+        "et" => "teenus",
+        "ru" => "усл.",
+        "en" => "service",
+        "de" => "Leistung",
+        "fr" => "prestation"
+      },
+      "visit" => %{
+        "et" => "väljasõit",
+        "ru" => "выезд",
+        "en" => "visit",
+        "de" => "Anfahrt",
+        "fr" => "déplacement"
+      },
+      "km" => %{"et" => "km", "ru" => "км", "en" => "km", "de" => "km", "fr" => "km"},
+      "pack" => %{
+        "et" => "pakk",
+        "ru" => "уп.",
+        "en" => "pack",
+        "de" => "Pkg.",
+        "fr" => "paquet"
+      },
+      "roll" => %{
+        "et" => "rull",
+        "ru" => "рулон",
+        "en" => "roll",
+        "de" => "Rolle",
+        "fr" => "rouleau"
+      },
+      "kg" => %{"et" => "kg", "ru" => "кг", "en" => "kg", "de" => "kg", "fr" => "kg"},
+      "litre" => %{"et" => "l", "ru" => "л", "en" => "l", "de" => "l", "fr" => "l"},
+      "m3" => %{"et" => "m³", "ru" => "м³", "en" => "m³", "de" => "m³", "fr" => "m³"}
+    }
+
+    for {unit, locales} <- expected, {locale, label} <- locales do
+      actual =
+        Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+          Item.unit_label(unit)
+        end)
+
+      assert actual == label, "unit #{unit} in #{locale} expected #{label}, got #{actual}"
+    end
+  end
+
+  test "the unit optgroup headings are translated in et/ru/de/fr" do
+    msgids = %{
+      "Units for goods" => %{
+        "et" => "Kaupade ühikud",
+        "ru" => "Единицы для товаров",
+        "de" => "Einheiten für Waren",
+        "fr" => "Unités pour marchandises"
+      },
+      "Units for services" => %{
+        "et" => "Teenuste ühikud",
+        "ru" => "Единицы для услуг",
+        "de" => "Einheiten für Leistungen",
+        "fr" => "Unités pour prestations"
+      }
+    }
+
+    for {msgid, locales} <- msgids, {locale, translation} <- locales do
+      actual =
+        Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, msgid)
+        end)
+
+      assert actual == translation,
+             "#{msgid} in #{locale} expected #{translation}, got #{actual}"
+    end
+  end
+
+  test "the item type strings are translated in et/ru/de/fr and present in en" do
+    msgids = %{
+      "Item type" => %{
+        "et" => "Liik",
+        "ru" => "Вид",
+        "de" => "Artikelart",
+        "fr" => "Type d'article"
+      },
+      "Default item type" => %{
+        "et" => "Vaikimisi liik",
+        "ru" => "Вид позиций по умолчанию",
+        "de" => "Standard-Artikelart",
+        "fr" => "Type d'article par défaut"
+      },
+      "Goods" => %{"et" => "Kaup", "ru" => "Товар", "de" => "Ware", "fr" => "Marchandise"},
+      "Service" => %{
+        "et" => "Teenus",
+        "ru" => "Услуга",
+        "de" => "Dienstleistung",
+        "fr" => "Service"
+      },
+      "— As in catalogue (%{type}) —" => %{
+        "et" => "— Nagu kataloogis (%{type}) —",
+        "ru" => "— Как в каталоге (%{type}) —",
+        "de" => "— Wie im Katalog (%{type}) —",
+        "fr" => "— Comme dans le catalogue (%{type}) —"
+      }
+    }
+
+    for {msgid, locales} <- msgids do
+      # en falls back to the msgid, so read the entry itself.
+      assert po_msgstr("en", msgid) == "", "#{msgid} missing from en.po"
+
+      for {locale, translation} <- locales do
+        assert po_msgstr(locale, msgid) == translation,
+               "#{msgid} in #{locale} expected #{translation}"
+      end
+    end
+
+    Gettext.with_locale(PhoenixKitCatalogue.Gettext, "et", fn ->
+      assert Item.item_type_label("service") == "Teenus"
+    end)
+  end
+
+  test "import sources and export destinations label themselves in the viewer's locale" do
+    # PR #143 dropped the hard-coded "Фурнитура (Furniture)" bilingual
+    # labels for English ones; the selects render `label/0` / `formats/0`
+    # as-is, so the translation has to happen inside those callbacks.
+    alias PhoenixKitCatalogue.Export
+    alias PhoenixKitCatalogue.Import.Source
+
+    Gettext.with_locale(PhoenixKitCatalogue.Gettext, "ru", fn ->
+      assert Source.Universal.label() == "Универсальный"
+      assert Export.Universal.label() == "Универсальный"
+
+      assert Source.Universal.formats() == [
+               {:spreadsheet, "XLSX / CSV"},
+               {:json, "JSON (экспорт)"}
+             ]
+
+      assert Source.Pro100.formats() == [{:furniture, "Фурнитура"}, {:materials, "Материалы"}]
+      assert Export.Pro100.formats() == [{:furniture, "Фурнитура"}, {:materials, "Материалы"}]
+    end)
+
+    Gettext.with_locale(PhoenixKitCatalogue.Gettext, "et", fn ->
+      assert Source.Universal.label() == "Universaalne"
+      assert Export.Pro100.formats() == [{:furniture, "Furnituur"}, {:materials, "Materjalid"}]
+    end)
   end
 end

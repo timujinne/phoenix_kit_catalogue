@@ -1,9 +1,17 @@
 defmodule PhoenixKitCatalogue.Web.ViewConfig do
   @moduledoc """
   Per-user table view config (columns / sort / filters / view mode) for the
-  catalogue admin tables. Stored in `phoenix_kit_users.custom_fields` under
-  the `"catalogue_view_configs"` key — no dedicated table. Precedent:
-  `PhoenixKit.Notifications.Prefs`.
+  catalogue admin tables, kept in core's per-user view preferences
+  (`PhoenixKit.Users.ViewPrefs`): one row per scope under
+  `"catalogue.<scope>"` (`columns`, `sort_by`, `sort_dir`, `filters`) and
+  one module-wide row under `"catalogue"` (`view`, `selector`). A save
+  writes only the fields it changed, patched in the database, so two tabs
+  changing different things both keep theirs. Columns follow core's rules
+  (`PhoenixKitWeb.TableColumns`): an empty list is a choice, ids no longer
+  offered are skipped, and resetting takes the choice back out.
+
+  V3 of this module's migration chain copied what earlier versions kept in
+  `phoenix_kit_users.custom_fields["catalogue_view_configs"]`.
 
   ## Global sort
 
@@ -20,7 +28,7 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   ## Shared view mode
 
   The VIEW (card / comfy / table) is per-user but **not** per-scope: it is
-  one choice for the whole module, stored under `@view_key`. Picking cards
+  one choice for the whole module, stored in the `"catalogue"` row. Picking cards
   on the catalogues index and then opening a catalogue used to land on
   whatever that page happened to remember — every surface kept its own
   preference, and two of them (the detail page, the attributes tab) kept
@@ -30,20 +38,16 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   so every `cfg.view` in the module returns the same answer.
   """
   alias PhoenixKit.Settings
-  alias PhoenixKit.Users.Auth
+  alias PhoenixKit.Users.ViewPrefs
   alias PhoenixKitCatalogue.Web.TableConfig
+  alias PhoenixKitWeb.TableColumns
 
-  @root "catalogue_view_configs"
-
-  # Not a scope name: the module-wide view lives beside the per-scope maps.
-  @view_key "__view__"
-
-  # The item-selector popup's per-user choices (2026-08-31, boss: "save
-  # settings after a user changes them"): starting view + hidden columns,
-  # one set per user for every selector embed, same philosophy as the
-  # module-wide view above. Values are stored raw and validated by the
-  # consumer against its granted columns.
-  @selector_key "__selector__"
+  # The module-wide row: the view (card / comfy / table) and the item
+  # selector's two choices (`selector_view`, `selector_hidden`) (2026-08-31, boss: "save settings after a user
+  # changes them") — starting view + hidden columns, one set per user for
+  # every selector embed. Selector values are stored raw and validated by
+  # the consumer against its granted columns.
+  @module_key "catalogue"
 
   # Shared sort for every admin: the catalogues index plus the detail
   # page's items/categories tables. Manufacturers/suppliers stay per-user.
@@ -51,6 +55,24 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
 
   @spec scope_key(TableConfig.scope()) :: String.t()
   def scope_key(scope), do: to_string(scope)
+
+  @doc "The view-preferences key a scope's choices are kept under."
+  @spec view_key(TableConfig.scope()) :: String.t()
+  def view_key(scope), do: @module_key <> "." <> scope_key(scope)
+
+  @doc """
+  The `PhoenixKitWeb.TableColumns` spec for a scope: its managed columns
+  (Name and the sort-only ids are drawn by the table, not picked) and
+  their defaults.
+  """
+  @spec column_spec(TableConfig.scope()) :: map()
+  def column_spec(scope) do
+    %{
+      key: view_key(scope),
+      columns: for(c <- TableConfig.managed_columns(scope), do: %{id: c.id, label: c.label}),
+      defaults: TableConfig.default_columns(scope)
+    }
+  end
 
   @spec defaults(TableConfig.scope()) :: map()
   def defaults(scope) do
@@ -111,13 +133,7 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
 
   @spec load(map() | nil, TableConfig.scope()) :: map()
   def load(user, scope) do
-    raw =
-      case user do
-        %{custom_fields: cf} when is_map(cf) -> get_in(cf, [@root, scope_key(scope)]) || %{}
-        _ -> %{}
-      end
-
-    cfg = normalize(scope, raw)
+    cfg = normalize(scope, ViewPrefs.get(user, view_key(scope)))
     # Legacy cleanup: configs saved before ?folder= became URL state may
     # still carry the folder filter — ignore it so nobody stays stuck.
     cfg = %{cfg | filters: Map.delete(cfg.filters, "folder")}
@@ -138,29 +154,20 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   """
   @spec load_view(map() | nil) :: String.t()
   def load_view(user) do
-    stored =
-      case user do
-        %{custom_fields: cf} when is_map(cf) -> get_in(cf, [@root, @view_key])
-        _ -> nil
-      end
-
+    stored = user |> ViewPrefs.get(@module_key) |> Map.get("view")
     if stored in ["card", "comfy", "table"], do: stored, else: "comfy"
   end
 
   @doc """
-  Stores the module-wide view mode. Best-effort like `save/3`: a test
-  harness user (or none) keeps the choice in memory for the session
-  rather than crashing the LiveView on a toggle click.
+  Stores the module-wide view mode. Best-effort: with no user (or a user
+  row that is gone) the choice lives in the page for the session rather
+  than crashing the LiveView on a toggle click.
   """
   @spec save_view(map() | nil, String.t()) :: {:ok, map()} | {:error, term()}
-  def save_view(%Auth.User{} = user, view) when view in ["card", "comfy", "table"] do
-    current = user.custom_fields || %{}
-    merged = Map.put(current, @root, Map.put(Map.get(current, @root, %{}), @view_key, view))
+  def save_view(user, view) when view in ["card", "comfy", "table"],
+    do: ViewPrefs.put(user, @module_key, %{"view" => view})
 
-    Auth.update_user_custom_fields(user, merged, ensure_definitions: false, broadcast: false)
-  end
-
-  def save_view(_user, _view), do: {:error, :no_user}
+  def save_view(_user, _view), do: {:error, :invalid_view}
 
   @doc """
   The user's saved item-selector choices: `%{view: "table" | "comfy" |
@@ -171,14 +178,9 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   """
   @spec load_selector(map() | nil) :: %{view: String.t() | nil, hidden: [String.t()] | nil}
   def load_selector(user) do
-    stored =
-      case user do
-        %{custom_fields: cf} when is_map(cf) -> get_in(cf, [@root, @selector_key]) || %{}
-        _ -> %{}
-      end
-
-    view = stored["view"]
-    hidden = stored["hidden"]
+    stored = ViewPrefs.get(user, @module_key)
+    view = stored["selector_view"]
+    hidden = stored["selector_hidden"]
 
     %{
       view: if(view in ["table", "comfy", "card"], do: view),
@@ -187,59 +189,37 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
   end
 
   @doc """
-  Stores the selector choices (merge — a `nil` half keeps what is
-  saved). Best-effort like `save_view/2`: no user, no crash, the choice
-  just lives for the session.
+  Stores the selector choices — each half its own field, so a `nil` half
+  keeps what is saved and two tabs changing different halves both keep
+  theirs. Best-effort like `save_view/2`.
   """
   @spec save_selector(map() | nil, %{
           optional(:view) => String.t(),
           optional(:hidden) => [String.t()]
         }) ::
           {:ok, map()} | {:error, term()}
-  def save_selector(%Auth.User{} = user, choices) do
-    current = user.custom_fields || %{}
-    root = Map.get(current, @root, %{})
-    stored = Map.get(root, @selector_key, %{})
+  def save_selector(user, choices) do
+    fields =
+      %{"selector_view" => choices[:view], "selector_hidden" => choices[:hidden]}
+      |> Map.reject(fn {_k, v} -> is_nil(v) end)
 
-    stored =
-      stored
-      |> then(fn s -> if v = choices[:view], do: Map.put(s, "view", v), else: s end)
-      |> then(fn s -> if h = choices[:hidden], do: Map.put(s, "hidden", h), else: s end)
-
-    merged = Map.put(current, @root, Map.put(root, @selector_key, stored))
-    Auth.update_user_custom_fields(user, merged, ensure_definitions: false, broadcast: false)
+    if fields == %{},
+      do: {:ok, ViewPrefs.get(user, @module_key)},
+      else: ViewPrefs.put(user, @module_key, fields)
   end
 
-  def save_selector(_user, _choices), do: {:error, :no_user}
-
-  @doc """
-  `save_view/2` for a LiveView: stores the choice and puts the REFRESHED
-  user back on the socket.
-
-  Keeping the refreshed user is the whole point. Every write here merges
-  one subtree into the user's entire `custom_fields` map and saves the
-  result, so a socket still holding the pre-save user carries a snapshot
-  that predates the view. The next column or filter save then merges
-  into that snapshot and writes it back — deleting the view the user
-  just chose, without an error anywhere. It surfaces one page later, as
-  "my view didn't stick", which is the thing this feature exists to fix.
-  """
+  @doc "`save_view/2` for a LiveView: stores the signed-in user's choice."
   @spec save_view_on(Phoenix.LiveView.Socket.t(), String.t()) :: Phoenix.LiveView.Socket.t()
   def save_view_on(socket, view) do
-    case save_view(socket.assigns[:phoenix_kit_current_user], view) do
-      {:ok, updated_user} ->
-        Phoenix.Component.assign(socket, :phoenix_kit_current_user, updated_user)
-
-      _ ->
-        socket
-    end
+    _ = save_view(socket.assigns[:phoenix_kit_current_user], view)
+    socket
   end
 
   @spec normalize(TableConfig.scope(), map()) :: map()
   def normalize(scope, raw) when is_map(raw) do
     d = defaults(scope)
 
-    cols = normalize_columns(scope, raw["columns"], d.columns)
+    cols = TableColumns.resolve(raw["columns"], column_spec(scope))
 
     filters =
       if is_map(raw["filters"]) do
@@ -265,50 +245,62 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
 
   def normalize(scope, _), do: defaults(scope)
 
-  # An empty list is a choice — every optional column hidden, Name left —
-  # and stays empty. Only a missing list, or one whose every id went
-  # stale, falls back to the defaults.
-  defp normalize_columns(_scope, [], _defaults), do: []
-
-  defp normalize_columns(scope, stored, defaults) when is_list(stored) do
-    case TableConfig.validate_columns(scope, stored) do
-      [] -> defaults
-      list -> list
-    end
-  end
-
-  defp normalize_columns(_scope, _stored, defaults), do: defaults
-
   defp dir("desc", _), do: :desc
   defp dir("asc", _), do: :asc
   defp dir(_, fallback), do: fallback
 
-  @spec save(map() | nil, TableConfig.scope(), map()) :: {:ok, map()} | {:error, term()}
-  def save(%Auth.User{} = user, scope, cfg) do
-    serialized = %{
+  @doc """
+  Stores a scope's config for `user`. With `prev` (the config the page held
+  before the change), only the fields that differ are written — the rest
+  stay as stored, so a sort change in one tab cannot put back the columns
+  another tab just changed.
+  """
+  @spec save(map() | nil, TableConfig.scope(), map(), map() | nil) ::
+          {:ok, map()} | {:error, term()}
+  def save(user, scope, cfg, prev \\ nil) do
+    # A global-sort scope's ordering is the module setting's; a per-user
+    # copy would be inert.
+    fields =
+      if global_sort?(scope),
+        do: Map.drop(serialize(cfg), ["sort_by", "sort_dir"]),
+        else: serialize(cfg)
+
+    changed =
+      case prev do
+        %{} -> Map.reject(fields, fn {k, v} -> serialize(prev)[k] == v end)
+        _ -> fields
+      end
+
+    if changed == %{},
+      do: {:ok, ViewPrefs.get(user, view_key(scope))},
+      else: ViewPrefs.put(user, view_key(scope), changed)
+  end
+
+  @doc "Stores just a scope's column choice for `user`."
+  @spec save_columns(map() | nil, TableConfig.scope(), [String.t()]) ::
+          {:ok, map()} | {:error, term()}
+  def save_columns(user, scope, columns),
+    do: ViewPrefs.put(user, view_key(scope), %{"columns" => columns})
+
+  @doc """
+  Takes the scope's column choice back out, so `user` sees the defaults
+  and follows them if they change — rather than a saved copy of them.
+  """
+  @spec reset_columns(map() | nil, TableConfig.scope()) :: {:ok, map()} | {:error, term()}
+  def reset_columns(user, scope), do: ViewPrefs.delete_fields(user, view_key(scope), ["columns"])
+
+  # The current folder is LOCATION, not a preference: it lives in the URL
+  # (?folder=) like the detail page's ?category=, so it is never persisted —
+  # a stored value made the index "remember" a drill across sessions and
+  # devices with no link to share. The view is module-wide (see the
+  # moduledoc) — `save_view/2` owns it; writing it per scope is what let
+  # the surfaces drift.
+  defp serialize(cfg) do
+    %{
       "columns" => cfg.columns,
       "sort_by" => cfg.sort_by,
       "sort_dir" => to_string(cfg.sort_dir),
-      # The current folder is LOCATION, not a preference: it lives in
-      # the URL (?folder=) like the detail page's ?category=, so it is
-      # never persisted — a stored value made the index "remember" a
-      # drill across sessions and devices with no link to share.
-      # The view is module-wide (see the moduledoc) — `save_view/2` owns
-      # it. Writing it per scope here is what let the surfaces drift.
       "filters" => Map.delete(cfg.filters, "folder")
     }
-
-    current = user.custom_fields || %{}
-    scoped = Map.put(Map.get(current, @root, %{}), scope_key(scope), serialized)
-    merged = Map.put(current, @root, scoped)
-
-    Auth.update_user_custom_fields(user, merged, ensure_definitions: false, broadcast: false)
   end
-
-  # `update_user_custom_fields/3` matches a real `%Auth.User{}`; anything else
-  # (nil, or the bare `%{uuid: uuid}` the LV test harness mounts with) used to
-  # raise out of `put_cfg` and crash the LiveView on the first sort click.
-  # Per-user persistence is best-effort — skip it rather than crash; callers
-  # already treat any non-{:ok, user} as "keep the in-memory cfg only".
-  def save(_user, _scope, _cfg), do: {:error, :no_user}
 end

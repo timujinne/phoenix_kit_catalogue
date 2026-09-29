@@ -49,6 +49,14 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
       ~r{(<select id="supplier-add-picker"[^>]*>).*?</select>}s,
       "\\1</select>"
     )
+    # Core's theme buttons encode a `JS.dispatch` payload map. A small map
+    # with atom keys lists them in atom-creation order (OTP 26+), so
+    # "event" and "detail" trade places depending on what the run loaded
+    # first. One canonical order: event, then detail.
+    |> String.replace(
+      ~r/\{&quot;detail&quot;:(\{[^}]*\}),&quot;event&quot;:(&quot;[^&]*&quot;)\}/,
+      "{&quot;event&quot;:\\2,&quot;detail&quot;:\\1}"
+    )
   end
 
   describe "no extension registered" do

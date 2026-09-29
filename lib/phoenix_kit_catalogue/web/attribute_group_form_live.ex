@@ -54,6 +54,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.AttributeGroup
+  alias PhoenixKitCatalogue.Web.HeaderTrail
 
   @translatable_fields ["name"]
 
@@ -119,8 +120,9 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
          page_title:
            if(action == :new,
              do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute group"),
-             else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: group.name)
+             else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")
            ),
+         page_crumbs: header_crumbs(action, group),
          action: action,
          group: group,
          confirm_delete_attribute: nil,
@@ -646,10 +648,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
     socket =
       socket
       |> assign(:group, group)
-      |> assign(
-        :page_title,
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: group.name)
-      )
+      |> assign(:page_crumbs, header_crumbs(:edit, group))
 
     if opts[:rebuild_changeset] do
       assign_changeset(socket, Catalogue.change_attribute_group(group))
@@ -728,6 +727,19 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
     ]
   end
 
+  # The header's trail: the Attributes list, then — when editing — the
+  # group itself, as text: the list is its only other page.
+  defp header_crumbs(action, group) do
+    list = [
+      %{
+        label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attributes"),
+        path: Paths.attribute_groups()
+      }
+    ]
+
+    if action == :edit, do: list ++ HeaderTrail.record_crumb(group.name), else: list
+  end
+
   @impl true
   def render(assigns) do
     assigns =
@@ -743,8 +755,9 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={@page_title}
-      page_section={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Attributes")}
-      page_section_path={Paths.attribute_groups()}
+      page_section={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
+      page_section_path={Paths.index()}
+      page_crumbs={@page_crumbs}
       page_subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Define a reusable set of options — colors, trims, surfaces — that items can inherit."), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Manage this group's attributes, values, and translations.")}
       current_path={assigns[:url_path] || Paths.attribute_groups()}
       current_locale={assigns[:current_locale]}

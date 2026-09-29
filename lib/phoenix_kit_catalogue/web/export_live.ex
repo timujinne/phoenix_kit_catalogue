@@ -8,6 +8,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
 
   use Phoenix.LiveView
 
+  require Logger
+
   import PhoenixKitWeb.Components.Core.Checkbox, only: [checkbox: 1]
   import PhoenixKitWeb.Components.Core.FormFieldLabel, only: [label: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
@@ -16,8 +18,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Export
   alias PhoenixKitCatalogue.Paths
-  alias PhoenixKitCatalogue.Web.Components.PlacePicker
   alias PhoenixKitCatalogue.Web.PlaceTree
+  alias PhoenixKitWeb.Components.TreePicker
 
   @impl true
   def mount(_params, _session, socket) do
@@ -29,6 +31,8 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
      socket
      |> assign(
        page_title: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Export"),
+       page_section: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues"),
+       page_section_path: Paths.index(),
        destinations: destinations,
        selected_destination: selected_destination,
        catalogues: catalogues,
@@ -56,7 +60,7 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
   # would post the previous ticks and undo it, so `change_form` ignores
   # them.
   @impl true
-  def handle_info({PlacePicker, "export-catalogue-picker", ids}, socket) when is_list(ids) do
+  def handle_info({TreePicker, "export-catalogue-picker", ids}, socket) when is_list(ids) do
     known = MapSet.new(socket.assigns.catalogues, & &1.uuid)
 
     uuids =
@@ -67,7 +71,12 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
     {:noreply, assign(socket, :selected_catalogue_uuids, uuids)}
   end
 
-  def handle_info(_msg, socket), do: {:noreply, socket}
+  # Catch-all so an unrelated message cannot crash the page; logged, as
+  # every other catalogue page does, so a dropped one can be found.
+  def handle_info(msg, socket) do
+    Logger.debug("ExportLive ignored unhandled message: #{inspect(msg)}")
+    {:noreply, socket}
+  end
 
   @impl true
   def render(assigns) do
@@ -94,13 +103,15 @@ defmodule PhoenixKitCatalogue.Web.ExportLive do
               <%!-- A folder's box ticks every catalogue in it. --%>
               <div class="border border-base-300 rounded-box bg-base-100 p-2">
                 <.live_component
-                  module={PlacePicker}
+                  module={TreePicker}
                   id="export-catalogue-picker"
                   tree={@catalogue_tree}
                   value={Enum.map(@selected_catalogue_uuids, &("catalogue:" <> &1))}
                   pickable={[:catalogue]}
                   multiple
                   name="catalogue_uuids[]"
+                  path_skip={[:folder]}
+                  post={&PlaceTree.post/1}
                 />
               </div>
             </div>

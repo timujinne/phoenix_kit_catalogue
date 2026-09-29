@@ -68,7 +68,9 @@ defmodule PhoenixKitCatalogue.Attachments do
   `for_catalogue(kind, actor_uuid)` (2-arity, the original contract).
   Either arity returns `{:ok, parent_folder_uuid}` or `nil` (root). Lookups
   by name check the parent first and the root second, so folders that
-  predate the setting are still found.
+  predate the setting are still found. A pending folder (made for a `:new`
+  form) moves under the saved record's parent when it is renamed — only
+  on a definite answer, never to the root a failed hook fell back to.
 
   ## Host-named folders
 
@@ -81,32 +83,40 @@ defmodule PhoenixKitCatalogue.Attachments do
   (e.g. for an unsaved resource) falls back to the deterministic name.
   `find_resource_folder/2` looks a resource's folder up in that order: the
   host name under the resolved parent, then the deterministic name under
-  the parent, then the deterministic name at the root — so a folder the
-  host has renamed is still found without a stored pointer.
+  the parent, at the root, then anywhere — so a folder the host has
+  renamed or moved is still found without a stored pointer. Only live
+  folders count; a folder another catalogue resource points at is never
+  adopted by host name (a host name carries no uuid, and two items can
+  share one), and when the host name is taken the folder gets the
+  deterministic name. An unsaved resource never adopts a folder. The
+  convention is core's `PhoenixKit.Modules.Storage.ResourceFolders`.
   """
 
   require Logger
 
-  import Ecto.Query, warn: false
   import Phoenix.Component, only: [assign: 2, assign: 3]
 
   import Phoenix.LiveView,
     only: [
-      allow_upload: 3,
       cancel_upload: 3,
       consume_uploaded_entry: 3,
       put_flash: 3
     ]
 
   alias PhoenixKit.Modules.Storage
-  alias PhoenixKit.Modules.Storage.{File, FolderLink}
-  alias PhoenixKit.Users.Auth, as: UsersAuth
+  alias PhoenixKit.Modules.Storage.{File, ResourceFolders}
+  alias PhoenixKit.Utils.Format
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item, Pdf}
   alias PhoenixKitCatalogue.Web.Helpers, as: WebHelpers
+  alias PhoenixKitWeb.Actor
+  alias PhoenixKitWeb.Attachments, as: CoreAttachments
 
   @upload_name :attachment_files
+  @app :phoenix_kit_catalogue
+  @pending_prefix "catalogue-attachment-pending-"
   @doc "Returns the upload ref name used for the inline files dropzone."
+  @spec upload_name() :: atom()
   def upload_name, do: @upload_name
 
   # ── Mount ────────────────────────────────────────────────────────
@@ -125,6 +135,8 @@ defmodule PhoenixKitCatalogue.Attachments do
       because its UI only renders the featured-image card; it has no
       files grid, so the file list query was wasted.
   """
+  @spec mount_attachments(Phoenix.LiveView.Socket.t(), struct(), keyword()) ::
+          Phoenix.LiveView.Socket.t()
   def mount_attachments(socket, resource, opts \\ []) do
     files_grid? = Keyword.get(opts, :files_grid, true)
 
@@ -137,6 +149,13 @@ defmodule PhoenixKitCatalogue.Attachments do
       # out in the user's saved order (boss, 2026-08-31: the client
       # reorders images after adding them).
       |> assign(:media_order, read_list(resource_data(resource), "media_order"))
+      # What the record held when this form opened: a clear marker is
+      # written only for something the form knew about.
+      |> assign(:media_order_at_mount, read_list(resource_data(resource), "media_order"))
+      |> assign(
+        :featured_image_at_mount,
+        read_string(resource_data(resource), "featured_image_uuid")
+      )
       # What the row holds — so a same-place drop writes nothing, and a
       # broadcast can tell "someone else reordered" from "our own write".
       |> assign(:media_order_persisted, read_list(resource_data(resource), "media_order"))
@@ -157,15 +176,9 @@ defmodule PhoenixKitCatalogue.Attachments do
   ceiling and auto-upload. Progress is consumed by `handle_progress/3`
   which this module captures for the caller.
   """
-  def allow_attachment_upload(socket) do
-    allow_upload(socket, @upload_name,
-      accept: :any,
-      max_entries: 20,
-      max_file_size: 100_000_000,
-      auto_upload: true,
-      progress: &handle_progress/3
-    )
-  end
+  @spec allow_attachment_upload(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
+  def allow_attachment_upload(socket),
+    do: CoreAttachments.allow(socket, @upload_name, &handle_progress/3)
 
   defp assign_files_folder(socket, resource) do
     assign(socket, :files_folder_uuid, read_string(resource_data(resource), "files_folder_uuid"))
@@ -188,19 +201,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   nil/empty order is the identity — legacy records sort as before
   (folder `inserted_at`).
   """
-  def apply_media_order(files, order) when is_list(order) and order != [] do
-    index = order |> Enum.with_index() |> Map.new()
-    tail_base = length(order)
-
-    files
-    |> Enum.with_index()
-    |> Enum.sort_by(fn {file, position} ->
-      {Map.get(index, to_string(file.uuid), tail_base), position}
-    end)
-    |> Enum.map(&elem(&1, 0))
-  end
-
-  def apply_media_order(files, _order), do: files
+  @spec apply_media_order([map()], [String.t()] | nil) :: [map()]
+  defdelegate apply_media_order(files, order), to: CoreAttachments, as: :apply_order
 
   @doc """
   The `"reorder_files"` event handler body, shared by the three form
@@ -210,6 +212,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   the payload missed keep their place at the tail, so the list can
   never lose or invent a file.
   """
+  @spec handle_reorder_files(Phoenix.LiveView.Socket.t(), term()) :: Phoenix.LiveView.Socket.t()
   def handle_reorder_files(socket, ordered_ids) when is_list(ordered_ids) do
     files = socket.assigns.files_state.files
     # Only strings can be ids; anything else in a crafted payload is
@@ -249,17 +252,7 @@ defmodule PhoenixKitCatalogue.Attachments do
           end
       end
 
-    case socket.assigns[:featured_image_file] do
-      nil ->
-        folder_files
-
-      %{uuid: featured_uuid} = featured_file ->
-        if Enum.any?(folder_files, &(&1.uuid == featured_uuid)) do
-          folder_files
-        else
-          [featured_file | folder_files]
-        end
-    end
+    CoreAttachments.with_featured(folder_files, socket.assigns[:featured_image_file])
   end
 
   # A featured image that was trashed since the pointer was written (from
@@ -293,6 +286,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   # ── Event bodies ─────────────────────────────────────────────────
 
   @doc "Opens the media selector modal scoped to the resource's folder."
+  @spec open_featured_image_picker(Phoenix.LiveView.Socket.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
   def open_featured_image_picker(socket) do
     case ensure_folder(socket) do
       {:ok, _folder_uuid, socket} ->
@@ -307,14 +302,11 @@ defmodule PhoenixKitCatalogue.Attachments do
          |> assign(:show_media_selector, true)}
 
       {:error, reason} ->
-        Logger.warning("Failed to ensure attachments folder: #{inspect(reason)}")
+        Logger.warning(
+          "Failed to ensure attachments folder: #{ResourceFolders.describe_failure(reason)}"
+        )
 
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not prepare the files folder.")
-         )}
+        {:noreply, put_flash(socket, :error, CoreAttachments.folder_error_message())}
     end
   end
 
@@ -325,6 +317,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   leaves them there, so the grid (and, if the folder's contents changed,
   every other surface counting them) must catch up on close.
   """
+  @spec close_media_selector(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def close_media_selector(socket) do
     socket
     |> reset_media_selector()
@@ -340,11 +333,15 @@ defmodule PhoenixKitCatalogue.Attachments do
   end
 
   @doc "Cancels an in-flight upload entry by ref."
+  @spec cancel_attachment_upload(Phoenix.LiveView.Socket.t(), String.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
   def cancel_attachment_upload(socket, ref) do
     {:noreply, cancel_upload(socket, @upload_name, ref)}
   end
 
   @doc "Nulls the featured image pointer in socket state (save persists)."
+  @spec clear_featured_image(Phoenix.LiveView.Socket.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
   def clear_featured_image(socket) do
     {:noreply,
      socket
@@ -366,6 +363,8 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   Also clears the featured pointer if the removed file was featured.
   """
+  @spec trash_file(Phoenix.LiveView.Socket.t(), String.t()) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
   def trash_file(socket, uuid) do
     folder_uuid = socket.assigns[:files_folder_uuid]
 
@@ -415,7 +414,7 @@ defmodule PhoenixKitCatalogue.Attachments do
           do: %{"media_order" => new_order, "featured_image_uuid" => nil},
           else: %{"media_order" => new_order}
 
-      case write_owned_data(resource, data, current_user_uuid(socket)) do
+      case write_owned_data(resource, data, Actor.uuid(socket)) do
         {:ok, updated} ->
           socket
           |> assign(:attachments_resource, updated)
@@ -436,85 +435,18 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   defp persist_removal(socket, _uuid, _new_order, :noop), do: socket
 
-  # `:noop` — nothing to detach (no folder yet / unknown file); `:ok` —
+  # Core's removal rule (`ResourceFolders.detach/2`): a link is dropped; a
+  # file homed here moves to a live folder that also links it, or is
+  # soft-trashed when nothing else holds it. `:noop` — nothing to detach
+  # (no folder yet, an unknown file, or a forged removal of a file this
+  # resource never held), so no change is announced for no write; `:ok` —
   # a row was written.
-  defp do_detach(_uuid, nil), do: :noop
-
   defp do_detach(file_uuid, folder_uuid) do
-    case Storage.get_file(file_uuid) do
-      nil -> :noop
-      %File{folder_uuid: ^folder_uuid} = file -> detach_home(file)
-      %File{} = file -> detach_link(file.uuid, folder_uuid)
+    case ResourceFolders.detach(file_uuid, folder_uuid) do
+      {:ok, :absent} -> :noop
+      {:ok, _outcome} -> :ok
+      {:error, reason} -> {:error, reason}
     end
-  end
-
-  # File's home is this folder; check for other `FolderLink`s to
-  # decide between trashing (single-owner) and promoting (shared).
-  defp detach_home(file) do
-    repo = PhoenixKit.RepoHelper.repo()
-
-    case list_links(file.uuid) do
-      [] ->
-        case soft_trash_file(file) do
-          {:ok, _} -> :ok
-          err -> err
-        end
-
-      [%FolderLink{} = link | _rest] ->
-        repo.transaction(fn ->
-          file
-          |> Ecto.Changeset.change(%{folder_uuid: link.folder_uuid})
-          |> repo.update!()
-
-          repo.delete!(link)
-        end)
-        |> case do
-          {:ok, _} -> :ok
-          err -> err
-        end
-    end
-  end
-
-  # Inline soft-trash so we don't depend on `Storage.trash_file/1` being
-  # present in the consumer's vendored `phoenix_kit` version. The
-  # public core helper was introduced after the hex release this plugin
-  # pins against; the write shape is trivial (status + timestamp) so
-  # doing it here keeps the plugin decoupled from the core version
-  # skew.
-  defp soft_trash_file(%File{} = file) do
-    file
-    |> Ecto.Changeset.change(%{
-      status: "trashed",
-      trashed_at: DateTime.utc_now() |> DateTime.truncate(:second)
-    })
-    |> PhoenixKit.RepoHelper.repo().update()
-  end
-
-  # File's home is elsewhere — removing from this resource just means
-  # deleting its folder_link for this folder. Other resources keep it.
-  # `:noop` when nothing was linked (a forged removal of a file this
-  # resource never held), so no change is announced for no write.
-  defp detach_link(file_uuid, folder_uuid) do
-    from(fl in FolderLink,
-      where: fl.file_uuid == ^file_uuid and fl.folder_uuid == ^folder_uuid
-    )
-    |> PhoenixKit.RepoHelper.repo().delete_all()
-    |> case do
-      {0, _} -> :noop
-      _ -> :ok
-    end
-  end
-
-  # Links into LIVE folders only — re-homing into a trashed folder would
-  # strand the file (listed nowhere, not in the file trash either).
-  defp list_links(file_uuid) do
-    from(fl in FolderLink,
-      join: fo in PhoenixKit.Modules.Storage.Folder,
-      on: fo.uuid == fl.folder_uuid,
-      where: fl.file_uuid == ^file_uuid and is_nil(fo.trashed_at),
-      order_by: [asc: fl.inserted_at]
-    )
-    |> PhoenixKit.RepoHelper.repo().all()
   end
 
   # ── handle_info bodies ───────────────────────────────────────────
@@ -525,6 +457,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   target is a no-op (modal already set folder_uuid). Both refresh
   the grid from the folder.
   """
+  @spec handle_media_selected(Phoenix.LiveView.Socket.t(), [String.t()]) ::
+          {:noreply, Phoenix.LiveView.Socket.t()}
   def handle_media_selected(socket, file_uuids) do
     socket =
       case socket.assigns[:media_selector_target] do
@@ -543,6 +477,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   over PubSub that the resource changed in another session (an upload or
   removal there) — the form's own pointers (featured image) are untouched.
   """
+  @spec refresh_files(Phoenix.LiveView.Socket.t()) :: Phoenix.LiveView.Socket.t()
   def refresh_files(socket) do
     socket
     |> resolve_files_folder()
@@ -598,7 +533,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   end
 
   defp assign_resolved_folder(socket) do
-    case find_resource_folder(socket.assigns[:attachments_resource], current_user_uuid(socket)) do
+    case find_resource_folder(socket.assigns[:attachments_resource], Actor.uuid(socket)) do
       %{uuid: uuid} -> assign(socket, :files_folder_uuid, uuid)
       _ -> socket
     end
@@ -648,14 +583,7 @@ defmodule PhoenixKitCatalogue.Attachments do
     do: put_flash(socket, :info, duplicate_notice(entry.client_name, existing))
 
   @doc false
-  def duplicate_notice(client_name, existing) do
-    Gettext.gettext(
-      PhoenixKitCatalogue.Gettext,
-      "%{name} is identical to %{existing}, which is already attached — nothing was added.",
-      name: client_name,
-      existing: existing.original_file_name || client_name
-    )
-  end
+  defdelegate duplicate_notice(client_name, existing), to: CoreAttachments
 
   # A drag is an action, not a draft: like an upload it lands at once,
   # so the popup's carousel and a reload agree with the editor without
@@ -669,7 +597,7 @@ defmodule PhoenixKitCatalogue.Attachments do
     resource = socket.assigns[:attachments_resource]
 
     if persisted?(resource) and media_order != socket.assigns[:media_order_persisted] do
-      case write_owned_data(resource, %{"media_order" => media_order}, current_user_uuid(socket)) do
+      case write_owned_data(resource, %{"media_order" => media_order}, Actor.uuid(socket)) do
         {:ok, updated} ->
           socket
           |> assign(:attachments_resource, updated)
@@ -713,6 +641,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   # save, when the pending folder is renamed. Owned-key write, so a
   # translation fingerprint or a sync's namespace written meanwhile is
   # kept. Never fatal: the files are attached either way.
+  @spec persist_folder_pointer(Phoenix.LiveView.Socket.t(), String.t() | nil) ::
+          Phoenix.LiveView.Socket.t()
   def persist_folder_pointer(socket, folder_uuid) when is_binary(folder_uuid) do
     resource = socket.assigns[:attachments_resource]
 
@@ -721,7 +651,7 @@ defmodule PhoenixKitCatalogue.Attachments do
       case write_owned_data(
              resource,
              %{"files_folder_uuid" => folder_uuid},
-             current_user_uuid(socket)
+             Actor.uuid(socket)
            ) do
         {:ok, updated} ->
           assign(socket, :attachments_resource, updated)
@@ -824,8 +754,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   Links already-uploaded Storage files to `item`'s attachment folder
   without a mounted LiveView. Resolves (or creates) the item's
   deterministic folder — the same name rule `mount_attachments/2` uses
-  — then home-adopts or folder-links each file (`assign_file_to_folder/2`
-  under the hood), and persists `data["featured_image_uuid"]`
+  — then home-adopts or folder-links each file (core's
+  `ResourceFolders.attach/2`), and persists `data["featured_image_uuid"]`
   (`opts[:featured]`, default the first uuid) and `data["media_order"]`
   (`opts[:order]`, default `file_uuids` as given) via
   `PhoenixKitCatalogue.Catalogue.update_item/3`. Pass `opts[:actor_uuid]`
@@ -839,8 +769,8 @@ defmodule PhoenixKitCatalogue.Attachments do
   @spec attach_files(Item.t(), [String.t()], keyword()) :: {:ok, Item.t()} | {:error, term()}
   def attach_files(%Item{} = item, file_uuids, opts \\ []) when is_list(file_uuids) do
     with {:ok, files} <- resolve_attach_files(file_uuids),
-         {:ok, folder_uuid} <- ensure_item_folder(item) do
-      Enum.each(files, &assign_file_to_folder(&1, folder_uuid))
+         {:ok, folder_uuid} <- ensure_item_folder(item, opts[:actor_uuid]) do
+      Enum.each(files, &attach_file(&1, folder_uuid))
 
       # Owned-key write: the caller's struct may be stale, and the row's
       # other data keys (translation fingerprints, sync namespaces) must
@@ -883,35 +813,36 @@ defmodule PhoenixKitCatalogue.Attachments do
     end
   end
 
-  defp ensure_item_folder(%Item{} = item) do
-    case read_string(resource_data(item), "files_folder_uuid") do
-      folder_uuid when is_binary(folder_uuid) -> {:ok, folder_uuid}
-      _ -> resolve_item_folder(item)
+  defp attach_file(file, folder_uuid) do
+    case ResourceFolders.attach(file, folder_uuid) do
+      {:ok, _outcome} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "Attaching #{file.uuid} to #{folder_uuid} failed: " <>
+            ResourceFolders.describe_failure(reason)
+        )
     end
   end
 
-  defp resolve_item_folder(item) do
-    case folder_name_for(item) do
-      :pending -> {:error, :item_not_persisted}
-      {:ok, _} -> find_or_create_item_folder(item)
-    end
-  end
-
-  defp find_or_create_item_folder(item) do
-    case find_resource_folder(item, nil) do
+  # The stored pointer while its folder is live, else the item's folder
+  # resolved or created as the form would.
+  defp ensure_item_folder(%Item{} = item, actor_uuid) do
+    case ResourceFolders.live_folder(read_string(resource_data(item), "files_folder_uuid")) do
       %{uuid: uuid} ->
         {:ok, uuid}
 
       nil ->
-        case Storage.create_folder(%{
-               name: folder_name(item, nil),
-               parent_uuid: parent_folder_uuid(item, nil)
-             }) do
-          {:ok, folder} -> {:ok, folder.uuid}
-          {:error, reason} -> {:error, reason}
+        case folder_name_for(item) do
+          :pending -> {:error, :item_not_persisted}
+          {:ok, _} -> item |> ensure_resource_folder(actor_uuid) |> folder_result()
         end
     end
   end
+
+  defp folder_result({:ok, %{uuid: uuid}}), do: {:ok, uuid}
+  defp folder_result({:error, reason}), do: {:error, reason}
 
   # ── Save-time helpers ────────────────────────────────────────────
 
@@ -919,82 +850,96 @@ defmodule PhoenixKitCatalogue.Attachments do
   Merges `files_folder_uuid` and `featured_image_uuid` into `params["data"]`.
   Call right before passing params to your context's create/update.
   """
+  @spec inject_attachment_data(map(), Phoenix.LiveView.Socket.t()) :: map()
   def inject_attachment_data(params, socket) do
     params
     |> inject_files_folder(socket.assigns[:files_folder_uuid])
-    |> inject_featured_image(socket.assigns[:featured_image_uuid])
-    |> inject_media_order(socket.assigns[:files_state])
+    |> inject_featured_image(socket.assigns[:featured_image_uuid], socket)
+    |> inject_media_order(socket.assigns[:files_state], socket)
   end
+
+  @doc """
+  Re-baselines the attachment assigns on a save that keeps the form open.
+  `mount_attachments/3` records what the record held when the form
+  opened; after a stay-save the record holds what was just saved, so a
+  later clear or removal must be judged against that. Without this, an
+  image picked and saved here reads as "never known", and clearing it
+  on the next save writes no marker — the image stays on the record.
+  """
+  @spec after_save(Phoenix.LiveView.Socket.t(), struct()) :: Phoenix.LiveView.Socket.t()
+  def after_save(socket, resource) do
+    data = resource_data(resource)
+    order = read_list(data, "media_order")
+
+    socket
+    |> assign(:attachments_resource, resource)
+    |> assign(:media_order_at_mount, order)
+    |> assign(:featured_image_at_mount, read_string(data, "featured_image_uuid"))
+    |> assign(:media_order_persisted, order)
+  end
+
+  # A clear marker says "the person cleared this here", so it is written
+  # only by a form that HAD one to clear: one opened before another tab
+  # set an image would otherwise delete it on any save.
+  defp knew?(socket, key), do: socket.assigns[key] not in [nil, []]
 
   @doc """
   After a `:new` save, renames the pending (random-named) folder to
   the deterministic name now that the resource has a UUID. Non-fatal:
   rename failures log and return `:ok` so the save flow isn't blocked.
   """
+  @spec maybe_rename_pending_folder(Phoenix.LiveView.Socket.t(), struct()) :: :ok
   def maybe_rename_pending_folder(socket, resource) do
-    actor = current_user_uuid(socket)
+    actor = Actor.uuid(socket)
 
     with folder_uuid when is_binary(folder_uuid) <- socket.assigns[:files_folder_uuid],
-         {:ok, _} <- folder_name_for(resource),
-         %{} = folder <- Storage.get_folder(folder_uuid) do
-      case Storage.update_folder(folder, %{
-             name: folder_name(resource, actor),
-             parent_uuid: parent_folder_uuid(resource, actor)
-           }) do
-        {:ok, _} ->
-          :ok
-
-        {:error, reason} ->
-          Logger.warning(
-            "Pending folder rename failed for #{inspect(resource.__struct__)} #{resource.uuid}: #{inspect(reason)}"
-          )
-
-          :ok
-      end
+         {:ok, deterministic} <- folder_name_for(resource) do
+      ResourceFolders.name_pending(
+        folder_uuid,
+        @pending_prefix,
+        folder_name(resource, actor),
+        [fallback_name: deterministic] ++ pending_move(resource, actor)
+      )
     else
       _ -> :ok
     end
   end
 
-  # ── Template helpers ─────────────────────────────────────────────
+  # The parent can depend on the saved record (its catalogue, its
+  # category), which the pending folder's create could not know, so the
+  # folder moves there once the record exists — on a definite answer only:
+  # a hook that failed must not send it to the storage root.
+  defp pending_move(resource, actor) do
+    case ResourceFolders.parent_hook(@app, resource_kind(resource), actor, resource) do
+      {:ok, parent_uuid} ->
+        [move_to: parent_uuid]
 
-  @doc "Renders a byte count as a human string. Nil-safe."
-  def format_file_size(nil), do: "—"
+      :unconfigured ->
+        []
 
-  def format_file_size(bytes) when is_integer(bytes) do
-    cond do
-      bytes >= 1_000_000_000 -> "#{Float.round(bytes / 1_000_000_000, 1)} GB"
-      bytes >= 1_000_000 -> "#{Float.round(bytes / 1_000_000, 1)} MB"
-      bytes >= 1_000 -> "#{Float.round(bytes / 1_000, 1)} KB"
-      true -> "#{bytes} B"
+      {:error, reason} ->
+        Logger.warning(
+          "Pending folder left in place for #{inspect(resource.__struct__)} #{resource.uuid}: " <>
+            ResourceFolders.describe_failure(reason)
+        )
+
+        []
     end
   end
 
-  def format_file_size(_), do: "—"
+  # ── Template helpers ─────────────────────────────────────────────
 
-  @doc "Picks a heroicon name for a file based on its Storage type."
-  def file_icon(%{file_type: "image"}), do: "hero-photo"
-  def file_icon(%{file_type: "video"}), do: "hero-film"
-  def file_icon(%{file_type: "audio"}), do: "hero-musical-note"
-  def file_icon(%{file_type: "archive"}), do: "hero-archive-box"
-  def file_icon(%{mime_type: "application/pdf"}), do: "hero-document-text"
-  def file_icon(_), do: "hero-document"
+  @doc "Renders a byte count as a human string (decimal units). Nil-safe."
+  @spec format_file_size(integer() | nil) :: String.t()
+  def format_file_size(bytes), do: Format.bytes(bytes, base: 1000, unknown: "—")
+
+  @doc "Heroicon name for a file's Storage type / mime (`Format.file_icon/1`)."
+  @spec file_icon(map()) :: String.t()
+  defdelegate file_icon(file), to: Format
 
   @doc "Translates LiveView upload error atoms to user-facing text."
-  def upload_error_message(:too_large),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File is too large.")
-
-  def upload_error_message(:not_accepted),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "File type not accepted.")
-
-  def upload_error_message(:too_many_files),
-    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Too many files.")
-
-  def upload_error_message(other),
-    do:
-      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload error: %{reason}",
-        reason: inspect(other)
-      )
+  @spec upload_error_message(term()) :: String.t()
+  defdelegate upload_error_message(reason), to: CoreAttachments, as: :error_message
 
   # ── Internals ────────────────────────────────────────────────────
 
@@ -1016,34 +961,11 @@ defmodule PhoenixKitCatalogue.Attachments do
   # Host-configured parent folder for a resource, see moduledoc "Parent
   # folder". `nil` means the storage root (the default). Prefers the
   # 3-arity hook (receives the resource itself) and falls back to the
-  # original 2-arity contract.
-  def parent_folder_uuid(resource, actor_uuid) do
-    case Application.get_env(:phoenix_kit_catalogue, :attachments_parent_folder) do
-      {mod, fun} when is_atom(mod) and is_atom(fun) ->
-        mod
-        |> call_parent_hook(fun, resource_kind(resource), actor_uuid, resource)
-        |> normalize_folder_uuid()
-
-      _ ->
-        nil
-    end
-  end
-
-  defp call_parent_hook(mod, fun, kind, actor_uuid, resource) do
-    cond do
-      Code.ensure_loaded?(mod) and function_exported?(mod, fun, 3) ->
-        apply(mod, fun, [kind, actor_uuid, resource])
-
-      Code.ensure_loaded?(mod) and function_exported?(mod, fun, 2) ->
-        apply(mod, fun, [kind, actor_uuid])
-
-      true ->
-        nil
-    end
-  end
-
-  defp normalize_folder_uuid({:ok, uuid}) when is_binary(uuid), do: uuid
-  defp normalize_folder_uuid(_), do: nil
+  # original 2-arity contract; a failing hook or a non-uuid answer falls
+  # back to the root, logged (`ResourceFolders.parent_uuid/4`).
+  @spec parent_folder_uuid(term(), String.t() | nil) :: String.t() | nil
+  def parent_folder_uuid(resource, actor_uuid),
+    do: ResourceFolders.parent_uuid(@app, resource_kind(resource), actor_uuid, resource)
 
   defp resource_kind(%Item{}), do: :item
   defp resource_kind(%Category{}), do: :category
@@ -1055,37 +977,48 @@ defmodule PhoenixKitCatalogue.Attachments do
   @doc false
   # Folder name for a resource: the host's (`:attachments_folder_name`) or
   # the deterministic `catalogue-<kind>-<uuid>` (see `folder_name_for/1`).
+  @spec folder_name(term(), String.t() | nil) :: String.t()
   def folder_name(resource, actor_uuid) do
-    with {mod, fun} when is_atom(mod) and is_atom(fun) <-
-           Application.get_env(:phoenix_kit_catalogue, :attachments_folder_name),
-         true <- Code.ensure_loaded?(mod) and function_exported?(mod, fun, 2),
-         {:ok, name} when is_binary(name) and name != "" <-
-           apply(mod, fun, [resource, actor_uuid]) do
-      name
-    else
-      _ ->
-        case folder_name_for(resource) do
-          {:ok, name} -> name
-          :pending -> "catalogue-attachment-pending-#{Ecto.UUID.generate()}"
-        end
-    end
+    ResourceFolders.host_name(@app, resource, actor_uuid) ||
+      case folder_name_for(resource) do
+        {:ok, name} -> name
+        :pending -> @pending_prefix <> Ecto.UUID.generate()
+      end
   end
 
   @doc false
-  # A resource's folder, without creating one: host name under parent →
-  # deterministic name under parent → deterministic name at root. See
-  # moduledoc "Host-named folders".
+  # A resource's folder, without creating one: host name under parent
+  # (unless another resource points at that folder) → deterministic name
+  # under parent → at root → anywhere (the name carries the resource's
+  # uuid). Live folders only. An unsaved resource has no folder to find.
+  # See moduledoc "Host-named folders".
+  @spec find_resource_folder(term(), String.t() | nil) ::
+          PhoenixKit.Modules.Storage.Folder.t() | nil
   def find_resource_folder(resource, actor_uuid) do
-    parent = parent_folder_uuid(resource, actor_uuid)
-    host_name = folder_name(resource, actor_uuid)
-    deterministic = deterministic_name(resource)
+    case folder_name_for(resource) do
+      {:ok, deterministic} ->
+        ResourceFolders.resolve(
+          parent: parent_folder_uuid(resource, actor_uuid),
+          host_name: ResourceFolders.host_name(@app, resource, actor_uuid),
+          name: deterministic,
+          anywhere: true,
+          claimed?: &claimed_by_other?(&1, resource)
+        )
 
-    [
-      fn -> parent && find_folder_by_name_under(host_name, parent) end,
-      fn -> parent && deterministic && find_folder_by_name_under(deterministic, parent) end,
-      fn -> deterministic && find_folder_by_name_under(deterministic, nil) end
-    ]
-    |> Enum.find_value(& &1.())
+      :pending ->
+        nil
+    end
+  end
+
+  # A host name carries no uuid, so another resource — an item of the same
+  # name in another catalogue — can own the folder it matches. Adopting it
+  # would show and store their files here; the check fails closed.
+  defp claimed_by_other?(%{uuid: folder_uuid}, %{uuid: own_uuid}) do
+    ResourceFolders.claimed?(folder_uuid, own_uuid, [
+      {Item, {:data, "files_folder_uuid"}},
+      {Category, {:data, "files_folder_uuid"}},
+      {Catalogue, {:data, "files_folder_uuid"}}
+    ])
   end
 
   defp deterministic_name(resource) do
@@ -1098,85 +1031,69 @@ defmodule PhoenixKitCatalogue.Attachments do
   @doc false
   # The deterministic legacy name for a resource ("catalogue-item-<uuid>",
   # "catalogue-category-<uuid>", "catalogue-<uuid>") — `nil` for an unsaved
-  # (`:new`) resource. Public so `PhoenixKitCatalogue.MediaReorganizer` can
-  # locate pre-hook-config folders without depending on `folder_name_for/1`.
+  # (`:new`) resource. Public so `Catalogue.Duplication` can locate a
+  # source's pre-hook-config folder without depending on `folder_name_for/1`.
+  @spec legacy_folder_name(term()) :: String.t() | nil
   def legacy_folder_name(resource), do: deterministic_name(resource)
 
-  # Lazy-creates (or finds) the owning folder. For persisted resources
-  # the name is deterministic; for `:new` resources we create a pending
-  # random-named folder that `maybe_rename_pending_folder/2` renames
-  # once the resource has a UUID.
+  # The owning folder: the stored one while it is live — a folder trashed
+  # in the media browser since would take every upload out of sight — else
+  # found or created. For persisted resources the name is the host's or
+  # the deterministic one; for `:new` resources a pending random-named
+  # folder that `maybe_rename_pending_folder/2` renames once the resource
+  # has a UUID.
   defp ensure_folder(socket) do
-    case socket.assigns[:files_folder_uuid] do
-      uuid when is_binary(uuid) -> {:ok, uuid, socket}
-      _ -> resolve_or_create_folder(socket)
+    case ResourceFolders.live_folder(socket.assigns[:files_folder_uuid]) do
+      %{uuid: uuid} ->
+        {:ok, uuid, socket}
+
+      nil ->
+        resource = socket.assigns[:attachments_resource]
+
+        case ensure_resource_folder(resource, Actor.uuid(socket)) do
+          {:ok, %{uuid: uuid}} ->
+            {:ok, uuid,
+             socket
+             |> assign(:files_folder_uuid, uuid)
+             |> assign(:attachments_resource, with_pointer(resource, uuid))}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
     end
   end
 
-  defp resolve_or_create_folder(socket) do
-    resource = socket.assigns[:attachments_resource]
-    actor = current_user_uuid(socket)
-    parent_uuid = parent_folder_uuid(resource, actor)
+  # Race-safe find-or-create. A host name taken under the parent by another
+  # resource's folder (or refused) gets the uuid-bearing deterministic name
+  # instead, which cannot collide. A saved resource's pointer is written in
+  # the same locked step (`:claim`): a host name carries no uuid, so until
+  # the pointer lands a same-named resource would take the folder for its
+  # own.
+  defp ensure_resource_folder(resource, actor_uuid) do
+    parent_uuid = parent_folder_uuid(resource, actor_uuid)
 
-    case find_resource_folder(resource, actor) do
-      %{uuid: uuid} -> {:ok, uuid, assign(socket, :files_folder_uuid, uuid)}
-      nil -> create_missing_folder(socket, resource, actor, parent_uuid)
-    end
-  end
-
-  defp create_missing_folder(socket, resource, actor, parent_uuid) do
     case folder_name_for(resource) do
-      {:ok, _} -> create_folder(socket, folder_name(resource, actor), parent_uuid)
-      :pending -> create_pending_folder(socket, parent_uuid)
+      {:ok, deterministic} ->
+        ResourceFolders.ensure(folder_name(resource, actor_uuid), parent_uuid, actor_uuid,
+          lookup: fn -> find_resource_folder(resource, actor_uuid) end,
+          fallback_name: deterministic,
+          claim: &claim_folder(resource, &1)
+        )
+
+      :pending ->
+        ResourceFolders.ensure(@pending_prefix <> Ecto.UUID.generate(), parent_uuid, actor_uuid)
     end
   end
 
-  defp create_pending_folder(socket, parent_uuid) do
-    create_folder(socket, "catalogue-attachment-pending-#{Ecto.UUID.generate()}", parent_uuid)
-  end
+  defp claim_folder(%schema{uuid: uuid}, folder),
+    do: ResourceFolders.write_pointer(schema, uuid, {:data, "files_folder_uuid"}, folder.uuid)
 
-  defp create_folder(socket, folder_name, parent_uuid) do
-    user_uuid = current_user_uuid(socket)
+  # The pointer `claim_folder/2` wrote, on the resource the form holds —
+  # so `persist_folder_pointer/2` has nothing left to write.
+  defp with_pointer(%{uuid: uuid} = resource, folder_uuid) when is_binary(uuid),
+    do: %{resource | data: Map.put(resource_data(resource), "files_folder_uuid", folder_uuid)}
 
-    case Storage.create_folder(%{
-           name: folder_name,
-           user_uuid: user_uuid,
-           parent_uuid: parent_uuid
-         }) do
-      {:ok, folder} -> {:ok, folder.uuid, assign(socket, :files_folder_uuid, folder.uuid)}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc false
-  # Deterministic-name lookup: under `parent_uuid` first, then at the root
-  # (folders created before the host configured a parent still live there).
-  def find_folder_by_name(name, parent_uuid \\ nil) when is_binary(name) do
-    case parent_uuid && find_folder_by_name_under(name, parent_uuid) do
-      %{} = folder -> folder
-      _ -> find_folder_by_name_under(name, nil)
-    end
-  rescue
-    error ->
-      Logger.warning("find_folder_by_name failed for #{name}: #{inspect(error)}")
-      nil
-  end
-
-  defp find_folder_by_name_under(name, nil) do
-    from(f in PhoenixKit.Modules.Storage.Folder,
-      where: f.name == ^name and is_nil(f.parent_uuid),
-      limit: 1
-    )
-    |> PhoenixKit.RepoHelper.repo().one()
-  end
-
-  defp find_folder_by_name_under(name, parent_uuid) do
-    from(f in PhoenixKit.Modules.Storage.Folder,
-      where: f.name == ^name and f.parent_uuid == ^parent_uuid,
-      limit: 1
-    )
-    |> PhoenixKit.RepoHelper.repo().one()
-  end
+  defp with_pointer(resource, _folder_uuid), do: resource
 
   # Upload cap is 20 files per submit; the inline grid is not paginated
   # and renders every row. Anything over this is almost certainly data
@@ -1187,27 +1104,25 @@ defmodule PhoenixKitCatalogue.Attachments do
   @doc """
   The files attached to a resource's folder — THE one set every surface
   reads: the folder's home files plus anything linked in via
-  `FolderLink`, live (not trashed), oldest first, capped at
-  #{@files_grid_limit}.
+  `FolderLink`, live (not trashed, not system-managed), oldest first,
+  capped at #{@files_grid_limit} (`ResourceFolders.list_files/2`).
 
   A file lands in a folder as a LINK, not a home row, whenever it
   already exists elsewhere: Storage de-duplicates uploads per user by
   content, so a second upload of a byte-identical file — under any name,
   to any resource — returns the file record the first upload created,
-  and this module links it in rather than moving it. Until 2026-09-12
-  the item form listed home + linked files while the product card and
-  the paperclip counts read the home folder only, so such a file showed
-  in the editor and nowhere else (client: "uploaded three PDFs, two
-  show, one does not"). Readers that used to build their own query call
-  this instead.
+  and this module links it in rather than moving it. Readers that build
+  their own query miss those files; they call this instead.
 
   Options:
 
-    * `:file_type` — keep only this Storage file type (`"image"`, …).
-    * `:exclude_file_type` — drop this Storage file type, in SQL, so the
-      cap cannot eat the rows a caller wanted (the card's documents).
-    * `:exclude_system_managed` — drop system-managed rows (default
-      `false`; the card and the counts pass `true`).
+    * `:only` — `:images`, `:non_images`, `{:type, file_type}`,
+      `{:not_type, file_type}` or `:all` (default), in SQL, so the cap
+      cannot eat the rows a caller wanted (the card's documents).
+    * `:file_type` / `:exclude_file_type` — the older spelling of
+      `{:type, t}` / `{:not_type, t}`, still honoured. System-managed files
+      are always left out, so the older `:exclude_system_managed` is no
+      longer needed.
   """
   @spec list_folder_files(String.t() | nil, keyword()) :: [File.t()]
   def list_folder_files(folder_uuid, opts \\ [])
@@ -1222,53 +1137,37 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   def list_folder_files(_, _opts), do: []
 
-  @doc """
-  The query behind `list_folder_files/2`, unordered and uncapped: live
-  files whose home is `folder_uuid` or that are linked into it. Exposed
-  so a batch reader (`Catalogue.Counts.attached_file_counts/1`) can
-  count exactly the set the listings show.
-  """
-  @spec folder_files_query(String.t()) :: Ecto.Query.t()
-  def folder_files_query(folder_uuid) when is_binary(folder_uuid) do
-    linked_subq =
-      from(fl in FolderLink,
-        where: fl.folder_uuid == ^folder_uuid,
-        select: fl.file_uuid
-      )
-
-    from(f in File,
-      where:
-        (f.folder_uuid == ^folder_uuid or f.uuid in subquery(linked_subq)) and
-          f.status != "trashed"
+  defp folder_files!(folder_uuid, opts) do
+    ResourceFolders.list_files(folder_uuid,
+      only: only_option(opts),
+      order: :oldest,
+      limit: @files_grid_limit
     )
   end
 
-  defp maybe_filter_file_type(query, nil), do: query
-  defp maybe_filter_file_type(query, type), do: where(query, [f], f.file_type == ^type)
-
-  defp maybe_exclude_file_type(query, nil), do: query
-  defp maybe_exclude_file_type(query, type), do: where(query, [f], f.file_type != ^type)
-
-  defp maybe_exclude_system_managed(query, true), do: where(query, [f], f.system_managed == false)
-  defp maybe_exclude_system_managed(query, _), do: query
-
-  defp folder_files!(folder_uuid, opts) do
-    folder_uuid
-    |> folder_files_query()
-    |> maybe_filter_file_type(opts[:file_type])
-    |> maybe_exclude_file_type(opts[:exclude_file_type])
-    |> maybe_exclude_system_managed(Keyword.get(opts, :exclude_system_managed, false))
-    |> order_by([f], asc: f.inserted_at, asc: f.uuid)
-    |> limit(@files_grid_limit)
-    |> PhoenixKit.RepoHelper.repo().all()
+  defp only_option(opts) do
+    cond do
+      only = opts[:only] -> only
+      type = opts[:file_type] -> {:type, type}
+      type = opts[:exclude_file_type] -> {:not_type, type}
+      true -> :all
+    end
   end
+
+  @doc """
+  The query behind `list_folder_files/2`, unordered and uncapped: core's
+  `ResourceFolders.files_query/1`. Kept for callers that count or order
+  the set themselves.
+  """
+  @spec folder_files_query(String.t()) :: Ecto.Query.t()
+  def folder_files_query(folder_uuid), do: ResourceFolders.files_query(folder_uuid)
 
   # The editor's own listing. System-managed rows (tiles, chunks) are
   # hidden here as they are on the card and in core's media browser, so
   # the grid never orders a file the card will not show. A failed read
   # is reported, not disguised as an empty folder.
   defp list_files_in_folder(folder_uuid) do
-    {:ok, folder_files!(folder_uuid, exclude_system_managed: true)}
+    {:ok, folder_files!(folder_uuid, [])}
   rescue
     error ->
       Logger.warning("list_folder_files failed for #{folder_uuid}: #{inspect(error)}")
@@ -1284,13 +1183,6 @@ defmodule PhoenixKitCatalogue.Attachments do
   end
 
   defp safe_get_file(_), do: nil
-
-  defp current_user_uuid(socket) do
-    case socket.assigns[:phoenix_kit_current_user] do
-      %{uuid: uuid} -> uuid
-      _ -> nil
-    end
-  end
 
   # Re-queries the folder and merges the featured image if needed.
   # Use this after any state change that can affect the files list —
@@ -1335,148 +1227,16 @@ defmodule PhoenixKitCatalogue.Attachments do
     end
   end
 
-  defp store_upload(%{path: path}, entry, socket, folder_uuid) do
-    user_uuid = current_user_uuid(socket)
-
-    if is_nil(user_uuid) do
-      {:ok, {:error, :no_user}}
-    else
-      file_checksum = UsersAuth.calculate_file_hash(path)
-      # `client_name` is browser-supplied and only checked against `:accept`,
-      # so strip any path before it reaches Storage as a filename. (`ext` was
-      # already safe — `Path.extname/1` cannot return a separator.)
-      client_name = Path.basename(entry.client_name || "")
-      ext = client_name |> Path.extname() |> String.trim_leading(".") |> String.downcase()
-      file_type = file_type_from_mime(entry.client_type)
-
-      path
-      |> Storage.store_file_in_buckets(file_type, user_uuid, file_checksum, ext, client_name)
-      |> then(&{:ok, file_stored(&1, folder_uuid)})
-    end
-  end
-
-  @doc false
-  # What a Storage store result means for THIS folder. A fresh file, or a
-  # content-duplicate that lives elsewhere, is attached (home-adopted or
-  # linked); a duplicate whose home is already this folder is reported
-  # as `:already_attached` so the uploader hears that nothing was added.
-  def file_stored({:ok, %File{} = file}, folder_uuid) do
-    case assign_file_to_folder(file, folder_uuid) do
-      {:error, reason} -> {:error, reason}
-      _ -> {:ok, file}
-    end
-  end
-
-  # A trashed duplicate is not "present" anywhere: the user removed it
-  # and is uploading it again, so restore it and attach as if fresh.
-  def file_stored({:ok, %File{status: "trashed"} = file, :duplicate}, folder_uuid) do
-    case Storage.restore_file(file) do
-      {:ok, restored} -> file_stored({:ok, restored}, folder_uuid)
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  def file_stored({:ok, %File{folder_uuid: home} = file, :duplicate}, folder_uuid)
-      when home == folder_uuid,
-      do: {:already_attached, file}
-
-  def file_stored({:ok, %File{} = file, :duplicate}, folder_uuid) do
-    # Linked in already (a media-selector pick, an earlier duplicate, a
-    # Duplication copy) is as attached as a home row: the link insert's
-    # `on_conflict: :nothing` would otherwise read as a fresh success.
-    if linked?(file.uuid, folder_uuid) do
-      {:already_attached, file}
-    else
-      case assign_file_to_folder(file, folder_uuid) do
-        {:error, reason} -> {:error, reason}
-        _ -> {:ok, file}
-      end
-    end
-  end
-
-  def file_stored({:error, reason}, _folder_uuid), do: {:error, reason}
-
-  defp linked?(file_uuid, folder_uuid) do
-    PhoenixKit.RepoHelper.repo().exists?(
-      from(fl in FolderLink, where: fl.folder_uuid == ^folder_uuid and fl.file_uuid == ^file_uuid)
-    )
-  end
-
-  # Mirrors the phoenix_kit core `maybe_set_folder/2`: no-op when the
-  # file is already in this folder, adopt as home when it has no
-  # folder, otherwise add a `FolderLink` so the file appears in
-  # multiple resource folders without being yanked from its original
-  # owner. Inline dropzone uploads use this path; modal uploads go
-  # through the core function of the same shape.
-  defp assign_file_to_folder(%{folder_uuid: current}, folder_uuid) when current == folder_uuid,
-    do: :ok
-
-  defp assign_file_to_folder(%File{folder_uuid: nil} = file, folder_uuid) do
-    file
-    |> Ecto.Changeset.change(%{folder_uuid: folder_uuid})
-    |> PhoenixKit.RepoHelper.repo().update()
-  rescue
-    # The folder vanished between ensure_folder and the store (deleted
-    # from another session): surface it instead of reporting success.
-    e in Ecto.ConstraintError -> {:error, e}
-  end
-
-  defp assign_file_to_folder(%File{uuid: file_uuid}, folder_uuid) when is_binary(folder_uuid) do
-    %FolderLink{}
-    |> FolderLink.changeset(%{folder_uuid: folder_uuid, file_uuid: file_uuid})
-    |> PhoenixKit.RepoHelper.repo().insert(
-      on_conflict: :nothing,
-      conflict_target: [:folder_uuid, :file_uuid]
-    )
-  rescue
-    e in Ecto.ConstraintError -> {:error, e}
-  end
+  defp store_upload(%{path: path}, entry, socket, folder_uuid),
+    do: {:ok, CoreAttachments.store(path, entry, Actor.uuid(socket), folder_uuid)}
 
   defp put_upload_error(socket, entry, reason) do
-    Logger.warning("Attachment upload failed for #{entry.client_name}: #{inspect(reason)}")
-
-    put_flash(
-      socket,
-      :error,
-      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Upload failed for %{name}.",
-        name: entry.client_name
-      )
+    Logger.warning(
+      "Attachment upload failed for #{Path.basename(to_string(entry.client_name))}: " <>
+        ResourceFolders.describe_failure(reason)
     )
-  end
 
-  @document_mimes ~w(
-    application/pdf
-    application/msword
-    application/vnd.openxmlformats-officedocument.wordprocessingml.document
-    application/vnd.ms-excel
-    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-  )
-
-  # Matches `Storage.determine_file_type/1` for types the browser
-  # surfaces; anything we can't bucket falls to "other" (allowed since
-  # the phoenix_kit allowlist was widened).
-  defp file_type_from_mime(mime) when mime in [nil, ""], do: "other"
-
-  defp file_type_from_mime(mime) when is_binary(mime) do
-    file_type_from_prefix(mime) ||
-      file_type_from_exact(mime) ||
-      file_type_from_keyword(mime) ||
-      "other"
-  end
-
-  defp file_type_from_prefix("image/" <> _), do: "image"
-  defp file_type_from_prefix("video/" <> _), do: "video"
-  defp file_type_from_prefix("audio/" <> _), do: "audio"
-  defp file_type_from_prefix("text/" <> _), do: "document"
-  defp file_type_from_prefix(_), do: nil
-
-  defp file_type_from_exact(mime) when mime in @document_mimes, do: "document"
-  defp file_type_from_exact(_), do: nil
-
-  defp file_type_from_keyword(mime) do
-    if String.contains?(mime, "zip") or String.contains?(mime, "archive") do
-      "archive"
-    end
+    put_flash(socket, :error, CoreAttachments.failed_message(entry.client_name, reason))
   end
 
   defp inject_files_folder(params, nil), do: params
@@ -1494,12 +1254,16 @@ defmodule PhoenixKitCatalogue.Attachments do
   # touches `:data` (`Schemas.Item`/`Schemas.Category`) drops a `nil`
   # top-level entry before it reaches storage, so the stored shape ends
   # up identical to a record that never had the key — not a JSON `null`.
-  defp inject_featured_image(params, nil) do
-    data = ensure_data_map(params)
-    Map.put(params, "data", Map.put(data, "featured_image_uuid", nil))
+  defp inject_featured_image(params, nil, socket) do
+    if knew?(socket, :featured_image_at_mount) do
+      data = ensure_data_map(params)
+      Map.put(params, "data", Map.put(data, "featured_image_uuid", nil))
+    else
+      params
+    end
   end
 
-  defp inject_featured_image(params, uuid) when is_binary(uuid) do
+  defp inject_featured_image(params, uuid, _socket) when is_binary(uuid) do
     data = ensure_data_map(params)
     Map.put(params, "data", Map.put(data, "featured_image_uuid", uuid))
   end
@@ -1508,16 +1272,20 @@ defmodule PhoenixKitCatalogue.Attachments do
   # uploads get persisted positions too, and the save is what makes the
   # order real (same lifecycle as the featured pointer). Only written
   # once the user HAS files: a legacy record without any stays untouched.
-  defp inject_media_order(params, %{files: [_ | _] = files}) do
+  defp inject_media_order(params, %{files: [_ | _] = files}, _socket) do
     data = ensure_data_map(params)
     Map.put(params, "data", Map.put(data, "media_order", Enum.map(files, &to_string(&1.uuid))))
   end
 
-  # `nil` marker, not `Map.delete/2` — see `inject_featured_image/2`'s
-  # comment just above.
-  defp inject_media_order(params, _files_state) do
-    data = ensure_data_map(params)
-    Map.put(params, "data", Map.put(data, "media_order", nil))
+  # `nil` marker, not `Map.delete/2` — see `inject_featured_image/3`'s
+  # comment just above; and only from a form that had an order to lose.
+  defp inject_media_order(params, _files_state, socket) do
+    if knew?(socket, :media_order_at_mount) do
+      data = ensure_data_map(params)
+      Map.put(params, "data", Map.put(data, "media_order", nil))
+    else
+      params
+    end
   end
 
   defp ensure_data_map(params) do

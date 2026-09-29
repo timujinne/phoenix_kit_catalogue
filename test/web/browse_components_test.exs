@@ -434,68 +434,64 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
 
   describe "qty_stepper/1" do
     test "a zero clears itself on focus and comes back when the field is left empty" do
-      html =
-        render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: 0)
+      onfocus = zero_handler("onfocus")
+      onblur = zero_handler("onblur")
 
-      # the attribute value is HTML-escaped in the markup (' → &#39;)
-      attr = fn name ->
-        [js] = Regex.run(~r/#{name}="([^"]*)"/, html, capture: :all_but_first)
-        String.replace(js, "&#39;", "'")
-      end
-
-      onfocus = attr.("onfocus")
-      onblur = attr.("onblur")
-
-      assert onfocus =~ "this.dataset.pkZero=this.value"
+      assert onfocus =~ "this.__pkZero=this.value"
       assert onfocus =~ "this.value=''"
-      [regex] = Regex.run(~r{^if\(/(.*)/\.test}, onfocus, capture: :all_but_first)
+
+      [regex] =
+        Regex.run(~r{^if\(!this\.readOnly&&/(.*)/\.test}, onfocus, capture: :all_but_first)
+
       js_zero = ~r/#{regex}/
       for zero <- ["0", "0,00", "0.0", " 0 ", "-0"], do: assert(zero =~ js_zero)
       for other <- ["", "1", "0,5", "10", "2.5"], do: refute(other =~ js_zero)
 
       assert onblur =~ "this.value.trim()===''"
-      assert onblur =~ "this.value=this.dataset.pkZero"
-      assert onblur =~ "delete this.dataset.pkZero"
+      assert onblur =~ "this.value=this.__pkZero"
+      assert onblur =~ "delete this.__pkZero"
     end
 
-    # The handlers themselves, run in node on a stand-in `this` — the
+    # LiveView's patch of a focused input removes every attribute the
+    # server did not render, so a zero parked in `data-*` was lost on any
+    # re-render (a relay refresh) while the field sat emptied.
+    test "the remembered zero never lives in a data- attribute" do
+      for name <- ~w(onfocus onblur onkeydown), do: refute(zero_handler(name) =~ "dataset")
+    end
+
+    # The handlers themselves, run in node on a stand-in element — the
     # attribute strings above only prove the wiring. Skipped without node.
+    # Returns the value after focus, the value at the end, and how many
+    # input events the element dispatched on its own.
     test "in a browser-like run: 0 clears on focus and returns on blur, typed text stays" do
-      case System.find_executable("node") do
-        nil ->
-          :ok
+      if node = System.find_executable("node") do
+        assert run_zero(node, "0", ["focus", "blur"]) == ["", "0", 0]
+        assert run_zero(node, "0", ["focus", {"type", "8"}, "blur"]) == ["", "8", 0]
+        assert run_zero(node, "0,00", ["focus", "blur"]) == ["", "0,00", 0]
+        assert run_zero(node, "0,00", ["focus", {"type", "15"}, "blur"]) == ["", "15", 0]
+        assert run_zero(node, "2.5", ["focus", "blur"]) == ["2.5", "2.5", 0]
+        assert run_zero(node, "2.5", ["focus", {"type", "3"}, "blur"]) == ["2.5", "3", 0]
+        assert run_zero(node, "", ["focus", "blur"]) == ["", "", 0]
+      end
+    end
 
-        node ->
-          html =
-            render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: 0)
+    # Typed then erased: qty_change last heard "" (ignored, so a row the
+    # typed value selected stayed selected) — the restore must announce
+    # the zero with an input event so qty_change and the hook hear it.
+    test "in a browser-like run: typed then erased, the zero returns and announces itself" do
+      if node = System.find_executable("node") do
+        steps = ["focus", {"type", "5"}, {"type", ""}, "blur"]
+        assert run_zero(node, "0", steps) == ["", "0", 1]
+        assert run_zero(node, "0", steps ++ ["focus", "blur"]) == ["", "0", 1]
+      end
+    end
 
-          attr = fn name ->
-            [js] = Regex.run(~r/#{name}="([^"]*)"/, html, capture: :all_but_first)
-            String.replace(js, "&#39;", "'")
-          end
-
-          run = fn value, typed ->
-            script = """
-            const el = {value: #{Jason.encode!(value)}, dataset: {}};
-            const focus = new Function(#{Jason.encode!(attr.("onfocus"))});
-            const blur = new Function(#{Jason.encode!(attr.("onblur"))});
-            focus.call(el); const focused = el.value;
-            if (#{Jason.encode!(typed)} !== null) el.value = #{Jason.encode!(typed)};
-            blur.call(el);
-            process.stdout.write(JSON.stringify([focused, el.value]));
-            """
-
-            {out, 0} = System.cmd(node, ["-e", script])
-            Jason.decode!(out)
-          end
-
-          assert run.("0", nil) == ["", "0"]
-          assert run.("0", "8") == ["", "8"]
-          assert run.("0,00", nil) == ["", "0,00"]
-          assert run.("0,00", "15") == ["", "15"]
-          assert run.("2.5", nil) == ["2.5", "2.5"]
-          assert run.("2.5", "3") == ["2.5", "3"]
-          assert run.("", nil) == ["", ""]
+    # Enter submits (qty_commit) before any blur — it must carry the zero.
+    test "in a browser-like run: Enter in the emptied field restores the zero first" do
+      if node = System.find_executable("node") do
+        assert run_zero(node, "0", ["focus", {"key", "Enter"}]) == ["", "0", 0]
+        assert run_zero(node, "0", ["focus", {"key", "a"}]) == ["", "", 0]
+        assert run_zero(node, "0", ["focus", {"type", "4"}, {"key", "Enter"}]) == ["", "4", 0]
       end
     end
 
@@ -504,8 +500,24 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
         render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: :any)
 
       assert html =~ ~s(type="text")
-      assert html =~ ~s(onfocus=")
-      assert html =~ ~s(onblur=")
+      for name <- ~w(onfocus onblur onkeydown), do: assert(html =~ ~s( #{name}="))
+    end
+
+    # 2026-09-24: the field is named just "value", so the browser offered
+    # whatever was once typed into any other field of that name ("Saved
+    # info — Must") under the quantity the user was typing.
+    test "the browser's saved-input suggestions are off in every mode" do
+      for precision <- [0, 2, :any] do
+        html =
+          render_component(&Browse.qty_stepper/1,
+            id: "q1",
+            uuid: "u-1",
+            qty: "1",
+            precision: precision
+          )
+
+        assert html =~ ~s(autocomplete="off"), "precision #{inspect(precision)}"
+      end
     end
 
     # 2026-08-30: a native <input type="number"> — browser spinner arrows,
@@ -782,5 +794,53 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
       assert html =~ "2.50"
       refute html =~ "/ pc"
     end
+  end
+
+  defp zero_handler(name) do
+    html = render_component(&Browse.qty_stepper/1, id: "q1", uuid: "u-1", qty: "0", precision: 0)
+
+    # the attribute value is HTML-escaped in the markup (' → &#39;, …)
+    [js] = Regex.run(~r/ #{name}="([^"]*)"/, html, capture: :all_but_first)
+
+    js
+    |> String.replace("&#39;", "'")
+    |> String.replace("&gt;", ">")
+    |> String.replace("&lt;", "<")
+    |> String.replace("&quot;", "\"")
+    |> String.replace("&amp;", "&")
+  end
+
+  # Steps: "focus", "blur", {"type", text}, {"key", key}.
+  defp run_zero(node, value, steps) do
+    fun = &Jason.encode!(zero_handler(&1))
+
+    js_steps =
+      Enum.map_join(steps, "\n", fn
+        "focus" ->
+          "focus.call(el, {}); if (focused === undefined) focused = el.value;"
+
+        "blur" ->
+          "blur.call(el, {});"
+
+        {"key", key} ->
+          "keydown.call(el, {key: #{Jason.encode!(key)}});"
+
+        {"type", text} ->
+          "el.value = #{Jason.encode!(text)}; typing = true; el.dispatchEvent(new Event('input')); typing = false;"
+      end)
+
+    script = """
+    const el = Object.assign(new EventTarget(), {value: #{Jason.encode!(value)}, readOnly: false});
+    let own = 0, typing = false, focused;
+    el.addEventListener('input', () => { if (!typing) own++ });
+    const focus = new Function('event', #{fun.("onfocus")});
+    const blur = new Function('event', #{fun.("onblur")});
+    const keydown = new Function('event', #{fun.("onkeydown")});
+    #{js_steps}
+    process.stdout.write(JSON.stringify([focused, el.value, own]));
+    """
+
+    {out, 0} = System.cmd(node, ["-e", script])
+    Jason.decode!(out)
   end
 end

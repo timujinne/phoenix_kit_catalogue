@@ -42,6 +42,11 @@ defmodule PhoenixKitCatalogue.Web.PdfDetailLive do
          assign(socket,
            pdf: pdf,
            page_title: pdf.original_filename,
+           page_section: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues"),
+           page_section_path: Paths.index(),
+           page_crumbs: [
+             %{label: Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDFs"), path: Paths.pdfs()}
+           ],
            page: nil
          )}
     end

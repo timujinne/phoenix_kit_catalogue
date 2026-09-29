@@ -216,6 +216,53 @@ defmodule PhoenixKitCatalogue.Workers.TranslationSweepWorkerTest do
     end
   end
 
+  describe "the shared engine's behaviour" do
+    test "a tick tops up to the cap instead of adding the cap again while jobs still wait" do
+      SweepSettings.update_sweep_enabled(true)
+      SweepSettings.update_sweep_max_per_run(2)
+      for name <- ~w(Alpha Beta Gamma Delta), do: create_item!(name)
+
+      assert :ok = TranslationSweepWorker.perform(%Oban.Job{})
+      assert length(translate_worker_jobs()) == 2
+
+      # The two are still waiting: the next tick has no room.
+      assert :ok = TranslationSweepWorker.perform(%Oban.Job{})
+      assert length(translate_worker_jobs()) == 2
+      assert %{last_run: %{"reason" => "ceiling_reached"}} = TranslationSweepWorker.status()
+    end
+
+    test "saving a new interval reschedules the waiting tick at it" do
+      SweepSettings.update_sweep_enabled(true)
+      assert [%Oban.Job{scheduled_at: first}] = sweep_worker_jobs()
+
+      SweepSettings.update_sweep_interval_minutes(5)
+
+      assert [%Oban.Job{scheduled_at: at}] =
+               Enum.filter(sweep_worker_jobs(), &(&1.state == "scheduled"))
+
+      assert DateTime.compare(at, first) == :lt
+      assert DateTime.diff(at, DateTime.utc_now()) in 290..300
+    end
+
+    test "an interval saved while the sweep was off applies when it is turned back on" do
+      SweepSettings.update_sweep_enabled(true)
+      SweepSettings.update_sweep_enabled(false)
+      # The chain keeps ticking while off, at the interval it had.
+      assert [%Oban.Job{}] = sweep_worker_jobs()
+
+      SweepSettings.update_sweep_interval_minutes(5)
+      SweepSettings.update_sweep_enabled(true)
+
+      assert [%Oban.Job{scheduled_at: at}] = sweep_worker_jobs()
+      assert DateTime.diff(at, DateTime.utc_now()) in 290..300
+    end
+
+    test "a manual run works while the automatic sweep is off" do
+      create_item!("Alpha")
+      assert {:ok, %{enqueued: 1}} = TranslationSweepWorker.run_manual_tick()
+    end
+  end
+
   describe "ensure_scheduled/0" do
     test "repeated calls collapse to a single pending tick" do
       assert {:ok, _job} = TranslationSweepWorker.ensure_scheduled()

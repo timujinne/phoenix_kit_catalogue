@@ -4,9 +4,10 @@ defmodule PhoenixKitCatalogue.Catalogue.Tree do
   # Used by the cascade operations (trash/restore/permanent-delete),
   # cross-catalogue move, cycle checks, and search expansion.
   #
-  # All public functions run one recursive CTE. For UIs that already
-  # have every category in the catalogue loaded (e.g. the detail view),
-  # prefer `build_index/1` + `walk_subtree/2` — same shape, no DB trip.
+  # The recursive queries are core's `PhoenixKit.Utils.TreeQuery` (one
+  # CTE each). For UIs that already have every category in the catalogue
+  # loaded (e.g. the detail view), prefer `build_index/1` + `walk_subtree/2`
+  # — same shape, no DB trip.
   #
   # ## Cycle safety
   #
@@ -14,24 +15,14 @@ defmodule PhoenixKitCatalogue.Catalogue.Tree do
   # rejects a descendant parent, `Category.changeset` rejects a
   # self-parent), so a well-formed DB never contains a cycle. As
   # defense in depth against corrupted data or direct SQL writes, the
-  # CTEs use `UNION` (not `UNION ALL`) — Postgres drops rows already in
-  # the working table before the next iteration, which breaks any
-  # cycle by emptying the working set. No infinite loop.
+  # CTEs use `UNION` (not `UNION ALL`), which ends a cycle's recursion.
 
   import Ecto.Query, warn: false
 
+  alias PhoenixKit.Utils.TreeQuery
   alias PhoenixKitCatalogue.Schemas.Category
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
-
-  @doc """
-  Returns `[uuid]` for every descendant of `root_uuid`, not including
-  `root_uuid` itself. Empty list for a leaf.
-  """
-  @spec descendant_uuids(Ecto.UUID.t()) :: [Ecto.UUID.t()]
-  def descendant_uuids(root_uuid) when is_binary(root_uuid) do
-    subtree_uuids_for([root_uuid]) -- [root_uuid]
-  end
 
   @doc """
   Returns `[uuid]` for `root_uuid` and every descendant. Order
@@ -53,33 +44,12 @@ defmodule PhoenixKitCatalogue.Catalogue.Tree do
   def subtree_uuids_for([]), do: []
 
   def subtree_uuids_for(roots) when is_list(roots) do
-    initial =
-      from(c in Category,
-        where: c.uuid in type(^roots, {:array, UUIDv7}),
-        select: %{uuid: c.uuid}
-      )
-
-    recursion =
-      from(c in Category,
-        join: t in "category_tree",
-        on: c.parent_uuid == t.uuid,
-        select: %{uuid: c.uuid}
-      )
-
-    cte = initial |> union(^recursion)
-
-    # The schema-less outer query (`"category_tree"`) doesn't carry
-    # field-type information, so Ecto returns the raw 16-byte binary
-    # form Postgres encodes UUIDs as. Most call sites pipe these
-    # straight into another `c.uuid in ^uuids` query (subtree trash /
-    # restore / permanent-delete) which expects the binary form too,
-    # so we keep them as-is. The one caller that compares against a
-    # textual UUID — `validate_parent_in_same_catalogue/1` — normalises
-    # both sides via `Ecto.UUID.dump/1` (see `catalogue.ex`).
-    from(t in "category_tree", select: t.uuid)
-    |> recursive_ctes(true)
-    |> with_cte("category_tree", as: ^cte)
-    |> repo().all()
+    # Raw 16-byte binaries, as the callers expect: most pipe these straight
+    # into another `c.uuid in ^uuids` query (subtree trash / restore /
+    # permanent-delete), and the one that compares against a textual UUID
+    # — `validate_parent_in_same_catalogue/1` — normalises both sides via
+    # `Ecto.UUID.dump/1` (see `catalogue.ex`).
+    Category |> TreeQuery.subtree_uuids(roots) |> Enum.map(&Ecto.UUID.dump!/1)
   end
 
   @doc """
@@ -88,32 +58,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Tree do
   """
   @spec ancestor_uuids(Ecto.UUID.t()) :: [Ecto.UUID.t()]
   def ancestor_uuids(uuid) when is_binary(uuid) do
-    initial =
-      from(c in Category,
-        where: c.uuid == type(^uuid, UUIDv7),
-        select: %{uuid: c.uuid, parent_uuid: c.parent_uuid}
-      )
-
-    recursion =
-      from(c in Category,
-        join: t in "category_tree",
-        on: c.uuid == t.parent_uuid,
-        select: %{uuid: c.uuid, parent_uuid: c.parent_uuid}
-      )
-
-    cte = initial |> union(^recursion)
-
-    # Returns raw 16-byte binaries — see `subtree_uuids_for/1` for the
-    # rationale (schema-less outer query loses type info, and most
-    # callers pipe straight into another `where: c.uuid in ^ancestors`
-    # query that expects the binary form).
-    from(t in "category_tree",
-      where: t.uuid != type(^uuid, UUIDv7),
-      select: t.uuid
-    )
-    |> recursive_ctes(true)
-    |> with_cte("category_tree", as: ^cte)
-    |> repo().all()
+    # Raw 16-byte binaries — see `subtree_uuids_for/1`.
+    Category |> TreeQuery.ancestor_uuids(uuid) |> Enum.map(&Ecto.UUID.dump!/1)
   end
 
   @doc """

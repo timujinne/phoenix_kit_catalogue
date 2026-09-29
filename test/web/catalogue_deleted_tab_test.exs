@@ -303,7 +303,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDeletedTabTest do
       {:ok, _} = Catalogue.trash_item(gone)
 
       {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}")
-      render_click(view, "remove_column", %{"column_id" => "status", "scope" => "detail_items"})
+      render_click(view, "remove_column", %{"column_id" => "status", "section" => "detail_items"})
       refute has_element?(view, "#level-items-active th", "Status")
 
       render_click(view, "switch_view", %{"mode" => "deleted"})

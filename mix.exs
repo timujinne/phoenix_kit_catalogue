@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.MixProject do
   use Mix.Project
 
-  @version "0.44.0"
+  @version "0.46.1"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_catalogue"
 
   def project do
@@ -95,7 +95,12 @@ defmodule PhoenixKitCatalogue.MixProject do
 
   defp deps do
     [
-      # 2.34.0 is the floor. The Events page calls
+      # 2.38.0 is the floor. The catalogue runs on core's shared toolkits
+      # (#860): `PhoenixKit.Activity.log/3`, `PhoenixKitWeb.Actor`,
+      # `TreePicker` with `Utils.Tree`/`TreeQuery`, `ResourceFolders`,
+      # `PhoenixKitWeb.Attachments` and `Users.ViewPrefs` — first shipped in
+      # phoenix_kit 2.38.0, and it does not compile against an older core.
+      # It was 2.34.0 before that: the Events page calls
       # `PhoenixKit.Activity.split_changes/1` / `humanize_metadata_key/1`
       # and the detail page passes `swap=` to `bulk_select_scope` — all
       # first shipped in phoenix_kit 2.34.0 (#837). On an older core the
@@ -124,13 +129,15 @@ defmodule PhoenixKitCatalogue.MixProject do
       #     2.13.4–2.13.10) won't do — the compound form keeps the
       #     conventional open ceiling at the next major instead of
       #     collapsing to one minor (see CorePinConformanceTest).
-      pk_dep(:phoenix_kit, ">= 2.34.0 and < 3.0.0"),
+      pk_dep(:phoenix_kit, ">= 2.38.0 and < 3.0.0"),
       # mdex_native (pulled in transitively through phoenix_kit's mdex dep)
       # builds from source when MDEX_NATIVE_BUILD=1 is set in the
       # environment; that path requires rustler itself, not just
       # rustler_precompiled. Same declaration as phoenix_kit's own mix.exs.
       {:rustler, ">= 0.0.0", optional: true},
-      pk_dep(:phoenix_kit_ai, "~> 0.18"),
+      # 0.24 is the floor: the translation sweep worker is a source for
+      # `PhoenixKitAI.TranslationSweep`, first shipped in phoenix_kit_ai 0.24.0.
+      pk_dep(:phoenix_kit_ai, "~> 0.24"),
       # Attribute sets ride the entities engine as MANAGED blueprints
       # (2026-08-18 rework). The Managed contract + on_behalf_of write
       # path ship in entities > 0.4.0; on an older entities the feature

@@ -54,7 +54,14 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
   # Mirrors the `Search.search_items/2` filter vocabulary (paging/preload
   # excluded). A string-keyed or unknown-key scope would read as no
   # restriction and silently widen browsing — fail loud at init instead.
-  @scope_keys [:catalogue_uuids, :category_uuids, :only, :statuses, :include_descendants]
+  @scope_keys [
+    :catalogue_uuids,
+    :category_uuids,
+    :only,
+    :statuses,
+    :include_descendants,
+    :item_types
+  ]
 
   # The fields the module's shared item sort can name — TableConfig's
   # sortable :detail_items ids, as atoms (`Search.apply_search_order/2`
@@ -92,8 +99,9 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
   Builds the initial state. `opts`:
 
     * `:scope` — map with any of `:catalogue_uuids`, `:category_uuids`,
-      `:only`, `:statuses`, `:include_descendants`. Fixed for the state's
-      lifetime. Unknown keys raise `ArgumentError`.
+      `:only`, `:statuses`, `:include_descendants`, `:item_types` (by the
+      EFFECTIVE type, e.g. `["goods"]`). Fixed for the state's lifetime.
+      Unknown keys raise `ArgumentError`.
     * `:per_page` — page size (default #{@default_per_page}).
     * `:drill` — what browsing INTO a category lists. `:subtree` (default)
       keeps today's flat-chip semantics: the category and everything under
@@ -307,7 +315,14 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
   """
   @spec query_opts(t()) :: keyword()
   def query_opts(state) do
-    base = Map.take(state.scope, [:catalogue_uuids, :only, :statuses, :include_descendants])
+    base =
+      Map.take(state.scope, [
+        :catalogue_uuids,
+        :only,
+        :statuses,
+        :include_descendants,
+        :item_types
+      ])
 
     # The catalogue drill narrows WITHIN the scope's offered list —
     # membership was checked at command time, and overriding here keeps

@@ -135,7 +135,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         # The raw code stays for the host's pick payload; the label is
         # what renders, in the popup's OWN locale — `Item.unit_label/1`
         # reads the process locale, which the `locale` attr overrides
-        # for names but never reached units (2026-09-16: "шт" in the
+        # for names but never reached units (2026-09-16: the Russian "pcs" in the
         # order rows, "piece" in the picker).
         unit_label: unit_label_in(item.unit, locale),
         manufacturer: item.manufacturer_name || item.manufacturer_name_snapshot,
@@ -1119,7 +1119,8 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           <% :unit -> %>
             <span class="text-base-content/70">{unit_label(@item)}</span>
           <% :price -> %>
-            <span :if={@item.price} class="font-semibold whitespace-nowrap">
+            <%!-- tabular-nums: prices right-align digit under digit. --%>
+            <span :if={@item.price} class="font-semibold whitespace-nowrap tabular-nums">
               {format_price(@item.price)}
               <span
                 :if={@inline_unit && @item.unit}
@@ -1142,7 +1143,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
               {unit_label(@item)}
             </span>
           <% :base_price -> %>
-            <span class="whitespace-nowrap">{format_price(@item.base_price)}</span>
+            <span class="whitespace-nowrap tabular-nums">{format_price(@item.base_price)}</span>
           <% :qty -> %>
             <div class="flex justify-end">{render_slot(@qty)}</div>
         <% end %>
@@ -1204,9 +1205,23 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
   # `qty_commit` then carries that zero as before. Inline handlers on the
   # control, no hook; a programmatic value change fires no `input` event,
   # so neither `qty_change` nor the row's selected-state hook sees the swap.
-  @zero_test "/^\\s*[-+]?(?:0+(?:[.,]0*)?|[.,]0+)\\s*$/.test(this.value)"
-  @zero_on_focus "if(#{@zero_test}){this.dataset.pkZero=this.value;this.value=''}"
-  @zero_on_blur "if(this.dataset.pkZero!=null){if(this.value.trim()==='')this.value=this.dataset.pkZero;delete this.dataset.pkZero}"
+  # Same handlers as core 2.37.4, kept verbatim so the two controls behave
+  # alike: the zero lives in expando properties, never `dataset` —
+  # LiveView's patch of a focused input drops every attribute the server
+  # did not render, and a component re-render (a relay refresh) while the
+  # field sat emptied lost the zero. A readonly field is never cleared.
+  @zero_test "!this.readOnly&&/^\\s*[-+]?(?:0+(?:[.,]0*)?|[.,]0+)\\s*$/.test(this.value)"
+  @zero_on_focus "if(#{@zero_test}){this.__pkZero=this.value;this.__pkZeroEdited=false;this.__pkZeroOnInput||(this.__pkZeroOnInput=()=>{this.__pkZeroEdited=true});this.addEventListener('input',this.__pkZeroOnInput);this.value=''}"
+
+  # Typed-then-erased: `qty_change` last heard `""` (ignored, so a row
+  # selected by the typed value stayed selected), so the restore announces
+  # itself with an input event of its own — `qty_change` hears the zero
+  # and the selected-state hook flips back with it.
+  @zero_on_blur "if(this.__pkZero!=null){if(this.value.trim()===''){this.value=this.__pkZero;if(this.__pkZeroEdited)this.dispatchEvent(new Event('input',{bubbles:true}))}delete this.__pkZero}"
+
+  # Enter submits the form before any blur: restore the zero first, so
+  # `qty_commit` carries it and not `""`.
+  @zero_on_keydown "if(event.key==='Enter'&&this.__pkZero!=null&&this.value.trim()===''){this.value=this.__pkZero;delete this.__pkZero}"
 
   @doc """
   Quantity input: a native `<input type="number">` — the browser's own
@@ -1242,11 +1257,13 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
 
   A zero clears itself on focus: a field showing `0` (or `0.0`, and `0,00`
   in free-text mode) empties when it gains focus, so a typed `8` is `8`
-  and not `08`; leaving it still empty puts the zero back. Typed text is
-  kept, a non-zero value is never touched. The swap is programmatic, so
-  `qty_change` and the row's selected-state hook never see it, and
-  `qty_commit` (blur) carries the restored zero as before; a host's own
-  `phx-focus` would see the emptied field. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
+  and not `08`; leaving it still empty puts the zero back, and so does
+  Enter, so `qty_commit` (blur or Enter) carries the zero as before.
+  Typed text is kept, a non-zero value is never touched. The plain swap
+  is programmatic, so `qty_change` and the row's selected-state hook
+  never see it; typing and then erasing it all restores the zero with an
+  `input` event, so `qty_change` hears the zero rather than keeping the
+  `""` it last saw. A host's own `phx-focus` would see the emptied field. `min`/`max`/`step` shape the arrows and keyboard ONLY — the
   form is `novalidate`, so they never gate the submit (a browser
   validation failure would leave Enter silently dead), and every limit
   is re-enforced server-side, exactly as before.
@@ -1289,6 +1306,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       assigns
       |> assign(:zero_on_focus, @zero_on_focus)
       |> assign(:zero_on_blur, @zero_on_blur)
+      |> assign(:zero_on_keydown, @zero_on_keydown)
 
     ~H"""
     <%!-- The form wraps the join (Enter commits via phx-submit; phx-blur
@@ -1375,6 +1393,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           max={@precision != :any && @max}
           step={qty_step(@precision)}
           inputmode={if decimal_precision?(@precision), do: "decimal", else: "numeric"}
+          autocomplete="off"
           class={["input join-item text-center pl-1 pr-2", qty_width(@size), input_size(@size)]}
           phx-debounce="400"
           phx-blur="qty_commit"
@@ -1383,6 +1402,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
           aria-label={gettext("Quantity")}
           onfocus={@zero_on_focus}
           onblur={@zero_on_blur}
+          onkeydown={@zero_on_keydown}
         />
         <span
           :if={@unit}

@@ -596,9 +596,6 @@ msgstr "või lohistage"
 msgid "File is too large (max 10MB)."
 msgstr "Fail on liiga suur (maks. 10 MB)"
 
-msgid "File type not accepted."
-msgstr "Failitüüp pole toetatud."
-
 msgid "Only PDF files are accepted."
 msgstr "Aktsepteeritakse ainult PDF-faile."
 
@@ -928,15 +925,6 @@ msgstr "Jäädavalt kustutati %{count} toodet."
 #, elixir-autogen
 msgid "Columns"
 msgstr "Veerud"
-
-msgid "Shown"
-msgstr "Näidatud"
-
-msgid "Available"
-msgstr "Saadaval"
-
-msgid "Reset"
-msgstr "Lähtesta"
 
 msgid "Apply"
 msgstr "Rakenda"
@@ -1846,9 +1834,6 @@ msgstr "Uut tarnijat ei õnnestunud luua. Kontrolli vormi ja proovi uuesti."
 msgid "Could not load more matches. Please try again."
 msgstr "Rohkem vasteid ei õnnestunud laadida. Proovi uuesti."
 
-msgid "Could not prepare the files folder."
-msgstr "Failikausta ei õnnestunud ette valmistada."
-
 msgid "Could not remove file."
 msgstr "Faili ei õnnestunud eemaldada."
 
@@ -2526,9 +2511,6 @@ msgstr "Luuakse"
 msgid "Too many files at once."
 msgstr "Korraga liiga palju faile."
 
-msgid "Too many files."
-msgstr "Liiga palju faile."
-
 msgid "Trashed"
 msgstr "Prügikastis"
 
@@ -2549,15 +2531,6 @@ msgstr "Uuendused"
 
 msgid "Upload & parse"
 msgstr "Laadi üles ja analüüsi"
-
-msgid "Upload error: %{reason}"
-msgstr "Üleslaadimise viga: %{reason}"
-
-msgid "Upload failed for %{name}."
-msgstr "%{name} üleslaadimine ebaõnnestus."
-
-msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
-msgstr "%{name} on identne juba manustatud failiga %{existing} — midagi ei lisatud."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr "Üleslaadimine ebaõnnestus ootamatul põhjusel. Proovi uuesti."
@@ -2698,6 +2671,72 @@ msgstr "komplekt"
 
 msgid "sheet"
 msgstr "leht"
+
+msgid "h"
+msgstr "h"
+
+msgid "service"
+msgstr "teenus"
+
+msgid "visit"
+msgstr "väljasõit"
+
+msgid "km"
+msgstr "km"
+
+msgid "pack"
+msgstr "pakk"
+
+msgid "roll"
+msgstr "rull"
+
+msgid "kg"
+msgstr "kg"
+
+msgid "l"
+msgstr "l"
+
+msgid "m³"
+msgstr "m³"
+
+msgid "Hour"
+msgstr "Tund"
+
+msgid "Service (teenus)"
+msgstr "Teenus"
+
+msgid "Visit (väljasõit)"
+msgstr "Väljasõit"
+
+msgid "Kilometer"
+msgstr "Kilomeeter"
+
+msgid "Pack"
+msgstr "Pakk"
+
+msgid "Roll"
+msgstr "Rull"
+
+msgid "Kilogram"
+msgstr "Kilogramm"
+
+msgid "Litre"
+msgstr "Liiter"
+
+msgid "m³ (cubic meter)"
+msgstr "m³ (kuupmeeter)"
+
+msgid "Pair"
+msgstr "Paar"
+
+msgid "Sheet"
+msgstr "Leht"
+
+msgid "Units for goods"
+msgstr "Kaupade ühikud"
+
+msgid "Units for services"
+msgstr "Teenuste ühikud"
 
 msgid "unit"
 msgstr "ühik"
@@ -3591,8 +3630,8 @@ msgstr "Loendid"
 msgid "Minutes between runs"
 msgstr "Minuteid käivituste vahel"
 
-msgid "Most jobs per run"
-msgstr "Kõige rohkem töid käivituse kohta"
+msgid "Most jobs queued at once"
+msgstr "Kõige rohkem töid korraga järjekorras"
 
 msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
 msgstr "Vaikimisi väljas. Sisselülitamisel käivitub ajakava kohe; iga käivitus paneb järjekorda tõlketööd kõige jaoks, mis on veel tõlkimata."
@@ -3660,6 +3699,9 @@ msgstr "Sihtkoht:"
 msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
 msgstr "Vali kategooria, mille alla see paigutada, või kataloog ise selle ülemise taseme jaoks. Saad seda hiljem teisaldada."
 
+msgid "The chosen parent is no longer available. Pick another place."
+msgstr "Valitud ülemkategooria pole enam saadaval. Vali teine koht."
+
 msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
 msgstr "Vali, kuhu see läheb: kataloogi ülemine tase või mõne kategooria alla. Alamkategooriad ja tooted tulevad kaasa."
 
@@ -3677,3 +3719,30 @@ msgstr "kategoriseerimata"
 
 msgid "Pick the category to import into, or choose another option."
 msgstr "Vali kategooria, kuhu importida, või mõni muu valik."
+
+msgid "Item type"
+msgstr "Liik"
+
+msgid "Default item type"
+msgstr "Vaikimisi liik"
+
+msgid "Goods"
+msgstr "Kaup"
+
+msgid "Service"
+msgstr "Teenus"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Nagu kataloogis (%{type}) —"
+
+msgid "Universal"
+msgstr "Universaalne"
+
+msgid "Furniture"
+msgstr "Furnituur"
+
+msgid "Materials"
+msgstr "Materjalid"
+
+msgid "JSON (export)"
+msgstr "JSON (eksport)"

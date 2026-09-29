@@ -26,7 +26,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
   # The Move dialogs pick in a tree (boss via Max, 2026-09-21: no flat
   # lists); this catalogue starts open in it.
   defp pick(view, picker, id),
-    do: view |> element(~s(##{picker} [data-place="#{id}"])) |> render_click()
+    do: view |> element(~s(##{picker} [data-tree-node="#{id}"])) |> render_click()
 
   defp offered_categories(tree),
     do:
@@ -250,7 +250,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
       render_click(view, "set_trash_disposition", %{"disposition" => "cascade"})
 
       for picker <- ~w(bulk-move-categories-picker bulk-move-items-picker trash-target-picker) do
-        send(view.pid, {PhoenixKitCatalogue.Web.Components.PlacePicker, picker, "category:x"})
+        send(view.pid, {PhoenixKitWeb.Components.TreePicker, picker, "category:x"})
       end
 
       assert Process.alive?(view.pid)

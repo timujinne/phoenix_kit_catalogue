@@ -54,7 +54,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     ]
 
   import PhoenixKitWeb.Components.Core.Sortable, only: [sortable_tbody: 1, sortable_row: 1]
-  import PhoenixKitCatalogue.Web.TableToolbar, only: [column_sections_modal: 1]
   import PhoenixKitWeb.Components.Core.TableRowMenu
   import PhoenixKitWeb.Components.Core.ReorderModal, only: [reorder_modal: 1]
   import PhoenixKitWeb.Components.Core.SortSelector, only: [sort_selector: 1]
@@ -83,13 +82,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Category
   alias PhoenixKitCatalogue.Schemas.Item
-  alias PhoenixKitCatalogue.Web.Components.PlacePicker
   alias PhoenixKitCatalogue.Web.Components.ProductCard
   alias PhoenixKitCatalogue.Web.LevelSwitchers
   alias PhoenixKitCatalogue.Web.PlaceTree
   alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.TableConfig
   alias PhoenixKitCatalogue.Web.ViewConfig
+  alias PhoenixKitWeb.Components.TreePicker
+  alias PhoenixKitWeb.TableColumns
 
   @per_page 100
   # Cross-tab bulk-change red-flash → state-refresh delay. Long enough
@@ -664,7 +664,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # Picks from the move dialogs' trees; a pick after its dialog closed
   # falls through to the catch-all.
   def handle_info(
-        {PlacePicker, "trash-target-picker", id},
+        {TreePicker, "trash-target-picker", id},
         %{assigns: %{trash_modal: %{} = modal}} = socket
       ) do
     target = modal |> picked_in(id, [:category]) |> PlaceTree.uuid()
@@ -672,7 +672,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   end
 
   def handle_info(
-        {PlacePicker, "bulk-move-items-picker", id},
+        {TreePicker, "bulk-move-items-picker", id},
         %{assigns: %{bulk_move_modal: %{} = modal}} = socket
       ) do
     target = picked_in(modal, id, [:catalogue, :category])
@@ -680,7 +680,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   end
 
   def handle_info(
-        {PlacePicker, "bulk-move-categories-picker", id},
+        {TreePicker, "bulk-move-categories-picker", id},
         %{assigns: %{bulk_move_categories_modal: %{} = modal}} = socket
       ) do
     target = picked_in(modal, id, [:catalogue, :category])
@@ -1569,11 +1569,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # Sortable column header click — toggles direction on the active field,
   # otherwise switches field (ascending).
   # ── Columns configuration (per-user, ViewConfig) — ONE modal for the
-  # whole page, a section per visible table (a drilled page shows
-  # subcategories and items at once, and two side-by-side "Columns"
-  # buttons read as a mistake). Events carry the section's scope, and
-  # every change applies + persists immediately (footer is Reset +
-  # Close, Reset covers every section shown). ──
+  # whole page (core's, with `sections`), a section per visible table (a
+  # drilled page shows subcategories and items at once, and two
+  # side-by-side "Columns" buttons read as a mistake). Events carry the
+  # section, every change applies + persists immediately under core's
+  # column rules, and Reset covers every section shown. ──
 
   def handle_event("show_column_modal", _p, socket),
     do: {:noreply, assign(socket, :show_columns_modal, true)}
@@ -1581,30 +1581,33 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   def handle_event("hide_column_modal", _p, socket),
     do: {:noreply, assign(socket, :show_columns_modal, false)}
 
-  def handle_event("add_column", %{"column_id" => id, "scope" => scope_str}, socket)
-      when scope_str in ~w(detail_items detail_categories) do
-    scope = String.to_existing_atom(scope_str)
-    {:noreply, live_update_detail_columns(socket, scope, &(&1 ++ [id]))}
+  def handle_event("add_column", %{"column_id" => id, "section" => section}, socket)
+      when section in ~w(detail_items detail_categories) do
+    scope = String.to_existing_atom(section)
+    {:noreply, live_update_detail_columns(socket, scope, &TableColumns.add(&1, id, &2))}
   end
 
-  def handle_event("remove_column", %{"column_id" => id, "scope" => scope_str}, socket)
-      when scope_str in ~w(detail_items detail_categories) do
-    scope = String.to_existing_atom(scope_str)
-    {:noreply, live_update_detail_columns(socket, scope, &Enum.reject(&1, fn c -> c == id end))}
+  def handle_event("remove_column", %{"column_id" => id, "section" => section}, socket)
+      when section in ~w(detail_items detail_categories) do
+    scope = String.to_existing_atom(section)
+    {:noreply, live_update_detail_columns(socket, scope, &TableColumns.remove(&1, id, &2))}
   end
 
-  # Per-section reorder events: the SortableGrid payload is only
-  # `%{ordered_ids}`, so the section rides in the event name.
-  def handle_event("reorder_columns_" <> scope_str, %{"ordered_ids" => ids}, socket)
-      when scope_str in ~w(detail_items detail_categories) and is_list(ids) do
-    scope = String.to_existing_atom(scope_str)
-    {:noreply, live_update_detail_columns(socket, scope, fn _ -> ids end)}
+  def handle_event("reorder_columns", %{"ordered_ids" => ids, "section" => section}, socket)
+      when section in ~w(detail_items detail_categories) do
+    scope = String.to_existing_atom(section)
+    {:noreply, live_update_detail_columns(socket, scope, &TableColumns.reorder(&1, ids, &2))}
   end
 
+  # Reset takes each shown table's choice back out (the user follows the
+  # defaults again), then shows the defaults.
   def handle_event("reset_columns", _p, socket) do
+    user = socket.assigns[:phoenix_kit_current_user]
+
     socket =
       Enum.reduce(detail_column_scopes(socket.assigns), socket, fn scope, acc ->
-        live_update_detail_columns(acc, scope, fn _ -> TableConfig.default_columns(scope) end)
+        _ = ViewConfig.reset_columns(user, scope)
+        put_detail_columns(acc, scope, TableConfig.default_columns(scope))
       end)
 
     {:noreply, socket}
@@ -1871,21 +1874,25 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   # index: the setting is the source of truth, changes broadcast so open
   # sessions follow live, and mount reads it back. ──────────────────
 
-  # Applies a columns transformation to one table's scope and persists
-  # it per-user. Removing the last column leaves Name alone — it used to
-  # snap back to the defaults, which read as the editor resetting itself.
+  # Applies one of core's column edits (`PhoenixKitWeb.TableColumns`) to
+  # one table's scope and persists just its columns per user. Removing the
+  # last column leaves Name alone — it used to snap back to the defaults,
+  # which read as the editor resetting itself.
   defp live_update_detail_columns(socket, scope, fun) do
-    ids = TableConfig.validate_columns(scope, fun.(current_scope_columns(socket, scope)))
+    current = current_scope_columns(socket, scope)
 
-    user = socket.assigns[:phoenix_kit_current_user]
-    cfg = %{ViewConfig.load(user, scope) | columns: ids}
+    case fun.(current, ViewConfig.column_spec(scope)) do
+      ^current ->
+        socket
 
-    socket =
-      case ViewConfig.save(user, scope, cfg) do
-        {:ok, updated_user} -> assign(socket, :phoenix_kit_current_user, updated_user)
-        _ -> socket
-      end
+      ids ->
+        user = socket.assigns[:phoenix_kit_current_user]
+        _ = ViewConfig.save_columns(user, scope, ids)
+        put_detail_columns(socket, scope, ids)
+    end
+  end
 
+  defp put_detail_columns(socket, scope, ids) do
     assigns_key = if scope == :detail_items, do: :items_columns, else: :categories_columns
     socket = assign(socket, assigns_key, ids)
 
@@ -4111,6 +4118,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               items={@search_results}
               columns={[:name, :sku, :price, :unit, :status]}
               markup_percentage={@catalogue.markup_percentage}
+              catalogue_item_type={@catalogue.item_type}
               edit_path={if @view_mode != "deleted", do: @edit_path_fn}
               preview_event="show_product_card"
               on_restore={if @view_mode == "deleted", do: "restore_item"}
@@ -4509,14 +4517,16 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         </div>
       </div>
 
-      <.column_sections_modal
+      <PhoenixKitWeb.Components.Core.ColumnSettings.column_settings_modal
         :if={@show_columns_modal}
+        id="catalogue-columns-modal"
         show={@show_columns_modal}
         sections={
           for scope <- detail_column_scopes(assigns) do
             %{
-              scope: scope,
+              id: to_string(scope),
               title: detail_column_section_title(scope),
+              columns: ViewConfig.column_spec(scope).columns,
               selected: current_scope_columns(assigns, scope)
             }
           end
@@ -4664,11 +4674,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
             </p>
             <.live_component
               :if={@trash_modal[:tree] != []}
-              module={PlacePicker}
+              module={TreePicker}
               id="trash-target-picker"
               tree={@trash_modal[:tree]}
               value={@trash_modal[:target_uuid] && "category:" <> @trash_modal[:target_uuid]}
               pickable={[:category]}
+              path_skip={[:folder]}
             />
           </div>
         </div>
@@ -4708,11 +4719,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
         <div class="mt-4 flex flex-col gap-3">
           <.live_component
-            module={PlacePicker}
+            module={TreePicker}
             id="bulk-move-items-picker"
             tree={@bulk_move_modal[:tree]}
             value={@bulk_move_modal[:target]}
             current={"catalogue:" <> @catalogue_uuid}
+            pickable={[:catalogue, :category]}
+            path_skip={[:folder]}
           />
           <.move_destination
             id="bulk-move-items-destination"
@@ -4741,11 +4754,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
         <div class="mt-4 flex flex-col gap-3">
           <.live_component
-            module={PlacePicker}
+            module={TreePicker}
             id="bulk-move-categories-picker"
             tree={@bulk_move_categories_modal[:tree]}
             value={@bulk_move_categories_modal[:target]}
             current={"catalogue:" <> @catalogue_uuid}
+            pickable={[:catalogue, :category]}
+            path_skip={[:folder]}
           />
           <.move_destination
             id="bulk-move-categories-destination"
@@ -6109,6 +6124,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               >
                 <.icon name="hero-swatch" class="w-3.5 h-3.5 text-primary/60" />
               </span>
+              <.item_type_badge item={item} catalogue_item_type={@catalogue.item_type} />
             </div>
             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm flex-1">
               <%= for col <- @items_columns do %>
@@ -6137,6 +6153,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                   <% "unit" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}</div>
                     <div>{Item.unit_label(item.unit)}</div>
+                  <% "item_type" -> %>
+                    <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}</div>
+                    <div>{Item.item_type_label(Item.effective_type(item, @catalogue.item_type))}</div>
                   <% "status" -> %>
                     <div class="text-base-content/60">{Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}</div>
                     <div><.status_badge status={item.status || "unknown"} size={:xs} /></div>
@@ -6218,6 +6237,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                     <.table_default_header_cell class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Unit")}
                     </.table_default_header_cell>
+                  <% "item_type" -> %>
+                    <.table_default_header_cell class="w-px whitespace-nowrap">
+                      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item type")}
+                    </.table_default_header_cell>
                   <% "status" -> %>
                     <.sort_header_cell field={:status} sort={header_sort(@items_sort_by, @items_sort_dir)} event="toggle_sort_items" class="w-px whitespace-nowrap">
                       {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
@@ -6276,6 +6299,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               </.table_default_cell>
               <.item_pricing_cell
                 item={item}
+                catalogue_item_type={@catalogue.item_type}
                 edit_path={if @view_mode != "deleted", do: @edit_path_fn}
                 has_attributes={Map.has_key?(@attribute_map, item.uuid)}
                 attribute_text={

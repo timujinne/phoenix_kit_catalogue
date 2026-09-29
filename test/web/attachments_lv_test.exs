@@ -13,6 +13,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
+  alias PhoenixKit.Modules.Storage
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
   setup do
@@ -106,6 +107,55 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
       assigns = :sys.get_state(view.pid).socket.assigns
       assert assigns[:featured_image_uuid] == nil
       assert assigns[:featured_image_file] == nil
+    end
+  end
+
+  describe "a save that keeps the form open (PR #136 review)" do
+    test "an image picked and saved here can be cleared by the next save", %{
+      conn: conn,
+      catalogue: cat
+    } do
+      scope = build_admin_scope()
+
+      {:ok, %{uuid: file_uuid}} =
+        Storage.create_file(%{
+          user_uuid: scope.user.uuid,
+          original_file_name: "x.jpg",
+          file_name: "x.jpg",
+          mime_type: "image/jpeg",
+          file_type: "image",
+          ext: "jpg",
+          file_checksum: "checksum-stay-save",
+          user_file_checksum: "user-checksum-stay-save",
+          size: 100,
+          status: "active"
+        })
+
+      {:ok, view, _html} = live(with_scope(conn, scope), "/en/admin/catalogue/#{cat.uuid}/edit")
+
+      render_click(view, "open_featured_image_picker", %{})
+      send(view.pid, {:media_selected, [file_uuid]})
+      _ = render(view)
+
+      render_submit(view, "save", %{
+        "catalogue" => %{"name" => "Attach Cat"},
+        "save_action" => "stay"
+      })
+
+      assert PhoenixKitCatalogue.Catalogue.get_catalogue!(cat.uuid).data["featured_image_uuid"] ==
+               file_uuid
+
+      render_click(view, "clear_featured_image", %{})
+
+      render_submit(view, "save", %{
+        "catalogue" => %{"name" => "Attach Cat"},
+        "save_action" => "stay"
+      })
+
+      refute Map.has_key?(
+               PhoenixKitCatalogue.Catalogue.get_catalogue!(cat.uuid).data,
+               "featured_image_uuid"
+             )
     end
   end
 

@@ -2,6 +2,7 @@ defmodule PhoenixKitCatalogue.Import.MapperTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKitCatalogue.Import.Mapper
+  alias PhoenixKitCatalogue.Schemas.Item
 
   describe "auto_detect_mappings/1" do
     test "detects English headers" do
@@ -163,6 +164,73 @@ defmodule PhoenixKitCatalogue.Import.MapperTest do
     test "is case-insensitive" do
       assert Mapper.normalize_unit("tk") == "piece"
       assert Mapper.normalize_unit("Tk") == "piece"
+    end
+
+    test "maps the new service-unit aliases" do
+      for alias_value <- ~w(h tund tundi ч час) do
+        assert Mapper.normalize_unit(alias_value) == "hour", "#{alias_value} should map to hour"
+      end
+
+      for alias_value <- ["teenus", "усл", "усл.", "услуга"] do
+        assert Mapper.normalize_unit(alias_value) == "service",
+               "#{alias_value} should map to service"
+      end
+
+      for alias_value <- ["väljasõit", "выезд"] do
+        assert Mapper.normalize_unit(alias_value) == "visit",
+               "#{alias_value} should map to visit"
+      end
+
+      for alias_value <- ["km", "км"] do
+        assert Mapper.normalize_unit(alias_value) == "km", "#{alias_value} should map to km"
+      end
+    end
+
+    test "maps the new goods-unit aliases" do
+      for alias_value <- ["pakk", "pk", "уп", "уп.", "упак", "упаковка"] do
+        assert Mapper.normalize_unit(alias_value) == "pack",
+               "#{alias_value} should map to pack"
+      end
+
+      for alias_value <- ["rull", "рулон"] do
+        assert Mapper.normalize_unit(alias_value) == "roll",
+               "#{alias_value} should map to roll"
+      end
+
+      for alias_value <- ["kg", "кг"] do
+        assert Mapper.normalize_unit(alias_value) == "kg", "#{alias_value} should map to kg"
+      end
+
+      for alias_value <- ["l", "liiter", "л", "литр"] do
+        assert Mapper.normalize_unit(alias_value) == "litre",
+               "#{alias_value} should map to litre"
+      end
+
+      for alias_value <- ["m3", "m³", "м3", "м³", "kuupmeeter"] do
+        assert Mapper.normalize_unit(alias_value) == "m3", "#{alias_value} should map to m3"
+      end
+    end
+
+    # Export writes the code (`"hour"`), and the tables show `unit_label/1`
+    # (`"h"`, de `"Std."`, fr `"prestation"`). An unknown label becomes
+    # "piece", so each of those has to come back as the same code.
+    test "every allowed unit code and its English label round-trip" do
+      for code <- Item.allowed_units() do
+        assert Mapper.normalize_unit(code) == code
+        assert Mapper.normalize_unit(Item.unit_label(code)) == code
+      end
+    end
+
+    test "translated labels of the new units round-trip" do
+      for locale <- ~w(et ru de fr), code <- ~w(hour service visit km pack roll kg litre m3) do
+        label =
+          Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+            Item.unit_label(code)
+          end)
+
+        assert Mapper.normalize_unit(label) == code,
+               "#{locale} label #{inspect(label)} for #{code} became #{inspect(Mapper.normalize_unit(label))}"
+      end
     end
   end
 
@@ -428,6 +496,95 @@ defmodule PhoenixKitCatalogue.Import.MapperTest do
       }
 
       assert Mapper.item_matches_existing?(import_item, existing)
+    end
+  end
+
+  describe "item type" do
+    test "normalize_item_type/1 maps the goods and service aliases, case-insensitively" do
+      for raw <- ["kaup", "Kaup", "товар", "Товар", "goods", " GOODS "] do
+        assert Mapper.normalize_item_type(raw) == "goods", "#{inspect(raw)} should be goods"
+      end
+
+      for raw <- ["teenus", "Teenus", "услуга", "Услуга", "service", "Service"] do
+        assert Mapper.normalize_item_type(raw) == "service", "#{inspect(raw)} should be service"
+      end
+    end
+
+    test "a blank or unknown value leaves the item as in its catalogue" do
+      assert Mapper.normalize_item_type("") == nil
+      assert Mapper.normalize_item_type("widget") == nil
+      assert Mapper.normalize_item_type(nil) == nil
+    end
+
+    test "is an import target" do
+      assert {:item_type, "Item type"} in Mapper.available_targets()
+    end
+
+    test "headers are detected without stealing the unit column" do
+      mappings = Mapper.auto_detect_mappings(["Name", "Item type", "Unit type"])
+      assert Enum.find(mappings, &(&1.header == "Item type")).target == :item_type
+      assert Enum.find(mappings, &(&1.header == "Unit type")).target == :unit
+
+      [liik] = Mapper.auto_detect_mappings(["Liik"])
+      assert liik.target == :item_type
+    end
+
+    test "build_import_plan/2 carries the normalized type, and none for a blank cell" do
+      mappings = [
+        %{column_index: 0, header: "Name", target: :name},
+        %{column_index: 1, header: "Liik", target: :item_type}
+      ]
+
+      plan = Mapper.build_import_plan(mappings, [["Transport", "Teenus"], ["Panel", ""]])
+      [transport, panel] = plan.items
+
+      assert transport.item_type == "service"
+      refute Map.has_key?(panel, :item_type)
+    end
+  end
+
+  describe "item_matches_existing?/3 (item type)" do
+    defp existing_item(item_type) do
+      %{
+        name: "Transport",
+        sku: nil,
+        base_price: nil,
+        markup_percentage: nil,
+        unit: "piece",
+        item_type: item_type,
+        category_uuid: nil,
+        data: %{}
+      }
+    end
+
+    test "a row naming another type than the item's own is not a duplicate" do
+      refute Mapper.item_matches_existing?(
+               %{name: "Transport", item_type: "service"},
+               existing_item("goods")
+             )
+
+      assert Mapper.item_matches_existing?(
+               %{name: "Transport", item_type: "service"},
+               existing_item("service")
+             )
+    end
+
+    test "an inheriting item is compared by its catalogue's type" do
+      row = %{name: "Transport", item_type: "service"}
+
+      assert Mapper.item_matches_existing?(row, existing_item(nil),
+               catalogue_item_type: "service"
+             )
+
+      refute Mapper.item_matches_existing?(row, existing_item(nil), catalogue_item_type: "goods")
+      # No catalogue type given: the item reads as goods.
+      refute Mapper.item_matches_existing?(row, existing_item(nil))
+    end
+
+    test "a row without a type matches whatever type the item has" do
+      for type <- [nil, "goods", "service"] do
+        assert Mapper.item_matches_existing?(%{name: "Transport"}, existing_item(type))
+      end
     end
   end
 end

@@ -1,8 +1,8 @@
 defmodule PhoenixKitCatalogue.Catalogue.ActivityLogTest do
   @moduledoc """
   Direct unit tests for `PhoenixKitCatalogue.Catalogue.ActivityLog` —
-  the rescue branches + `with_log/2` shape. Uses `async: false`
-  because the rescue tests DROP the activity table mid-transaction
+  it never raises, and the `with_log/2` shape. Uses `async: false`
+  because a test DROPs the activity table mid-transaction
   (per the workspace AGENTS.md "destructive rescue test" pattern) and
   parallel async tests holding row-level locks would deadlock.
   """
@@ -30,9 +30,9 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLogTest do
     end
   end
 
-  describe "log/1 — rescue branches" do
+  describe "log/1 never raises" do
     @tag :destructive
-    test "swallows Postgrex.Error :undefined_table silently" do
+    test "a missing activity table is logged by core and returns :ok" do
       # Drop the table inside the sandboxed transaction. Sandbox rolls
       # the DROP back at test exit so other tests still see it.
       TestRepo.query!("DROP TABLE phoenix_kit_activities CASCADE")
@@ -47,32 +47,21 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLogTest do
                    })
         end)
 
-      refute log =~ "PhoenixKitCatalogue activity log failed",
-             "Expected :undefined_table to be swallowed silently — got: #{log}"
+      assert log =~ "Activity logging error"
     end
 
-    test "logs Logger.warning for unknown errors" do
-      # Pass a malformed attrs map that PhoenixKit.Activity.log/1
-      # rejects (missing :action). The catalogue rescue's generic
-      # `error -> Logger.warning` branch should fire.
+    test "an entry core rejects is logged by core and returns :ok" do
       log =
         capture_log(fn ->
           assert :ok =
                    ActivityLog.log(%{
-                     # No :action — Activity.log/1 will fail.
+                     # No :action — the entry changeset refuses it.
                      resource_type: "catalogue",
                      resource_uuid: Ecto.UUID.generate()
                    })
         end)
 
-      # Either core's Activity rejected this with a wrapped warning,
-      # or it landed silently. Both are acceptable; we assert the
-      # call returned :ok and didn't crash. If a warning fires, it
-      # must mention our module's prefix.
-      if log =~ "PhoenixKitCatalogue activity log failed" do
-        assert log =~ "catalogue.test" or log =~ "resource_type" or log =~ "catalogue",
-               "Expected the log line to surface attrs context, got: #{log}"
-      end
+      assert log =~ "Failed to log activity"
     end
   end
 

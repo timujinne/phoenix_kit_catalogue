@@ -268,7 +268,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
                 min="1"
                 step="1"
                 phx-debounce="600"
-                label={gettext("Most jobs per run")}
+                label={gettext("Most jobs queued at once")}
               />
             </form>
           </div>

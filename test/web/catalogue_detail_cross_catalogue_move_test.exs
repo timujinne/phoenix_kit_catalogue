@@ -36,7 +36,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailCrossCatalogueMoveTest do
   end
 
   defp pick(view, picker, id),
-    do: view |> element(~s(##{picker} [data-place="#{id}"])) |> render_click()
+    do: view |> element(~s(##{picker} [data-tree-node="#{id}"])) |> render_click()
 
   describe "items" do
     # The context's bulk move refuses a non-canonical uuid with
@@ -125,9 +125,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailCrossCatalogueMoveTest do
       render_click(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
       html = view |> element("#bulk-move-items-picker") |> render()
 
-      assert html =~ ~s(data-place="catalogue:#{here.uuid}")
+      assert html =~ ~s(data-tree-node="catalogue:#{here.uuid}")
       assert html =~ "Current"
-      assert html =~ ~s(data-place="catalogue:#{there.uuid}")
+      assert html =~ ~s(data-tree-node="catalogue:#{there.uuid}")
       refute html =~ smart.uuid
       refute html =~ binned.uuid
 
@@ -162,8 +162,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailCrossCatalogueMoveTest do
 
       send(
         view.pid,
-        {PhoenixKitCatalogue.Web.Components.PlacePicker, "bulk-move-items-picker",
-         "catalogue:" <> here.uuid}
+        {PhoenixKitWeb.Components.TreePicker, "bulk-move-items-picker", "catalogue:" <> here.uuid}
       )
 
       render_click(view, "confirm_bulk_move_items", %{})

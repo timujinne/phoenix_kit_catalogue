@@ -21,6 +21,10 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
   alias PhoenixKitCatalogue.Schemas.{CatalogueRule, Item, ItemSupplierInfo}
   alias PhoenixKitCatalogue.Test.Repo
 
+  defmodule SharedNameHook do
+    def name(_resource, _actor), do: {:ok, "Shared"}
+  end
+
   setup do
     cat = fixture_catalogue(%{name: "Dup"})
     alpha = fixture_category(cat, %{name: "Alpha", position: 0})
@@ -168,6 +172,65 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
                Repo.all(from(l in FolderLink, where: l.folder_uuid == ^new_folder))
 
       assert Repo.get!(StorageFile, file_uuid).folder_uuid == folder.uuid
+    end
+
+    test "a copy whose host folder name is its source's takes the deterministic one",
+         %{a: a} do
+      Application.put_env(
+        :phoenix_kit_catalogue,
+        :attachments_folder_name,
+        {SharedNameHook, :name}
+      )
+
+      on_exit(fn -> Application.delete_env(:phoenix_kit_catalogue, :attachments_folder_name) end)
+
+      user_uuid = insert_user!()
+      {:ok, folder} = Storage.create_folder(%{name: "Shared", user_uuid: user_uuid})
+      _file = insert_file!(user_uuid, folder.uuid, "photo.jpg")
+      {:ok, _} = Catalogue.update_item(a, %{data: %{"files_folder_uuid" => folder.uuid}})
+
+      assert {:ok, copy} =
+               Catalogue.duplicate_item(Catalogue.get_item!(a.uuid), actor_uuid: user_uuid)
+
+      assert Storage.get_folder(copy.data["files_folder_uuid"]).name ==
+               "catalogue-item-#{copy.uuid}"
+    end
+
+    # The pointer is read first — a host may have renamed the folder, so a
+    # name lookup alone would miss it — and the name only when the pointer
+    # is not a live folder.
+    test "files come from the folder the pointer names, whatever it is called", %{a: a} do
+      user_uuid = insert_user!()
+      {:ok, folder} = Storage.create_folder(%{name: "Renamed by the host", user_uuid: user_uuid})
+      file_uuid = insert_file!(user_uuid, folder.uuid, "photo.jpg")
+      {:ok, _} = Catalogue.update_item(a, %{data: %{"files_folder_uuid" => folder.uuid}})
+
+      {:ok, copy} = Catalogue.duplicate_item(Catalogue.get_item!(a.uuid), actor_uuid: user_uuid)
+
+      assert [%FolderLink{file_uuid: ^file_uuid}] =
+               Repo.all(
+                 from(l in FolderLink, where: l.folder_uuid == ^copy.data["files_folder_uuid"])
+               )
+    end
+
+    test "a pointer to a trashed folder falls back to the item's named folder", %{a: a} do
+      user_uuid = insert_user!()
+      {:ok, gone} = Storage.create_folder(%{name: "Gone", user_uuid: user_uuid})
+      _stale = insert_file!(user_uuid, gone.uuid, "stale.jpg")
+      {:ok, _} = Storage.trash_folder(gone)
+
+      {:ok, named} =
+        Storage.create_folder(%{name: "catalogue-item-#{a.uuid}", user_uuid: user_uuid})
+
+      file_uuid = insert_file!(user_uuid, named.uuid, "photo.jpg")
+      {:ok, _} = Catalogue.update_item(a, %{data: %{"files_folder_uuid" => gone.uuid}})
+
+      {:ok, copy} = Catalogue.duplicate_item(Catalogue.get_item!(a.uuid), actor_uuid: user_uuid)
+
+      assert [%FolderLink{file_uuid: ^file_uuid}] =
+               Repo.all(
+                 from(l in FolderLink, where: l.folder_uuid == ^copy.data["files_folder_uuid"])
+               )
     end
 
     test "a 255-character name is trimmed so the suffix still fits", %{a: a} do

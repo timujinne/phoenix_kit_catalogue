@@ -13,22 +13,8 @@ defmodule PhoenixKitCatalogue.Web.EditViewingLanguageTest do
   use PhoenixKitCatalogue.LiveCase
 
   alias PhoenixKit.Modules.Languages
-  alias PhoenixKitCatalogue.Web.Helpers
 
   @base "/en/admin/catalogue"
-
-  describe "viewing_language/2" do
-    test "the exact code, else the first sharing its base, else nil" do
-      enabled = ["en-US", "fr-FR", "fr-CA", "et-EE"]
-
-      assert Helpers.viewing_language(enabled, "fr-CA") == "fr-CA"
-      assert Helpers.viewing_language(enabled, "fr") == "fr-FR"
-      assert Helpers.viewing_language(enabled, "et_EE") == "et-EE"
-      assert Helpers.viewing_language(enabled, "EN") == "en-US"
-      assert Helpers.viewing_language(enabled, "de-DE") == nil
-      assert Helpers.viewing_language(enabled, nil) == nil
-    end
-  end
 
   describe "edit forms" do
     setup %{conn: conn} do

@@ -49,6 +49,19 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
     {heads, rows}
   end
 
+  # The categories table showing exactly `ids`, through the modal's own
+  # events: every shown column removed, then each of `ids` added in order.
+  defp set_columns(view, ids) do
+    section = %{"section" => "detail_categories"}
+
+    for id <- :sys.get_state(view.pid).socket.assigns.categories_columns,
+        do: render_click(view, "remove_column", Map.put(section, "column_id", id))
+
+    Enum.reduce(ids, render(view), fn id, _html ->
+      render_click(view, "add_column", Map.put(section, "column_id", id))
+    end)
+  end
+
   defp assert_rectangular(html, marker) do
     {heads, rows} = shape(html, marker)
     # Two chapters plus the Uncategorized row.
@@ -77,8 +90,7 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
       assert_rectangular(html, "category-menu-uncategorized-tree")
 
       for ids <- @column_sets do
-        html =
-          render_click(view, "reorder_columns_detail_categories", %{"ordered_ids" => ids})
+        html = set_columns(view, ids)
 
         assert_rectangular(html, "category-menu-uncategorized-tree")
       end
@@ -98,8 +110,7 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
       assert_rectangular(html, "category-menu-uncategorized-tree")
 
       for ids <- @column_sets do
-        html =
-          render_click(view, "reorder_columns_detail_categories", %{"ordered_ids" => ids})
+        html = set_columns(view, ids)
 
         assert_rectangular(html, "category-menu-uncategorized-tree")
       end
@@ -127,7 +138,7 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
         Enum.reduce(TableConfig.default_columns(:detail_categories), nil, fn id, _ ->
           render_click(view, "remove_column", %{
             "column_id" => id,
-            "scope" => "detail_categories"
+            "section" => "detail_categories"
           })
         end)
 
@@ -169,10 +180,7 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
     } do
       {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}")
 
-      html =
-        render_click(view, "reorder_columns_detail_categories", %{
-          "ordered_ids" => ~w(items description status updated)
-        })
+      html = set_columns(view, ~w(items description status updated))
 
       heads =
         html

@@ -72,7 +72,13 @@ defmodule PhoenixKitCatalogue.AttachmentsDataOwnershipSeamTest do
       item = create_item()
       {:ok, item} = Catalogue.update_item(item, %{data: %{"featured_image_uuid" => "old-uuid"}})
 
-      s = socket(%{featured_image_uuid: nil, files_state: %{files: []}})
+      s =
+        socket(%{
+          featured_image_uuid: nil,
+          featured_image_at_mount: "old-uuid",
+          files_state: %{files: []}
+        })
+
       params = Attachments.inject_attachment_data(%{"data" => %{}}, s)
 
       assert {:ok, updated} =
@@ -85,7 +91,13 @@ defmodule PhoenixKitCatalogue.AttachmentsDataOwnershipSeamTest do
       item = create_item()
       {:ok, item} = Catalogue.update_item(item, %{data: %{"media_order" => ["a", "b"]}})
 
-      s = socket(%{featured_image_uuid: nil, files_state: %{files: []}})
+      s =
+        socket(%{
+          featured_image_uuid: nil,
+          media_order_at_mount: ["a", "b"],
+          files_state: %{files: []}
+        })
+
       params = Attachments.inject_attachment_data(%{"data" => %{}}, s)
 
       assert {:ok, updated} =
@@ -134,6 +146,37 @@ defmodule PhoenixKitCatalogue.AttachmentsDataOwnershipSeamTest do
     end
   end
 
+  describe "a form that never knew an attachment leaves it alone" do
+    test "a featured image set in another tab survives this form's save" do
+      item = create_item()
+      elsewhere = Ecto.UUID.generate()
+
+      # This form opened before the other tab set it: nothing to clear.
+      s = socket(%{featured_image_uuid: nil, files_state: %{files: []}})
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"featured_image_uuid" => elsewhere}})
+
+      params = Attachments.inject_attachment_data(%{"data" => %{}}, s)
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, params, data_owned_keys: item_owned_keys(s))
+
+      assert updated.data["featured_image_uuid"] == elsewhere
+    end
+
+    test "an order set in another tab survives this form's save" do
+      item = create_item()
+      s = socket(%{featured_image_uuid: nil, files_state: %{files: []}})
+      {:ok, item} = Catalogue.update_item(item, %{data: %{"media_order" => ["a", "b"]}})
+
+      params = Attachments.inject_attachment_data(%{"data" => %{}}, s)
+
+      assert {:ok, updated} =
+               Catalogue.update_item(item, params, data_owned_keys: item_owned_keys(s))
+
+      assert updated.data["media_order"] == ["a", "b"]
+    end
+  end
+
   describe "category — seam" do
     test "clearing the featured image survives a real save (key is gone, not null)" do
       category = create_category()
@@ -141,7 +184,13 @@ defmodule PhoenixKitCatalogue.AttachmentsDataOwnershipSeamTest do
       {:ok, category} =
         Catalogue.update_category(category, %{data: %{"featured_image_uuid" => "old-uuid"}})
 
-      s = socket(%{featured_image_uuid: nil, files_state: %{files: []}})
+      s =
+        socket(%{
+          featured_image_uuid: nil,
+          featured_image_at_mount: "old-uuid",
+          files_state: %{files: []}
+        })
+
       params = Attachments.inject_attachment_data(%{"data" => %{}}, s)
 
       assert {:ok, updated} =

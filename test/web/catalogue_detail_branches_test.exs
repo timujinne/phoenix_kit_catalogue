@@ -211,7 +211,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
       # The catalogue's own row: uncategorized in it.
       view
-      |> element(~s(#bulk-move-items-picker [data-place="catalogue:#{cat.uuid}"]))
+      |> element(~s(#bulk-move-items-picker [data-tree-node="catalogue:#{cat.uuid}"]))
       |> render_click()
 
       render_click(view, "confirm_bulk_move_items", %{})

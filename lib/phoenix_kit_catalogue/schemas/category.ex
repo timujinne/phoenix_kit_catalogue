@@ -72,7 +72,7 @@ defmodule PhoenixKitCatalogue.Schemas.Category do
   # See the identical helper (and its full rationale) in
   # `PhoenixKitCatalogue.Schemas.Item.changeset/2` — `nil` is never a
   # legitimate stored value for a top-level `data` key; a caller that
-  # wants one gone (see `Attachments.inject_featured_image/2`) means
+  # wants one gone (see `Attachments.inject_attachment_data/2`) means
   # "this key doesn't exist", not "JSON null".
   defp drop_nil_data_values(data) when is_map(data),
     do: Map.reject(data, fn {_k, v} -> is_nil(v) end)

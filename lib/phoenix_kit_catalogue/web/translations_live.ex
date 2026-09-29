@@ -426,9 +426,9 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
 
     # Caps how many rows one click enqueues SYNCHRONOUSLY in this LiveView
     # process (each row does a dedup query + an Oban insert) — reuses the
-    # sweep's own per-tick cap rather than inventing a second knob; a
-    # filter matching more than that gets queued a batch at a time, one
-    # click per batch, same as the sweep already self-throttles per tick.
+    # sweep's own ceiling on queued jobs rather than inventing a second
+    # knob; a filter matching more than that gets queued a batch at a
+    # time, one click per batch.
     cap = SweepSettings.sweep_max_per_run()
     rows = Enum.take(matched, cap)
     truncated? = length(matched) > cap
@@ -594,7 +594,8 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={@page_title}
-      page_subtitle={gettext("Catalogues")}
+      page_section={gettext("Catalogues")}
+      page_section_path={Paths.index()}
       current_path={assigns[:url_path] || Paths.translations()}
       current_locale={assigns[:current_locale]}
     >
@@ -619,7 +620,9 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={@page_title}
-      page_subtitle={gettext("Catalogues") <> " · " <> gettext("%{count} rows", count: @total)}
+      page_section={gettext("Catalogues")}
+      page_section_path={Paths.index()}
+      page_subtitle={gettext("%{count} rows", count: @total)}
       current_path={assigns[:url_path] || Paths.translations()}
       current_locale={assigns[:current_locale]}
     >

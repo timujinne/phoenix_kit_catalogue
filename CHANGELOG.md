@@ -1,3 +1,180 @@
+## 0.46.1 - 2026-09-28
+
+Review: `dev_docs/pull_requests/2026/143-english-source-labels/`.
+
+### Changed
+
+- The import sources and export destinations are named in English
+  (#143): Universal, Furniture, Materials, JSON (export), instead of the
+  earlier mixed Russian-and-English labels.
+
+### Fixed
+
+- Those names now follow the admin's language, in every locale the module
+  ships (English, Russian, Estonian, German, French). Before, they were
+  the same fixed text for everyone.
+
+## 0.46.0 - 2026-09-26
+
+Reviews: `dev_docs/pull_requests/2026/140-item-units/`,
+`141-item-type/`.
+
+Built against `phoenix_kit` 2.40.1 and `phoenix_kit_ai` 0.24.1; the
+requirements are unchanged. The line under a page title (the page
+description) now shows only when an admin turns on "show page
+descriptions" under Settings → General. The pages still send it.
+
+### Added
+
+- More measurement units (#140). Services can be priced per hour, service,
+  visit or kilometre, and goods gain pack, roll, kilogram, litre and cubic
+  metre, alongside the units already there. The item form's unit field
+  offers all fifteen, in two groups.
+- An item type, goods or service (#141), independent of whether a catalogue
+  prices items or fees. The catalogue carries the default; an item may
+  name its own or leave it blank and follow the catalogue. Migration V4
+  adds the columns (existing catalogues read as goods, existing items
+  follow their catalogue). Search, the item lists and the item selector
+  can keep to one type. The catalogue form, the item form, the product
+  card and the items table show it, and a copy, an import or an export
+  carries it.
+
+### Fixed
+
+- Importing a unit column that uses one of the new codes (`hour`,
+  `service`, `pack`, …) or the abbreviation the tables show for it — in
+  English, Estonian, Russian, German or French — no longer stores the
+  item as pieces. A catalogue exported to JSON and imported back keeps
+  its units.
+- `list_items_for_catalogue/2` and `list_items_for_category/2` honour an
+  `item_types` filter, as the paged listings and the counts already did.
+- Saving an item and staying on the form re-reads "As in catalogue (…)".
+  It names the catalogue's type as it is after the save.
+
+## 0.45.1 - 2026-09-25
+
+Review: `dev_docs/pull_requests/2026/142-admin-header-trail/`.
+
+Built against `phoenix_kit` 2.40.0 and `phoenix_kit_ai` 0.24.1; the
+requirements are unchanged.
+
+### Fixed
+
+- The admin header's trail never loses a level (#142). Every page names
+  `Catalogues` as its section, linking to the landing page; the item and
+  category forms show the catalogue and the whole category chain above
+  them, and an edit page adds the record itself. Page titles are the page
+  alone (`Edit`, `New item`) instead of repeating the trail. The PDF
+  library's title is now `PDFs`, matching its tab.
+- A new category opened under a parent that the form cannot use (one in
+  another catalogue, or one deleted since the link was shown) no longer
+  shows that parent in the header. The header now matches the form, which
+  already fell back to the top level.
+- The Events and PDFs pages no longer repeat `Catalogues ·` in their
+  subtitle.
+
+## 0.45.0 - 2026-09-24
+
+Reviews: `dev_docs/pull_requests/2026/136-core-shared-toolkits/`,
+`138-translation-source-fields-markdown/`, `139-qty-autocomplete-off/`.
+
+**Requires `phoenix_kit` 2.38.0 or later and `phoenix_kit_ai` 0.24 or
+later.** The requirements are now `>= 2.38.0 and < 3.0.0` and `~> 0.24`.
+This release uses core's shared toolkits (#860) and phoenix_kit_ai's
+`TranslationSweep`, and it does not compile against older versions of
+either. Built against `phoenix_kit` 2.38.1 and `phoenix_kit_ai` 0.24.0.
+
+### Changed
+
+- Now built on core's shared toolkits (#136): activity logging and the
+  acting user, the place pickers (core's `TreePicker`), attachments and
+  per-record media folders, and per-user table and item-selector choices
+  (core's view preferences). Migration V3 copies each user's saved table
+  and selector choices once, so nothing a user set up is lost.
+- The AI-translation sweep runs on phoenix_kit_ai's shared
+  `TranslationSweep` engine. Its settings, and jobs already scheduled, keep
+  working.
+- The translation prompts list only the fields a call actually sends
+  (#138), so a partly filled item no longer comes back with a note about
+  the fields it skipped. Both prompts update themselves the next time they
+  are used after the upgrade.
+
+### Fixed
+
+- A description's Markdown headings (`## Size`) stay inside the translated
+  description. Before, the translation could stop at the first heading
+  (#138).
+- A summary cut off mid-sentence is translated up to the same point and
+  no further. Before, the model could continue writing past it (#138).
+- The quantity field in the item selector no longer shows the browser's
+  saved-input suggestions (#139).
+- A form that saves and stays open can clear the featured image on a later
+  save (#136).
+- Saving a category that another admin had moved to a different catalogue
+  no longer moves it back (#136).
+- Moving a category to the top level now takes the catalogue lock like any
+  other move (#136).
+
+## 0.44.3 - 2026-09-23
+
+Review: `dev_docs/pull_requests/2026/137-translation-glossary-slot/`.
+
+Built against `phoenix_kit` 2.37.5 and `phoenix_kit_ai` 0.23.2; the floors
+stay at 2.34.0 and `~> 0.18`.
+
+### Added
+
+- Both catalogue translation prompts (items and categories, and attribute
+  sets) now follow the glossary you set up in AI → Translations, per target
+  language. A catalogue term is then translated the same way on every
+  product (#137). You don't need to do anything: the prompts update
+  themselves the next time they are used after the upgrade. With no
+  glossary set up, nothing changes.
+- The glossary needs `phoenix_kit_ai` 0.23.2 or later. On an older version
+  the prompts stay exactly as they were, and they pick the glossary up by
+  themselves once `phoenix_kit_ai` is upgraded.
+
+## 0.44.2 - 2026-09-22
+
+Review: `dev_docs/pull_requests/2026/135-selector-qty-unit-columns/`.
+
+Built against `phoenix_kit` 2.37.4; the floor stays at 2.34.0.
+
+### Changed
+
+- In the item selector's list views, when the host shows a separate unit
+  column, the quantity fields no longer repeat the unit ("pc", "m") after
+  the number. All the fields are now the same width and line up in one
+  straight column (#135). Hiding the unit column does not bring the unit
+  back, which matches how the price column already behaves.
+- Prices in the item selector's list views now use equal-width digits, so
+  they line up digit under digit.
+- On the item form, the price, markup and discount fields now also empty
+  a zero when you click into them. This comes from `phoenix_kit` 2.37.4's
+  `decimal_input`.
+
+## 0.44.1 - 2026-09-22
+
+Review: `dev_docs/pull_requests/2026/134-qty-zero-clears-on-focus/`.
+
+Built against `phoenix_kit` 2.37.3; the floor stays at 2.34.0.
+
+### Changed
+
+- In the item selector, a quantity field showing zero now empties when you
+  click into it, so typing `8` gives `8`, not `08`. Leaving the field empty
+  puts the zero back (#134). It works the same way as core's
+  `decimal_input`.
+
+### Fixed
+
+- A zero that emptied on focus is no longer lost when the field
+  re-renders while you are in it.
+- Pressing Enter in the emptied field now commits the zero, not an empty
+  value.
+- If you type a quantity and then erase it, the row now goes back to zero
+  as soon as you leave the field, instead of keeping the erased amount.
+
 ## 0.44.0 - 2026-09-22
 
 Reviews: `dev_docs/pull_requests/2026/132-image-alt-text/` and

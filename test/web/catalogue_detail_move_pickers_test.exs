@@ -23,7 +23,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailMovePickersTest do
   defp assigns(view), do: :sys.get_state(view.pid).socket.assigns
 
   defp pick(view, picker, id),
-    do: view |> element(~s(##{picker} [data-place="#{id}"])) |> render_click()
+    do: view |> element(~s(##{picker} [data-tree-node="#{id}"])) |> render_click()
 
   test "bulk-moving items: a category row of this catalogue, then confirm",
        %{conn: conn, catalogue: cat, a: a} do
@@ -55,7 +55,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailMovePickersTest do
 
     render_click(view, "set_trash_disposition", %{"disposition" => "move_to"})
     html = view |> element("#trash-target-picker") |> render()
-    refute html =~ ~s(data-place="category:#{a.uuid}")
+    refute html =~ ~s(data-tree-node="category:#{a.uuid}")
 
     pick(view, "trash-target-picker", "category:" <> b.uuid)
     assert assigns(view).trash_modal.target_uuid == b.uuid

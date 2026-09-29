@@ -1,19 +1,22 @@
 defmodule PhoenixKitCatalogue.Web.PlaceTree do
   @moduledoc """
-  The trees a place picker (`Web.PlacePicker`) offers, and the pure
-  operations over them. No list of places is shown flat: a category is
+  The trees a place picker (core's `PhoenixKitWeb.Components.TreePicker`)
+  offers in the catalogue. No list of places is shown flat: a category is
   picked under its parent, a catalogue under its folder (the owner, via
   Max, 2026-09-21: "no flat lists anywhere, only proper pickers").
 
-  A node is `%{id, type, name, archived?, children}` plus an optional
-  `:hint` (e.g. "top level" beside a catalogue row that stands for its own
-  top level). Ids say what they are — `"folder:<uuid>"`,
+  Nodes are core `PhoenixKit.Utils.Tree` nodes, shown by core's
+  `PhoenixKitWeb.Components.TreePicker`: `%{id, type, name, icon,
+  archived?, children}` plus an optional `:hint` (e.g. "top level" beside a
+  catalogue row that stands for its own top level) and a `:badge` on an
+  archived catalogue. Ids say what they are — `"folder:<uuid>"`,
   `"catalogue:<uuid>"`, `"category:<uuid>"` — and `"root"` is the level
   above every folder.
 
-  The builders read the database; the rest is pure.
+  The builders read the database; the pure operations are core's `Tree`.
   """
 
+  alias PhoenixKit.Utils.Tree
   alias PhoenixKitCatalogue.Catalogue
 
   @type node_type :: :root | :folder | :catalogue | :category
@@ -22,16 +25,16 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
           required(:id) => String.t(),
           required(:type) => node_type(),
           required(:name) => String.t(),
+          required(:icon) => String.t(),
           required(:archived?) => boolean(),
           required(:children) => [tree_node()],
-          optional(:hint) => String.t()
+          optional(:hint) => String.t(),
+          optional(:badge) => String.t()
         }
-
-  @root "root"
 
   @doc "The id of the level above every folder."
   @spec root_id() :: String.t()
-  def root_id, do: @root
+  defdelegate root_id, to: Tree
 
   # ── Builders ────────────────────────────────────────────────────────
 
@@ -82,13 +85,10 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
     hint = Keyword.get(opts, :catalogue_hint)
 
     place_level(nil, folder_children, by_folder, categories)
-    |> map_nodes(fn node ->
+    |> Tree.map_nodes(fn node ->
       if hint && node.type == :catalogue, do: Map.put(node, :hint, hint), else: node
     end)
   end
-
-  defp map_nodes(nodes, fun),
-    do: Enum.map(nodes, fn node -> fun.(%{node | children: map_nodes(node.children, fun)}) end)
 
   defp place_level(folder_uuid, folder_children, by_folder, categories) do
     folders =
@@ -129,16 +129,7 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
         nodes
 
       hint ->
-        [
-          %{
-            id: @root,
-            type: :root,
-            name: catalogue.name,
-            hint: hint,
-            archived?: false,
-            children: nodes
-          }
-        ]
+        [root_node(catalogue.name, nodes, hint: hint)]
     end
   end
 
@@ -153,16 +144,11 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
       |> Enum.map(&elem(&1, 0))
       |> Enum.group_by(& &1.parent_uuid)
 
-    [
-      %{
-        id: @root,
-        type: :root,
-        name: root_name,
-        archived?: false,
-        children: folder_level(nil, children)
-      }
-    ]
+    [root_node(root_name, folder_level(nil, children))]
   end
+
+  defp root_node(name, children, opts \\ []),
+    do: name |> Tree.root(children, opts) |> Map.put(:archived?, false)
 
   defp folder_level(parent_uuid, children) do
     for folder <- Map.get(children, parent_uuid, []),
@@ -174,182 +160,73 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
       id: "folder:" <> folder.uuid,
       type: :folder,
       name: folder.name,
+      icon: "hero-folder",
       archived?: false,
       children: children
     }
   end
 
   defp catalogue_node(catalogue, children) do
-    %{
+    node = %{
       id: "catalogue:" <> catalogue.uuid,
       type: :catalogue,
       name: catalogue.name,
+      icon: "hero-book-open",
       archived?: catalogue.status == "archived",
       children: children
     }
+
+    if node.archived?,
+      do: Map.put(node, :badge, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived")),
+      else: node
   end
 
-  # A category whose parent is not among the live ones is a root here.
-  # Walking down from the roots also means a corrupt parent cycle can
-  # never loop: nothing in a cycle is reachable from a root.
+  # A category whose parent is not among the live ones is a root here, and
+  # a corrupt parent cycle cannot loop (`Tree.from_flat/2`).
   defp category_nodes(categories) do
-    live = MapSet.new(categories, & &1.uuid)
-
-    by_parent =
-      Enum.group_by(categories, fn category ->
-        if category.parent_uuid && MapSet.member?(live, category.parent_uuid),
-          do: category.parent_uuid,
-          else: nil
-      end)
-
-    category_level(nil, by_parent)
+    Tree.from_flat(categories,
+      id: &("category:" <> &1.uuid),
+      parent: &(&1.parent_uuid && "category:" <> &1.parent_uuid),
+      node: &%{type: :category, name: &1.name, icon: "hero-rectangle-stack", archived?: false}
+    )
   end
 
-  defp category_level(parent_uuid, by_parent) do
-    for category <- Map.get(by_parent, parent_uuid, []) do
-      %{
-        id: "category:" <> category.uuid,
-        type: :category,
-        name: category.name,
-        archived?: false,
-        children: category_level(category.uuid, by_parent)
-      }
-    end
-  end
+  # ── Pure operations (core's Tree) ──────────────────────────────────
 
-  # ── Pure operations ─────────────────────────────────────────────────
-
-  @doc """
-  The tree without the rows in `ids` and everything under them — a
-  category cannot move into its own subtree, a folder into itself.
-  """
+  @doc "See `PhoenixKit.Utils.Tree.prune/2`."
   @spec prune([tree_node()], [String.t()]) :: [tree_node()]
-  def prune(tree, []), do: tree
+  defdelegate prune(tree, ids), to: Tree
 
-  def prune(tree, ids) do
-    drop = MapSet.new(ids)
-
-    for node <- tree,
-        not MapSet.member?(drop, node.id),
-        do: %{node | children: prune(node.children, ids)}
-  end
-
-  @doc "The row with `id`, or nil."
+  @doc "See `PhoenixKit.Utils.Tree.find/2`."
   @spec find([tree_node()], term()) :: tree_node() | nil
-  def find(tree, id) when is_binary(id) do
-    case chain(tree, id) do
-      [node | _] -> node
-      [] -> nil
-    end
-  end
+  defdelegate find(tree, id), to: Tree
 
-  def find(_tree, _id), do: nil
+  @doc "See `PhoenixKit.Utils.Tree.member?/3`."
+  @spec member?([tree_node()], term(), [atom()] | :all) :: boolean()
+  defdelegate member?(tree, id, types), to: Tree
 
-  @doc "Whether the tree offers `id` as a row of one of `types`."
-  @spec member?([tree_node()], term(), [node_type()]) :: boolean()
-  def member?(tree, id, types) do
-    case find(tree, id) do
-      %{type: type} -> type in types
-      nil -> false
-    end
-  end
+  @doc "See `PhoenixKit.Utils.Tree.path/3`."
+  @spec path_in([tree_node()], term(), [atom()]) :: [String.t()]
+  defdelegate path_in(tree, id, skip \\ []), to: Tree, as: :path
 
-  @doc """
-  The names from the top down to `id`. `skip` leaves rows of those types
-  out — the folders above a catalogue are how catalogues are filed, not
-  where a category is. `[]` when the tree lacks it.
-  """
-  @spec path_in([tree_node()], term(), [node_type()]) :: [String.t()]
-  def path_in(tree, id, skip \\ [])
+  @doc "See `PhoenixKit.Utils.Tree.ancestor_ids/2`."
+  @spec ancestor_ids([tree_node()], term()) :: [String.t()]
+  defdelegate ancestor_ids(tree, id), to: Tree
 
-  def path_in(tree, id, skip) when is_binary(id) do
-    tree
-    |> chain(id)
-    |> Enum.reverse()
-    |> Enum.reject(&(&1.type in skip))
-    |> Enum.map(& &1.name)
-  end
-
-  def path_in(_tree, _id, _skip), do: []
-
-  @doc "The ids of the rows above `id`, root first — what to open to show it."
-  @spec ancestor_ids([tree_node()], String.t() | nil) :: [String.t()]
-  def ancestor_ids(_tree, nil), do: []
-
-  def ancestor_ids(tree, id) do
-    case chain(tree, id) do
-      [_self | above] -> above |> Enum.reverse() |> Enum.map(& &1.id)
-      [] -> []
-    end
-  end
-
-  # The row with `id` followed by its ancestors (nearest first); [] when
-  # the tree has no such row.
-  defp chain(nodes, id) do
-    Enum.find_value(nodes, [], fn node ->
-      cond do
-        node.id == id ->
-          [node]
-
-        (found = chain(node.children, id)) != [] ->
-          found ++ [node]
-
-        true ->
-          nil
-      end
-    end)
-  end
-
-  @doc """
-  The tree cut down to the rows whose name contains `query` (case and
-  accents ignored) and the rows above them, plus the ids to open so every
-  match shows. A matching row keeps its whole subtree, closed — searching
-  for a catalogue still lets the admin open it and pick a category.
-  A blank query returns the tree untouched and opens nothing.
-  """
+  @doc "See `PhoenixKit.Utils.Tree.filter/2`."
   @spec filter([tree_node()], String.t()) :: {[tree_node()], [String.t()]}
-  def filter(tree, query) do
-    case fold(query) do
-      "" -> {tree, []}
-      needle -> filter_level(tree, needle)
-    end
-  end
+  defdelegate filter(tree, query), to: Tree
 
-  defp filter_level(nodes, needle) do
-    Enum.reduce(nodes, {[], []}, &filter_node(&1, needle, &2))
-  end
+  @doc "See `PhoenixKit.Utils.Tree.ids_of/2`."
+  @spec ids_of([tree_node()], [atom()] | :all) :: [String.t()]
+  defdelegate ids_of(tree, types), to: Tree
 
-  # A match stays whole; otherwise a row stays only for a match below it,
-  # and is opened to show it.
-  defp filter_node(node, needle, {kept, open}) do
-    if String.contains?(fold(node.name), needle) do
-      {kept ++ [node], open}
-    else
-      case filter_level(node.children, needle) do
-        {[], _} -> {kept, open}
-        {children, below} -> {kept ++ [%{node | children: children}], [node.id | open] ++ below}
-      end
-    end
-  end
-
-  defp fold(text) when is_binary(text) do
-    text
-    |> String.normalize(:nfd)
-    |> String.replace(~r/\p{Mn}/u, "")
-    |> String.downcase()
-    |> String.trim()
-  end
-
-  defp fold(_text), do: ""
-
-  @doc "Every id in the tree whose row is one of `types`."
-  @spec ids_of([tree_node()], [node_type()]) :: [String.t()]
-  def ids_of(tree, types) do
-    Enum.flat_map(tree, fn node ->
-      own = if node.type in types, do: [node.id], else: []
-      own ++ ids_of(node.children, types)
-    end)
-  end
+  @doc """
+  What a picker posts for a typed id: the bare uuid, or `""` for `"root"`
+  (no parent, no folder) — pass as `TreePicker`'s `post`.
+  """
+  @spec post(String.t()) :: String.t()
+  def post(id), do: uuid(id) || ""
 
   @doc "The uuid inside a typed id; `nil` for `\"root\"` or anything else."
   @spec uuid(term()) :: String.t() | nil

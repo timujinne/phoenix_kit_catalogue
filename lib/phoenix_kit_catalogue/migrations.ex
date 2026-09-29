@@ -106,6 +106,18 @@ defmodule PhoenixKitCatalogue.Migrations do
   to emit (it deletes only projection rows it is about to
   re-insert — never a base table row).
 
+  ## What V4 is
+
+  V4 adds the item type — goods or service, the 1C "nomenclature kind" —
+  on the same two core-known tables: `phoenix_kit_cat_catalogues.item_type
+  varchar(20) NOT NULL DEFAULT 'goods'` (the catalogue's default) and
+  `phoenix_kit_cat_items.item_type varchar(20)` (NULL = as in the
+  catalogue), each with a guarded CHECK. Like V2's `slug`, an extra column
+  on a manifested table is outside what core's `ExpectedSchema` looks at,
+  so no core release is needed. V1's `CREATE TABLE` DDL is deliberately
+  left alone (V2's precedent): `up/1` replays V1..V4, so a fresh install
+  gets the columns from this version.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker; it NEVER drops any of the
@@ -122,7 +134,7 @@ defmodule PhoenixKitCatalogue.Migrations do
 
   use Ecto.Migration
 
-  @current_version 2
+  @current_version 4
   @marker_prefix "pkc_schema:"
   @version_table "phoenix_kit_cat_catalogues"
 
@@ -205,7 +217,8 @@ defmodule PhoenixKitCatalogue.Migrations do
   `current_version/0`): `1` is the pure V1 adoption step (the owned
   tables/keys/checks/indexes below); `2` additionally adds V2's
   per-language `slug` column, its trigger projections, and the
-  attribute-set GIN index. Mirrors `phoenix_kit_billing`'s version-aware
+  attribute-set GIN index; `3` the one-time view-preference copy; `4` the
+  item-type columns and their CHECKs. Mirrors `phoenix_kit_billing`'s version-aware
   `up_statements/2` — the wrapper migration core's update task generates
   calls this with an explicit `:version`, and a stale wrapper asking for
   `1` must not receive `2`'s objects.
@@ -219,10 +232,14 @@ defmodule PhoenixKitCatalogue.Migrations do
     target = min(target, @current_version)
 
     v2 = if target >= 2, do: v2_statements(p), else: []
+    v3 = if target >= 3, do: v3_statements(prefix, p), else: []
+    v4 = if target >= 4, do: v4_statements(prefix, p), else: []
 
     List.flatten([
       v1_statements(prefix, p),
       v2,
+      v3,
+      v4,
       "COMMENT ON TABLE #{p}#{@version_table} IS '#{@marker_prefix}#{target}'"
     ])
   end
@@ -234,6 +251,115 @@ defmodule PhoenixKitCatalogue.Migrations do
       foreign_keys(prefix, p),
       checks(prefix, p),
       indexes(p)
+    ]
+  end
+
+  # ── V4: item type (goods / service) ────────────────────────────────
+  #
+  # The catalogue carries the default for its items; an item either
+  # inherits it (NULL) or names its own. Existing rows come out as goods
+  # catalogues with inheriting items. Both CHECKs go through the same
+  # guard as V1's, so a replay finds them in place and skips them.
+  defp v4_statements(prefix, p) do
+    [
+      "ALTER TABLE #{p}phoenix_kit_cat_catalogues ADD COLUMN IF NOT EXISTS item_type character varying(20) DEFAULT 'goods'::character varying NOT NULL",
+      "ALTER TABLE #{p}phoenix_kit_cat_items ADD COLUMN IF NOT EXISTS item_type character varying(20)",
+      guarded_constraint(
+        prefix,
+        "phoenix_kit_cat_catalogues",
+        "phoenix_kit_cat_catalogues_item_type_check",
+        "ALTER TABLE #{p}phoenix_kit_cat_catalogues ADD CONSTRAINT phoenix_kit_cat_catalogues_item_type_check CHECK (((item_type)::text = ANY ((ARRAY['goods'::character varying, 'service'::character varying])::text[])))"
+      ),
+      guarded_constraint(
+        prefix,
+        "phoenix_kit_cat_items",
+        "phoenix_kit_cat_items_item_type_check",
+        "ALTER TABLE #{p}phoenix_kit_cat_items ADD CONSTRAINT phoenix_kit_cat_items_item_type_check CHECK (((item_type IS NULL) OR ((item_type)::text = ANY ((ARRAY['goods'::character varying, 'service'::character varying])::text[]))))"
+      )
+    ]
+  end
+
+  # ── V3: each user's table choices move to core ─────────────────────
+  #
+  # The admin tables' per-user columns / sort / filters, the module-wide
+  # view and the item selector's choices lived in
+  # `phoenix_kit_users.custom_fields["catalogue_view_configs"]`, written as
+  # a whole map from whatever copy of the user a page held. They are now
+  # core's per-user view preferences (`phoenix_kit_user_view_prefs`, core
+  # V201): one row per scope (`catalogue.<scope>`) and one module-wide row
+  # (`catalogue`). This copies them once. An empty column list is kept —
+  # it meant "every optional column hidden" here and does in core too. Only
+  # the module's own scopes are copied, and the selector's two choices land
+  # as two fields. A field already in core wins, and the legacy fields its
+  # row lacks are added — a user who switched the view before the copy
+  # keeps the selector choices they never touched. It runs once: the
+  # `catalogue_view_prefs_copied_at` setting is written right after it, and
+  # `up/1` replays every version, so a later run would otherwise bring back
+  # a choice the user has since reset. Where core's table is not there yet
+  # it copies nothing and writes no setting, so the next replay of the chain
+  # makes the copy; the chain's own version marker plays no part in the
+  # guard. A host only replays the chain when a later version is pending,
+  # though — core's chain runs first in the same update, so on that path
+  # the table is always there.
+  # The `custom_fields` key is left in place, unread.
+  defp v3_statements(prefix, p) do
+    [
+      """
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_class t JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE t.relname = 'phoenix_kit_user_view_prefs' AND n.nspname = '#{prefix}'
+            AND t.relkind = 'r'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM #{p}phoenix_kit_settings WHERE key = 'catalogue_view_prefs_copied_at'
+        ) THEN
+          INSERT INTO #{p}phoenix_kit_user_view_prefs AS existing (user_uuid, key, prefs, inserted_at, updated_at)
+          SELECT u.uuid,
+                 'catalogue.' || s.key,
+                 jsonb_strip_nulls(jsonb_build_object(
+                   'columns', CASE WHEN jsonb_typeof(s.value -> 'columns') = 'array' THEN s.value -> 'columns' END,
+                   'sort_by', CASE WHEN jsonb_typeof(s.value -> 'sort_by') = 'string' THEN s.value -> 'sort_by' END,
+                   'sort_dir', CASE WHEN jsonb_typeof(s.value -> 'sort_dir') = 'string' THEN s.value -> 'sort_dir' END,
+                   'filters', CASE WHEN jsonb_typeof(s.value -> 'filters') = 'object' THEN s.value -> 'filters' END
+                 )),
+                 date_trunc('second', now()),
+                 date_trunc('second', now())
+          FROM #{p}phoenix_kit_users u
+          CROSS JOIN LATERAL jsonb_each(
+            CASE WHEN jsonb_typeof(u.custom_fields -> 'catalogue_view_configs') = 'object'
+                 THEN u.custom_fields -> 'catalogue_view_configs'
+                 ELSE '{}'::jsonb END
+          ) s
+          WHERE s.key IN ('catalogues', 'suppliers', 'manufacturers', 'attribute_groups',
+                          'detail_items', 'detail_categories')
+            AND jsonb_typeof(s.value) = 'object'
+          ON CONFLICT (user_uuid, key)
+            DO UPDATE SET prefs = EXCLUDED.prefs || existing.prefs;
+
+          INSERT INTO #{p}phoenix_kit_user_view_prefs AS existing (user_uuid, key, prefs, inserted_at, updated_at)
+          SELECT u.uuid,
+                 'catalogue',
+                 jsonb_strip_nulls(jsonb_build_object(
+                   'view', CASE WHEN jsonb_typeof(c.cfg -> '__view__') = 'string' THEN c.cfg -> '__view__' END,
+                   'selector_view', CASE WHEN jsonb_typeof(c.cfg -> '__selector__' -> 'view') = 'string' THEN c.cfg -> '__selector__' -> 'view' END,
+                   'selector_hidden', CASE WHEN jsonb_typeof(c.cfg -> '__selector__' -> 'hidden') = 'array' THEN c.cfg -> '__selector__' -> 'hidden' END
+                 )),
+                 date_trunc('second', now()),
+                 date_trunc('second', now())
+          FROM #{p}phoenix_kit_users u
+          CROSS JOIN LATERAL (SELECT u.custom_fields -> 'catalogue_view_configs' AS cfg) c
+          WHERE jsonb_typeof(c.cfg) = 'object'
+            AND (c.cfg ? '__view__' OR c.cfg ? '__selector__')
+          ON CONFLICT (user_uuid, key)
+            DO UPDATE SET prefs = EXCLUDED.prefs || existing.prefs;
+
+          INSERT INTO #{p}phoenix_kit_settings (key, value, module)
+          VALUES ('catalogue_view_prefs_copied_at', now()::text, 'catalogue')
+          ON CONFLICT (key) DO NOTHING;
+        END IF;
+      END $$
+      """
     ]
   end
 

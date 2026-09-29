@@ -78,6 +78,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
   defp catalogue_detail_url(catalogue_uuid), do: "#{@base}/#{catalogue_uuid}"
 
+  # The Location picker is core's TreePicker. A pick goes to the picker's
+  # own event (its search box carries the hook and the target), which takes
+  # only a row its tree offers — the path a click on a row takes too, so a
+  # forged target is checked the same way.
+  defp pick_place(view, target),
+    do: view |> element("#location-tree-picker-search") |> render_hook("pick", %{"id" => target})
+
+  defp search_places(view, text),
+    do:
+      view |> element("#location-tree-picker-search") |> render_hook("search", %{"value" => text})
+
   defp base_item_params(overrides \\ %{}) do
     Map.merge(
       %{
@@ -123,6 +134,35 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
     end
   end
 
+  describe "new item — unit select" do
+    test "renders both optgroups with every unit code, including pair and sheet", %{conn: conn} do
+      catalogue = fixture_catalogue()
+      {:ok, _view, html} = live(conn, new_item_url(catalogue.uuid))
+
+      document = LazyHTML.from_fragment(html)
+      unit_select = LazyHTML.query(document, "select#item_unit")
+
+      optgroup_labels =
+        unit_select
+        |> LazyHTML.query("optgroup")
+        |> LazyHTML.attribute("label")
+
+      assert length(optgroup_labels) == 2
+
+      option_values =
+        unit_select
+        |> LazyHTML.query("option")
+        |> LazyHTML.attribute("value")
+
+      for unit <- Item.allowed_units() do
+        assert unit in option_values, "expected #{unit} to be a selectable option"
+      end
+
+      assert "pair" in option_values
+      assert "sheet" in option_values
+    end
+  end
+
   describe "new item — validate" do
     test "shows name error when name is blank", %{conn: conn} do
       catalogue = fixture_catalogue()
@@ -161,7 +201,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
       render_click(view, "open_location_picker", %{})
-      render_click(view, "pick_location", %{"target" => "category:" <> category.uuid})
+      pick_place(view, "category:" <> category.uuid)
 
       {:error, {:live_redirect, %{to: to}}} =
         view
@@ -292,7 +332,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
       render_click(view, "open_location_picker", %{})
-      render_click(view, "pick_location", %{"target" => "category:" <> target.uuid})
+      pick_place(view, "category:" <> target.uuid)
 
       assert view |> element("#item-location-path") |> render() =~ "Filed there"
 
@@ -312,7 +352,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       {:ok, view, _html} = live(conn, new_item_url(catalogue.uuid))
 
       render_click(view, "open_location_picker", %{})
-      render_click(view, "pick_location", %{"target" => "category:" <> target.uuid})
+      pick_place(view, "category:" <> target.uuid)
       {:ok, _} = Catalogue.trash_category(target)
 
       html = render_submit(view, "save", %{"item" => base_item_params(%{"name" => "Homeless"})})
@@ -1178,7 +1218,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   describe "Location" do
     defp pick(view, target) do
       render_click(view, "open_location_picker", %{})
-      render_click(view, "pick_location", %{"target" => target})
+      pick_place(view, target)
     end
 
     defp save_stay(view, params) do
@@ -1283,7 +1323,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       # Kinds never mix: a smart catalogue is not in a standard item's tree.
       pick(view, "catalogue:" <> smart.uuid)
       pick(view, "category:" <> Ecto.UUID.generate())
-      render_click(view, "pick_location", %{"target" => "garbage"})
+      pick(view, "garbage")
 
       assert is_nil(:sys.get_state(view.pid).socket.assigns.location_target)
       save_stay(view, %{"name" => "Standard"})
@@ -1300,11 +1340,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
       render_click(view, "open_location_picker", %{})
       # The rules picker lists standard catalogues too; the tree does not.
-      tree = view |> element("#location-tree") |> render()
+      tree = view |> element("#location-tree-picker-tree") |> render()
       assert tree =~ "Extras"
       refute tree =~ "Plain Standard"
 
-      render_click(view, "pick_location", %{"target" => "catalogue:" <> other_smart.uuid})
+      pick_place(view, "catalogue:" <> other_smart.uuid)
       save_stay(view, %{"name" => "Delivery"})
 
       assert Catalogue.get_item(item.uuid).catalogue_uuid == other_smart.uuid
@@ -1331,21 +1371,22 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       # Closed until opened.
       refute tree =~ "Legs"
 
-      html = render_click(view, "toggle_location_node", %{"id" => "folder:" <> folder.uuid})
-      assert html =~ "Tables"
-
       html =
         view
-        |> element("#location-search-form")
-        |> render_change(%{"q" => "leg"})
+        |> element(~s(#location-tree-picker [data-tree-node="folder:#{folder.uuid}"]))
+        |> render_click()
+
+      assert html =~ "Tables"
+
+      html = search_places(view, "leg")
 
       # The match and the rows above it, opened; its siblings are gone.
       assert html =~ "Estonian stuff"
       assert html =~ "Tables"
-      assert html =~ ~s(data-location="category:#{legs.uuid}")
+      assert html =~ ~s(data-tree-node="category:#{legs.uuid}")
       refute html =~ "Tops"
 
-      html = view |> element("#location-search-form") |> render_change(%{"q" => "zzz"})
+      html = search_places(view, "zzz")
       assert html =~ "No matches."
     end
 

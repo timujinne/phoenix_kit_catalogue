@@ -1175,7 +1175,7 @@ defmodule PhoenixKitCatalogue.MediaReorganizerTest do
       assert reloaded.data["files_folder_uuid"] == legacy.uuid
     end
 
-    test "F1 name-track: TWO live legacy copies under different real parents, hook answers root → no adoption, no hook_nil, both :relocated (U1)" do
+    test "F1 name-track: TWO live legacy copies under different real parents, hook answers root → no adoption, no hook_nil, one :duplicate naming both (U1)" do
       catalogue = new_catalogue()
       item = new_item(catalogue)
 
@@ -1206,12 +1206,9 @@ defmodule PhoenixKitCatalogue.MediaReorganizerTest do
       refute Enum.any?(actions, &(&1.kind == :item and &1.label == item.name))
       refute Enum.any?(actions, &(&1.kind == :hook_nil))
 
-      relocated_uuids =
-        actions
-        |> Enum.filter(&(&1.kind == :relocated and &1.label == item.name))
-        |> Enum.map(& &1.folder.uuid)
-
-      assert Enum.sort(relocated_uuids) == Enum.sort([copy1.uuid, copy2.uuid])
+      dup = Enum.find(actions, &(&1.kind == :duplicate and &1.label == item.name))
+      assert dup.reason =~ copy1.uuid
+      assert dup.reason =~ copy2.uuid
     end
 
     test "pointer already correct AND TWO live legacy-named twins exist elsewhere → both are reported :relocated (F5)" do
@@ -1691,7 +1688,7 @@ defmodule PhoenixKitCatalogue.MediaReorganizerTest do
       log = capture_log(fn -> MediaReorganizer.plan(nil, []) end)
 
       assert log =~ "JunkUuidHook, :parent}"
-      assert log =~ "kind: :item"
+      assert log =~ ":item"
     end
   end
 

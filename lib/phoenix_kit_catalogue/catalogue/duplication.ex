@@ -47,8 +47,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
   require Logger
 
   alias Ecto.Adapters.SQL
-  alias PhoenixKit.Modules.Storage
-  alias PhoenixKit.Modules.Storage.FolderLink
+  alias PhoenixKit.Modules.Storage.{FolderLink, ResourceFolders}
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.Catalogue.{ActivityLog, PubSub, SupplierComments}
   alias PhoenixKitCatalogue.Extensions
@@ -72,6 +71,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     :default_value,
     :default_unit,
     :unit,
+    :item_type,
     :status,
     :manufacturer_uuid,
     :manufacturer_source,
@@ -384,6 +384,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
       name: column_copy_name(source, opts),
       description: source.description,
       kind: source.kind,
+      item_type: source.item_type,
       markup_percentage: source.markup_percentage,
       discount_percentage: source.discount_percentage,
       status: if(Keyword.get(opts, :archived, false), do: "archived", else: source.status),
@@ -874,18 +875,15 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     end
   end
 
-  # Pointer FIRST (the host may have renamed the folder, so a name-only lookup would miss it),
-  # then the module's name-based resolution.
+  # Pointer FIRST while its folder is live (the host may have renamed the folder, so a
+  # name-only lookup would miss it), then the module's name-based resolution.
   defp source_folder_uuid(%{data: data} = source, opts) do
-    case data && data["files_folder_uuid"] do
-      uuid when is_binary(uuid) ->
-        uuid
+    pointer = data && data["files_folder_uuid"]
 
-      _ ->
-        case PhoenixKitCatalogue.Attachments.find_resource_folder(source, opts[:actor_uuid]) do
-          %{uuid: uuid} -> uuid
-          nil -> nil
-        end
+    case ResourceFolders.live_folder(pointer) ||
+           PhoenixKitCatalogue.Attachments.find_resource_folder(source, opts[:actor_uuid]) do
+      %{uuid: uuid} -> uuid
+      nil -> nil
     end
   end
 
@@ -893,20 +891,27 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
   # — but UNCAPPED: a copy must carry every file, not the grid's page.
   defp list_files(folder_uuid) do
     folder_uuid
-    |> PhoenixKitCatalogue.Attachments.folder_files_query()
+    |> ResourceFolders.files_query()
     |> order_by([f], asc: f.inserted_at, asc: f.uuid)
     |> repo().all()
   end
 
+  # The copy's own folder, never an existing one: a copy keeping its source's name gets the
+  # same host name, which its source's folder already has under that parent — so it takes the
+  # uuid-bearing deterministic name instead (checked first: a refused insert would abort the
+  # transaction this runs in).
   defp create_folder!(record, opts) do
-    attrs = %{
-      name: PhoenixKitCatalogue.Attachments.folder_name(record, opts[:actor_uuid]),
-      parent_uuid: PhoenixKitCatalogue.Attachments.parent_folder_uuid(record, opts[:actor_uuid])
-    }
+    actor_uuid = opts[:actor_uuid]
 
-    attrs = if opts[:actor_uuid], do: Map.put(attrs, :user_uuid, opts[:actor_uuid]), else: attrs
-
-    case Storage.create_folder(attrs) do
+    record
+    |> PhoenixKitCatalogue.Attachments.folder_name(actor_uuid)
+    |> ResourceFolders.ensure(
+      PhoenixKitCatalogue.Attachments.parent_folder_uuid(record, actor_uuid),
+      actor_uuid,
+      lookup: fn -> nil end,
+      fallback_name: PhoenixKitCatalogue.Attachments.legacy_folder_name(record)
+    )
+    |> case do
       {:ok, folder} -> folder
       {:error, reason} -> repo().rollback({:files_folder, reason})
     end

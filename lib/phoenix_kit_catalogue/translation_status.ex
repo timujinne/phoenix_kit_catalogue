@@ -575,7 +575,8 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
     * `:state` — one state atom or a list of them; unfiltered when absent
     * `:catalogue_uuid` — scope `:item`/`:category` rows to one catalogue
       (ignored for `:set_label`/`:set_value`, which are catalogue-wide)
-    * `:page` / `:per_page` — 1-indexed pagination (defaults `1` / `50`)
+    * `:page` / `:per_page` — 1-indexed pagination (defaults `1` / `50`);
+      `per_page: :all` returns every row
   """
   @spec list(:item | :category | :set_label | :set_value, keyword()) :: [map()]
   def list(type, opts \\ []) do
@@ -589,9 +590,13 @@ defmodule PhoenixKitCatalogue.TranslationStatus do
     |> Enum.flat_map(&rows_for(type, &1, langs))
     |> Enum.sort_by(&{&1.name, &1.lang})
     |> filter_states(states)
-    |> Enum.drop((page - 1) * per_page)
-    |> Enum.take(per_page)
+    |> paginate(page, per_page)
   end
+
+  defp paginate(rows, _page, :all), do: rows
+
+  defp paginate(rows, page, per_page),
+    do: rows |> Enum.drop((page - 1) * per_page) |> Enum.take(per_page)
 
   defp resources_for(:item, nil), do: Catalogue.list_items()
 

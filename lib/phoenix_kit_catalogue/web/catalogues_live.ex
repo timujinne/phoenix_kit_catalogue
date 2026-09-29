@@ -47,11 +47,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Components.AttributeSetItemsModal
-  alias PhoenixKitCatalogue.Web.Components.PlacePicker
   alias PhoenixKitCatalogue.Web.Components.ProductCard
   alias PhoenixKitCatalogue.Web.PlaceTree
   alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.{TableConfig, TableQuery, ViewConfig}
+  alias PhoenixKitWeb.Components.TreePicker
+  alias PhoenixKitWeb.TableColumns
 
   # What the Duplicate dialog starts with (see `Catalogue.duplicate_catalogue/2`).
   @duplicate_defaults %{skus: true, files: true, suppliers: true, archived: false}
@@ -214,7 +215,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     finish_duplicate(assign(socket, :duplicating, running), source_uuid, {:error, :failed})
   end
 
-  def handle_info({PlacePicker, "move-folder-picker", id}, socket),
+  def handle_info({TreePicker, "move-folder-picker", id}, socket),
     do: {:noreply, assign(socket, :move_pick, id)}
 
   def handle_info(:auto_migrate_legacy, socket) do
@@ -345,19 +346,17 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   defp current_cfg(assigns), do: Map.fetch!(assigns.view_configs, active_scope(assigns))
 
-  # Applies a columns transformation to the active scope's cfg and
-  # persists it (put_cfg). Removing the last column leaves Name alone
-  # rather than snapping back to the defaults. The active sort survives
-  # whenever it is still a sortable column — "name" and "position" are
-  # managed?: false so never in `ids`, and sorting doesn't require the
-  # column to be displayed.
+  # Applies one of core's column edits (`PhoenixKitWeb.TableColumns`) to the
+  # active scope's cfg and persists it (put_cfg). Removing the last column
+  # leaves Name alone rather than snapping back to the defaults. The active
+  # sort survives whenever it is still a sortable column — "name" and
+  # "position" are managed?: false so never in `ids`, and sorting doesn't
+  # require the column to be displayed.
   defp live_update_columns(socket, fun) do
     scope = active_scope(socket.assigns)
     cfg = current_cfg(socket.assigns)
 
-    ids = TableConfig.validate_columns(scope, fun.(cfg.columns))
-
-    cfg = %{cfg | columns: ids}
+    cfg = %{cfg | columns: fun.(cfg.columns, ViewConfig.column_spec(scope))}
 
     cfg =
       if MapSet.member?(known_sortable_ids(scope), cfg.sort_by),
@@ -367,22 +366,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     put_cfg(socket, scope, cfg)
   end
 
-  # Update one scope's cfg in assigns AND persist to the user row.
-  #
-  # `ViewConfig.save/3` writes the WHOLE `custom_fields` column (Ecto cast,
-  # not a DB-level JSONB merge) from whatever `user.custom_fields` the caller
-  # passes in. If we didn't refresh `phoenix_kit_current_user` with the
-  # returned row, the next `put_cfg` call (any scope) would build its write
-  # from the stale pre-save snapshot and silently revert this save.
+  # Update one scope's cfg in assigns AND persist the fields that changed
+  # (the rest stay as stored — another tab may have changed them).
   defp put_cfg(socket, scope, cfg) do
-    user = socket.assigns[:phoenix_kit_current_user]
     prev = Map.fetch!(socket.assigns.view_configs, scope)
-
-    socket =
-      case ViewConfig.save(user, scope, cfg) do
-        {:ok, updated_user} -> assign(socket, :phoenix_kit_current_user, updated_user)
-        _ -> socket
-      end
+    _ = ViewConfig.save(socket.assigns[:phoenix_kit_current_user], scope, cfg, prev)
 
     # Global-sort scopes share their ordering: persist the new sort as a
     # module setting and tell every other open index to switch live. Keyed
@@ -404,6 +392,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   defp tab_path(:index), do: Paths.index()
   defp tab_path(:attribute_groups), do: Paths.attribute_groups()
+
+  # The header's section: the landing page IS the module, so it has none;
+  # the Attributes list sits under it.
+  defp tab_section(:index), do: nil
+  defp tab_section(:attribute_groups), do: tab_title(:index)
+
+  defp tab_section_path(:index), do: nil
+  defp tab_section_path(:attribute_groups), do: Paths.index()
 
   # Graceful handler for a delete event that fires while `confirm_delete`
   # is nil (e.g. someone pushed the event without first opening the
@@ -2852,23 +2848,31 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # LIVE columns editor: every change applies (and persists) immediately;
   # the modal's footer is just Reset + Close.
   def handle_event("add_column", %{"column_id" => id}, socket) do
-    {:noreply, live_update_columns(socket, &(&1 ++ [id]))}
+    {:noreply, live_update_columns(socket, &TableColumns.add(&1, id, &2))}
   end
 
   def handle_event("remove_column", %{"column_id" => id}, socket) do
-    {:noreply, live_update_columns(socket, &Enum.reject(&1, fn c -> c == id end))}
+    {:noreply, live_update_columns(socket, &TableColumns.remove(&1, id, &2))}
   end
 
   def handle_event("reorder_columns", params, socket) do
     case parse_order(params) do
-      ids when is_list(ids) -> {:noreply, live_update_columns(socket, fn _ -> ids end)}
-      _ -> {:noreply, socket}
+      ids when is_list(ids) ->
+        {:noreply, live_update_columns(socket, &TableColumns.reorder(&1, ids, &2))}
+
+      _ ->
+        {:noreply, socket}
     end
   end
 
+  # Reset takes the choice back out (the user follows the defaults again),
+  # then shows them.
   def handle_event("reset_columns", _p, socket) do
     scope = active_scope(socket.assigns)
-    {:noreply, live_update_columns(socket, fn _ -> TableConfig.default_columns(scope) end)}
+    _ = ViewConfig.reset_columns(socket.assigns[:phoenix_kit_current_user], scope)
+    cfg = %{current_cfg(socket.assigns) | columns: TableConfig.default_columns(scope)}
+
+    {:noreply, assign(socket, :view_configs, Map.put(socket.assigns.view_configs, scope, cfg))}
   end
 
   def handle_event("set_sort", %{"sort_by" => by}, socket) do
@@ -3327,6 +3331,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={tab_title(@active_tab)}
+      page_section={tab_section(@active_tab)}
+      page_section_path={tab_section_path(@active_tab)}
       current_path={assigns[:url_path] || tab_path(@active_tab)}
       current_locale={assigns[:current_locale]}
     >
@@ -4207,7 +4213,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           </h3>
           <p class="text-sm text-base-content/60">{move_dialog_label(@move_dialog)}</p>
           <.live_component
-            module={PlacePicker}
+            module={TreePicker}
             id="move-folder-picker"
             tree={@move_tree}
             value={@move_pick}
@@ -4215,6 +4221,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             pickable={[:root, :folder]}
             path_skip={[]}
             name="folder_uuid"
+            post={&PlaceTree.post/1}
           />
           <div class="flex justify-end gap-2">
             <button type="button" phx-click="cancel_move" class="btn btn-ghost btn-sm">

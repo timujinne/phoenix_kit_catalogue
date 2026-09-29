@@ -114,16 +114,21 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
 
   describe "inject_attachment_data/2 — folder + featured image threading" do
     test "no folder_uuid + no featured_image still ensures data key exists" do
-      # `inject_featured_image/2` and `inject_media_order/2` both run
-      # unconditionally and, with nothing set, write an explicit `nil`
-      # "clear this" marker rather than omitting the key — the signal
-      # `Catalogue.update_item/3`'s `:data_owned_keys` splicing (and the
-      # Item/Category changesets, as a backstop) read as "drop this key",
-      # not "leave it alone". Pin the behaviour explicitly — non-data
-      # keys are preserved untouched.
+      # A form that knew neither an image nor an order writes neither
+      # key: the "clear this" marker belongs to a form that had one to
+      # clear, or it would delete what another tab set. Non-data keys
+      # are preserved untouched.
       socket = build_fake_socket(folder: nil, featured: nil)
       result = Attachments.inject_attachment_data(%{"name" => "X"}, socket)
       assert result["name"] == "X"
+      refute Map.has_key?(result, "data")
+
+      # One it knew is cleared, as an explicit `nil` marker — the signal
+      # `Catalogue.update_item/3`'s `:data_owned_keys` splicing (and the
+      # Item/Category changesets, as a backstop) read as "drop this key",
+      # not "leave it alone".
+      knew = build_fake_socket(featured_at_mount: "old", order_at_mount: ["a"])
+      result = Attachments.inject_attachment_data(%{"name" => "X"}, knew)
       assert result["data"] == %{"featured_image_uuid" => nil, "media_order" => nil}
     end
 
@@ -146,7 +151,7 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
     end
 
     test "nil featured_image clears existing data['featured_image_uuid']" do
-      socket = build_fake_socket(folder: nil, featured: nil)
+      socket = build_fake_socket(folder: nil, featured: nil, featured_at_mount: "stale")
 
       params = %{"name" => "X", "data" => %{"featured_image_uuid" => "stale"}}
       result = Attachments.inject_attachment_data(params, socket)
@@ -233,7 +238,11 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
       # pointer — signaled as an explicit `nil` marker (not an absent
       # key; see `Catalogue.update_item/3`'s `:data_owned_keys` doc for
       # why the two are not interchangeable).
-      empty_socket = put_in(socket.assigns.files_state, %{files: []})
+      empty_socket =
+        socket
+        |> put_in([Access.key!(:assigns), :files_state], %{files: []})
+        |> put_in([Access.key!(:assigns), :media_order_at_mount], ["stale"])
+
       params = %{"name" => "X", "data" => %{"media_order" => ["stale"]}}
       result = Attachments.inject_attachment_data(params, empty_socket)
       assert Map.has_key?(result["data"], "media_order")
@@ -244,11 +253,15 @@ defmodule PhoenixKitCatalogue.AttachmentsTest do
   # Build a struct-like fake socket with just the assigns we need.
   # Phoenix.LiveView.Socket has many required fields; build one
   # via struct/2 with minimal overrides.
-  defp build_fake_socket(folder: folder, featured: featured) do
+  defp build_fake_socket(opts) do
     %Phoenix.LiveView.Socket{
       assigns: %{
-        files_folder_uuid: folder,
-        featured_image_uuid: featured
+        files_folder_uuid: Keyword.get(opts, :folder),
+        featured_image_uuid: Keyword.get(opts, :featured),
+        # What the record held when the form opened: a clear marker is
+        # written only for something the form knew about.
+        featured_image_at_mount: Keyword.get(opts, :featured_at_mount),
+        media_order_at_mount: Keyword.get(opts, :order_at_mount, [])
       }
     }
   end

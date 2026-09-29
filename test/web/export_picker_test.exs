@@ -34,7 +34,7 @@ defmodule PhoenixKitCatalogue.Web.ExportPickerTest do
     assert Enum.sort(selected(view)) == Enum.sort([ctx.kitchen.uuid, ctx.bath.uuid])
 
     view
-    |> element(~s(#export-catalogue-picker [data-place="catalogue:#{ctx.loose.uuid}"]))
+    |> element(~s(#export-catalogue-picker [data-tree-node="catalogue:#{ctx.loose.uuid}"]))
     |> render_click()
 
     view
@@ -44,7 +44,7 @@ defmodule PhoenixKitCatalogue.Web.ExportPickerTest do
     |> render_click()
 
     view
-    |> element(~s(#export-catalogue-picker [data-place="catalogue:#{ctx.bath.uuid}"]))
+    |> element(~s(#export-catalogue-picker [data-tree-node="catalogue:#{ctx.bath.uuid}"]))
     |> render_click()
 
     assert Enum.sort(selected(view)) == Enum.sort([ctx.kitchen.uuid, ctx.loose.uuid])
@@ -63,7 +63,7 @@ defmodule PhoenixKitCatalogue.Web.ExportPickerTest do
     {:ok, view, _html} = live(conn, @url)
 
     view
-    |> element(~s(#export-catalogue-picker [data-place="catalogue:#{ctx.loose.uuid}"]))
+    |> element(~s(#export-catalogue-picker [data-tree-node="catalogue:#{ctx.loose.uuid}"]))
     |> render_click()
 
     render_change(view, "change_form", %{"catalogue_uuids" => [ctx.bath.uuid]})

@@ -2,7 +2,8 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
   @moduledoc """
   The tree picker every place choice uses (the owner, via Max, 2026-09-21:
   no flat lists, only proper pickers): `Web.PlaceTree` builds the trees,
-  `Components.PlacePicker` shows one.
+  core's `PhoenixKitWeb.Components.TreePicker` shows one, with the options
+  every catalogue picker passes.
 
   The component is hosted inside a form with its own `phx-change` and
   `phx-submit`, the placement the category form gives it — what the host
@@ -11,8 +12,8 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
   use PhoenixKitCatalogue.LiveCase, async: false
 
   alias PhoenixKitCatalogue.Catalogue
-  alias PhoenixKitCatalogue.Web.Components.PlacePicker
   alias PhoenixKitCatalogue.Web.PlaceTree
+  alias PhoenixKitWeb.Components.TreePicker
 
   defmodule Host do
     use Phoenix.LiveView
@@ -36,18 +37,21 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
       <form id="host-form" phx-change="validate" phx-submit="save">
         <input type="text" name="title" value="kept" />
         <.live_component
-          module={PlacePicker}
+          module={TreePicker}
           id="pp"
           tree={@tree}
           value={@value}
           name="place"
-          {@opts}
+          {Map.merge(
+            %{pickable: [:catalogue, :category], path_skip: [:folder], post: &PlaceTree.post/1},
+            @opts
+          )}
         />
       </form>
       """
     end
 
-    def handle_info({PlacePicker, "pp", value}, socket),
+    def handle_info({TreePicker, "pp", value}, socket),
       do:
         {:noreply,
          Phoenix.Component.assign(socket, value: value, picked: socket.assigns.picked ++ [value])}
@@ -72,7 +76,7 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
   defp search(view, text),
     do: view |> element("#pp-search") |> render_hook("search", %{"value" => text})
 
-  defp row(view, id), do: element(view, ~s(#pp [data-place="#{id}"]))
+  defp row(view, id), do: element(view, ~s(#pp [data-tree-node="#{id}"]))
 
   # Kitchen (standard, in folder Rooms) › Doors › Oak; Hardware (smart).
   setup do
@@ -163,13 +167,13 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
     end
   end
 
-  describe "PlacePicker" do
+  describe "TreePicker with the catalogue's trees" do
     test "opens at the picked place and posts its uuid with the host form", %{conn: conn} = ctx do
       oak = "category:" <> ctx.oak.uuid
       view = host(conn, PlaceTree.places("standard"), oak)
 
       assert view |> row(oak) |> has_element?()
-      assert has_element?(view, ~s(#pp li[aria-selected="true"] [data-place="#{oak}"]))
+      assert has_element?(view, ~s(#pp li[aria-selected="true"] [data-tree-node="#{oak}"]))
 
       view |> form("#host-form") |> render_submit()
       assert state(view).submitted["place"] == ctx.oak.uuid
@@ -181,10 +185,10 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
       folder = "folder:" <> ctx.rooms.uuid
       kitchen = "catalogue:" <> ctx.kitchen.uuid
 
-      refute has_element?(view, ~s(#pp [data-place="#{kitchen}"]))
+      refute has_element?(view, ~s(#pp [data-tree-node="#{kitchen}"]))
       view |> row(folder) |> render_click()
       assert state(view).picked == []
-      assert has_element?(view, ~s(#pp [data-place="#{kitchen}"]))
+      assert has_element?(view, ~s(#pp [data-tree-node="#{kitchen}"]))
 
       view |> row(kitchen) |> render_click()
       assert state(view).picked == [kitchen]
@@ -212,13 +216,13 @@ defmodule PhoenixKitCatalogue.Web.PlacePickerTest do
       view = host(conn, PlaceTree.places("standard"))
 
       html = search(view, "oak")
-      assert html =~ ~s(data-place="category:#{ctx.oak.uuid}")
-      refute html =~ ~s(data-place="folder:#{ctx.empty.uuid}")
+      assert html =~ ~s(data-tree-node="category:#{ctx.oak.uuid}")
+      refute html =~ ~s(data-tree-node="folder:#{ctx.empty.uuid}")
 
       assert search(view, "zzz") =~ "No matches."
       html = search(view, "")
-      assert html =~ ~s(data-place="folder:#{ctx.rooms.uuid}")
-      refute html =~ ~s(data-place="category:#{ctx.oak.uuid}")
+      assert html =~ ~s(data-tree-node="folder:#{ctx.rooms.uuid}")
+      refute html =~ ~s(data-tree-node="category:#{ctx.oak.uuid}")
     end
 
     test "a pushed pick_all on a single picker changes nothing", %{conn: conn} = ctx do

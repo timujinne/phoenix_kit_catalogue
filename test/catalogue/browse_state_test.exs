@@ -83,6 +83,15 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
       end
     end
 
+    test ":item_types is a scope key and survives every command that fetches" do
+      state = BrowseState.init(scope: %{catalogue_uuids: ["cat-1"], item_types: ["goods"]})
+
+      for cmd <- [:reset, {:search, "screw"}, :load_more, {:set_category, :uncategorized}] do
+        opts = opts_map(BrowseState.command(state, cmd))
+        assert opts[:item_types] == ["goods"], "#{inspect(cmd)} dropped :item_types"
+      end
+    end
+
     test "a string-keyed or unknown-key scope raises rather than silently widening" do
       assert_raise ArgumentError, ~r/unknown keys/, fn ->
         BrowseState.init(scope: %{"catalogue_uuids" => ["cat-1"]})

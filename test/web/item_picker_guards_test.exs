@@ -23,6 +23,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
          excluded: List.wrap(session["excluded"]),
          disabled: session["disabled"] == true,
          statuses: session["statuses"],
+         item_types: session["item_types"],
          catalogue_uuids: session["catalogue_uuids"],
          last_message: nil
        ), layout: false}
@@ -38,6 +39,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
           excluded_uuids={@excluded}
           disabled={@disabled}
           statuses={@statuses}
+          item_types={@item_types}
           catalogue_uuids={@catalogue_uuids}
         />
         <div :if={@last_message} id="last-message">{@last_message}</div>
@@ -148,6 +150,26 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerGuardsTest do
     html = render(view)
     assert html =~ item.name
     refute html =~ "Retired Item"
+  end
+
+  test "the item_types attr scopes the option list by effective type", %{
+    conn: conn,
+    cat: cat,
+    item: item
+  } do
+    {:ok, _service} =
+      Catalogue.create_item(%{
+        name: "Mounting Service",
+        catalogue_uuid: cat.uuid,
+        item_type: "service"
+      })
+
+    {:ok, view, _html} = mount_host(conn, %{"item_types" => ["goods"]})
+    populate(view)
+
+    html = render(view)
+    assert html =~ item.name
+    refute html =~ "Mounting Service"
   end
 
   test "changing the parent-supplied scope invalidates the option list", %{

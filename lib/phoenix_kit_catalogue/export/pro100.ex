@@ -46,8 +46,8 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   @impl true
   def formats do
     [
-      {:furniture, "Фурнитура (Furniture)"},
-      {:materials, "Материалы (Materials)"}
+      {:furniture, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Furniture")},
+      {:materials, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Materials")}
     ]
   end
 

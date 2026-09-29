@@ -596,9 +596,6 @@ msgstr "или перетащите"
 msgid "File is too large (max 10MB)."
 msgstr "Файл слишком большой (макс. 10 МБ)"
 
-msgid "File type not accepted."
-msgstr "Тип файла не поддерживается."
-
 msgid "Only PDF files are accepted."
 msgstr "Принимаются только PDF-файлы."
 
@@ -938,15 +935,6 @@ msgstr "Окончательно удалено %{count} позиций."
 #, elixir-autogen
 msgid "Columns"
 msgstr "Колонки"
-
-msgid "Shown"
-msgstr "Показаны"
-
-msgid "Available"
-msgstr "Доступные"
-
-msgid "Reset"
-msgstr "Сбросить"
 
 msgid "Apply"
 msgstr "Применить"
@@ -1856,9 +1844,6 @@ msgstr "Не удалось создать нового поставщика. П
 msgid "Could not load more matches. Please try again."
 msgstr "Не удалось загрузить больше результатов. Попробуйте снова."
 
-msgid "Could not prepare the files folder."
-msgstr "Не удалось подготовить папку файлов."
-
 msgid "Could not remove file."
 msgstr "Не удалось удалить файл."
 
@@ -2536,9 +2521,6 @@ msgstr "К созданию"
 msgid "Too many files at once."
 msgstr "Слишком много файлов за раз."
 
-msgid "Too many files."
-msgstr "Слишком много файлов."
-
 msgid "Trashed"
 msgstr "В корзине"
 
@@ -2559,15 +2541,6 @@ msgstr "Обновления"
 
 msgid "Upload & parse"
 msgstr "Загрузить и разобрать"
-
-msgid "Upload error: %{reason}"
-msgstr "Ошибка загрузки: %{reason}"
-
-msgid "Upload failed for %{name}."
-msgstr "Не удалось загрузить %{name}."
-
-msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
-msgstr "%{name} совпадает с уже прикреплённым файлом %{existing} — ничего не добавлено."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr "Загрузка не удалась по неожиданной причине. Попробуйте снова."
@@ -2708,6 +2681,72 @@ msgstr "комплект"
 
 msgid "sheet"
 msgstr "лист"
+
+msgid "h"
+msgstr "ч"
+
+msgid "service"
+msgstr "усл."
+
+msgid "visit"
+msgstr "выезд"
+
+msgid "km"
+msgstr "км"
+
+msgid "pack"
+msgstr "уп."
+
+msgid "roll"
+msgstr "рулон"
+
+msgid "kg"
+msgstr "кг"
+
+msgid "l"
+msgstr "л"
+
+msgid "m³"
+msgstr "м³"
+
+msgid "Hour"
+msgstr "Час"
+
+msgid "Service (teenus)"
+msgstr "Услуга"
+
+msgid "Visit (väljasõit)"
+msgstr "Выезд"
+
+msgid "Kilometer"
+msgstr "Километр"
+
+msgid "Pack"
+msgstr "Упаковка"
+
+msgid "Roll"
+msgstr "Рулон"
+
+msgid "Kilogram"
+msgstr "Килограмм"
+
+msgid "Litre"
+msgstr "Литр"
+
+msgid "m³ (cubic meter)"
+msgstr "м³ (кубометр)"
+
+msgid "Pair"
+msgstr "Пара"
+
+msgid "Sheet"
+msgstr "Лист"
+
+msgid "Units for goods"
+msgstr "Единицы для товаров"
+
+msgid "Units for services"
+msgstr "Единицы для услуг"
 
 msgid "unit"
 msgstr "ед."
@@ -3604,8 +3643,8 @@ msgstr "Списки"
 msgid "Minutes between runs"
 msgstr "Минут между запусками"
 
-msgid "Most jobs per run"
-msgstr "Не больше заданий за запуск"
+msgid "Most jobs queued at once"
+msgstr "Не больше заданий в очереди одновременно"
 
 msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
 msgstr "По умолчанию выключено. После включения расписание запускается сразу; каждый запуск ставит в очередь перевод всего, что ещё не переведено."
@@ -3673,6 +3712,9 @@ msgstr "Куда:"
 msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
 msgstr "Выберите категорию, в которую вложить эту, или сам каталог — для его верхнего уровня. Переместить её можно и позже."
 
+msgid "The chosen parent is no longer available. Pick another place."
+msgstr "Выбранная родительская категория больше недоступна. Выберите другое место."
+
 msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
 msgstr "Выберите, куда её переместить: на верхний уровень каталога или внутрь категории. Подкатегории и позиции переместятся вместе с ней."
 
@@ -3690,3 +3732,30 @@ msgstr "без категории"
 
 msgid "Pick the category to import into, or choose another option."
 msgstr "Выберите категорию для импорта или другой вариант."
+
+msgid "Item type"
+msgstr "Вид"
+
+msgid "Default item type"
+msgstr "Вид позиций по умолчанию"
+
+msgid "Goods"
+msgstr "Товар"
+
+msgid "Service"
+msgstr "Услуга"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Как в каталоге (%{type}) —"
+
+msgid "Universal"
+msgstr "Универсальный"
+
+msgid "Furniture"
+msgstr "Фурнитура"
+
+msgid "Materials"
+msgstr "Материалы"
+
+msgid "JSON (export)"
+msgstr "JSON (экспорт)"

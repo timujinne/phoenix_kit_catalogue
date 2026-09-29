@@ -8,7 +8,13 @@ defmodule PhoenixKitCatalogue.Import.Source.Pro100 do
   @impl true
   def label, do: "PRO100"
   @impl true
-  def formats, do: [{:furniture, "Фурнитура (Furniture)"}, {:materials, "Материалы (Materials)"}]
+  def formats do
+    [
+      {:furniture, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Furniture")},
+      {:materials, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Materials")}
+    ]
+  end
+
   @impl true
   def accept, do: ~w(.txt)
   @impl true

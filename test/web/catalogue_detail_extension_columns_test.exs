@@ -47,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       opened = render_click(view, "show_column_modal", %{})
       assert opened =~ "Fake status"
       assert opened =~ ~s(phx-value-column_id="fake:status")
-      assert opened =~ ~s(phx-value-scope="detail_items")
+      assert opened =~ ~s(phx-value-section="detail_items")
     end
 
     test "the contributed column appears in the Columns modal's Available list for categories",
@@ -60,7 +60,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       opened = render_click(view, "show_column_modal", %{})
       assert opened =~ "Fake status"
       assert opened =~ ~s(phx-value-column_id="fake:status")
-      assert opened =~ ~s(phx-value-scope="detail_categories")
+      assert opened =~ ~s(phx-value-section="detail_categories")
     end
 
     test "adding it renders the extension's cell content in the items table", %{conn: conn} do
@@ -74,7 +74,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "fake:status",
-          "scope" => "detail_items"
+          "section" => "detail_items"
         })
 
       assert updated =~ "fake-status"
@@ -93,7 +93,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "fake:status",
-          "scope" => "detail_categories"
+          "section" => "detail_categories"
         })
 
       assert updated =~ "fake-status"
@@ -117,7 +117,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "fake:status",
-          "scope" => "detail_items"
+          "section" => "detail_items"
         })
 
       marker = "ext-fake-status-#{item.uuid}"
@@ -136,7 +136,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "fake:status",
-          "scope" => "detail_categories"
+          "section" => "detail_categories"
         })
 
       marker = "ext-fake-status-#{category.uuid}"
@@ -163,13 +163,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
 
       # Simulates an admin who picked the extension's column while it was
       # registered; the extension is gone by the time this user loads the
-      # page (uninstalled, disabled, or simply not on this deploy). Needs
-      # the REAL user row (`with_scope/2`'s bare `%{uuid:}` doesn't match
-      # `ViewConfig.save/3`'s `%Auth.User{}` clause and would silently
-      # no-op the save).
+      # page (uninstalled, disabled, or simply not on this deploy).
       user = Auth.get_user!(scope.user.uuid)
       cfg = %{ViewConfig.load(user, :detail_items) | columns: ["sku", "fake:status"]}
-      {:ok, _updated_user} = ViewConfig.save(user, :detail_items, cfg)
+      {:ok, _prefs} = ViewConfig.save(user, :detail_items, cfg)
       conn = with_scope(conn, scope)
 
       {:ok, _view, html} = live(conn, url(catalogue.uuid) <> "?mode=items")
@@ -247,13 +244,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
 
         render_click(view, "add_column", %{
           "column_id" => unquote(col_id),
-          "scope" => "detail_items"
+          "section" => "detail_items"
         })
 
         updated =
           render_click(view, "add_column", %{
             "column_id" => "hostile:ok",
-            "scope" => "detail_items"
+            "section" => "detail_items"
           })
 
         assert Process.alive?(view.pid)
@@ -277,13 +274,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
 
         render_click(view, "add_column", %{
           "column_id" => unquote(col_id),
-          "scope" => "detail_categories"
+          "section" => "detail_categories"
         })
 
         updated =
           render_click(view, "add_column", %{
             "column_id" => "hostile:ok",
-            "scope" => "detail_categories"
+            "section" => "detail_categories"
           })
 
         assert Process.alive?(view.pid)
@@ -309,7 +306,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "hostile:label_raises",
-          "scope" => "detail_items"
+          "section" => "detail_items"
         })
 
       assert Process.alive?(view.pid)

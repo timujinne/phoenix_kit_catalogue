@@ -596,9 +596,6 @@ msgstr "or drag & drop"
 msgid "File is too large (max 10MB)."
 msgstr "File is too large (max 10MB)."
 
-msgid "File type not accepted."
-msgstr "File type not accepted."
-
 msgid "Only PDF files are accepted."
 msgstr "Only PDF files are accepted."
 
@@ -928,15 +925,6 @@ msgstr "Permanently deleted %{count} items."
 #, elixir-autogen
 msgid "Columns"
 msgstr "Columns"
-
-msgid "Shown"
-msgstr "Shown"
-
-msgid "Available"
-msgstr "Available"
-
-msgid "Reset"
-msgstr "Reset"
 
 msgid "Apply"
 msgstr "Apply"
@@ -1846,9 +1834,6 @@ msgstr ""
 msgid "Could not load more matches. Please try again."
 msgstr ""
 
-msgid "Could not prepare the files folder."
-msgstr ""
-
 msgid "Could not remove file."
 msgstr ""
 
@@ -2526,9 +2511,6 @@ msgstr ""
 msgid "Too many files at once."
 msgstr ""
 
-msgid "Too many files."
-msgstr ""
-
 msgid "Trashed"
 msgstr ""
 
@@ -2549,15 +2531,6 @@ msgstr ""
 
 msgid "Upload & parse"
 msgstr ""
-
-msgid "Upload error: %{reason}"
-msgstr ""
-
-msgid "Upload failed for %{name}."
-msgstr ""
-
-msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
-msgstr "%{name} is identical to %{existing}, which is already attached — nothing was added."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr ""
@@ -2697,6 +2670,72 @@ msgid "set"
 msgstr ""
 
 msgid "sheet"
+msgstr ""
+
+msgid "h"
+msgstr ""
+
+msgid "service"
+msgstr ""
+
+msgid "visit"
+msgstr ""
+
+msgid "km"
+msgstr ""
+
+msgid "pack"
+msgstr ""
+
+msgid "roll"
+msgstr ""
+
+msgid "kg"
+msgstr ""
+
+msgid "l"
+msgstr ""
+
+msgid "m³"
+msgstr ""
+
+msgid "Hour"
+msgstr ""
+
+msgid "Service (teenus)"
+msgstr ""
+
+msgid "Visit (väljasõit)"
+msgstr ""
+
+msgid "Kilometer"
+msgstr ""
+
+msgid "Pack"
+msgstr ""
+
+msgid "Roll"
+msgstr ""
+
+msgid "Kilogram"
+msgstr ""
+
+msgid "Litre"
+msgstr ""
+
+msgid "m³ (cubic meter)"
+msgstr ""
+
+msgid "Pair"
+msgstr ""
+
+msgid "Sheet"
+msgstr ""
+
+msgid "Units for goods"
+msgstr ""
+
+msgid "Units for services"
 msgstr ""
 
 msgid "unit"
@@ -3207,12 +3246,12 @@ msgstr "Include subcategory items"
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4523
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5033
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5136
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "New subcategory"
-msgstr "New Category"
+msgstr ""
 
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3459
-#, elixir-autogen, elixir-format, fuzzy
+#, elixir-autogen, elixir-format
 msgid "Search for"
 msgstr ""
 
@@ -3591,7 +3630,7 @@ msgstr ""
 msgid "Minutes between runs"
 msgstr ""
 
-msgid "Most jobs per run"
+msgid "Most jobs queued at once"
 msgstr ""
 
 msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
@@ -3660,6 +3699,9 @@ msgstr ""
 msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
 msgstr ""
 
+msgid "The chosen parent is no longer available. Pick another place."
+msgstr ""
+
 msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
 msgstr ""
 
@@ -3676,4 +3718,31 @@ msgid "uncategorized"
 msgstr ""
 
 msgid "Pick the category to import into, or choose another option."
+msgstr ""
+
+msgid "Item type"
+msgstr ""
+
+msgid "Default item type"
+msgstr ""
+
+msgid "Goods"
+msgstr ""
+
+msgid "Service"
+msgstr ""
+
+msgid "— As in catalogue (%{type}) —"
+msgstr ""
+
+msgid "Universal"
+msgstr ""
+
+msgid "Furniture"
+msgstr ""
+
+msgid "Materials"
+msgstr ""
+
+msgid "JSON (export)"
 msgstr ""

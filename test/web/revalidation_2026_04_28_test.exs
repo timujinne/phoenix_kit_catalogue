@@ -10,7 +10,6 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
-  alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Import.Mapper
   alias PhoenixKitCatalogue.Web.Helpers, as: WebHelpers
 
@@ -196,35 +195,6 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
         assert Regex.match?(pattern, source),
                "Mapper label #{inspect(label)} has no `defp translate_target/1` clause in import_live.ex — extractor invisible."
       end)
-    end
-  end
-
-  describe "Batch 2 — ActivityLog rescue widened" do
-    test "ActivityLog.log/1 swallows DBConnection.OwnershipError silently" do
-      # Async PubSub broadcasts crossing into a logging path without
-      # sandbox checkout raise OwnershipError, not Postgrex.Error.
-      # Simulate by spawning an unowned process and calling log/1 from
-      # there. The rescue must convert this into :ok, no warning.
-      log =
-        capture_log(fn ->
-          parent = self()
-
-          spawn(fn ->
-            result =
-              ActivityLog.log(%{
-                action: "catalogue.test.ownership_error",
-                resource_type: "catalogue",
-                resource_uuid: Ecto.UUID.generate()
-              })
-
-            send(parent, {:done, result})
-          end)
-
-          assert_receive {:done, :ok}, 1_000
-        end)
-
-      refute log =~ "PhoenixKitCatalogue activity log failed",
-             "Expected DBConnection.OwnershipError to be swallowed silently, but got warning."
     end
   end
 

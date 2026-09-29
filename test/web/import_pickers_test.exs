@@ -31,7 +31,7 @@ defmodule PhoenixKitCatalogue.Web.ImportPickersTest do
 
   defp assigns(view), do: :sys.get_state(view.pid).socket.assigns
 
-  defp row(view, picker, id), do: element(view, ~s(##{picker} [data-place="#{id}"]))
+  defp row(view, picker, id), do: element(view, ~s(##{picker} [data-tree-node="#{id}"]))
 
   defp toggle(view, picker, id) do
     view
@@ -109,7 +109,7 @@ defmodule PhoenixKitCatalogue.Web.ImportPickersTest do
 
     send(
       view.pid,
-      {PhoenixKitCatalogue.Web.Components.PlacePicker, "import-category-picker",
+      {PhoenixKitWeb.Components.TreePicker, "import-category-picker",
        "category:" <> ctx.foreign.uuid}
     )
 

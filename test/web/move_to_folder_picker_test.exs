@@ -29,7 +29,7 @@ defmodule PhoenixKitCatalogue.Web.MoveToFolderPickerTest do
     do: render_click(view, "open_move", %{"type" => type, "uuid" => uuid})
 
   defp pick(view, id),
-    do: view |> element(~s(#move-folder-picker [data-place="#{id}"])) |> render_click()
+    do: view |> element(~s(#move-folder-picker [data-tree-node="#{id}"])) |> render_click()
 
   defp confirm(view), do: view |> form("#move-to-folder-form") |> render_submit()
 

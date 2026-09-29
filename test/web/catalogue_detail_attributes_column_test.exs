@@ -56,7 +56,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       html =
         view
-        |> render_click("add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+        |> render_click("add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       # The attached item's row carries the selected value's label —
       # never just the swatch icon with nothing readable next to it.
@@ -93,7 +93,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       html =
         view
-        |> render_click("add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+        |> render_click("add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       row = row_segment(html, "Whole set item")
       assert row =~ set.display_name
@@ -127,7 +127,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       html =
         view
-        |> render_click("add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+        |> render_click("add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       # `<:card_body>` (catalogue_detail_live.ex) is the OTHER surface
       # `attribute_cell_text/1` feeds — the `<tr>`-scoped assertions above
@@ -170,7 +170,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       html =
         view
-        |> render_click("add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+        |> render_click("add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       row = row_segment(html, "Hidden item")
       assert row =~ "Silver"
@@ -205,7 +205,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       html =
         view
-        |> render_click("add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+        |> render_click("add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       row = row_segment(html, "Ghost item")
       assert row =~ set.display_name
@@ -235,7 +235,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
       assert :sys.get_state(view.pid).socket.assigns.attribute_map[item.uuid] == true
 
       # Column added: the full resolve replaces the presence marker.
-      render_click(view, "add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+      render_click(view, "add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       assert [%{name: "Gate finish"}] =
                :sys.get_state(view.pid).socket.assigns.attribute_map[item.uuid]
@@ -243,7 +243,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
       # Column removed again: back to presence only.
       render_click(view, "remove_column", %{
         "column_id" => "attributes",
-        "scope" => "detail_items"
+        "section" => "detail_items"
       })
 
       assert :sys.get_state(view.pid).socket.assigns.attribute_map[item.uuid] == true
@@ -265,7 +265,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
 
       {:ok, view, _html} = live(conn, cat_url(catalogue.uuid, category.uuid) <> "&mode=items")
 
-      render_click(view, "add_column", %{"column_id" => "attributes", "scope" => "detail_items"})
+      render_click(view, "add_column", %{"column_id" => "attributes", "section" => "detail_items"})
 
       {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
       :ok = Catalogue.set_attribute_set_selection(item.uuid, set.uuid, [brass.slug])

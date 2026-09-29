@@ -92,16 +92,19 @@ defmodule PhoenixKitCatalogue.Web.Settings do
 
   @doc """
   Toggles the automatic sweep. Flipping it ON seeds the sweep's
-  self-rescheduling chain (`TranslationSweepWorker.ensure_scheduled/0`) —
+  self-rescheduling chain (`TranslationSweepWorker.reschedule/0`) —
   the boot-time bootstrap only seeds it when already enabled (additive
   for hosts that never opt in), so this write is what starts the chain
-  the first time an operator turns the sweep on.
+  the first time an operator turns the sweep on. Rescheduling rather than
+  just seeding: a chain left from an earlier "on" keeps ticking at the
+  interval it had, and an interval saved while the sweep was off does not
+  move it.
   """
   @spec update_sweep_enabled(boolean()) :: {:ok, struct()} | {:error, term()}
   def update_sweep_enabled(enabled?) when is_boolean(enabled?) do
     with {:ok, setting} <-
            Settings.update_boolean_setting_with_module(@enabled_key, enabled?, @module_key) do
-      if enabled?, do: TranslationSweepWorker.ensure_scheduled()
+      if enabled?, do: TranslationSweepWorker.reschedule()
       {:ok, setting}
     end
   end
@@ -112,10 +115,21 @@ defmodule PhoenixKitCatalogue.Web.Settings do
     Settings.get_integer_setting(@interval_key, @default_interval_minutes)
   end
 
-  @doc "Sets the sweep interval, in minutes."
+  @doc """
+  Sets the sweep interval, in minutes, and reschedules a running chain at
+  it — a shortened interval would otherwise wait out the old one.
+  """
   @spec update_sweep_interval_minutes(pos_integer()) :: {:ok, struct()} | {:error, term()}
   def update_sweep_interval_minutes(minutes) when is_integer(minutes) and minutes > 0 do
-    Settings.update_setting_with_module(@interval_key, Integer.to_string(minutes), @module_key)
+    with {:ok, setting} <-
+           Settings.update_setting_with_module(
+             @interval_key,
+             Integer.to_string(minutes),
+             @module_key
+           ) do
+      if sweep_enabled?(), do: TranslationSweepWorker.reschedule()
+      {:ok, setting}
+    end
   end
 
   @doc """
@@ -143,13 +157,16 @@ defmodule PhoenixKitCatalogue.Web.Settings do
     Settings.update_json_setting_with_module(@langs_key, %{"codes" => langs}, @module_key)
   end
 
-  @doc "Maximum number of translation jobs one sweep tick enqueues."
+  @doc """
+  The most catalogue translation jobs that may be waiting or running at
+  once — a sweep tick tops up to it.
+  """
   @spec sweep_max_per_run() :: pos_integer()
   def sweep_max_per_run do
     Settings.get_integer_setting(@max_per_run_key, @default_max_per_run)
   end
 
-  @doc "Sets the per-tick enqueue cap."
+  @doc "Sets the most catalogue translation jobs waiting or running at once."
   @spec update_sweep_max_per_run(pos_integer()) :: {:ok, struct()} | {:error, term()}
   def update_sweep_max_per_run(n) when is_integer(n) and n > 0 do
     Settings.update_setting_with_module(@max_per_run_key, Integer.to_string(n), @module_key)

@@ -596,9 +596,6 @@ msgstr ""
 msgid "File is too large (max 10MB)."
 msgstr ""
 
-msgid "File type not accepted."
-msgstr ""
-
 msgid "Only PDF files are accepted."
 msgstr ""
 
@@ -927,15 +924,6 @@ msgstr ""
 #: lib/phoenix_kit_catalogue/web/components/browse.ex:659
 #, elixir-autogen
 msgid "Columns"
-msgstr ""
-
-msgid "Shown"
-msgstr ""
-
-msgid "Available"
-msgstr ""
-
-msgid "Reset"
 msgstr ""
 
 msgid "Apply"
@@ -1847,9 +1835,6 @@ msgstr ""
 msgid "Could not load more matches. Please try again."
 msgstr ""
 
-msgid "Could not prepare the files folder."
-msgstr ""
-
 msgid "Could not remove file."
 msgstr ""
 
@@ -2527,9 +2512,6 @@ msgstr ""
 msgid "Too many files at once."
 msgstr ""
 
-msgid "Too many files."
-msgstr ""
-
 msgid "Trashed"
 msgstr ""
 
@@ -2550,15 +2532,6 @@ msgstr ""
 
 msgid "Upload & parse"
 msgstr ""
-
-msgid "Upload error: %{reason}"
-msgstr ""
-
-msgid "Upload failed for %{name}."
-msgstr ""
-
-msgid "%{name} is identical to %{existing}, which is already attached — nothing was added."
-msgstr "%{name} est identique au fichier déjà joint %{existing} — rien n'a été ajouté."
 
 msgid "Upload failed for an unexpected reason. Please try again."
 msgstr ""
@@ -2699,6 +2672,72 @@ msgstr ""
 
 msgid "sheet"
 msgstr ""
+
+msgid "h"
+msgstr "h"
+
+msgid "service"
+msgstr "prestation"
+
+msgid "visit"
+msgstr "déplacement"
+
+msgid "km"
+msgstr "km"
+
+msgid "pack"
+msgstr "paquet"
+
+msgid "roll"
+msgstr "rouleau"
+
+msgid "kg"
+msgstr "kg"
+
+msgid "l"
+msgstr "l"
+
+msgid "m³"
+msgstr "m³"
+
+msgid "Hour"
+msgstr "Heure"
+
+msgid "Service (teenus)"
+msgstr "Prestation"
+
+msgid "Visit (väljasõit)"
+msgstr "Déplacement"
+
+msgid "Kilometer"
+msgstr "Kilomètre"
+
+msgid "Pack"
+msgstr "Paquet"
+
+msgid "Roll"
+msgstr "Rouleau"
+
+msgid "Kilogram"
+msgstr "Kilogramme"
+
+msgid "Litre"
+msgstr "Litre"
+
+msgid "m³ (cubic meter)"
+msgstr "m³ (mètre cube)"
+
+msgid "Pair"
+msgstr "Paire"
+
+msgid "Sheet"
+msgstr "Feuille"
+
+msgid "Units for goods"
+msgstr "Unités pour marchandises"
+
+msgid "Units for services"
+msgstr "Unités pour prestations"
 
 msgid "unit"
 msgstr ""
@@ -3209,7 +3248,7 @@ msgstr ""
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5136
 #, elixir-autogen, elixir-format
 msgid "New subcategory"
-msgstr ""
+msgstr "Nouvelle sous-catégorie"
 
 #: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3459
 #, elixir-autogen, elixir-format
@@ -3591,8 +3630,8 @@ msgstr "Listes"
 msgid "Minutes between runs"
 msgstr "Minutes entre deux exécutions"
 
-msgid "Most jobs per run"
-msgstr "Tâches maximum par exécution"
+msgid "Most jobs queued at once"
+msgstr "Tâches maximum en file à la fois"
 
 msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
 msgstr "Désactivée par défaut. Une fois activée, la planification démarre aussitôt ; chaque exécution met en file la traduction de tout ce qui manque encore."
@@ -3660,6 +3699,9 @@ msgstr "Destination :"
 msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
 msgstr "Choisissez une catégorie où l’imbriquer, ou le catalogue lui-même pour son premier niveau. Vous pourrez la déplacer plus tard."
 
+msgid "The chosen parent is no longer available. Pick another place."
+msgstr "Le parent choisi n’est plus disponible. Choisissez un autre emplacement."
+
 msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
 msgstr "Choisissez où la placer : au premier niveau d’un catalogue ou sous une catégorie. Ses sous-catégories et articles suivent."
 
@@ -3677,3 +3719,30 @@ msgstr "sans catégorie"
 
 msgid "Pick the category to import into, or choose another option."
 msgstr "Choisissez la catégorie d’import ou une autre option."
+
+msgid "Item type"
+msgstr "Type d'article"
+
+msgid "Default item type"
+msgstr "Type d'article par défaut"
+
+msgid "Goods"
+msgstr "Marchandise"
+
+msgid "Service"
+msgstr "Service"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Comme dans le catalogue (%{type}) —"
+
+msgid "Universal"
+msgstr "Universel"
+
+msgid "Furniture"
+msgstr "Quincaillerie"
+
+msgid "Materials"
+msgstr "Matériaux"
+
+msgid "JSON (export)"
+msgstr "JSON (export)"

@@ -42,6 +42,18 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveWizardTest do
       assert Enum.find(mappings, &(&1.column_index == 0)).target == :skip
     end
 
+    test "update_mapping sets a column to :item_type, and it is unique",
+         %{conn: conn, catalogue: cat} do
+      view = mount_at_map_step(conn, cat, headers: ~w(c0 c1 c2))
+
+      render_change(view, "update_mapping", %{"column" => "0", "target" => "item_type"})
+      render_change(view, "update_mapping", %{"column" => "1", "target" => "item_type"})
+
+      mappings = current_assigns(view).column_mappings
+      assert Enum.find(mappings, &(&1.column_index == 1)).target == :item_type
+      assert Enum.find(mappings, &(&1.column_index == 0)).target == :skip
+    end
+
     test "update_mapping sets a column to :name", %{conn: conn, catalogue: cat} do
       view = mount_at_map_step(conn, cat)
 

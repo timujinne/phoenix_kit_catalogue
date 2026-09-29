@@ -20,14 +20,42 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   @foreign_key_type UUIDv7
 
   @statuses ~w(active inactive discontinued deleted)
-  @units ~w(piece set pair sheet m2 running_meter)
+  @goods_units ~w(piece set pair sheet m2 running_meter pack roll kg litre m3)
+  @service_units ~w(hour service visit km)
+  @units @goods_units ++ @service_units
 
   # Mirrors the DB CHECK added in V179. Keep the two in step.
   @manufacturer_sources ~w(local crm_company)
   @default_units ~w(percent flat)
+  # Mirrors the V4 CHECK. `nil` on an item = as in its catalogue.
+  @item_types ~w(goods service)
 
   @spec allowed_units() :: [String.t()]
   def allowed_units, do: @units
+
+  @doc """
+  Unit codes split into `{group_label, codes}` pairs — goods units, then
+  service units — for building a grouped `<optgroup>` select
+  (`Phoenix.HTML.Form.options_for_select/2` accepts `{label, options}`
+  tuples). Every code `allowed_units/0` returns appears exactly once.
+  """
+  @spec unit_groups() :: [{String.t(), [String.t()]}]
+  def unit_groups, do: [{"goods", @goods_units}, {"services", @service_units}]
+
+  @doc "The item types an item or catalogue can carry: `goods`, `service`."
+  @spec allowed_item_types() :: [String.t()]
+  def allowed_item_types, do: @item_types
+
+  @doc """
+  Human-facing label of an item type (`"goods"` → "Goods", `"service"` →
+  "Service"), translated. `nil` collapses to `""`; an unknown string passes
+  through.
+  """
+  @spec item_type_label(term()) :: String.t()
+  def item_type_label("goods"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Goods")
+  def item_type_label("service"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Service")
+  def item_type_label(other) when is_binary(other), do: other
+  def item_type_label(_), do: ""
 
   @spec allowed_default_units() :: [String.t()]
   def allowed_default_units, do: @default_units
@@ -48,6 +76,15 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   def unit_label("sheet"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "sheet")
   def unit_label("m2"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m²")
   def unit_label("running_meter"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "rm")
+  def unit_label("hour"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "h")
+  def unit_label("service"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "service")
+  def unit_label("visit"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "visit")
+  def unit_label("km"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "km")
+  def unit_label("pack"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "pack")
+  def unit_label("roll"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "roll")
+  def unit_label("kg"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "kg")
+  def unit_label("litre"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "l")
+  def unit_label("m3"), do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "m³")
   def unit_label(other) when is_binary(other), do: other
   def unit_label(_), do: ""
 
@@ -71,6 +108,10 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     field(:default_value, :decimal)
     field(:default_unit, :string)
     field(:unit, :string, default: "piece")
+    # Goods or service (V4). `nil` means "as in the catalogue", the same
+    # inherit-or-override scheme as markup/discount — resolve it with
+    # `effective_type/1,2`, never read it raw.
+    field(:item_type, :string)
     field(:status, :string, default: "active")
     field(:position, :integer, default: 0)
     field(:data, :map, default: %{})
@@ -139,6 +180,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     :default_value,
     :default_unit,
     :unit,
+    :item_type,
     :status,
     :position,
     :category_uuid,
@@ -168,6 +210,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     )
     |> validate_number(:default_value, greater_than_or_equal_to: 0)
     |> validate_inclusion(:default_unit, @default_units ++ [nil])
+    |> validate_inclusion(:item_type, @item_types ++ [nil])
     |> foreign_key_constraint(:catalogue_uuid)
     |> foreign_key_constraint(:category_uuid)
     |> unique_constraint(:slug,
@@ -178,7 +221,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
 
   # `nil` is never a legitimate STORED value for a top-level `data` key —
   # a caller that wants to clear one (see
-  # `PhoenixKitCatalogue.Attachments.inject_featured_image/2` /
+  # `PhoenixKitCatalogue.Attachments.inject_attachment_data/2` /
   # `inject_media_order/2`, which write an explicit `nil` as their
   # "absent, not merely untouched" signal for
   # `Catalogue.update_item/3`'s `:data_owned_keys` splicing) means
@@ -194,6 +237,47 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     do: Map.reject(data, fn {_k, v} -> is_nil(v) end)
 
   defp drop_nil_data_values(other), do: other
+
+  @doc """
+  The item type that actually applies — the item's own `item_type` if set,
+  otherwise `catalogue_type`, otherwise `"goods"`. Pure, like
+  `effective_markup/2`: pass `nil` for an item without a catalogue.
+  """
+  @spec effective_type(t(), String.t() | nil) :: String.t()
+  def effective_type(%__MODULE__{item_type: type}, catalogue_type),
+    do: type || catalogue_type || "goods"
+
+  @doc """
+  The item type that actually applies, read from the item's preloaded
+  catalogue — or, when `:catalogue` is not loaded, from its preloaded
+  `category.catalogue`. An item with no catalogue reads as goods (unless it
+  names its own type).
+
+  For callers that GUARANTEE the preload (`Catalogue.list_items_by_uuids/2`
+  loads `:catalogue`): with neither loaded it raises `ArgumentError`, even for an
+  item that names its own type, so a missing preload fails on the first
+  item rather than on the first inheriting one. UI code that cannot
+  guarantee it uses `PhoenixKitCatalogue.Catalogue.effective_item_type/1`,
+  which loads what is missing and never raises.
+  """
+  @spec effective_type(t()) :: String.t()
+  def effective_type(%__MODULE__{} = item), do: effective_type(item, loaded_catalogue_type(item))
+
+  @doc "Whether the item is a service — `effective_type/1` (same preload contract)."
+  @spec service?(t()) :: boolean()
+  def service?(%__MODULE__{} = item), do: effective_type(item) == "service"
+
+  defp loaded_catalogue_type(%{catalogue: %{item_type: type}}), do: type
+  defp loaded_catalogue_type(%{catalogue: nil}), do: nil
+  defp loaded_catalogue_type(%{category: %{catalogue: %{item_type: type}}}), do: type
+  defp loaded_catalogue_type(%{category: %{catalogue: nil}}), do: nil
+
+  defp loaded_catalogue_type(%{uuid: uuid}) do
+    raise ArgumentError,
+          "Item.effective_type/1 needs the item's :catalogue (or category: :catalogue) " <>
+            "preloaded, item #{inspect(uuid)} has neither — preload it, or use " <>
+            "Catalogue.effective_item_type/1"
+  end
 
   @doc """
   Calculates the sale price for an item.

@@ -419,12 +419,10 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLive do
       socket={@socket}
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      page_title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDF library")}
-      page_subtitle={
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues") <>
-          " · " <>
-          Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} PDFs", count: length(@pdfs))
-      }
+      page_title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "PDFs")}
+      page_section={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
+      page_section_path={Paths.index()}
+      page_subtitle={Gettext.gettext(PhoenixKitCatalogue.Gettext, "%{count} PDFs", count: length(@pdfs))}
       current_path={assigns[:url_path] || Paths.pdfs()}
       current_locale={assigns[:current_locale]}
     >

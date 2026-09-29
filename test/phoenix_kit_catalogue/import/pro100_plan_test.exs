@@ -98,7 +98,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     r =
       row(%{
         format: :materials,
-        unit: "m³",
+        unit: "gross",
         base_price: Decimal.new("100.00"),
         service: %{"c3" => "0", "c5" => "1.0"}
       })
@@ -107,7 +107,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     assert [change] = plan.updates
     assert :unit_unrecognized in change.flags
     refute Map.has_key?(change.changes, :unit)
-    assert change.data["original_unit"] == "m³"
+    assert change.data["original_unit"] == "gross"
   end
 
   test "an unmatched row with a usable id and name becomes a create, not a skip" do
@@ -237,11 +237,11 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     end
 
     test "omits :unit but stashes original_unit for an unrecognized materials unit" do
-      r = row(%{format: :materials, unit: "m³", service: %{"c3" => "0", "c5" => "1.0"}})
+      r = row(%{format: :materials, unit: "gross", service: %{"c3" => "0", "c5" => "1.0"}})
       plan = Pro100Plan.build([r], Matcher.index([]), nil)
       assert [create] = plan.creates
       refute Map.has_key?(create.attrs, :unit)
-      assert create.attrs.data["original_unit"] == "m³"
+      assert create.attrs.data["original_unit"] == "gross"
       assert :unit_unrecognized in create.flags
     end
 

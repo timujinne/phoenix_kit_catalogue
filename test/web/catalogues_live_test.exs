@@ -6,6 +6,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
   """
   use PhoenixKitCatalogue.LiveCase
 
+  alias PhoenixKit.Users.ViewPrefs
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.ViewConfig
 
@@ -56,28 +57,31 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       refute html =~ "Trashed cat"
     end
 
-    test "the drilled folder is never persisted to the user's view config", %{conn: conn} do
+    test "the drilled folder is never persisted to the user's view config", %{
+      conn: conn,
+      scope: scope
+    } do
       {:ok, folder} = Catalogue.create_folder(%{name: "Unsaved folder"})
 
-      {:ok, view, _html} = live(conn, @base)
+      user = %{uuid: scope.user.uuid}
+      {:ok, view, _html} = live(with_scope(conn, scope), @base)
       render_click(view, "navigate_folder", %{"uuid" => folder.uuid})
 
-      # Round-trip through ViewConfig: a save of the current cfg (any
-      # preference change triggers one) must not carry the folder, and
-      # a legacy stored folder is ignored on load.
-      user = %PhoenixKit.Users.Auth.User{
-        uuid: UUIDv7.generate(),
-        custom_fields: %{
-          "catalogue_view_configs" => %{
-            "catalogues" => %{"filters" => %{"folder" => folder.uuid, "status" => "active"}}
-          }
-        }
-      }
+      # A preference change inside the folder saves no folder.
+      render_change(view, "set_filter", %{"column_id" => "status", "value" => "active"})
+      stored = ViewPrefs.get(user, "catalogue.catalogues")
+      assert stored["filters"] == %{"status" => "active"}
+
+      # A legacy stored folder filter is ignored on load, the rest kept.
+
+      {:ok, _} =
+        ViewPrefs.put(user, "catalogue.catalogues", %{
+          "filters" => %{"folder" => folder.uuid, "status" => "active"}
+        })
 
       cfg = ViewConfig.load(user, :catalogues)
       refute Map.has_key?(cfg.filters, "folder")
       assert cfg.filters["status"] == "active"
-      _ = view
     end
   end
 

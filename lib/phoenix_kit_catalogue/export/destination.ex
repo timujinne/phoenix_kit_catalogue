@@ -16,12 +16,12 @@ defmodule PhoenixKitCatalogue.Export.Destination do
   @doc "Machine key for the destination (e.g. `:pro100`)."
   @callback key() :: atom()
 
-  @doc "Human-readable label shown in the UI select."
+  @doc "Human-readable label shown in the UI select, translated at call time."
   @callback label() :: String.t()
 
   @doc """
   Supported formats as `[{key, label}]` pairs.
-  `key` is an atom used when calling `render/2`; `label` is the display string.
+  `key` is an atom used when calling `render/2`; `label` is the display string, translated at call time.
   """
   @callback formats() :: [{atom(), String.t()}]
 

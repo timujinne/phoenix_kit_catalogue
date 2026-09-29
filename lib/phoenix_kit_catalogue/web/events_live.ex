@@ -309,11 +309,9 @@ defmodule PhoenixKitCatalogue.Web.EventsLive do
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
       page_title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events")}
-      page_subtitle={
-        Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues") <>
-          " · " <>
-          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events: %{count}", count: @total)
-      }
+      page_section={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
+      page_section_path={Paths.index()}
+      page_subtitle={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Events: %{count}", count: @total)}
       current_path={assigns[:url_path] || Paths.events()}
       current_locale={assigns[:current_locale]}
     >

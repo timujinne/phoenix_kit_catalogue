@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Export.Universal do
   def key, do: :universal
 
   @impl true
-  def label, do: "Универсальный (Universal)"
+  def label, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Universal")
 
   @impl true
   def formats do

@@ -62,7 +62,7 @@ defmodule PhoenixKitCatalogue.AIPromptTest do
   end
 
   describe "ensure_sets_prompt/0" do
-    test "creates a prompt distinct from ensure_prompt/0's, with a label/title vocabulary" do
+    test "creates a prompt distinct from ensure_prompt/0's, with no per-field slots" do
       assert {:ok, sets_uuid} = AIPrompt.ensure_sets_prompt()
       assert {:ok, item_uuid} = AIPrompt.ensure_prompt()
 
@@ -71,9 +71,12 @@ defmodule PhoenixKitCatalogue.AIPromptTest do
       sets_prompt = PhoenixKitAI.get_prompt(sets_uuid)
       assert sets_prompt.slug == AIPrompt.sets_slug()
       refute sets_prompt.slug == AIPrompt.slug()
-      assert sets_prompt.content =~ "{{label}}"
-      assert sets_prompt.content =~ "{{title}}"
-      refute sets_prompt.content =~ "{{seo_title}}"
+      # The fields arrive through the engine's block; a `{{label}}` slot left
+      # unbound by a title-only call is what the model used to comment on.
+      assert sets_prompt.content =~ "{{SourceFields}}"
+      refute sets_prompt.content =~ "{{label}}"
+      refute sets_prompt.content =~ "{{title}}"
+      refute sets_prompt.content =~ "seo_title"
     end
 
     test "is idempotent by slug — repeated calls return the same uuid" do

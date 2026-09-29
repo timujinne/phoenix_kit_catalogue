@@ -748,7 +748,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       render_click(view, "show_column_modal", %{})
       # Drop the SKU column — the editor is live, no Apply step.
       updated =
-        render_click(view, "remove_column", %{"column_id" => "sku", "scope" => "detail_items"})
+        render_click(view, "remove_column", %{"column_id" => "sku", "section" => "detail_items"})
 
       refute updated =~ "COL-1"
       assert updated =~ "Col item"
@@ -766,7 +766,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       updated =
         render_click(view, "add_column", %{
           "column_id" => "updated",
-          "scope" => "detail_categories"
+          "section" => "detail_categories"
         })
 
       assert updated =~ "Updated"
@@ -787,11 +787,11 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       # The modal carries a section per table, each editing its own
       # scope without touching the other.
       opened = render_click(view, "show_column_modal", %{})
-      assert opened =~ "columns-shown-detail_categories"
-      assert opened =~ "columns-shown-detail_items"
+      assert opened =~ "catalogue-columns-modal-detail_categories-selected"
+      assert opened =~ "catalogue-columns-modal-detail_items-selected"
 
       updated =
-        render_click(view, "remove_column", %{"column_id" => "sku", "scope" => "detail_items"})
+        render_click(view, "remove_column", %{"column_id" => "sku", "section" => "detail_items"})
 
       refute updated =~ "DIR-1"
 
@@ -1079,7 +1079,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       render_hook(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
 
       view
-      |> element(~s(#bulk-move-items-picker [data-place="catalogue:#{catalogue.uuid}"]))
+      |> element(~s(#bulk-move-items-picker [data-tree-node="catalogue:#{catalogue.uuid}"]))
       |> render_click()
 
       render_click(view, "confirm_bulk_move_items", %{})

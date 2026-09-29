@@ -215,8 +215,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   Pass `current_user` (the `phoenix_kit_users` struct the host's
   live_session already assigns) and the selector remembers the view and
-  column visibility each user last chose — stored beside the admin
-  tables' preferences in `custom_fields` (`ViewConfig.load_selector/1`),
+  column visibility each user last chose — stored in core's per-user
+  view preferences beside the admin tables' (`ViewConfig.load_selector/1`),
   one set per user across every selector embed. The saved choice beats
   the host's STARTING attrs (`view`, `hidden_columns`), never the grant:
   saved names outside `columns` are ignored, and quantity mode still
@@ -262,8 +262,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   ## Scope
 
   `scope` fixes what the user may browse: any of `:catalogue_uuids`,
-  `:category_uuids`, `:only`, `:statuses`, `:include_descendants` (the
-  `Catalogue.search_items/2` vocabulary). It is enforced in `BrowseState`
+  `:category_uuids`, `:only`, `:statuses`, `:include_descendants`,
+  `:item_types` (the `Catalogue.search_items/2` vocabulary; `item_types:
+  ["goods"]` keeps services out of a warehouse picker, and the level
+  counters count by it too). It is enforced in `BrowseState`
   — every fetch re-derives from it, and client events can only narrow
   within it, so a crafted event cannot browse or select outside what the
   host allowed. Selection events are additionally accepted only for uuids
@@ -320,7 +322,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   import PhoenixKitCatalogue.Web.Components.Browse
 
-  alias PhoenixKit.Users.Auth
   alias PhoenixKit.Utils.Number
   require Logger
 
@@ -383,7 +384,6 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   defp initialize(socket, assigns) do
     original_scope = assigns[:scope] || %{}
-    assigns = Map.put(assigns, :current_user, refresh_user(assigns[:current_user]))
 
     # BrowseState.init/1 validates the scope keys (atoms, search_items/2
     # vocabulary) so a string-keyed map cannot silently widen browsing.
@@ -672,28 +672,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     Enum.filter(granted, &(to_string(&1) in stored))
   end
 
-  # The host's current_user assign is a snapshot from the HOST's mount —
-  # a choice saved in a previous open of this selector (same page visit)
-  # is invisible to it, so a reopen would load yesterday's prefs and the
-  # next save would write over today's. Re-read the row at init; keep the
-  # snapshot when the re-read fails (a stub user in tests, no row).
-  defp refresh_user(%Auth.User{uuid: uuid} = user) do
-    Auth.get_user!(uuid)
-  rescue
-    _ -> user
-  end
-
-  defp refresh_user(other), do: other
-
-  # Best-effort persistence: store what the user just chose and keep the
-  # REFRESHED user on the socket — the save merges into the whole
-  # custom_fields map, so a stale snapshot would clobber the previous
-  # choice on the next save (the save_view_on/2 lesson in ViewConfig).
+  # Best-effort persistence of what the user just chose (the module-wide
+  # view-preferences row; see ViewConfig).
   defp persist_selector(socket, choices) do
-    case ViewConfig.save_selector(socket.assigns.current_user, choices) do
-      {:ok, updated} -> assign(socket, current_user: updated)
-      _ -> socket
-    end
+    _ = ViewConfig.save_selector(socket.assigns.current_user, choices)
+    socket
   end
 
   # A column toggle both applies and persists: what is saved is the
@@ -912,6 +895,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
        when is_list(uuids) and length(uuids) > 1 do
     catalogue_uuids = Enum.map(uuids, &normalize_uuid/1)
     base = category_tree_base(catalogue_uuids, scope, original, locale)
+    type_opts = item_type_opts(scope)
 
     # Catalogue-first drill (Max, 2026-08-31: "for multiple catalogues we
     # should first have the user choose a catalogue"): the ROOT level
@@ -936,7 +920,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       catalogue_uuids
       |> Enum.flat_map(fn catalogue_uuid ->
         catalogue_uuid
-        |> Catalogue.item_counts_by_category_for_catalogue()
+        |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
         |> Map.to_list()
       end)
       |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end)
@@ -945,7 +929,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     # category tiles read — uuids never collide.
     catalogue_counts =
       Map.new(catalogue_uuids, fn catalogue_uuid ->
-        {catalogue_uuid, Catalogue.count_items_for_catalogue(catalogue_uuid)}
+        {catalogue_uuid, Catalogue.count_items_for_catalogue(catalogue_uuid, type_opts)}
       end)
 
     Map.merge(base, %{
@@ -959,7 +943,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         if offer_uncategorized?(scope) do
           Map.new(
             catalogue_uuids,
-            &{&1, Catalogue.uncategorized_count_for_catalogue(&1)}
+            &{&1, Catalogue.uncategorized_count_for_catalogue(&1, type_opts)}
           )
         else
           %{}
@@ -971,15 +955,16 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   defp do_build_category_tree(%{catalogue_uuids: [catalogue_uuid]} = scope, original, locale) do
     base = category_tree_base([catalogue_uuid], scope, original, locale)
+    type_opts = item_type_opts(scope)
 
     Map.merge(base, %{
       counts:
         catalogue_uuid
-        |> Catalogue.item_counts_by_category_for_catalogue()
+        |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
         |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end),
       uncategorized:
         if(offer_uncategorized?(scope),
-          do: Catalogue.uncategorized_count_for_catalogue(catalogue_uuid)
+          do: Catalogue.uncategorized_count_for_catalogue(catalogue_uuid, type_opts)
         )
     })
   rescue
@@ -987,6 +972,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   end
 
   defp do_build_category_tree(_scope, _original, _locale), do: @empty_cat_tree
+
+  # The level counters count what the browse can list: a scope's
+  # `:item_types` narrows them too, so a category holding only services
+  # does not read as non-empty in a goods-only picker.
+  defp item_type_opts(scope), do: [item_types: scope[:item_types]]
 
   # The level maps both tree shapes build identically: translated
   # categories, the uuid index, the children grouping, and the root
@@ -1683,7 +1673,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       allowed?(scope[:catalogue_uuids], item.catalogue_uuid) and
       category_in_scope?(expanded_categories, item.category_uuid) and
       allowed?(scope[:statuses], item.status) and
-      only_ok?(scope[:only], item)
+      only_ok?(scope[:only], item) and
+      item_type_ok?(scope[:item_types], item)
   end
 
   # The search joins exclude items under a soft-deleted catalogue or
@@ -1728,6 +1719,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         MapSet.new(Enum.map(raw, &normalize_uuid/1))
     end
   end
+
+  # By the EFFECTIVE type, as the fetch layer filters — and, like it
+  # (`Catalogue.filter_by_item_types/2`), a bare "goods" counts as ["goods"].
+  # Hydrated rows come from `list_items_by_uuids/2` with the catalogue preloaded.
+  defp item_type_ok?(types, _item) when types in [nil, []], do: true
+
+  defp item_type_ok?(types, item),
+    do: Catalogue.effective_item_type(item) in (types |> List.wrap() |> Enum.map(&to_string/1))
 
   defp only_ok?(:uncategorized_only, item), do: is_nil(item.category_uuid)
   defp only_ok?(:categorized_only, item), do: not is_nil(item.category_uuid)
@@ -2293,7 +2292,12 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # or `:close` (the grant-change rebuild — a detail materialized under
   # OLD grants must not survive a failed refresh; 2026-08-31 sweep).
   defp open_detail(socket, uuid, on_miss \\ :keep) do
-    case Catalogue.list_items_by_uuids([uuid]) do
+    # Re-checked against the scope's item types: a listed row can have
+    # changed type since it was rendered, and its detail is exactly what
+    # the scope excludes.
+    types = socket.assigns.browse.scope[:item_types]
+
+    case Enum.filter(Catalogue.list_items_by_uuids([uuid]), &item_type_ok?(types, &1)) do
       [item] ->
         locale = socket.assigns.locale
 
@@ -2981,12 +2985,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
                     target={@myself}
                   >
                     <:qty>
+                      <%!-- A granted :unit column carries the unit, so the
+                      stepper drops its suffix: every input is then the same
+                      width and the quantities stand in one straight column
+                      instead of shifting with "pc" / "m" (boss, 2026-09-22).
+                      Same grant test as the price cell's inline_unit. --%>
                       <.qty_stepper
                         :if={stepper?(assigns, item.uuid)}
                         id={"#{@id}-qty-#{item.uuid}-r#{qty_rev(assigns, item.uuid)}"}
                         uuid={item.uuid}
                         qty={qty_display_or_zero(assigns, item.uuid)}
-                        unit={if(decimal_qty?(@qty_precision), do: Browse.unit_label(item))}
+                        unit={
+                          if(decimal_qty?(@qty_precision) and :unit not in @columns,
+                            do: Browse.unit_label(item)
+                          )
+                        }
                         precision={@qty_precision}
                         min={@qmin}
                         max={@qmax}

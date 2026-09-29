@@ -98,7 +98,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
 
       {:ok, _view, html} = live(conn, @lib_path)
 
-      assert html =~ "PDF library"
+      assert html =~ "PDFs"
       assert html =~ "kitchen.pdf"
       # Active filter shows upload zone
       assert html =~ "Drag files here or click to browse"

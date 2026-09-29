@@ -17,7 +17,6 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
-      open_on_viewing_language: 2,
       narrow_new_data: 2,
       actor_opts: 1,
       assign_ai_translation: 3,
@@ -38,6 +37,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
+  alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Web.HeaderTrail
 
   @translatable_fields ["name", "description"]
 
@@ -60,6 +61,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
     "description" => :description,
     "status" => :status,
     "kind" => :kind,
+    "item_type" => :item_type,
     "markup_percentage" => :markup_percentage,
     "discount_percentage" => :discount_percentage
   }
@@ -96,9 +98,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
          page_title:
            if(action == :new,
              do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "New catalogue"),
-             else:
-               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: catalogue.name)
+             else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit")
            ),
+         page_crumbs: header_crumbs(action, catalogue, socket.assigns[:current_locale]),
          action: action,
          catalogue: catalogue,
          current_tab: :details,
@@ -107,8 +109,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
        |> Attachments.mount_attachments(catalogue)
        |> Attachments.allow_attachment_upload()
        |> assign_changeset(changeset)
-       |> mount_multilang()
-       |> open_on_viewing_language(action)
+       |> mount_multilang(open_on: if(action == :edit, do: :viewing_language, else: :primary))
        |> assign_ai_translation("catalogue", if(action == :edit, do: catalogue, else: nil))}
     end
   end
@@ -350,12 +351,17 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   defp refresh_after_edit(socket, catalogue) do
     socket
     |> assign(:catalogue, catalogue)
-    |> assign(
-      :page_title,
-      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Edit %{name}", name: catalogue.name)
-    )
+    |> assign(:page_crumbs, header_crumbs(:edit, catalogue, socket.assigns[:current_locale]))
+    |> Attachments.after_save(catalogue)
     |> assign_changeset(Catalogue.change_catalogue(catalogue))
   end
+
+  # The header's trail: nothing between the module and a new catalogue;
+  # the catalogue itself, linking to its page, when editing one.
+  defp header_crumbs(:new, _catalogue, _locale), do: []
+
+  defp header_crumbs(:edit, catalogue, locale),
+    do: HeaderTrail.place_crumbs(catalogue, nil, locale)
 
   @impl true
   def render(assigns) do
@@ -374,6 +380,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
       page_title={@page_title}
       page_section={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Catalogues")}
       page_section_path={Paths.index()}
+      page_crumbs={@page_crumbs}
       page_subtitle={if @action == :new, do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Create a new product catalogue to organize categories and items."), else: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Update catalogue details and settings.")}
       current_path={assigns[:url_path] || Paths.index()}
       current_locale={assigns[:current_locale]}
@@ -521,6 +528,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
                   {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Standard catalogues hold items priced directly — each item has its own base price, markup, and discount. This is the normal flow for materials, products, or anything with a fixed price tag.")}
                 <% end %>
               </span>
+            </div>
+
+            <div>
+              <.select
+                field={@form[:item_type]}
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Default item type")}
+                class="transition-colors focus-within:select-primary"
+                options={Enum.map(Item.allowed_item_types(), &{Item.item_type_label(&1), &1})}
+              />
             </div>
 
             <div>

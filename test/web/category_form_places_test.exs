@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormPlacesTest do
   alias PhoenixKitCatalogue.Test.Repo
   alias PhoenixKitWeb.Components.TreePicker
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp form_selector, do: ~s|form[action="#"][phx-submit=save]|
 

@@ -10,7 +10,7 @@ defmodule PhoenixKitCatalogue.Web.FolderRenameInsideTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     {:ok, folder} = Catalogue.create_folder(%{name: "Old name"})

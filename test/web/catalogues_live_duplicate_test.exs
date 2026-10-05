@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveDuplicateTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   # The copy runs outside the LiveView process; poll the rendered page
   # until the task's report has arrived.

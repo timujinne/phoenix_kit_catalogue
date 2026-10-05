@@ -18,7 +18,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailExtensionColumnsTest do
   alias PhoenixKitCatalogue.Test.HostileRenderModule
   alias PhoenixKitCatalogue.Web.ViewConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp url(uuid), do: "#{@base}/#{uuid}"
 

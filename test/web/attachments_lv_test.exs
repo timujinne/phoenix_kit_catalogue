@@ -31,7 +31,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
           data: Map.put(cat.data || %{}, "sync", %{"remote_id" => "r-1"})
         })
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
       # Change the row behind the open form so its snapshot is stale.
       {:ok, _} =
         PhoenixKitCatalogue.Catalogue.update_catalogue(cat, %{
@@ -48,7 +48,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
       conn: conn,
       catalogue: cat
     } do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
       send(view.pid, {:catalogue_data_changed, :catalogue, cat.uuid, cat.uuid})
       assert render(view) =~ "Attach Cat"
       assert Process.alive?(view.pid)
@@ -58,7 +58,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
   describe "open_featured_image_picker / close_media_selector" do
     test "open_featured_image_picker flips media selector flags",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       render_click(view, "open_featured_image_picker", %{})
 
@@ -74,7 +74,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
 
     test "close_media_selector clears all media-selector assigns",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       # Open then close.
       render_click(view, "open_featured_image_picker", %{})
@@ -90,7 +90,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
   describe "clear_featured_image" do
     test "clear_featured_image nulls featured image assigns",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       # Inject a featured image first.
       :sys.replace_state(view.pid, fn state ->
@@ -131,7 +131,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
           status: "active"
         })
 
-      {:ok, view, _html} = live(with_scope(conn, scope), "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(with_scope(conn, scope), "/en/admin/catalogues/#{cat.uuid}/edit")
 
       render_click(view, "open_featured_image_picker", %{})
       send(view.pid, {:media_selected, [file_uuid]})
@@ -162,7 +162,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
   describe "handle_info({:media_selected, ...})" do
     test "media_selected with empty list clears selector + closes modal",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       send(view.pid, {:media_selected, []})
 
@@ -174,7 +174,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
 
     test "media_selected with a uuid sets featured_image_uuid",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       # First, open with target = :featured_image.
       render_click(view, "open_featured_image_picker", %{})
@@ -195,7 +195,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
   describe "remove_file (trash_file)" do
     test "remove_file with no folder + unknown uuid is a clean no-op",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       render_click(view, "remove_file", %{"uuid" => Ecto.UUID.generate()})
 
@@ -208,7 +208,7 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
 
     test "remove_file when the file exists in the resource's folder trashes it",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       folder_uuid = :sys.get_state(view.pid).socket.assigns[:files_folder_uuid]
 

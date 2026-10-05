@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.NoTutorialHintsTest do
 
   alias PhoenixKitCatalogue.Web.ViewConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     catalogue = fixture_catalogue(%{name: "Hints cat"})

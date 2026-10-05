@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailEmptyCategoryTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp assigns(view), do: :sys.get_state(view.pid).socket.assigns
 

@@ -34,7 +34,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         item = fixture_item(%{name: "TabItem"})
         {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
 
-        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
 
         assert :sys.get_state(view.pid).socket.assigns.sets_enabled
         assert html =~ "Tab colors"
@@ -77,7 +77,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       test "New Set collects a name only, stamps ownership, hands off to entities", %{
         conn: conn
       } do
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         render_click(view, "open_new_set_modal", %{})
 
@@ -101,7 +101,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
 
         # Kind is stored but HIDDEN from every surface until something
         # consumes it (Max, 2026-08-27) — no badge, no column.
-        {:ok, _view, listing} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, _view, listing} = live(conn, "/en/admin/catalogues/attributes")
         refute listing =~ "Fixed value"
         refute listing =~ "Multiple values"
       end
@@ -128,7 +128,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
             })
         end
 
-        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
 
         # 25 of 30 sets loaded; core's load_more appends the rest and then
         # has nothing left to offer.
@@ -183,20 +183,20 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         # LEGACY branch before the sets loaded.
         {:ok, _} = Catalogue.create_attribute_set(%{name: "Flash Guard"})
 
-        static = conn |> get("/en/admin/catalogue/attributes") |> html_response(200)
+        static = conn |> get("/en/admin/catalogues/attributes") |> html_response(200)
         refute static =~ "No attribute groups yet"
         refute static =~ "No sets yet"
         assert static =~ "skeleton"
 
         # The connected mount replaces the skeleton with the real listing.
-        {:ok, _view, html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, _view, html} = live(conn, "/en/admin/catalogues/attributes")
         assert html =~ "Flash Guard"
         refute html =~ "skeleton h-24"
       end
 
       test "no-match search says so instead of rendering silence", %{conn: conn} do
         {:ok, _} = Catalogue.create_attribute_set(%{name: "Only Set"})
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         html = render_change(view, "attr_sets_search", %{"q" => "zzz-nothing"})
         assert html =~ "No sets match your search."
@@ -213,7 +213,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         {:ok, other} = Catalogue.create_attribute_set(%{name: "Hinge sides"})
         {:ok, _} = Catalogue.create_attribute_set_value(other, %{label: "Left"})
 
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         html = render_change(view, "attr_sets_search", %{"q" => "oak"})
         assert html =~ "Front finishes"
@@ -238,7 +238,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         {:ok, _} =
           PhoenixKitEntities.EntityData.update(value, %{status: "archived"}, activity_log: false)
 
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         # The viewer hides archived values, so they must not drag their
         # set into the results either.
@@ -248,7 +248,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
 
       test "the query is trimmed: a trailing space still matches", %{conn: conn} do
         {:ok, _} = Catalogue.create_attribute_set(%{name: "Doors Color"})
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         html = render_change(view, "attr_sets_search", %{"q" => "Doors Color "})
         assert html =~ "Doors Color"
@@ -260,7 +260,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       end
 
       test "the deferred backstop migration message reloads without crashing", %{conn: conn} do
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         send(view.pid, :auto_migrate_legacy)
         assert render(view)
@@ -271,7 +271,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       test "the kebab archives an active set and restores an archived one", %{conn: conn} do
         {:ok, set} = Catalogue.create_attribute_set(%{name: "Lifecycle colors"})
 
-        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
         assert has_element?(view, "#attr-set-menu-t-#{set.uuid} button", "Archive")
         refute html =~ "restore_attribute_set"
 
@@ -297,7 +297,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       test "archive_attribute_set flashes an error for a uuid that doesn't resolve", %{
         conn: conn
       } do
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         html = render_click(view, "archive_attribute_set", %{"uuid" => Ecto.UUID.generate()})
 
@@ -307,7 +307,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
       test "restore_attribute_set flashes an error for a uuid that doesn't resolve", %{
         conn: conn
       } do
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
         html = render_click(view, "restore_attribute_set", %{"uuid" => Ecto.UUID.generate()})
 
@@ -319,7 +319,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         item = fixture_item(%{name: "LifecycleItem"})
         {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
 
-        {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
         render_click(view, "archive_attribute_set", %{"uuid" => set.uuid})
 
         assert Catalogue.get_attribute_set(set.uuid).status == "archived"
@@ -334,7 +334,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         {:ok, archived} = Catalogue.create_attribute_set(%{name: "Long retired"})
         {:ok, _} = Catalogue.archive_attribute_set(archived)
 
-        {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+        {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
         assert html =~ "Still active"
         refute html =~ "Long retired"
 
@@ -353,7 +353,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
     describe "AttributeGroupFormLive with sets live" do
       test "redirects to the attributes listing instead of rendering", %{conn: conn} do
         assert {:error, {:live_redirect, %{to: to, flash: flash}}} =
-                 live(conn, "/en/admin/catalogue/attributes/new")
+                 live(conn, "/en/admin/catalogues/attributes/new")
 
         assert to == Paths.attribute_groups()
         assert flash["info"] =~ "replaced by sets"
@@ -427,12 +427,12 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetsSurfacesTest do
         catalogue = fixture_catalogue(%{name: "NavCat"})
         category = fixture_category(catalogue, %{name: "NavCategory"})
 
-        {:ok, _view, root_html} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}")
+        {:ok, _view, root_html} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}")
         assert root_html =~ "All catalogues"
         refute root_html =~ "Up one level"
 
         {:ok, _view, cat_html} =
-          live(conn, "/en/admin/catalogue/#{catalogue.uuid}?category=#{category.uuid}")
+          live(conn, "/en/admin/catalogues/#{catalogue.uuid}?category=#{category.uuid}")
 
         assert cat_html =~ "Up one level"
         assert cat_html =~ "All catalogues"

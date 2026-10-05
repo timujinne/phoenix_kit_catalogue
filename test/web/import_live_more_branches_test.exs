@@ -7,7 +7,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveMoreBranchesTest do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   setup do
     cat = fixture_catalogue(%{name: "MoreBranches"})

@@ -3759,3 +3759,21 @@ msgstr "Материалы"
 
 msgid "JSON (export)"
 msgstr "JSON (экспорт)"
+
+msgid "View options"
+msgstr "Параметры вида"
+
+msgid "Filters"
+msgstr "Фильтры"
+
+msgid "Sort by"
+msgstr "Сортировать по"
+
+msgid "Layout"
+msgstr "Вид"
+
+msgid "Reorder all categories"
+msgstr "Переупорядочить все категории"
+
+msgid "Reorder all items"
+msgstr "Переупорядочить все позиции"

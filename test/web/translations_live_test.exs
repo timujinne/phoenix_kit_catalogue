@@ -27,7 +27,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLiveTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.TranslationStatus
 
-  @base "/en/admin/catalogue/translations"
+  @base "/en/admin/catalogues/translations"
   @lang "fr-FR"
 
   defp translate_worker_jobs, do: all_enqueued(worker: TranslateWorker)

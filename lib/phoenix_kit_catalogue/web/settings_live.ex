@@ -45,7 +45,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket |> assign(:page_title, gettext("Catalogue")) |> load_settings()}
+    {:ok, socket |> assign(:page_title, gettext("Catalogues")) |> load_settings()}
   end
 
   # Read straight through on every load rather than caching in assigns: these
@@ -156,10 +156,10 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
       socket={@socket}
       flash={@flash}
       phoenix_kit_current_scope={assigns[:phoenix_kit_current_scope]}
-      page_title={gettext("Catalogue")}
+      page_title={gettext("Catalogues")}
       page_section={gettext("Settings")}
       page_section_path={Routes.path("/admin/settings")}
-      current_path={assigns[:url_path] || Routes.path("/admin/settings/catalogue")}
+      current_path={assigns[:url_path] || Routes.path("/admin/settings/catalogues")}
       current_locale={assigns[:current_locale]}
     >
       <div class="flex flex-col w-full max-w-3xl mx-auto px-4 py-6 gap-6">

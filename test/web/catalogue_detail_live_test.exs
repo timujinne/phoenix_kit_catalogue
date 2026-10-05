@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.TableConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp url(uuid), do: "#{@base}/#{uuid}"
   defp cat_url(cat_uuid, category_uuid), do: "#{url(cat_uuid)}?category=#{category_uuid}"
@@ -269,7 +269,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       # re-roots.
       assert html =~ "?category=#{cat_a.uuid}"
       # The pencil keeps a one-click path to the edit form.
-      assert html =~ "/en/admin/catalogue/categories/#{cat_a.uuid}/edit"
+      assert html =~ "/en/admin/catalogues/categories/#{cat_a.uuid}/edit"
       # Root search is catalogue-wide.
       assert html =~ "Search items by name, description, or SKU"
     end
@@ -637,7 +637,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
 
       # The edit link carries the level it was clicked from, so save/cancel
       # can land back here instead of the catalogue root.
-      assert html =~ ~s(href="/en/admin/catalogue/items/#{item.uuid}/edit?return_to=)
+      assert html =~ ~s(href="/en/admin/catalogues/items/#{item.uuid}/edit?return_to=)
       assert html =~ "Clickable item"
     end
 
@@ -650,7 +650,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
       {:ok, _view, html} = live(conn, cat_url(catalogue.uuid, level.uuid))
 
       encoded_level =
-        URI.encode_www_form("/en/admin/catalogue/#{catalogue.uuid}?category=#{level.uuid}")
+        URI.encode_www_form("/en/admin/catalogues/#{catalogue.uuid}?category=#{level.uuid}")
 
       assert html =~ ~s(/categories/#{child.uuid}/edit?return_to=#{encoded_level})
       assert html =~ "parent_uuid=#{child.uuid}&amp;return_to=#{encoded_level}"
@@ -782,7 +782,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLiveTest do
 
       # One button for the whole page — Max: two side-by-side "Columns"
       # buttons "probobly should be in the same popup".
-      assert length(String.split(html, ~s(phx-click="show_column_modal"))) == 2
+      # The button pushes the event and closes the View options pop-up it
+      # sits in, so its phx-click is a JS command naming the event.
+      assert length(Regex.scan(~r/phx-click="[^"]*show_column_modal/, html)) == 1
 
       # The modal carries a section per table, each editing its own
       # scope without touching the other.

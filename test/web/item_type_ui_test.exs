@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Web.ItemTypeUITest do
   alias PhoenixKitCatalogue.Web.ViewConfig
   alias PhoenixKitWeb.Components.TreePicker
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp form_selector, do: ~s|form[action="#"][phx-submit=save]|
   defp new_item_url(catalogue_uuid), do: "#{@base}/#{catalogue_uuid}/items/new"

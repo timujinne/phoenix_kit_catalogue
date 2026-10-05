@@ -508,18 +508,18 @@ The module registers admin tabs via `PhoenixKit.Module`:
 
 | Path | View |
 |------|------|
-| `/admin/catalogue` | Catalogue list with Active/Deleted tabs |
-| `/admin/catalogue/new` | New catalogue form |
-| `/admin/catalogue/:uuid` | Catalogue detail with categories, items, status tabs |
-| `/admin/catalogue/:uuid/edit` | Edit catalogue + permanent delete |
-| `/admin/catalogue/categories/:uuid/edit` | Edit category + move + permanent delete |
-| `/admin/catalogue/items/:uuid/edit` | Edit item + move |
-| `/admin/catalogue/attributes` (+ `/new`, `/:uuid/edit`) | Attribute groups |
-| `/admin/catalogue/import` | Import wizard (universal + Pro100) |
-| `/admin/catalogue/export` | Export |
-| `/admin/catalogue/events` | Activity events for the module |
-| `/admin/catalogue/pdfs` (+ `/:uuid`) | PDF library and detail |
-| `/admin/catalogue/translations` | Translation freshness and the AI sweep |
+| `/admin/catalogues` | Catalogue list with Active/Deleted tabs |
+| `/admin/catalogues/new` | New catalogue form |
+| `/admin/catalogues/:uuid` | Catalogue detail with categories, items, status tabs |
+| `/admin/catalogues/:uuid/edit` | Edit catalogue + permanent delete |
+| `/admin/catalogues/categories/:uuid/edit` | Edit category + move + permanent delete |
+| `/admin/catalogues/items/:uuid/edit` | Edit item + move |
+| `/admin/catalogues/attributes` (+ `/new`, `/:uuid/edit`) | Attribute groups |
+| `/admin/catalogues/import` | Import wizard (universal + Pro100) |
+| `/admin/catalogues/export` | Export |
+| `/admin/catalogues/events` | Activity events for the module |
+| `/admin/catalogues/pdfs` (+ `/:uuid`) | PDF library and detail |
+| `/admin/catalogues/translations` | Translation freshness and the AI sweep |
 
 Manufacturers and suppliers are CRM companies since 0.2x; the module has
 no lists of its own for them.

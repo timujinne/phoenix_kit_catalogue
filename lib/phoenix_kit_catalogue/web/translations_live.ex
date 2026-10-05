@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   @moduledoc """
   Admin page for catalogue AI-translation freshness (block-6 plan, Task 5):
-  `/admin/catalogue/translations`.
+  `/admin/catalogues/translations`.
 
   Lists (resource, target language) rows across the four catalogue
   translatable types (`item` / `category` / `set_label` / `set_value`),

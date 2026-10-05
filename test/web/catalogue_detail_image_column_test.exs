@@ -10,7 +10,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailImageColumnTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp url(uuid), do: "#{@base}/#{uuid}"
 

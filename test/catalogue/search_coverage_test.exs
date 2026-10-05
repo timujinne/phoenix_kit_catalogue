@@ -141,7 +141,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
       # ?mode=catalogues: the index's auto mode answers a query with ITEM
       # results since the 2026-08-31 search-default flip — catalogue-name
       # coverage lives behind the explicit switch.
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue?mode=catalogues")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues?mode=catalogues")
 
       assert render_change(view, "table_search", %{"query" => "Köögisari"}) =~ "Kitchen Range"
       refute render_change(view, "table_search", %{"query" => "_name"}) =~ "Kitchen Range"
@@ -168,7 +168,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
 
   describe "the detail page" do
     test "surfaces matching categories beside the items, with their trail", ctx do
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue/#{ctx.cat.uuid}")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues/#{ctx.cat.uuid}")
 
       render_change(view, "search", %{"query" => "Oak"})
       html = render_async(view)
@@ -188,7 +188,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
     end
 
     test "a query matching nothing at all says so once", ctx do
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue/#{ctx.cat.uuid}")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues/#{ctx.cat.uuid}")
 
       render_change(view, "search", %{"query" => "zzz-nothing"})
       html = render_async(view)
@@ -203,7 +203,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SearchCoverageTest do
         Catalogue.update_catalogue(ctx.cat, %{data: %{"et" => %{"_name" => "Köögisari"}}})
 
       # Explicit catalogues mode — see "structure is not content" above.
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue?mode=catalogues")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues?mode=catalogues")
 
       assert render_change(view, "table_search", %{"query" => "  kitchen  "}) =~ "Kitchen Range"
       assert render_change(view, "table_search", %{"query" => "Köögisari"}) =~ "Kitchen Range"

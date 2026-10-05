@@ -47,6 +47,11 @@ defmodule PhoenixKitCatalogue.Web.TableToolbar do
       "sort_by value that means \"manual/drag order\" (e.g. \"position\"). When active, the direction toggle is hidden — direction has no meaning for a user-dragged order."
   )
 
+  attr(:label, :boolean,
+    default: true,
+    doc: "Show the control's own \"Sort by\" label. Off where the row it sits in already says so."
+  )
+
   @doc """
   The index's sort control — core's `sort_selector`, not a second
   implementation of it.
@@ -78,7 +83,7 @@ defmodule PhoenixKitCatalogue.Web.TableToolbar do
       options={@options}
       manual_field={@manual_value}
       event="set_sort"
-      label
+      label={@label}
     />
     """
   end

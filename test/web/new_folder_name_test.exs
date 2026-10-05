@@ -7,7 +7,7 @@ defmodule PhoenixKitCatalogue.Web.NewFolderNameTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     %{conn: with_scope(conn, scope)}

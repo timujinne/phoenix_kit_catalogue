@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveExtraTest do
   describe "media-selector delegations from ItemFormLive" do
     test "open_featured_image_picker flips show_media_selector",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       render_click(view, "open_featured_image_picker", %{})
 
@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveExtraTest do
     end
 
     test "close_media_selector resets the modal", %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       render_click(view, "open_featured_image_picker", %{})
       render_click(view, "close_media_selector", %{})
@@ -35,7 +35,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveExtraTest do
 
   describe "add_meta_field idempotence" do
     test "adding the same key twice is a no-op", %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       render_click(view, "add_meta_field", %{"key" => "color"})
       first = :sys.get_state(view.pid).socket.assigns.meta_state
@@ -50,7 +50,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveExtraTest do
   describe "validate event with various param shapes" do
     test "validate with string-keyed params produces a changeset",
          %{conn: conn, item: item, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       render_change(view, "validate", %{
         "item" => %{

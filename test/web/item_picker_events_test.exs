@@ -20,7 +20,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerEventsTest do
 
       # ItemPicker is mounted inside ItemFormLive; use that LV to host.
       target_item = fixture_item(%{name: "Host Item", catalogue_uuid: cat.uuid})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{target_item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{target_item.uuid}/edit")
 
       # ItemFormLive renders a smart-rule picker only on smart catalogues.
       # Skip directly to assertions that the LV mounted (the picker
@@ -90,7 +90,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerEventsTest do
     end
 
     test "filter event narrows by action", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       render_change(view, "filter", %{"filter" => %{"action" => "item.created"}})
 
@@ -99,7 +99,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerEventsTest do
     end
 
     test "filter event narrows by resource_type", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       render_change(view, "filter", %{"filter" => %{"resource_type" => "item"}})
 
@@ -107,7 +107,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerEventsTest do
     end
 
     test "clear_filters resets filter_action + filter_resource_type", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       render_change(view, "filter", %{"filter" => %{"action" => "item.created"}})
       render_click(view, "clear_filters", %{})
@@ -118,7 +118,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerEventsTest do
     end
 
     test "load_more is a no-op when has_more is false", %{conn: conn} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       before_page = :sys.get_state(view.pid).socket.assigns.page
       render_click(view, "load_more", %{})

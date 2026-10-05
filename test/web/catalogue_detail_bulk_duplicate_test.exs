@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkDuplicateTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     cat = fixture_catalogue(%{name: "Dup page"})

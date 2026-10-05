@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Web.AITranslatePromptTest do
   alias PhoenixKitAI.TranslateWorker
   alias PhoenixKitCatalogue.AIPrompt
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
   @lang "fr-FR"
 
   defp edit_item_url(uuid), do: "#{@base}/items/#{uuid}/edit"

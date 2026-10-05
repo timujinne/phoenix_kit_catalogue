@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveWizardTest do
 
   use PhoenixKitCatalogue.LiveCase, async: false
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   setup do
     cat = fixture_catalogue(%{name: "Wizard Test Cat"})

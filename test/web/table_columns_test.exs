@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.TableColumnsTest do
   alias PhoenixKitCatalogue.Web.Components
   alias PhoenixKitCatalogue.Web.TableConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     catalogue = fixture_catalogue(%{name: "Columns cat"})

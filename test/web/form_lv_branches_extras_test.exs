@@ -26,7 +26,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesExtrasTest do
     end
 
     test "add_meta_field with unknown key is a no-op", %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       before = :sys.get_state(view.pid).socket.assigns.meta_state
       render_click(view, "add_meta_field", %{"key" => "definitely_not_a_real_key"})
@@ -38,7 +38,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesExtrasTest do
 
     test "add_meta_field + remove_meta_field round-trip on a known key",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       # `color` is a known metadata definition for items.
       render_click(view, "add_meta_field", %{"key" => "color"})

@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Paths do
   alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Routes
 
-  @base "/admin/catalogue"
+  @base "/admin/catalogues"
 
   # ── Catalogues ───────────────────────────────────────────────────
 

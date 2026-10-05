@@ -3746,3 +3746,21 @@ msgstr "Matériaux"
 
 msgid "JSON (export)"
 msgstr "JSON (export)"
+
+msgid "View options"
+msgstr "Options d’affichage"
+
+msgid "Filters"
+msgstr "Filtres"
+
+msgid "Sort by"
+msgstr "Trier par"
+
+msgid "Layout"
+msgstr "Disposition"
+
+msgid "Reorder all categories"
+msgstr "Réorganiser toutes les catégories"
+
+msgid "Reorder all items"
+msgstr "Réorganiser tous les articles"

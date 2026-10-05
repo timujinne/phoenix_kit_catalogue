@@ -6,7 +6,7 @@ defmodule PhoenixKitCatalogue.Test.Router do
 
   `PhoenixKit.Utils.Routes.path/1` defaults to no URL prefix when the
   phoenix_kit_settings table is unavailable, so the base is simply
-  `/admin/catalogue`.
+  `/admin/catalogues`.
   """
 
   use Phoenix.Router
@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Test.Router do
   # `PhoenixKit.Utils.Routes.path/1` prepends the default locale ("en")
   # to every admin path. Our scope must match so `live/2` in tests can
   # use the exact URL the LiveViews navigate to themselves.
-  scope "/en/admin/catalogue", PhoenixKitCatalogue.Web do
+  scope "/en/admin/catalogues", PhoenixKitCatalogue.Web do
     pipe_through(:browser)
 
     live_session :catalogue_test,
@@ -72,8 +72,8 @@ defmodule PhoenixKitCatalogue.Test.Router do
   end
 
   # Settings → Catalogue. A separate scope because the page lives under
-  # /admin/settings, not /admin/catalogue — the real route comes from the
-  # module's `settings_tabs/0`, which resolves a bare "catalogue" path
+  # /admin/settings, not /admin/catalogues — the real route comes from the
+  # module's `settings_tabs/0`, which resolves a bare "catalogues" path
   # against the settings prefix.
   scope "/en/admin/settings", PhoenixKitCatalogue.Web do
     pipe_through(:browser)
@@ -81,7 +81,7 @@ defmodule PhoenixKitCatalogue.Test.Router do
     live_session :catalogue_settings_test,
       on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
       layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
-      live("/catalogue", SettingsLive, :settings)
+      live("/catalogues", SettingsLive, :settings)
     end
   end
 

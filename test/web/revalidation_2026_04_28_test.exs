@@ -26,7 +26,7 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
       Logger.configure(level: :debug)
       on_exit(fn -> Logger.configure(level: original_level) end)
 
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/events")
 
       log =
         capture_log([level: :debug], fn ->
@@ -41,34 +41,34 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
     end
 
     test "CatalogueDetailLive catch-all swallows stray messages", %{catalogue: cat} do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}")
       send(view.pid, :totally_unexpected_message)
       assert Process.alive?(view.pid)
     end
 
     test "CatalogueFormLive catch-all swallows stray messages" do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue/new")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/new")
       send(view.pid, :totally_unexpected_message)
       assert Process.alive?(view.pid)
     end
 
     test "CategoryFormLive catch-all swallows stray messages", %{catalogue: cat} do
       {:ok, view, _html} =
-        live(conn(), "/en/admin/catalogue/#{cat.uuid}/categories/new")
+        live(conn(), "/en/admin/catalogues/#{cat.uuid}/categories/new")
 
       send(view.pid, :totally_unexpected_message)
       assert Process.alive?(view.pid)
     end
 
     test "ItemFormLive catch-all swallows stray messages", %{catalogue: cat} do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue/#{cat.uuid}/items/new")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}/items/new")
       send(view.pid, :totally_unexpected_message)
       assert Process.alive?(view.pid)
     end
 
     test "ImportLive catch-all swallows stray messages", %{catalogue: cat} do
       {:ok, view, _html} =
-        live(conn(), "/en/admin/catalogue/import?catalogue_uuid=#{cat.uuid}")
+        live(conn(), "/en/admin/catalogues/import?catalogue_uuid=#{cat.uuid}")
 
       send(view.pid, :totally_unexpected_message)
       assert Process.alive?(view.pid)
@@ -77,7 +77,7 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
 
   describe "Batch 2 — PubSub handle_info clauses fire for real broadcasts" do
     test "CataloguesLive refreshes on {:catalogue_data_changed, :catalogue, ...}" do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues")
 
       # Real broadcast shape from PubSub.broadcast_data_changed/3
       send(
@@ -91,7 +91,7 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
     end
 
     test "CatalogueDetailLive refreshes on a :catalogue change for its uuid", %{catalogue: cat} do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}")
 
       send(view.pid, {:catalogue_data_changed, :catalogue, cat.uuid, nil})
       assert Process.alive?(view.pid)
@@ -100,7 +100,7 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
 
     test "ImportLive handles import_progress + import_result", %{catalogue: cat} do
       {:ok, view, _html} =
-        live(conn(), "/en/admin/catalogue/import?catalogue_uuid=#{cat.uuid}")
+        live(conn(), "/en/admin/catalogues/import?catalogue_uuid=#{cat.uuid}")
 
       send(view.pid, {:import_progress, 5, 10})
       assert Process.alive?(view.pid)

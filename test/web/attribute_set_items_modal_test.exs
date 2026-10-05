@@ -32,7 +32,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
       {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
       :ok = AttributeSets.set_attachment_selection(item.uuid, set.uuid, [red.slug])
 
-      {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
 
       # The listing shows the COUNT, not item names.
       refute html =~ "Popup door"
@@ -58,7 +58,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
       {:ok, _} = Catalogue.attach_attribute_set(hit.uuid, set.uuid)
       {:ok, _} = Catalogue.attach_attribute_set(miss.uuid, set.uuid)
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       html =
@@ -86,7 +86,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
         {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
       end
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       html = render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       assert html =~ "Paged item 01"
@@ -112,7 +112,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       {:ok, empty} = Catalogue.create_attribute_set(%{name: "Popup empty"})
 
-      {:ok, view, html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, html} = live(conn, "/en/admin/catalogues/attributes")
 
       # An unattached set renders a bare muted 0, not a dead button
       # (Max, 2026-08-28).
@@ -139,7 +139,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
       {:ok, _} =
         PhoenixKitEntities.EntityData.update(red, %{status: "archived"}, activity_log: false)
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       # The bug this replaces: an archived value's label used to vanish
@@ -190,7 +190,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       assert AttributeSets.resolve_set(set.uuid) == nil
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
 
       # The bug this replaces: a broken contract made `resolve_set/2`
       # return nil, which degraded the WHOLE label map to `%{}` — every
@@ -230,7 +230,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       assert AttributeSets.resolve_set(set.uuid) == nil
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       assert has_element?(view, "##{modal_id(set)}-item-#{item.uuid}", "Ghosted Red")
@@ -280,7 +280,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       assert AttributeSets.resolve_set(set.uuid) == nil
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       html = render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       assert html =~ "Collision door"
@@ -302,7 +302,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
       item = fixture_item(%{name: "Close item"})
       {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       view
@@ -331,7 +331,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeSetItemsModalTest do
 
       {:ok, _} = Catalogue.attach_attribute_set(item.uuid, set.uuid)
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/attributes")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/attributes")
       html = render_click(view, "open_set_items_modal", %{"uuid" => set.uuid})
 
       assert html =~ ~s(alt="Popup lamp")

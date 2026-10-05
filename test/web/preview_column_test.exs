@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.PreviewColumnTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.Components
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     catalogue = fixture_catalogue(%{name: "Previews"})

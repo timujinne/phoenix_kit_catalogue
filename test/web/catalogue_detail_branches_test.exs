@@ -32,7 +32,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       # uncategorized bucket (where the trashed item lives) to exercise
       # the view switch.
       {:ok, view, _html} =
-        live(conn, "/en/admin/catalogue/#{cat.uuid}?category=uncategorized")
+        live(conn, "/en/admin/catalogues/#{cat.uuid}?category=uncategorized")
 
       render_click(view, "switch_view", %{"mode" => "deleted"})
       assert :sys.get_state(view.pid).socket.assigns.view_mode == "deleted"
@@ -47,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
          %{conn: conn, catalogue: cat} do
       {:ok, _item} = Catalogue.create_item(%{name: "Searchable", catalogue_uuid: cat.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       render_change(view, "search", %{"query" => "Searchable"})
 
@@ -58,7 +58,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     end
 
     test "search with empty query clears results", %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       render_change(view, "search", %{"query" => "anything"})
       render_change(view, "search", %{"query" => ""})
@@ -67,7 +67,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     end
 
     test "clear_search resets search state", %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       render_change(view, "search", %{"query" => "stuff"})
       render_click(view, "clear_search", %{})
@@ -81,7 +81,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
   describe "delete_item / restore_item happy path" do
     test "delete_item trashes + restore_item un-trashes", %{conn: conn, catalogue: cat} do
       {:ok, item} = Catalogue.create_item(%{name: "Cycle", catalogue_uuid: cat.uuid})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       render_click(view, "delete_item", %{"uuid" => item.uuid})
       assert Catalogue.get_item(item.uuid).status == "deleted"
@@ -94,7 +94,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
     test "delete_item with unknown uuid flashes 'not found'",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       html = render_click(view, "delete_item", %{"uuid" => Ecto.UUID.generate()})
       assert html =~ "not found" or html =~ "Item not found"
@@ -105,7 +105,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     test "request_trash_category trashes empty category directly + restore reverses",
          %{conn: conn, catalogue: cat} do
       cat_obj = fixture_category(cat, %{name: "TrashCat"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       # `request_trash_category` (the renamed event) trashes directly
       # when the subtree has no active items; otherwise it would open
@@ -123,7 +123,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     test "show_delete_confirm + cancel_delete toggles confirm_delete",
          %{conn: conn, catalogue: cat} do
       cat_obj = fixture_category(cat, %{name: "Confirm"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       render_click(view, "show_delete_confirm", %{
         "uuid" => cat_obj.uuid,
@@ -142,7 +142,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       {:ok, item} = Catalogue.create_item(%{name: "Hard", catalogue_uuid: cat.uuid})
       {:ok, _} = Catalogue.trash_item(item)
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}?view=deleted")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}?view=deleted")
       render_click(view, "show_delete_confirm", %{"uuid" => item.uuid, "type" => "item"})
       render_click(view, "permanently_delete_item", %{})
 
@@ -168,7 +168,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       a = fixture_item(%{name: "A", category_uuid: category.uuid})
       b = fixture_item(%{name: "B", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
       render_click(view, "request_bulk_delete_items", %{"uuids" => [a.uuid, b.uuid]})
 
       confirm = :sys.get_state(view.pid).socket.assigns.bulk_confirm
@@ -192,7 +192,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       _cat_b = fixture_category(cat, %{name: "Cat B"})
       item = fixture_item(%{name: "I", category_uuid: cat_a.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
       render_click(view, "request_bulk_move_items", %{"uuids" => [item.uuid]})
 
       modal = :sys.get_state(view.pid).socket.assigns.bulk_move_modal
@@ -206,7 +206,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       category = fixture_category(cat)
       a = fixture_item(%{name: "A", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
       render_click(view, "request_bulk_move_items", %{"uuids" => [a.uuid]})
 
       # The catalogue's own row: uncategorized in it.
@@ -233,7 +233,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       category = fixture_category(cat)
       _ = fixture_item(%{name: "Original", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       # Simulate another LV pid broadcasting a card refresh.
       send(view.pid, {:catalogue_card_refresh, cat.uuid, category.uuid, nil, :ok, self()})
@@ -248,7 +248,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
 
     test "catalogue_card_refresh from self() is ignored (no double-render)",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       # Self-broadcast — should be a no-op so the originator doesn't
       # double-render after their own action.
@@ -263,7 +263,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
       category = fixture_category(cat)
       item = fixture_item(%{name: "Bulk", category_uuid: category.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
 
       send(view.pid, {:catalogue_bulk_change, cat.uuid, :trashed, [item.uuid], self()})
       :sys.get_state(view.pid)

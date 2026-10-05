@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailMovePickersTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.PlaceTree
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     cat = fixture_catalogue(%{name: "Pickers"})

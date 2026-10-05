@@ -12,7 +12,7 @@ defmodule PhoenixKitCatalogue.Web.InfrastructureSmokeTest do
   end
 
   test "catalogues index renders", %{conn: conn} do
-    {:ok, _view, html} = live(conn, "/en/admin/catalogue")
+    {:ok, _view, html} = live(conn, "/en/admin/catalogues")
     assert html =~ "Catalogues"
   end
 end

@@ -10,7 +10,7 @@ defmodule PhoenixKitCatalogue.Web.HeaderTrailTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.HeaderTrail
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   # The bar's markup only — the body repeats the same names in its own
   # links and pickers.
@@ -56,7 +56,7 @@ defmodule PhoenixKitCatalogue.Web.HeaderTrailTest do
                %{label: "Hinges HT", path: child_path}
              ] = HeaderTrail.place_crumbs(catalogue, child, nil)
 
-      assert cat_path =~ "/admin/catalogue/#{catalogue.uuid}"
+      assert cat_path =~ "/admin/catalogues/#{catalogue.uuid}"
       assert parent_path =~ "?category=#{parent.uuid}"
       assert child_path =~ "?category=#{child.uuid}"
 

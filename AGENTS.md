@@ -26,10 +26,11 @@ conventions, contracts and non-obvious boundaries.
   extension slot (`PhoenixKitCatalogue.Extension` / `.Extensions`) — neither
   side declares a dependency on the other. A few siblings reference the module
   name behind `Code.ensure_loaded?/1` guards only.
-- **Admin surface:** parent tab `:admin_catalogue` at `/admin/catalogue`, with
+- **Admin surface:** parent tab `:admin_catalogue` at `/admin/catalogues`, with
   subtabs All catalogues, Attributes, Import, Export, Events, PDFs,
-  Translations, plus hidden form/detail tabs. One stateless HTTP route:
-  `GET /admin/catalogue/export/download`.
+  Translations, plus hidden form/detail tabs. Two kinds of plain HTTP route:
+  the stateless `GET /admin/catalogues/export/download`, and the redirects
+  from the module's old `/admin/catalogue` addresses.
 - **Module key** `"catalogue"`; settings prefix `catalogue_`. The module's
   NAME is "Catalogues" everywhere a person reads it — `module_name/0`, the
   permission label, the sidebar parent, the header's section, page
@@ -41,8 +42,8 @@ conventions, contracts and non-obvious boundaries.
   only for activity logging. Permission gating happens at the LiveView mount
   layer (`live_session :phoenix_kit_admin`, `:catalogue` permission key).
 - **Admin-only.** No public routes, JSON endpoints, or webhook receivers. The
-  single HTTP endpoint is the admin-gated, stateless export download, behind
-  `:phoenix_kit_require_admin`.
+  plain HTTP routes — the stateless export download and the redirects from
+  the module's old addresses — are both behind `:phoenix_kit_require_admin`.
 - **No per-item versioning.** Soft-delete (`status`) is the only history
   mechanism; the activity log is the audit trail.
 - **No always-on background work.** Two jobs, both opt-in by config:
@@ -116,8 +117,8 @@ Repo-local aliases:
   which wrap `PhoenixKit.Utils.Routes.path/1` for prefix/locale handling.
 - **Routing** — admin pages come from `admin_tabs/0` (each tab carries its
   `live_view:`); `route_module/0` → `Web.Routes` adds only the stateless
-  export-download GET, declared in both `admin_routes/0` and
-  `admin_locale_routes/0`. PhoenixKit injects both into its own
+  export-download GET and the old-address redirects, declared in both
+  `admin_routes/0` and `admin_locale_routes/0`. PhoenixKit injects both into its own
   `live_session :phoenix_kit_admin` / router — never hand-register plugin routes
   in a host router (loses the admin layout, crashes cross-session navigation).
   In `admin_tabs/0`, declare static paths **before** wildcard `:uuid` paths, and
@@ -132,7 +133,7 @@ Repo-local aliases:
 - **LiveViews `use Phoenix.LiveView` directly** — no `use PhoenixKitWeb,
   :live_view` in this standalone package. Four LVs layer
   `use PhoenixKitWeb.Live.UrlState` on top for URL-backed state; the export
-  controller is the one `use PhoenixKitWeb, :controller`.
+  and old-address controllers are the two `use PhoenixKitWeb, :controller`.
 - **Most admin LVs self-wrap the layout.** Core auto-applies its admin chrome
   via `socket.private[:live_layout]`; a view that needs to push its own
   title/subtitle into the global admin header opts out with an `on_mount` that
@@ -321,7 +322,7 @@ Key invariants to preserve:
   recursive queries in LiveViews.
 
 Settings keys (`PhoenixKit.Settings`). Every key a person can change is on
-Settings → Catalogue (`Web.SettingsLive`), read and written through
+Settings → Catalogues (`Web.SettingsLive`), read and written through
 `Web.Settings`, except the two noted:
 
 | key | type | note |
@@ -400,7 +401,7 @@ in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
   Endpoint, `PhoenixKit.PubSub`, `PhoenixKit.PubSub.Manager` and
   `PhoenixKit.TaskSupervisor`.
 - Test support: `test/support/data_case.ex`, `live_case.ex` (Test.Endpoint plus
-  a router scoped at `/en/admin/catalogue`), `activity_log_assertions.ex`,
+  a router scoped at `/en/admin/catalogues`), `activity_log_assertions.ex`,
   `test_repo.ex`, `test_router.ex`, `test_layouts.ex`.
 - `PGUSER` / `PGPASSWORD` / `PGHOST` are honoured. `PGDATABASE` and `PGPOOL`
   override the database name and pool size, so the suite can point at a database
@@ -425,13 +426,33 @@ Pointers, not docs — the moduledocs are the contract.
   `Web.HeaderTrail`. The rules and per-page shapes are core's
   `dev_docs/guides/2026-09-25-admin-header-trail.md`; the pages are pinned
   in `test/web/header_trail_test.exs`.
+- **List chrome** — the top of a list page is one toolbar row: search and
+  Filters left, View options and the create buttons right. Whatever tunes a
+  list lives in one of those two pop-ups, never loose on the row —
+  `Components.search_filters/1` holds what narrows WHICH rows show,
+  `view_options/1` how they show (sort, layout, Columns, Reorder all). A
+  control inside a pop-up that opens a dialog pushes its event through
+  `push_closing/2`, or the pop-up is still open behind the dialog. A level
+  that lists categories and items has one sort for both (`sort_level`). A
+  selection's action bar docks under its list (`bulk_dock_class/0`), so no row
+  is kept on the page for it to take the place of. Pinned by
+  `test/web/list_chrome_test.exs`.
+- **Column fitting** — list tables pass `Components.table_fit/0` and give each
+  header cell a `column_priority/1`; core then drops the least important
+  columns when the table does not fit. Columns hide by position, so every
+  body row must have the header's cells in the header's order — the same test
+  counts them. A new column id needs a clause in `column_priority/1`.
+- **Old addresses redirect** — the pages answer at `/admin/catalogues` and
+  `/admin/settings/catalogues`; the singular forms redirect there, path and
+  query intact (`Web.LegacyPathController`). Keep the redirect: sibling
+  modules and stored links still use the old form.
 - **Right-click a row** — a row or card flagged `data-row-menu-context` opens
   the `⋮` menu rendered inside it at the pointer (core's `RowMenu` hook; see
   `TableRowMenu`'s "Right-click" section). Every file that renders a
   `table_row_menu` either flags its rows or is named in
   `test/web/row_context_menu_test.exs`'s `@unflagged` with a reason. The flag
   is read once per mount (`@row_context_menu`) and threaded down; the
-  Settings → Catalogue switch turns it off by omitting the attribute.
+  Settings → Catalogues switch turns it off by omitting the attribute.
 - **Trash and restore** — provenance stamps in `data["_trash"]`, the
   per-catalogue advisory lock, what a restore does and does not undo, what a
   Deleted tab lists and counts (a trashed category is one closed unit, and a

@@ -14,14 +14,18 @@ defmodule PhoenixKitCatalogue.Web.ItemFormUploadTest do
   alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
   @buckets_cache :phoenix_kit_buckets_cache
 
   setup do
     :persistent_term.erase(@buckets_cache)
     # Stored files go to every enabled bucket; keep them all in this one.
-    for bucket <- Storage.list_enabled_buckets(),
-        do: {:ok, _} = Storage.update_bucket(bucket, %{enabled: false})
+    # Switched off in the table rather than through `Storage.update_bucket/2`:
+    # a core with storage profiles refuses to disable a bucket a profile
+    # lists, and an older core has no profiles to take it out of first.
+    PhoenixKit.RepoHelper.repo().update_all(PhoenixKit.Modules.Storage.Bucket,
+      set: [enabled: false]
+    )
 
     n = System.unique_integer([:positive])
     root = Path.join(System.tmp_dir!(), "catalogue_upload_#{n}")

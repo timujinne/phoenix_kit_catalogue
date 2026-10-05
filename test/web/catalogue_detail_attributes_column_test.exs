@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailAttributesColumnTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.AttributeSets
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp cat_url(cat_uuid, category_uuid), do: "#{@base}/#{cat_uuid}?category=#{category_uuid}"
 

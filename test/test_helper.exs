@@ -145,7 +145,7 @@ exclude = if repo_available, do: [], else: [:integration]
 # Force PhoenixKit's URL prefix cache to an empty string for tests so
 # `Paths.index()` etc. produce paths the test router can match. Admin
 # paths always get the default locale ("en") prefix, so our router
-# scope is `/en/admin/catalogue`.
+# scope is `/en/admin/catalogues`.
 :persistent_term.put({PhoenixKit.Config, :url_prefix}, "/")
 
 # Start the test Endpoint so Phoenix.LiveViewTest can drive our

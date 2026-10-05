@@ -25,7 +25,9 @@ defmodule PhoenixKitCatalogue.ActivityResourceLinksTest do
         assert String.contains?(path, ":uuid") or String.contains?(path, ":metadata."),
                "#{type}'s path identifies no record"
 
-        assert String.starts_with?(path, "/admin/catalogue"), "#{type}'s path is not an admin one"
+        assert String.starts_with?(path, "/admin/catalogues"),
+               "#{type}'s path is not an admin one"
+
         assert String.starts_with?(title, ":metadata."), "#{type}'s title is not from metadata"
       end
     end

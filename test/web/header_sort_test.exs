@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Web.HeaderSortTest do
   alias PhoenixKitCatalogue.Web.Components
   alias PhoenixKitCatalogue.Web.ViewConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     before =

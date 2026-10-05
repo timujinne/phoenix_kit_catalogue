@@ -17,8 +17,8 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction}
   alias PhoenixKitCatalogue.Test.Repo
 
-  @lib_path "/en/admin/catalogue/pdfs"
-  @detail_path "/en/admin/catalogue/pdfs"
+  @lib_path "/en/admin/catalogues/pdfs"
+  @detail_path "/en/admin/catalogues/pdfs"
 
   defp now_truncated, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -227,7 +227,7 @@ defmodule PhoenixKitCatalogue.Web.PdfLibraryLiveTest do
 
       assert html =~ "manual.pdf"
       assert html =~ "X-200"
-      assert html =~ ~s(href="/en/admin/catalogue/pdfs/#{pdf.uuid}?page=3")
+      assert html =~ ~s(href="/en/admin/catalogues/pdfs/#{pdf.uuid}?page=3")
 
       # No-results state for a miss.
       html =

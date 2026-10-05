@@ -382,10 +382,11 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
   def handle_event("execute_import", _params, socket) do
     # Re-read at Run: the catalogue picked on the first step may have been
-    # trashed since, and nothing live is imported into the trash.
+    # trashed since, and nothing live is imported into the trash. Keep this
+    # fresh row for duplicate detection too: its default item type can change.
     case Catalogue.get_catalogue(socket.assigns.selected_catalogue.uuid) do
-      %{status: status} when status != "deleted" ->
-        run_import(socket)
+      %{status: status} = catalogue when status != "deleted" ->
+        run_import(assign(socket, :selected_catalogue, catalogue))
 
       _ ->
         {:noreply,
@@ -1061,8 +1062,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     existing_duplicates =
       Mapper.detect_existing_duplicates(import_plan, socket.assigns.selected_catalogue.uuid,
         category_uuid: import_category,
-        language: import_lang,
-        catalogue_item_type: socket.assigns.selected_catalogue.item_type
+        language: import_lang
       )
 
     {:noreply,

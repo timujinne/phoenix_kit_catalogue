@@ -30,7 +30,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSetsTest do
       %{conn: with_scope(conn, scope), set: set, red: red, blue: blue, item: item}
     end
 
-    defp open(conn, item), do: live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+    defp open(conn, item), do: live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
     defp assigns(view), do: :sys.get_state(view.pid).socket.assigns
 

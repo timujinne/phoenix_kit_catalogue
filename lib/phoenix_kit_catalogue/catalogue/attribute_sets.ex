@@ -53,7 +53,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
   # (locked_keys only guards THAT sub-map, and managed_by/locked_keys
   # themselves are untouched, so this rides the owner bypass like any
   # other unlocked settings write).
-  @managed_path "/admin/catalogue/attributes"
+  @managed_path "/admin/catalogues/attributes"
 
   defp repo, do: PhoenixKit.RepoHelper.repo()
 

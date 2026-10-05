@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSeoTest do
   alias PhoenixKitCatalogue.Catalogue.Translations
   alias PhoenixKitCatalogue.Web.Settings
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp edit_item_url(item_uuid), do: "#{@base}/items/#{item_uuid}/edit"
 

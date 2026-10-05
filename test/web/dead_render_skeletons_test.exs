@@ -17,11 +17,11 @@ defmodule PhoenixKitCatalogue.Web.DeadRenderSkeletonsTest do
   test "catalogues index: skeleton, not 'No catalogues yet.'", %{conn: conn} do
     fixture_catalogue(%{name: "Dead Render Cat"})
 
-    static = conn |> get("/en/admin/catalogue") |> html_response(200)
+    static = conn |> get("/en/admin/catalogues") |> html_response(200)
     refute static =~ "No catalogues yet."
     assert static =~ "skeleton"
 
-    {:ok, _view, html} = live(conn, "/en/admin/catalogue")
+    {:ok, _view, html} = live(conn, "/en/admin/catalogues")
     assert html =~ "Dead Render Cat"
   end
 
@@ -31,28 +31,28 @@ defmodule PhoenixKitCatalogue.Web.DeadRenderSkeletonsTest do
     cat = fixture_catalogue(%{name: "Detail Dead Render"})
     fixture_item(%{name: "Detail Item", catalogue_uuid: cat.uuid})
 
-    static = conn |> get("/en/admin/catalogue/#{cat.uuid}") |> html_response(200)
+    static = conn |> get("/en/admin/catalogues/#{cat.uuid}") |> html_response(200)
     refute static =~ "No categories or items yet"
     assert static =~ "loading-spinner"
 
-    {:ok, _view, html} = live(conn, "/en/admin/catalogue/#{cat.uuid}?mode=items")
+    {:ok, _view, html} = live(conn, "/en/admin/catalogues/#{cat.uuid}?mode=items")
     assert html =~ "Detail Item"
   end
 
   test "PDF library: skeleton, not 'No PDFs uploaded yet.'", %{conn: conn} do
-    static = conn |> get("/en/admin/catalogue/pdfs") |> html_response(200)
+    static = conn |> get("/en/admin/catalogues/pdfs") |> html_response(200)
     refute static =~ "No PDFs uploaded yet."
     assert static =~ "skeleton"
   end
 
   test "events log: skeleton, not 'No events recorded yet'", %{conn: conn} do
-    static = conn |> get("/en/admin/catalogue/events") |> html_response(200)
+    static = conn |> get("/en/admin/catalogues/events") |> html_response(200)
     refute static =~ "No events recorded yet."
     assert static =~ "skeleton"
 
     # The first connected load clears the initial loading flag, so a
     # genuinely empty log still reaches its real empty state.
-    {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+    {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
     refute :sys.get_state(view.pid).socket.assigns.loading
   end
 end

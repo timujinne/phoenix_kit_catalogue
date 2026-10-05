@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.MalformedUrlKeysTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.Helpers
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   describe "the getters answer not-found for a key that is not a UUID" do
     test "nil from the plain getters, NoResultsError from the bang ones" do

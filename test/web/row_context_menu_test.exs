@@ -10,7 +10,7 @@ defmodule PhoenixKitCatalogue.Web.RowContextMenuTest do
 
   alias PhoenixKitCatalogue.Web.Settings
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     on_exit(fn -> Settings.update_context_menu_enabled(true) end)

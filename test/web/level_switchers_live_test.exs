@@ -7,7 +7,7 @@ defmodule PhoenixKitCatalogue.Web.LevelSwitchersLiveTest do
   """
   use PhoenixKitCatalogue.LiveCase, async: false
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
   @core_switcher? Code.ensure_loaded?(PhoenixKitWeb.Components.Core.CrumbSwitcher)
 
   setup %{conn: conn, scope: scope} do

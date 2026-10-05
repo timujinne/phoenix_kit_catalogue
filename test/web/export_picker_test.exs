@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.ExportPickerTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @url "/en/admin/catalogue/export"
+  @url "/en/admin/catalogues/export"
 
   setup do
     {:ok, rooms} = Catalogue.create_folder(%{name: "Rooms"})

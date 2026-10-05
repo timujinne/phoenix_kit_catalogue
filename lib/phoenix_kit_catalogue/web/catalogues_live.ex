@@ -815,6 +815,18 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     end
   end
 
+  # What the Filters button counts: the filters narrowing the index.
+  defp index_active_filters(assigns, cfg) do
+    # Not in the Deleted view: its rows are all one status, so the select
+    # narrows nothing there and a count would claim a filter that is inert.
+    status =
+      if assigns.catalogue_view_mode == "deleted" or cfg.filters["status"] in [nil, ""],
+        do: 0,
+        else: 1
+
+    status + length(active_attribute_slugs(assigns))
+  end
+
   # The `?attr=` slugs are item-level, so they act only in items mode —
   # in catalogues mode (and the trash) they ride the URL inert.
   defp active_attribute_slugs(assigns) do
@@ -1736,7 +1748,13 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <.icon name="hero-arrow-up-tray" class="w-4 h-4 inline-block mr-1 align-text-bottom" />
         {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Drop here to move to root (unfiled)")}
       </div>
-      <.table_default variant="zebra" size="sm" view_mode={@cfg.view}>
+      <.table_default
+        id="catalogues-tree-list"
+        variant="zebra"
+        size="sm"
+        view_mode={@cfg.view}
+        {table_fit()}
+      >
         <.table_default_header>
           <.table_default_row>
             <.table_default_header_cell class="w-8"></.table_default_header_cell>
@@ -1747,7 +1765,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             </.table_default_header_cell>
             <%!-- The tree shows under every sort now, so it carries the same
                  sortable headers as the flat table — plain in Manual order. --%>
-            <.sort_header_cell field={@name_col_id} sort={Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}>
+            <.sort_header_cell
+              field={@name_col_id}
+              sort={Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}
+              data-col-lead
+            >
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Name")}
             </.sort_header_cell>
             <.sort_header_cell
@@ -1756,6 +1778,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
               sort={c.sortable? && Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}
               align={c.align}
               class={[column_fit_class(c.id), c.align == :right && "text-right"]}
+              data-col-priority={column_priority(c.id)}
             >
               {c.label.()}
             </.sort_header_cell>
@@ -3346,31 +3369,72 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         <div :if={@active_tab == :index and @index_loaded} class="flex flex-col gap-4">
           <% cfg = @view_configs.catalogues %>
           <% items? = item_results?(assigns) %>
-          <.table_toolbar scope={:catalogues} cfg={cfg}>
+          <.table_toolbar
+            scope={:catalogues}
+            cfg={cfg}
+            active_filters={index_active_filters(assigns, cfg)}
+          >
             <:filters>
-              <%!-- No folder select here: search works where the user
-                    stands — the drilled folder's subtree — and scope is
-                    chosen by navigating folders (Max, 2026-08-29). --%>
-              <.enum_filter
-                id="status"
-                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
-                value={cfg.filters["status"]}
-                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All statuses")}
-                options={TableQuery.enum_options(@catalogue_rows, :catalogues, "status")}
-              />
-              <%!-- The attribute filter is an item-level question, so it
-                    lives with items mode and filters the results directly
-                    (Max, 2026-08-29 — it used to mean "catalogues
-                    containing such items", which needed a disclaimer). --%>
-              <.attribute_filter
-                :if={@catalogue_view_mode == "active" and @attribute_filter_options != []}
-                options={@attribute_filter_options}
-                selected={active_attribute_slugs(assigns)}
-                counts={@attribute_value_counts}
-                always_visible
-              />
-            </:filters>
+                <%!-- No folder select here: search works where the user
+                      stands — the drilled folder's subtree — and scope is
+                      chosen by navigating folders (Max, 2026-08-29). --%>
+                <.enum_filter
+                  id="status"
+                  label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
+                  value={cfg.filters["status"]}
+                  prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All statuses")}
+                  options={TableQuery.enum_options(@catalogue_rows, :catalogues, "status")}
+                />
+                <%!-- The attribute filter is an item-level question, so it
+                      lives with items mode and filters the results directly
+                      (Max, 2026-08-29 — it used to mean "catalogues
+                      containing such items", which needed a disclaimer). --%>
+                <.attribute_filter
+                  :if={@catalogue_view_mode == "active" and @attribute_filter_options != []}
+                  options={@attribute_filter_options}
+                  selected={active_attribute_slugs(assigns)}
+                  counts={@attribute_value_counts}
+                  always_visible
+                  inline
+                />
+              </:filters>
             <:actions>
+              <Shared.view_options id="catalogues-view-options">
+                <:row label={gettext("Sort by")}>
+                  <.sort_controls
+                    scope={:catalogues}
+                    selected={["position", "name" | cfg.columns]}
+                    sort_by={cfg.sort_by}
+                    sort_dir={cfg.sort_dir}
+                    manual_value="position"
+                    label={false}
+                  />
+                </:row>
+                <:row label={gettext("Layout")}>
+                  <.view_toggle view={cfg.view} />
+                </:row>
+                <:action>
+                  <button
+                    type="button"
+                    phx-click={push_closing("show_column_modal", "catalogues-view-options")}
+                    class={Shared.view_option_action_class()}
+                  >
+                    <.icon name="hero-view-columns" class="w-4 h-4" />
+                    {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
+                  </button>
+                  <button
+                    :if={cfg.sort_by == "position" and reorder_all_offered?(assigns)}
+                    type="button"
+                    phx-click={
+                      push_closing("open_catalogues_reorder_modal", "catalogues-view-options")
+                    }
+                    class={Shared.view_option_action_class()}
+                  >
+                    <.icon name="hero-arrows-up-down" class="w-4 h-4" />
+                    {gettext("Reorder all")}
+                  </button>
+                </:action>
+              </Shared.view_options>
               <button
                 :if={@catalogue_view_mode == "active"}
                 type="button"
@@ -3400,17 +3464,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             }
             tree={searched_deleted_folder_tree(assigns)}
           />
-          <%!-- Active/Deleted tabs. With no search: whenever the trash
-               holds anything. With a search on: only when it holds a
-               MATCH — except while standing in the Deleted view itself,
-               where hiding the row would trap the user (Max,
-               2026-08-29). The view-mode toggle moved into the
-               toolbar's view-tools cluster above, next to Columns —
-               it's a filter/menu-panel control, not a trash-visibility
-               one. Items mode is a live view of items, so the trash
+          <%!-- Active/Deleted tabs, alone on their row. With no search:
+               whenever the trash holds anything. With a search on: only when
+               it holds a MATCH — except while standing in the Deleted view
+               itself, where hiding the row would trap the user (Max,
+               2026-08-29). Items mode is a live view of items, so the trash
                toggle rests with it. --%>
-          <%!-- Tabs left, the table's own controls right — the same row and
-               the same order as inside a catalogue. --%>
           <Shared.list_controls_row>
             <:tabs :if={deleted_count > 0 or @catalogue_view_mode == "deleted"}>
               <Shared.status_tab
@@ -3429,31 +3488,6 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                 phx-value-mode="deleted"
               />
             </:tabs>
-            <:controls>
-              <.sort_controls
-                scope={:catalogues}
-                selected={["position", "name" | cfg.columns]}
-                sort_by={cfg.sort_by}
-                sort_dir={cfg.sort_dir}
-                manual_value="position"
-              />
-              <button
-                :if={cfg.sort_by == "position" and reorder_all_offered?(assigns)}
-                type="button"
-                phx-click="open_catalogues_reorder_modal"
-                class="btn btn-outline btn-sm"
-              >
-                <.icon name="hero-arrows-up-down" class="w-4 h-4" />
-                <span class="hidden sm:inline">{gettext("Reorder all")}</span>
-              </button>
-              <button type="button" phx-click="show_column_modal" class="btn btn-outline btn-sm">
-                <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
-                <span class="hidden sm:inline">
-                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
-                </span>
-              </button>
-              <.view_toggle view={cfg.view} />
-            </:controls>
           </Shared.list_controls_row>
           <%!-- Location row: Up + current folder name, whenever drilled
                in — including the flat search/sorted table, where it is
@@ -3967,47 +4001,52 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
              untouched in the DB until the cutover drop migration. --%>
         <div :if={@attr_tab_loaded and not @sets_enabled} class="flex flex-col gap-4">
         <% cfg = @view_configs.attribute_groups %>
-        <.table_toolbar scope={:attribute_groups} cfg={cfg}>
+        <.table_toolbar
+          scope={:attribute_groups}
+          cfg={cfg}
+          active_filters={if cfg.filters["status"] in [nil, ""], do: 0, else: 1}
+        >
           <:filters>
-            <.enum_filter
-              id="status"
-              label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
-              value={cfg.filters["status"]}
-              prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All statuses")}
-              options={TableQuery.enum_options(@attribute_group_rows, :attribute_groups, "status")}
-            />
-          </:filters>
+              <.enum_filter
+                id="status"
+                label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Status")}
+                value={cfg.filters["status"]}
+                prompt={Gettext.gettext(PhoenixKitCatalogue.Gettext, "All statuses")}
+                options={TableQuery.enum_options(@attribute_group_rows, :attribute_groups, "status")}
+              />
+            </:filters>
           <:actions>
+            <Shared.view_options id="attribute-groups-view-options">
+              <:row label={gettext("Sort by")}>
+                <.sort_controls
+                  scope={:attribute_groups}
+                  selected={["position", "name" | cfg.columns]}
+                  sort_by={cfg.sort_by}
+                  sort_dir={cfg.sort_dir}
+                  manual_value="position"
+                  label={false}
+                />
+              </:row>
+              <:row label={gettext("Layout")}>
+                <.view_toggle view={cfg.view} />
+              </:row>
+              <:action>
+                <button
+                  type="button"
+                  phx-click={push_closing("show_column_modal", "attribute-groups-view-options")}
+                  class={Shared.view_option_action_class()}
+                >
+                  <.icon name="hero-view-columns" class="w-4 h-4" />
+                  {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
+                </button>
+              </:action>
+            </Shared.view_options>
             <.link navigate={Paths.attribute_group_new()} class="btn btn-primary btn-sm">
               <.icon name="hero-plus" class="w-4 h-4" />
               {Gettext.gettext(PhoenixKitCatalogue.Gettext, "New attribute group")}
             </.link>
           </:actions>
         </.table_toolbar>
-        <%!-- The table's own controls, on their own row — this list has no
-             status tabs, so the row carries only the right-hand group. It
-             used to get sort and Columns from `table_toolbar`, which now
-             renders search, filters and actions alone: without this the
-             legacy groups list would silently lose both (zai,
-             2026-09-21). --%>
-        <Shared.list_controls_row>
-          <:controls>
-            <.sort_controls
-              scope={:attribute_groups}
-              selected={["position", "name" | cfg.columns]}
-              sort_by={cfg.sort_by}
-              sort_dir={cfg.sort_dir}
-              manual_value="position"
-            />
-            <button type="button" phx-click="show_column_modal" class="btn btn-outline btn-sm">
-              <.icon name="hero-adjustments-horizontal" class="w-4 h-4" />
-              <span class="hidden sm:inline">
-                {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Columns")}
-              </span>
-            </button>
-            <.view_toggle view={cfg.view} />
-          </:controls>
-        </Shared.list_controls_row>
         <.simple_table
           scope={:attribute_groups}
           show_view_toggle={false}
@@ -4532,18 +4571,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   attr(:scope, :atom, required: true)
   attr(:cfg, :map, required: true)
+  attr(:active_filters, :integer, default: 0)
 
   slot(:filters)
   slot(:actions)
 
   defp table_toolbar(assigns) do
     ~H"""
-    <%!-- Search and filters left, create actions right. The table's own
-         controls — sort, Reorder all, Columns, the view toggle — are NOT
-         here: they sit on the tabs row below, where the catalogue pages
-         have always kept them (boss via Max, 2026-09-21). Two groups
-         rather than one flat wrap, so a narrow screen drops the actions
-         under the search as a unit instead of scattering buttons. --%>
+    <%!-- Search and its Filters button left, View options and the create
+         actions right — the same pair, in the same places, as inside a
+         catalogue. Nothing that tunes the list sits loose on the row (boss
+         via Max, 2026-10-05: the top was too busy). Two groups rather than
+         one flat wrap, so a narrow screen drops the actions under the search
+         as a unit — still against the right edge, which is also what keeps
+         the View options pop-up on screen. --%>
     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
       <div class="flex flex-wrap items-center gap-2">
         <Shared.search_input
@@ -4553,10 +4594,16 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
           on_clear="table_search_clear"
           class={Shared.search_width_class()}
         />
-        {render_slot(@filters)}
+        <Shared.search_filters
+          :if={@filters != []}
+          id={"#{@scope}-filters"}
+          active={@active_filters}
+        >
+          {render_slot(@filters)}
+        </Shared.search_filters>
       </div>
 
-      <div :if={@actions != []} class="flex flex-wrap items-center gap-2">
+      <div :if={@actions != []} class="ml-auto flex flex-wrap items-center justify-end gap-2">
         {render_slot(@actions)}
       </div>
     </div>
@@ -4631,6 +4678,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       view_event="set_view"
       items={@rows}
       {card_media_frame()}
+      {table_fit()}
       card_fields={fn row ->
         for c <- @cols, c.id != "name" do
           %{label: c.label.(), value: render_card_value(@scope, c.id, row)}
@@ -4651,6 +4699,8 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             sort={c.sortable? && Shared.header_sort(@cfg.sort_by, @cfg.sort_dir)}
             align={c.align}
             class={[column_fit_class(c.id), c.align == :right && "text-right"]}
+            data-col-priority={c.id != "name" && column_priority(c.id)}
+            data-col-lead={c.id == "name"}
           >
             {c.label.()}
           </.sort_header_cell>

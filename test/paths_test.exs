@@ -20,14 +20,14 @@ defmodule PhoenixKitCatalogue.PathsTest do
 
   describe "pdfs/0" do
     test "returns the admin PDF library index path" do
-      assert Paths.pdfs() =~ "/admin/catalogue/pdfs"
+      assert Paths.pdfs() =~ "/admin/catalogues/pdfs"
     end
   end
 
   describe "pdf_detail/1" do
     test "appends the pdf uuid" do
       uuid = "019df9d5-1b2d-70e0-9776-b94e6341c8d1"
-      assert Paths.pdf_detail(uuid) =~ "/admin/catalogue/pdfs/#{uuid}"
+      assert Paths.pdf_detail(uuid) =~ "/admin/catalogues/pdfs/#{uuid}"
     end
 
     test "does not include any query string" do

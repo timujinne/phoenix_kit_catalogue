@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
       # nil, so a validate handler that forwards the previous action — which
       # starts nil from mount — renders a form that is invalid and says
       # nothing. The user only learns anything on their first failed save.
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/new")
 
       html =
         view
@@ -44,7 +44,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
   describe "CatalogueFormLive :edit — tab + language + metadata" do
     test "switch_tab toggles between :details / :metadata / :files",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       render_click(view, "switch_tab", %{"tab" => "metadata"})
       assert :sys.get_state(view.pid).socket.assigns.current_tab == :metadata
@@ -58,13 +58,13 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
 
     test "switch_language doesn't crash with multilang disabled",
          %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
       render_click(view, "switch_language", %{"lang" => "fi"})
       assert Process.alive?(view.pid)
     end
 
     test "add_meta_field + remove_meta_field round-trip", %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
 
       render_click(view, "add_meta_field", %{"key" => "brand"})
       meta = :sys.get_state(view.pid).socket.assigns.meta_state
@@ -80,7 +80,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     test "switch_language doesn't crash with multilang disabled",
          %{conn: conn, catalogue: cat} do
       cat_obj = fixture_category(cat, %{name: "C"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/categories/#{cat_obj.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/categories/#{cat_obj.uuid}/edit")
 
       render_click(view, "switch_language", %{"lang" => "fi"})
       assert Process.alive?(view.pid)
@@ -92,7 +92,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     # (boss via Max, 2026-09-21: proper pickers, no flat lists): a place in
     # its own catalogue reparents, a place in another moves it there.
     defp edit(conn, category),
-      do: live(conn, "/en/admin/catalogue/categories/#{category.uuid}/edit")
+      do: live(conn, "/en/admin/catalogues/categories/#{category.uuid}/edit")
 
     defp pick(view, place, name) do
       view |> element("#category-move-picker-change") |> render_click()
@@ -298,7 +298,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
           data: %{"meta" => %{"brand" => "Acme"}}
         })
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       assert render(element(view, "#item-meta-section")) =~ "ignore_attrs"
     end
   end
@@ -320,7 +320,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
             {"nope", "After junk"}
           ] do
         {:ok, view, _html} =
-          live(conn, "/en/admin/catalogue/#{cat.uuid}/categories/new?parent_uuid=#{parent}")
+          live(conn, "/en/admin/catalogues/#{cat.uuid}/categories/new?parent_uuid=#{parent}")
 
         assert :sys.get_state(view.pid).socket.assigns.parent_pick == "root"
 
@@ -336,7 +336,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     test "its catalogue deleted forever while the form is open does not crash it",
          %{conn: conn} do
       doomed = fixture_catalogue(%{name: "Doomed"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{doomed.uuid}/categories/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{doomed.uuid}/categories/new")
 
       {:ok, _} = Catalogue.permanently_delete_catalogue(doomed)
       _ = render(view)
@@ -348,7 +348,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     test "a parent trashed after it was picked is dropped, and the context refuses it",
          %{conn: conn, catalogue: cat} do
       doors = fixture_category(cat, %{name: "Doors"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/categories/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/categories/new")
 
       view |> element("#category-parent-picker-change") |> render_click()
 
@@ -374,7 +374,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     test "it starts at the top level, and saves under the category picked",
          %{conn: conn, catalogue: cat} do
       doors = fixture_category(cat, %{name: "Doors"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/categories/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/categories/new")
 
       assert view |> element("#category-parent-picker-path") |> render() =~ "Branches Cat"
 
@@ -399,7 +399,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     test "a post still carrying the old parent does not undo the pick",
          %{conn: conn, catalogue: cat} do
       doors = fixture_category(cat, %{name: "Doors"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{cat.uuid}/categories/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/categories/new")
 
       view |> element("#category-parent-picker-change") |> render_click()
 
@@ -422,7 +422,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
       doors = fixture_category(cat, %{name: "Doors"})
 
       {:ok, view, _html} =
-        live(conn, "/en/admin/catalogue/#{cat.uuid}/categories/new?parent_uuid=#{doors.uuid}")
+        live(conn, "/en/admin/catalogues/#{cat.uuid}/categories/new?parent_uuid=#{doors.uuid}")
 
       assert view |> element("#category-parent-picker-path") |> render() =~ "Doors"
 
@@ -446,7 +446,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
 
     test "switch_tab moves between Details / Metadata / Files",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       render_click(view, "switch_tab", %{"tab" => "metadata"})
       assert :sys.get_state(view.pid).socket.assigns.current_tab == :metadata
@@ -457,7 +457,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
 
     test "switch_language with multilang disabled is a no-op (no crash)",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       # multilang_enabled defaults to false in test env (no PhoenixKit
       # languages settings rows); the handler should still :noreply
       # cleanly without changing current_lang.
@@ -466,7 +466,7 @@ defmodule PhoenixKitCatalogue.Web.FormLVBranchesTest do
     end
 
     test "clear_featured_image clears the assign", %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       # Inject a featured image first.
       :sys.replace_state(view.pid, fn state ->

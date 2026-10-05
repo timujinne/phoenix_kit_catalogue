@@ -7,7 +7,7 @@ defmodule PhoenixKitCatalogue.Web.LevelImageTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     catalogue = fixture_catalogue(%{name: "Pictures"})

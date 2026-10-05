@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveExecuteTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   setup do
     cat = fixture_catalogue(%{name: "Execute Cat"})
@@ -174,6 +174,42 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveExecuteTest do
   end
 
   describe "duplicates and the item type" do
+    test "confirmation reads the current catalogue type", %{conn: conn, catalogue: cat} do
+      fixture_item(%{name: "Transport", catalogue_uuid: cat.uuid})
+      view = type_import(conn, cat)
+
+      {:ok, _} = Catalogue.update_catalogue(cat, %{item_type: "service"})
+      render_click(view, "continue_to_confirm", %{})
+
+      assert :sys.get_state(view.pid).socket.assigns.existing_duplicate_count == 1
+    end
+
+    for {original_type, current_type, expected_created} <- [
+          {"goods", "service", 0},
+          {"service", "goods", 1}
+        ] do
+      test "Skip duplicates follows a catalogue changed from #{original_type} to #{current_type} after confirmation",
+           %{conn: conn} do
+        cat = fixture_catalogue(%{item_type: unquote(original_type)})
+        fixture_item(%{name: "Transport", catalogue_uuid: cat.uuid})
+        view = type_import(conn, cat)
+        render_click(view, "continue_to_confirm", %{})
+        render_change(view, "set_duplicate_mode", %{"mode" => "skip"})
+
+        {:ok, _} = Catalogue.update_catalogue(cat, %{item_type: unquote(current_type)})
+        render_click(view, "execute_import", %{})
+
+        assert_eventually(fn -> :sys.get_state(view.pid).socket.assigns.step == :done end)
+
+        assert :sys.get_state(view.pid).socket.assigns.import_result.created ==
+                 unquote(expected_created)
+
+        items = Catalogue.list_items_for_catalogue(cat.uuid)
+        assert length(items) == 1 + unquote(expected_created)
+        assert Enum.count(items, &(&1.item_type == "service")) == unquote(expected_created)
+      end
+    end
+
     # A service catalogue whose items inherit its type. A file row that names
     # the type is a duplicate only when that type is the item's effective one;
     # the confirm-step counter and "Skip duplicates" agree on it.
@@ -216,6 +252,25 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveExecuteTest do
 
       assert length(goods_transport) == 1
     end
+  end
+
+  defp type_import(conn, cat) do
+    {:ok, view, _html} = live(conn, @import_url)
+    render_change(view, "validate_upload", %{"catalogue" => cat.uuid})
+
+    file =
+      file_input(view, "#upload-form", :import_file, [
+        %{
+          last_modified: 1_700_000_000_000,
+          name: "type.csv",
+          content: "name,item_type\nTransport,service\n",
+          type: "text/csv"
+        }
+      ])
+
+    render_upload(file, "type.csv")
+    render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
+    view
   end
 
   defp assert_eventually(check, attempts \\ 50) do

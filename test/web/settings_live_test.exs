@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLiveTest do
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKitCatalogue.Web.Settings
 
-  @path "/en/admin/settings/catalogue"
+  @path "/en/admin/settings/catalogues"
 
   setup do
     before = %{
@@ -163,7 +163,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLiveTest do
     [tab] = PhoenixKitCatalogue.settings_tabs()
 
     assert tab.parent == :admin_settings
-    assert tab.path == "catalogue"
+    assert tab.path == "catalogues"
     assert tab.live_view == {PhoenixKitCatalogue.Web.SettingsLive, :settings}
     assert tab.permission == PhoenixKitCatalogue.module_key()
   end

@@ -12,7 +12,7 @@ defmodule PhoenixKitCatalogue.Web.CategorySeoReadTest do
     conn = with_scope(conn, scope)
     catalogue = fixture_catalogue(%{name: "Cat SEO"})
     category = fixture_category(catalogue, %{name: "Doors"})
-    url = "/en/admin/catalogue/categories/#{category.uuid}/edit"
+    url = "/en/admin/catalogues/categories/#{category.uuid}/edit"
 
     {:ok, view, _html} = live(conn, url)
 

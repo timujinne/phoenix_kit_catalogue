@@ -25,7 +25,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveBranchesTest do
 
       _ = {cat, cat_obj, m, s}
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, _view, html} = live(conn, "/en/admin/catalogues/events")
 
       # The filter dropdown lists each humanize_resource_type clause's
       # output. Pin that the localized labels render — at least one
@@ -40,7 +40,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveBranchesTest do
          %{conn: conn, catalogue: cat} do
       Catalogue.create_item(%{name: "Filter Item", catalogue_uuid: cat.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       render_change(view, "filter", %{"filter" => %{"action" => "item.created"}})
 
@@ -51,7 +51,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveBranchesTest do
 
     test "filter with empty action clears it back to nil", %{conn: conn, catalogue: cat} do
       _ = cat
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       render_change(view, "filter", %{"filter" => %{"action" => "item.created"}})
       render_change(view, "filter", %{"filter" => %{"action" => ""}})
@@ -65,7 +65,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveBranchesTest do
          %{conn: conn, catalogue: cat} do
       Catalogue.create_item(%{name: "FO Item", catalogue_uuid: cat.uuid})
 
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
       assigns = :sys.get_state(view.pid).socket.assigns
       assert is_list(assigns.action_types)

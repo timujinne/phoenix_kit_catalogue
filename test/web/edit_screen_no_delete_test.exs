@@ -14,7 +14,7 @@ defmodule PhoenixKitCatalogue.Web.EditScreenNoDeleteTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     catalogue = fixture_catalogue(%{name: "Kitchen"})

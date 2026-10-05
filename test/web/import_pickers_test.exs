@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.ImportPickersTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   setup do
     {:ok, rooms} = Catalogue.create_folder(%{name: "Rooms"})

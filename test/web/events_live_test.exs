@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @events_url "/en/admin/catalogue/events"
+  @events_url "/en/admin/catalogues/events"
 
   describe "mount and render" do
     test "renders an empty state when no events exist", %{conn: conn} do

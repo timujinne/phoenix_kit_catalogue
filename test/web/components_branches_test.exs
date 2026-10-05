@@ -17,7 +17,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
 
   describe "smart-catalogue ItemFormLive — rules render branches" do
     test "ItemFormLive renders for a smart-catalogue item", %{conn: conn, item: item} do
-      {:ok, _view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       assert is_binary(html)
       # Smart-rule UI elements should appear.
@@ -40,7 +40,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
         })
 
       _ = smart
-      {:ok, _view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       # The rule should render with the trailing-zero-stripped value
       # (15.0000 → 15) and unit symbol (%).
@@ -59,7 +59,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
           unit: "flat"
         })
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       assert html =~ "Flat" or html =~ "flat"
     end
 
@@ -74,7 +74,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
           unit: "percent"
         })
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       assert is_binary(html)
     end
   end
@@ -84,7 +84,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
          %{conn: conn, item: item, smart: smart} do
       {:ok, ref} = Catalogue.create_catalogue(%{name: "SetValRef", kind: "standard"})
 
-      {:ok, _view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, _view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       # The working_rules state is keyed by referenced_catalogue_uuid.
       # We can't directly trigger the event without proper rule render,
@@ -96,7 +96,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
 
     test "set_catalogue_rule_unit with empty string clears the unit",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       uuid = Ecto.UUID.generate()
 
       # Toggle on first, then set unit to empty string.
@@ -109,7 +109,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
 
     test "set_catalogue_rule_unit ignores unknown rule uuid",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       # Without first toggling, the rule isn't in working_rules. The
       # event should be a no-op.
@@ -125,7 +125,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
 
     test "set_catalogue_rule_value ignores unknown rule uuid",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
       before = :sys.get_state(view.pid).socket.assigns.working_rules
 
@@ -139,7 +139,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
 
     test "set_catalogue_rule_value with non-decimal raw stores nil",
          %{conn: conn, item: item} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
       uuid = Ecto.UUID.generate()
 
       render_click(view, "toggle_catalogue_rule", %{"uuid" => uuid})

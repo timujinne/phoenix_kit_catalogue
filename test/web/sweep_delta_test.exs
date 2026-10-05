@@ -56,7 +56,7 @@ defmodule PhoenixKitCatalogue.Web.SweepDeltaTest do
       # admin-list HTML contains the gettext form.
       _ = cat
 
-      {:ok, _view, html} = live(conn(), "/en/admin/catalogue")
+      {:ok, _view, html} = live(conn(), "/en/admin/catalogues")
 
       assert html =~ "Active"
     end
@@ -64,7 +64,7 @@ defmodule PhoenixKitCatalogue.Web.SweepDeltaTest do
 
   describe "C6 — handle_info catch-all logs at debug" do
     test "stray messages don't crash CataloguesLive (catch-all is exhaustive)" do
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogue")
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues")
 
       # Send an unexpected message — the LV's catch-all should `:noreply`
       # without crashing (and emit a Logger.debug, which we don't

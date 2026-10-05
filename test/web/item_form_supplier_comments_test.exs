@@ -16,7 +16,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
 
   @type_ "catalogue_item_supplier"
 
-  defp edit_item_url(item_uuid), do: "/en/admin/catalogue/items/#{item_uuid}/edit"
+  defp edit_item_url(item_uuid), do: "/en/admin/catalogues/items/#{item_uuid}/edit"
 
   defp item_with_supplier do
     item =
@@ -301,7 +301,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormSupplierCommentsTest do
       {:ok, view, _} =
         conn
         |> with_scope(scope)
-        |> live("/en/admin/catalogue/#{catalogue.uuid}/items/new?tab=sourcing")
+        |> live("/en/admin/catalogues/#{catalogue.uuid}/items/new?tab=sourcing")
 
       view
       |> element("#supplier-add-picker")

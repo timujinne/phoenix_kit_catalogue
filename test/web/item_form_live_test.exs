@@ -17,7 +17,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
   # Helpers
   # ─────────────────────────────────────────────────────────────────
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   describe "crafted payloads (review sweep, 2026-09-12)" do
     test "a non-string choice index cannot crash the form (sweep 2026-09-13)", %{conn: conn} do
@@ -1623,7 +1623,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
 
     test "a valid return_to drives the Cancel link; an external one is dropped", %{conn: conn} do
       catalogue = fixture_catalogue()
-      rt = "/en/admin/catalogue/#{catalogue.uuid}?category=uncategorized"
+      rt = "/en/admin/catalogues/#{catalogue.uuid}?category=uncategorized"
 
       {:ok, _view, html} =
         live(conn, new_item_url(catalogue.uuid) <> "?" <> URI.encode_query(return_to: rt))

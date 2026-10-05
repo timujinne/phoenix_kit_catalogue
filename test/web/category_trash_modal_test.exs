@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryTrashModalTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   test "trashing a category with items defaults to sending the items to Deleted with it",
        %{conn: conn} do

@@ -720,7 +720,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
     describe "managed_path (2026-09-11 direction, step 2)" do
       test "create_set stamps a top-level managed_path settings key" do
         set = create_set!("Path set")
-        assert set.settings["managed_path"] == "/admin/catalogue/attributes"
+        assert set.settings["managed_path"] == "/admin/catalogues/attributes"
       end
 
       test "the managed_path key does not trip tampers_with_markers?/2" do
@@ -774,14 +774,14 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSetsTest do
 
         assert :ok = AttributeSets.backfill_managed_path()
         backfilled = AttributeSets.get_set(set.uuid)
-        assert backfilled.settings["managed_path"] == "/admin/catalogue/attributes"
+        assert backfilled.settings["managed_path"] == "/admin/catalogues/attributes"
 
         # Idempotent: a set that already carries it is left alone (no
         # crash, no duplicate write) on a second run.
         assert :ok = AttributeSets.backfill_managed_path()
 
         assert AttributeSets.get_set(set.uuid).settings["managed_path"] ==
-                 "/admin/catalogue/attributes"
+                 "/admin/catalogues/attributes"
       end
     end
 

@@ -12,7 +12,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailCrossCatalogueMoveTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     here = fixture_catalogue(%{name: "Here"})

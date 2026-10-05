@@ -14,7 +14,7 @@ defmodule PhoenixKitCatalogue.Web.EditViewingLanguageTest do
 
   alias PhoenixKit.Modules.Languages
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   describe "edit forms" do
     setup %{conn: conn} do

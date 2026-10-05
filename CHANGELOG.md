@@ -1,3 +1,52 @@
+## 0.47.1 - 2026-10-05
+
+Reviews: `dev_docs/pull_requests/2026/141-item-type/`,
+`144-list-chrome-popups-catalogues-address/` (`CODEX_REVIEW.md`).
+
+The requirements are unchanged.
+
+### Fixed
+
+- Skip duplicates in the import wizard compared against the catalogue's
+  item type as it was when the file was uploaded. If the catalogue's default
+  type was changed meanwhile (Goods to Service or back), an incoming row could
+  create a duplicate of an existing item or be skipped wrongly. The count on
+  the confirmation step and the run itself now use the current default.
+- An old-address redirect no longer rewrites a second old address further
+  along the path; only the first one moves.
+- The layout tests for row alignment and the Image-column category tree run
+  on every `phoenix_kit` version, not only 2.54.0 and later.
+
+## 0.47.0 - 2026-10-05
+
+Reviews: `dev_docs/pull_requests/2026/144-list-chrome-popups-catalogues-address/`.
+
+Built against `phoenix_kit` 2.53.0 and `phoenix_kit_ai` 0.25.0; the
+requirements are unchanged. Column fitting (below) takes effect from
+`phoenix_kit` 2.54.0; on an older core the tables scroll sideways as they did.
+
+### Changed
+
+- The admin pages are now under `/admin/catalogues` (#144), the settings page
+  under `/admin/settings/catalogues`. The old singular addresses redirect, path
+  and query intact, so bookmarks, sent links and activity-log entries still
+  land; the redirect is admin-only and follows a host's renamed admin area.
+- A list's loose controls sit behind two buttons: Filters beside the search
+  (which rows show) and View options beside the create buttons (sort, layout,
+  Columns, Reorder all). A catalogue level that lists categories and items
+  shares one sort. The bulk-action bar docks under its list.
+- List tables drop their least important columns when they do not fit,
+  instead of scrolling sideways (needs `phoenix_kit` 2.54.0).
+- Subcategories are drawn set in under their parent, with its picture's width
+  as the step, and the Subcategories toggle sits under the category's name.
+
+### Fixed
+
+- A request for the old address with extra leading slashes now gets an
+  answer instead of a server error.
+- The module's tests no longer fail on a `phoenix_kit` older than 2.54.0; the
+  four that look for a fitted table are skipped there.
+
 ## 0.46.1 - 2026-09-28
 
 Review: `dev_docs/pull_requests/2026/143-english-source-labels/`.

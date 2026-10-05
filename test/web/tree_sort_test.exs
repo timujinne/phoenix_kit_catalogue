@@ -19,7 +19,7 @@ defmodule PhoenixKitCatalogue.Web.TreeSortTest do
   alias PhoenixKitCatalogue.Web.TableConfig
   alias PhoenixKitCatalogue.Web.ViewConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup %{conn: conn, scope: scope} do
     # The sorts are module-wide settings: put every one back.

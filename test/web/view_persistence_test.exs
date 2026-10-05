@@ -20,7 +20,7 @@ defmodule PhoenixKitCatalogue.Web.ViewPersistenceTest do
 
   test "choosing a view on the index changes what every other page opens with",
        %{conn: conn, catalogue: catalogue, user: user} do
-    {:ok, index, _html} = live(conn, "/en/admin/catalogue")
+    {:ok, index, _html} = live(conn, "/en/admin/catalogues")
     render_click(index, "set_view", %{"mode" => "table"})
 
     # Stored against the user, not the page…
@@ -28,23 +28,23 @@ defmodule PhoenixKitCatalogue.Web.ViewPersistenceTest do
 
     # …so the detail page, the attributes tab and the PDF library all
     # open in it rather than in whatever they last remembered.
-    {:ok, detail, _} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}")
+    {:ok, detail, _} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}")
     assert :sys.get_state(detail.pid).socket.assigns.view_mode_pref == "table"
 
-    {:ok, attrs, _} = live(conn, "/en/admin/catalogue/attributes")
+    {:ok, attrs, _} = live(conn, "/en/admin/catalogues/attributes")
     assert :sys.get_state(attrs.pid).socket.assigns.view_mode == "table"
 
-    {:ok, pdfs, _} = live(conn, "/en/admin/catalogue/pdfs")
+    {:ok, pdfs, _} = live(conn, "/en/admin/catalogues/pdfs")
     assert :sys.get_state(pdfs.pid).socket.assigns.view_mode == "table"
   end
 
   test "and it travels the other way too", %{conn: conn, catalogue: catalogue, user: user} do
-    {:ok, detail, _} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}")
+    {:ok, detail, _} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}")
     render_click(detail, "set_view", %{"mode" => "card"})
 
     assert ViewConfig.load_view(reload_user(user)) == "card"
 
-    {:ok, index, _} = live(conn, "/en/admin/catalogue")
+    {:ok, index, _} = live(conn, "/en/admin/catalogues")
     assert :sys.get_state(index.pid).socket.assigns.view_configs.catalogues.view == "card"
   end
 
@@ -54,7 +54,7 @@ defmodule PhoenixKitCatalogue.Web.ViewPersistenceTest do
     # CSS do the switching and persists afterwards, so the click is free.
     # (Asserted on the detail page because the attributes tab and the PDF
     # library render no toggle at all when they have nothing to list.)
-    {:ok, view, html} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}?mode=items")
+    {:ok, view, html} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}?mode=items")
 
     # The table is UNCONTROLLED — it carries the shared storage key, which
     # is what lets the client swap faces without asking the server.
@@ -73,19 +73,19 @@ defmodule PhoenixKitCatalogue.Web.ViewPersistenceTest do
     # snapshot from before it, so the next scope save wrote that snapshot
     # back and the view vanished — silently, and only visible one page
     # later as "my view didn't stick".
-    {:ok, index, _} = live(conn, "/en/admin/catalogue")
+    {:ok, index, _} = live(conn, "/en/admin/catalogues")
     render_click(index, "set_view", %{"mode" => "table"})
     assert ViewConfig.load_view(reload_user(user)) == "table"
 
     render_click(index, "remove_column", %{"column_id" => "status"})
 
     assert ViewConfig.load_view(reload_user(user)) == "table"
-    {:ok, detail, _} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}")
+    {:ok, detail, _} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}")
     assert :sys.get_state(detail.pid).socket.assigns.view_mode_pref == "table"
   end
 
   test "an unknown mode is ignored rather than blanking the page", %{conn: conn, user: user} do
-    {:ok, index, _} = live(conn, "/en/admin/catalogue")
+    {:ok, index, _} = live(conn, "/en/admin/catalogues")
 
     # The payload is client-forgeable, so an unknown mode is ignored by
     # a catch-all rather than crashing the LiveView, and nothing is

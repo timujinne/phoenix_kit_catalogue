@@ -130,7 +130,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
     end
 
     test "the page filters, and the filter is in the URL", ctx do
-      url = "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items"
+      url = "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items"
 
       {:ok, view, html} = live(ctx.conn, url)
       assert html =~ "Blue oak door"
@@ -171,7 +171,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       {:ok, _view, html} =
         live(
           ctx.conn,
-          "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items&attr=#{ctx.blue.slug}"
+          "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items&attr=#{ctx.blue.slug}"
         )
 
       assert html =~ "Blue oak door"
@@ -206,7 +206,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       {:ok, dead} = Catalogue.create_attribute_set_value(ctx.colour, %{label: "Chartreuse"})
 
       {:ok, view, _html} =
-        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}")
+        live(ctx.conn, "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}")
 
       assert has_element?(view, ~s|button[phx-value-slug="#{dead.slug}"][disabled]|)
       refute has_element?(view, ~s|button[phx-value-slug="#{ctx.blue.slug}"][disabled]|)
@@ -247,7 +247,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       # …but standing in Doors, it matches nothing, so the page offers it
       # disabled.
       {:ok, view, _html} =
-        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}")
+        live(ctx.conn, "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}")
 
       assert has_element?(view, ~s|button[phx-value-slug="#{teal.slug}"][disabled]|)
     end
@@ -265,7 +265,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       {:ok, view, html} =
         live(
           ctx.conn,
-          "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{empty_cat.uuid}&mode=items"
+          "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{empty_cat.uuid}&mode=items"
         )
 
       assert html =~ "Plain item"
@@ -278,7 +278,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       {:ok, doors, _} =
         live(
           ctx.conn,
-          "/en/admin/catalogue/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items"
+          "/en/admin/catalogues/#{ctx.catalogue.uuid}?category=#{ctx.category.uuid}&mode=items"
         )
 
       assert has_element?(doors, ~s|button[phx-value-slug="#{ctx.blue.slug}"]:not([disabled])|)
@@ -301,7 +301,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       other = fixture_catalogue(%{name: "No Attributes Here"})
       fixture_item(%{name: "Plain thing", catalogue_uuid: other.uuid})
 
-      {:ok, view, html} = live(ctx.conn, "/en/admin/catalogue")
+      {:ok, view, html} = live(ctx.conn, "/en/admin/catalogues")
       refute html =~ "item-result-"
 
       render_click(view, "toggle_attribute_filter", %{"slug" => ctx.blue.slug})
@@ -324,7 +324,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       # item-results section. The control's own DOM id — the word
       # "Attributes" and the swatch icon both also appear in the admin
       # chrome, so they prove nothing.
-      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue")
+      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogues")
       assert html =~ ~s(id="attribute-filter")
     end
 
@@ -367,16 +367,16 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       # category — "doors" matches no item, and the filter would hide in
       # All mode too, for the ordinary every-value-is-dead reason.
       {:ok, view, _html} =
-        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?q=door&type=categories")
+        live(ctx.conn, "/en/admin/catalogues/#{ctx.catalogue.uuid}?q=door&type=categories")
 
       refute render_async(view) =~ ~s(id="attribute-filter")
 
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?q=door")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues/#{ctx.catalogue.uuid}?q=door")
       assert render_async(view) =~ ~s(id="attribute-filter")
     end
 
     test "an attribute-set broadcast reloads an open items-mode index", ctx do
-      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogue?mode=items")
+      {:ok, view, _html} = live(ctx.conn, "/en/admin/catalogues?mode=items")
       render_click(view, "toggle_attribute_filter", %{"slug" => ctx.blue.slug})
       assert render_async(view) =~ "Blue oak door"
 
@@ -408,12 +408,12 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
       other = fixture_catalogue(%{name: "No Attributes Here"})
       fixture_item(%{name: "Plain thing", catalogue_uuid: other.uuid})
 
-      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogue?q=plain")
+      {:ok, _view, html} = live(ctx.conn, "/en/admin/catalogues?q=plain")
       assert html =~ ~s(id="attribute-filter")
 
       # Same on the detail page, searched into nothing.
       {:ok, view, _html} =
-        live(ctx.conn, "/en/admin/catalogue/#{ctx.catalogue.uuid}?q=zzznothing")
+        live(ctx.conn, "/en/admin/catalogues/#{ctx.catalogue.uuid}?q=zzznothing")
 
       assert render_async(view) =~ ~s(id="attribute-filter")
     end
@@ -505,7 +505,7 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeFilterTest do
           AttributeSets.set_attachment_selection(stray.uuid, ctx.colour.uuid, [ctx.red.slug])
 
         {:ok, view, _html} =
-          live(ctx.conn, "/en/admin/catalogue?folder=#{parent.uuid}&attr=#{ctx.red.slug}")
+          live(ctx.conn, "/en/admin/catalogues?folder=#{parent.uuid}&attr=#{ctx.red.slug}")
 
         render_async(view)
         counts = :sys.get_state(view.pid).socket.assigns.attribute_value_counts

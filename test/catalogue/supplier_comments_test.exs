@@ -298,7 +298,7 @@ defmodule PhoenixKitCatalogue.Catalogue.SupplierCommentsTest do
                SupplierComments.resolve_resources([thread])
 
       assert title == "Oak Panel — Acme Metals"
-      assert path == "/admin/catalogue/items/#{item.uuid}/edit?tab=sourcing"
+      assert path == "/admin/catalogues/items/#{item.uuid}/edit?tab=sourcing"
       # RAW path: the comments module applies the URL prefix itself.
       refute path =~ "/phoenix_kit"
     end

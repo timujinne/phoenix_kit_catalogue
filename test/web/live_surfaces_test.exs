@@ -15,7 +15,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   # A live, non-image document row in `folder_uuid` — what the paperclip
   # counts. Inserted raw like attachments_lv_test does (no bucket needed).
@@ -315,7 +315,7 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
   end
 
   describe "F8 — a crashed import task surfaces a failed step instead of freezing" do
-    @import_url "/en/admin/catalogue/import"
+    @import_url "/en/admin/catalogues/import"
 
     # A real, monitored task: the fun runs INSIDE the LiveView process, so
     # the monitor belongs to it and `Process.info(view.pid, :monitors)` can

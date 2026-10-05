@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBulkCategoriesTest do
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitCatalogue.Web.PlaceTree
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     cat = fixture_catalogue(%{name: "Bulk cats"})

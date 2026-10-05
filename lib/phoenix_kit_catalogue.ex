@@ -135,16 +135,16 @@ defmodule PhoenixKitCatalogue do
   # missing, so a link never renders blank. Pinned by
   # `test/activity_resource_links_test.exs`.
   @record_links %{
-    "item" => {"/admin/catalogue/items/:uuid/edit", "name"},
-    "category" => {"/admin/catalogue/categories/:uuid/edit", "name"},
-    "catalogue" => {"/admin/catalogue/:uuid", "name"},
-    "pdf" => {"/admin/catalogue/pdfs/:uuid", "original_filename"},
-    "attribute_group" => {"/admin/catalogue/attributes/:uuid/edit", "name"},
+    "item" => {"/admin/catalogues/items/:uuid/edit", "name"},
+    "category" => {"/admin/catalogues/categories/:uuid/edit", "name"},
+    "catalogue" => {"/admin/catalogues/:uuid", "name"},
+    "pdf" => {"/admin/catalogues/pdfs/:uuid", "original_filename"},
+    "attribute_group" => {"/admin/catalogues/attributes/:uuid/edit", "name"},
     # A folder is not a page of its own — it is a location on the index.
-    "folder" => {"/admin/catalogue?folder=:uuid", "name"},
+    "folder" => {"/admin/catalogues?folder=:uuid", "name"},
     # A supplier row belongs to its item's Suppliers tab, so the link goes to
     # the ITEM — metadata.item_uuid, not the join row's own uuid.
-    "item_supplier_info" => {"/admin/catalogue/items/:metadata.item_uuid/edit", "name"}
+    "item_supplier_info" => {"/admin/catalogues/items/:metadata.item_uuid/edit", "name"}
   }
 
   @doc false
@@ -249,7 +249,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
-        path: "catalogue",
+        path: "catalogues",
         priority: 660,
         level: :admin,
         permission: module_key(),
@@ -268,7 +268,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
-        path: "catalogue",
+        path: "catalogues",
         priority: 661,
         level: :admin,
         permission: module_key(),
@@ -279,12 +279,12 @@ defmodule PhoenixKitCatalogue do
         # subtab paths (attributes, import, events).
         #
         # Without this, hidden subtabs with literal `:uuid` segments
-        # (e.g. "catalogue/:uuid/edit") never match a real URL, so the
+        # (e.g. "catalogues/:uuid/edit") never match a real URL, so the
         # parent "Catalogues" tab is the only thing that lights up on
         # detail/form pages — which looks wrong in the sidebar.
         match:
           {:regex,
-           ~r"^/admin/catalogue(/(?!attributes|import|export|events|pdfs|translations).*)?$"},
+           ~r"^/admin/catalogues(/(?!attributes|import|export|events|pdfs|translations).*)?$"},
         parent: :admin_catalogue,
         live_view: {PhoenixKitCatalogue.Web.CataloguesLive, :index}
       },
@@ -296,7 +296,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-swatch",
-        path: "catalogue/attributes",
+        path: "catalogues/attributes",
         priority: 664,
         level: :admin,
         permission: module_key(),
@@ -313,7 +313,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
-        path: "catalogue/attributes/new",
+        path: "catalogues/attributes/new",
         priority: 668,
         level: :admin,
         permission: module_key(),
@@ -327,7 +327,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-pencil-square",
-        path: "catalogue/attributes/:uuid/edit",
+        path: "catalogues/attributes/:uuid/edit",
         priority: 669,
         level: :admin,
         permission: module_key(),
@@ -342,7 +342,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-arrow-down-tray",
-        path: "catalogue/import",
+        path: "catalogues/import",
         priority: 665,
         level: :admin,
         permission: module_key(),
@@ -356,7 +356,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-arrow-up-tray",
-        path: "catalogue/export",
+        path: "catalogues/export",
         priority: 666,
         level: :admin,
         permission: module_key(),
@@ -370,7 +370,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-clock",
-        path: "catalogue/events",
+        path: "catalogues/events",
         priority: 667,
         level: :admin,
         permission: module_key(),
@@ -385,7 +385,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-document-text",
-        path: "catalogue/pdfs",
+        path: "catalogues/pdfs",
         priority: 690,
         level: :admin,
         permission: module_key(),
@@ -402,7 +402,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-document-text",
-        path: "catalogue/pdfs/:uuid",
+        path: "catalogues/pdfs/:uuid",
         priority: 691,
         level: :admin,
         permission: module_key(),
@@ -418,7 +418,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-language",
-        path: "catalogue/translations",
+        path: "catalogues/translations",
         priority: 692,
         level: :admin,
         permission: module_key(),
@@ -435,7 +435,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
-        path: "catalogue/new",
+        path: "catalogues/new",
         priority: 666,
         level: :admin,
         permission: module_key(),
@@ -450,7 +450,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-pencil-square",
-        path: "catalogue/categories/:uuid/edit",
+        path: "catalogues/categories/:uuid/edit",
         priority: 671,
         level: :admin,
         permission: module_key(),
@@ -465,7 +465,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-pencil-square",
-        path: "catalogue/items/:uuid/edit",
+        path: "catalogues/items/:uuid/edit",
         priority: 672,
         level: :admin,
         permission: module_key(),
@@ -480,7 +480,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
-        path: "catalogue/:uuid",
+        path: "catalogues/:uuid",
         priority: 673,
         level: :admin,
         permission: module_key(),
@@ -494,7 +494,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-pencil-square",
-        path: "catalogue/:uuid/edit",
+        path: "catalogues/:uuid/edit",
         priority: 674,
         level: :admin,
         permission: module_key(),
@@ -508,7 +508,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
-        path: "catalogue/:catalogue_uuid/categories/new",
+        path: "catalogues/:catalogue_uuid/categories/new",
         priority: 675,
         level: :admin,
         permission: module_key(),
@@ -522,7 +522,7 @@ defmodule PhoenixKitCatalogue do
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-plus",
-        path: "catalogue/:catalogue_uuid/items/new",
+        path: "catalogues/:catalogue_uuid/items/new",
         priority: 676,
         level: :admin,
         permission: module_key(),
@@ -538,13 +538,13 @@ defmodule PhoenixKitCatalogue do
     [
       Tab.new!(
         id: :admin_settings_catalogue,
-        label: "Catalogue",
+        label: "Catalogues",
         gettext_backend: PhoenixKitCatalogue.Gettext,
         gettext_domain: "default",
         icon: "hero-rectangle-stack",
-        path: "catalogue",
+        path: "catalogues",
         # Between Posts (922) and Comments (924): Settings orders its module
-        # entries by priority, and this is where "Catalogue" reads in that
+        # entries by priority, and this is where "Catalogues" reads in that
         # run of names.
         priority: 923,
         level: :admin,

@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLivePro100Test do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   # Minimal valid PRO100 furniture file with one data row.
   # Header: "# Parts\t<col_names>"

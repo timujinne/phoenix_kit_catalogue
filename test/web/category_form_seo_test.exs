@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormSeoTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.Translations
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp edit_category_url(uuid), do: "#{@base}/categories/#{uuid}/edit"
 

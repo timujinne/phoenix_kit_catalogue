@@ -17,7 +17,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormMediaOrderTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Test.Repo
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   setup do
     user_uuid = UUIDv7.generate()

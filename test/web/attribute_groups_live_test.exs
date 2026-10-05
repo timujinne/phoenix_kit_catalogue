@@ -7,7 +7,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp create_group(attrs \\ %{}) do
     {:ok, g} = Catalogue.create_attribute_group(Map.merge(%{name: "Idea doors"}, attrs))

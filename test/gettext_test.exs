@@ -50,6 +50,16 @@ defmodule PhoenixKitCatalogue.GettextTest do
           # regenerated .pot. See the Gettext note in AGENTS.md.
           {"Comfortable view", "Просторный вид", "Avar vaade"},
           {"Compact view", "Компактный вид", "Kompaktne vaade"},
+          # The list's View options pop-up and the search's Filters pop-up
+          # (boss via Max, 2026-10-05: the top of the pages was too busy):
+          {"View options", "Параметры вида", "Vaate valikud"},
+          {"Filters", "Фильтры", "Filtrid"},
+          {"Sort by", "Сортировать по", "Sorteeri"},
+          {"Layout", "Вид", "Paigutus"},
+          # A level with categories AND items names each list's Reorder all:
+          {"Reorder all categories", "Переупорядочить все категории",
+           "Järjesta kõik kategooriad ümber"},
+          {"Reorder all items", "Переупорядочить все позиции", "Järjesta kõik tooted ümber"},
           # Found by the 2026-08-29 sweep: all of these were rendered by the
           # UI and present in NO catalogue. `:set_not_found` is the sharpest —
           # `errors_test.exs` pinned `Errors.message(:set_not_found) ==

@@ -9,7 +9,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDeletedTabTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp trashed_world do
     catalogue = fixture_catalogue()

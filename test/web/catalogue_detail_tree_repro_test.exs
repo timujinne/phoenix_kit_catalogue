@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailTreeReproTest do
   alias PhoenixKitCatalogue.Schemas.Category
   alias PhoenixKitCatalogue.Test.Repo
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp db_count(name) do
     Repo.aggregate(from(c in Category, where: c.name == ^name), :count)

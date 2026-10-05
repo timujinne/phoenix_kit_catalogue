@@ -10,7 +10,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Web.ViewConfig
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   # ─────────────────────────────────────────────────────────────────
   # Tab switching
@@ -560,7 +560,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
 
       {:ok, _view, html} = live(conn, @base)
 
-      expected_href = "/en/admin/catalogue/#{catalogue.uuid}"
+      expected_href = "/en/admin/catalogues/#{catalogue.uuid}"
       assert html =~ ~s(href="#{expected_href}")
     end
   end
@@ -1183,7 +1183,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       assert html =~ "Showrooms"
       assert html =~ "Frames and hardware."
       assert has_element?(view, "#catalogue-index-card-edit")
-      assert html =~ ~r/href="[^"]*\/catalogue\/#{Regex.escape(catalogue.uuid)}\/edit"/
+      assert html =~ ~r/href="[^"]*\/catalogues\/#{Regex.escape(catalogue.uuid)}\/edit"/
     end
 
     test "a uuid that is not a catalogue opens nothing", %{conn: conn} do

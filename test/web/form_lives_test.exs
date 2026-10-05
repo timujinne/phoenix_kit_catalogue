@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
 
   alias PhoenixKitCatalogue.Catalogue
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   # The Attachments dropzone (`Attachments.allow_attachment_upload/1`)
   # also renders a `phx-submit="save"` form, so the loose selector is
@@ -245,7 +245,7 @@ defmodule PhoenixKitCatalogue.Web.FormLivesTest do
       catalogue = fixture_catalogue(%{name: "Tabbed cat"})
       category = fixture_category(catalogue, %{name: "Tabbed category"})
 
-      {:ok, view, html} = live(conn, "/en/admin/catalogue/categories/#{category.uuid}/edit")
+      {:ok, view, html} = live(conn, "/en/admin/catalogues/categories/#{category.uuid}/edit")
 
       # Same strip as the catalogue/item forms; files tab carries the
       # shared attachments panel (dropzone + featured image card).

@@ -14,7 +14,7 @@ defmodule PhoenixKitCatalogue.LiveCase do
         use PhoenixKitCatalogue.LiveCase
 
         test "renders", %{conn: conn} do
-          {:ok, view, html} = live(conn, ~p"/admin/catalogue/new")
+          {:ok, view, html} = live(conn, ~p"/admin/catalogues/new")
           assert html =~ "New Catalogue"
         end
       end

@@ -559,7 +559,7 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
              }) == uuid
 
       for junk <- [
-            "../../admin/catalogue/items/x/edit?",
+            "../../admin/catalogues/items/x/edit?",
             "0123456789abcdef",
             "",
             String.upcase(uuid)

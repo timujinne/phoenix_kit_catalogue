@@ -21,7 +21,7 @@ defmodule PhoenixKitCatalogue.Web.ItemSeoFieldsTest do
     # sits wherever the form keeps it, not where a fixture guesses.
     conn = with_scope(conn, scope)
     {:ok, _} = Settings.update_seo_fields_visible(true)
-    {:ok, view, _html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+    {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
     view
     |> form("#item-form", %{
@@ -35,7 +35,7 @@ defmodule PhoenixKitCatalogue.Web.ItemSeoFieldsTest do
   end
 
   defp edit(conn, item) do
-    {:ok, view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+    {:ok, view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
     {view, html}
   end
 
@@ -96,7 +96,7 @@ defmodule PhoenixKitCatalogue.Web.ItemSeoFieldsTest do
   describe "a new item's slug follows its name" do
     defp new_item_view(conn) do
       catalogue = fixture_catalogue(%{name: "Slug cat"})
-      {:ok, view, _html} = live(conn, "/en/admin/catalogue/#{catalogue.uuid}/items/new")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{catalogue.uuid}/items/new")
       {view, catalogue}
     end
 
@@ -140,7 +140,7 @@ defmodule PhoenixKitCatalogue.Web.ItemSeoFieldsTest do
   end
 
   test "the settings page switch writes the setting", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/en/admin/settings/catalogue")
+    {:ok, view, _html} = live(conn, "/en/admin/settings/catalogues")
 
     view |> form("#catalogue-seo-fields-form", %{"value" => "true"}) |> render_change()
     assert Settings.seo_fields_visible?()

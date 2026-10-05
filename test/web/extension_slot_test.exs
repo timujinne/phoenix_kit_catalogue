@@ -17,7 +17,7 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
   alias PhoenixKitCatalogue.Test.FakeModule
   alias PhoenixKitCatalogue.Web.Settings
 
-  @base "/en/admin/catalogue"
+  @base "/en/admin/catalogues"
 
   defp edit_item_url(uuid), do: "#{@base}/items/#{uuid}/edit"
   defp edit_category_url(uuid), do: "#{@base}/categories/#{uuid}/edit"
@@ -49,6 +49,11 @@ defmodule PhoenixKitCatalogue.Web.ExtensionSlotTest do
       ~r{(<select id="supplier-add-picker"[^>]*>).*?</select>}s,
       "\\1</select>"
     )
+    # Page chrome a newer core adds around the form — a marker on `<body>`
+    # and a stylesheet for phone inputs. The snapshot is the item form, and
+    # it has to hold on every core the pin allows.
+    |> String.replace(~s( data-phoenix-kit=""), "")
+    |> String.replace(~r{<style data-pk-mobile-inputs="">.*?</style>}s, "")
     # Core's theme buttons encode a `JS.dispatch` payload map. A small map
     # with atom keys lists them in atom-creation order (OTP 26+), so
     # "event" and "detail" trade places depending on what the run loaded

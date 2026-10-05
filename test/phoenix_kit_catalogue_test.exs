@@ -110,7 +110,7 @@ defmodule PhoenixKitCatalogueTest do
 
       assert events_tab != nil
       assert events_tab.label == "Events"
-      assert events_tab.path == "catalogue/events"
+      assert events_tab.path == "catalogues/events"
       assert events_tab.icon == "hero-clock"
       assert events_tab.parent == :admin_catalogue
       assert events_tab.live_view == {PhoenixKitCatalogue.Web.EventsLive, :index}
@@ -137,65 +137,65 @@ defmodule PhoenixKitCatalogueTest do
     end
 
     test "matches the bare catalogues index", %{tab: tab} do
-      assert Tab.matches_path?(tab, "/admin/catalogue")
+      assert Tab.matches_path?(tab, "/admin/catalogues")
     end
 
     test "matches the new-catalogue form", %{tab: tab} do
-      assert Tab.matches_path?(tab, "/admin/catalogue/new")
+      assert Tab.matches_path?(tab, "/admin/catalogues/new")
     end
 
     test "matches a catalogue detail page with an actual UUID", %{tab: tab} do
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/019d1330-c5e0-7caf-b84b-91a4418f67f2"
+               "/admin/catalogues/019d1330-c5e0-7caf-b84b-91a4418f67f2"
              )
     end
 
     test "matches a catalogue edit page with an actual UUID", %{tab: tab} do
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
+               "/admin/catalogues/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
              )
     end
 
     test "matches nested item-new and category-new pages", %{tab: tab} do
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/019d1330-c5e0-7caf-b84b-91a4418f67f2/items/new"
+               "/admin/catalogues/019d1330-c5e0-7caf-b84b-91a4418f67f2/items/new"
              )
 
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/019d1330-c5e0-7caf-b84b-91a4418f67f2/categories/new"
+               "/admin/catalogues/019d1330-c5e0-7caf-b84b-91a4418f67f2/categories/new"
              )
     end
 
     test "matches item-edit and category-edit pages", %{tab: tab} do
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/items/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
+               "/admin/catalogues/items/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
              )
 
       assert Tab.matches_path?(
                tab,
-               "/admin/catalogue/categories/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
+               "/admin/catalogues/categories/019d1330-c5e0-7caf-b84b-91a4418f67f2/edit"
              )
     end
 
     # The Manufacturers subtab is gone too — manufacturers are CRM companies.
     test "matches leftover manufacturer paths, which no longer belong to a subtab", %{tab: tab} do
-      assert Tab.matches_path?(tab, "/admin/catalogue/manufacturers")
+      assert Tab.matches_path?(tab, "/admin/catalogues/manufacturers")
     end
 
     # The Suppliers subtab is gone — suppliers are CRM companies now — so the
     # parent no longer has a sibling to yield those paths to.
     test "matches leftover supplier paths, which no longer belong to a subtab", %{tab: tab} do
-      assert Tab.matches_path?(tab, "/admin/catalogue/suppliers")
+      assert Tab.matches_path?(tab, "/admin/catalogues/suppliers")
     end
 
     test "does NOT match import or events paths (belong to their own subtabs)", %{tab: tab} do
-      refute Tab.matches_path?(tab, "/admin/catalogue/import")
-      refute Tab.matches_path?(tab, "/admin/catalogue/events")
+      refute Tab.matches_path?(tab, "/admin/catalogues/import")
+      refute Tab.matches_path?(tab, "/admin/catalogues/events")
     end
 
     test "does NOT match completely unrelated paths", %{tab: tab} do

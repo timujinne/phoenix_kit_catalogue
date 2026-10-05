@@ -23,7 +23,7 @@ defmodule PhoenixKitCatalogue.Web.ItemLocationLocaleTest do
     translate!(catalogue, "Primary Catalogue", &Catalogue.update_catalogue(&1, &2))
     translate!(category, "Doors", &Catalogue.update_category(&1, &2))
 
-    {:ok, view, html} = live(conn, "/en/admin/catalogue/items/#{item.uuid}/edit")
+    {:ok, view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
     assert html =~ "Doors"
     refute html =~ "Uksed"
 

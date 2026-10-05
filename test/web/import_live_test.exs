@@ -11,7 +11,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveTest do
   """
   use PhoenixKitCatalogue.LiveCase
 
-  @import_url "/en/admin/catalogue/import"
+  @import_url "/en/admin/catalogues/import"
 
   describe "mount" do
     test "renders the upload step", %{conn: conn} do

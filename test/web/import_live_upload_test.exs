@@ -86,21 +86,21 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveUploadTest do
   end
 
   describe "Parser.parse — invalid binary surfaces a flash error" do
-    test "header-only CSV (no rows) survives without crashing",
+    test "a header-only CSV reaches the mapping step with its columns and no rows",
          %{conn: conn, catalogue: cat} do
       {:ok, view, _html} = live(conn, @import_url)
       render_change(view, "validate_upload", %{"catalogue" => cat.uuid})
 
-      # Header line only, no data rows. Parser may return :ok with 0
-      # rows or {:error, _}; the structural guarantee we pin is that
-      # the LV doesn't crash.
       file = build_file_input(view, "headers_only.csv", "text/csv", "name,sku\n")
       render_upload(file, "headers_only.csv")
 
-      html = render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
+      render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
 
-      assert is_binary(html)
-      assert Process.alive?(view.pid)
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.step == :map
+      assert assigns.headers == ~w(name sku)
+      assert assigns.row_count == 0
+      assert assigns.preview_rows == []
     end
 
     test "garbage XLSX bytes flash a parse error",

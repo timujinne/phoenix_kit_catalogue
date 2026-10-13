@@ -10,6 +10,10 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   so turning the sweep on was an operator call into `update_*` and nobody
   could see it was off (boss via Max, 2026-09-21).
 
+  Every `update_*` takes `opts`; the settings page passes `actor_uuid:` so
+  core's settings history names the admin who made the change. The writes
+  are recorded as `source: "settings"` either way.
+
   Kept as a thin module rather than folding the keys into
   `PhoenixKitCatalogue` itself: the worker and the templates only ever read,
   the settings page only ever writes, and neither needs the other's concerns.
@@ -75,15 +79,25 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   def seo_fields_visible?, do: Settings.get_boolean_setting(@seo_fields_key, false)
 
   @doc "Shows or hides the item form's slug and SEO fields."
-  @spec update_seo_fields_visible(boolean()) :: {:ok, struct()} | {:error, term()}
-  def update_seo_fields_visible(visible?) when is_boolean(visible?) do
-    Settings.update_boolean_setting_with_module(@seo_fields_key, visible?, @module_key)
+  @spec update_seo_fields_visible(boolean(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def update_seo_fields_visible(visible?, opts \\ []) when is_boolean(visible?) do
+    Settings.update_boolean_setting_with_module(
+      @seo_fields_key,
+      visible?,
+      @module_key,
+      write_opts(opts)
+    )
   end
 
   @doc "Turns the right-click row menu on or off."
-  @spec update_context_menu_enabled(boolean()) :: {:ok, struct()} | {:error, term()}
-  def update_context_menu_enabled(enabled?) when is_boolean(enabled?) do
-    Settings.update_boolean_setting_with_module(@context_menu_key, enabled?, @module_key)
+  @spec update_context_menu_enabled(boolean(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def update_context_menu_enabled(enabled?, opts \\ []) when is_boolean(enabled?) do
+    Settings.update_boolean_setting_with_module(
+      @context_menu_key,
+      enabled?,
+      @module_key,
+      write_opts(opts)
+    )
   end
 
   @doc "Is the automatic sweep enabled?"
@@ -100,10 +114,15 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   interval it had, and an interval saved while the sweep was off does not
   move it.
   """
-  @spec update_sweep_enabled(boolean()) :: {:ok, struct()} | {:error, term()}
-  def update_sweep_enabled(enabled?) when is_boolean(enabled?) do
+  @spec update_sweep_enabled(boolean(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def update_sweep_enabled(enabled?, opts \\ []) when is_boolean(enabled?) do
     with {:ok, setting} <-
-           Settings.update_boolean_setting_with_module(@enabled_key, enabled?, @module_key) do
+           Settings.update_boolean_setting_with_module(
+             @enabled_key,
+             enabled?,
+             @module_key,
+             write_opts(opts)
+           ) do
       if enabled?, do: TranslationSweepWorker.reschedule()
       {:ok, setting}
     end
@@ -119,13 +138,16 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   Sets the sweep interval, in minutes, and reschedules a running chain at
   it — a shortened interval would otherwise wait out the old one.
   """
-  @spec update_sweep_interval_minutes(pos_integer()) :: {:ok, struct()} | {:error, term()}
-  def update_sweep_interval_minutes(minutes) when is_integer(minutes) and minutes > 0 do
+  @spec update_sweep_interval_minutes(pos_integer(), keyword()) ::
+          {:ok, struct()} | {:error, term()}
+  def update_sweep_interval_minutes(minutes, opts \\ [])
+      when is_integer(minutes) and minutes > 0 do
     with {:ok, setting} <-
            Settings.update_setting_with_module(
              @interval_key,
              Integer.to_string(minutes),
-             @module_key
+             @module_key,
+             write_opts(opts)
            ) do
       if sweep_enabled?(), do: TranslationSweepWorker.reschedule()
       {:ok, setting}
@@ -152,9 +174,14 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   end
 
   @doc "Sets the sweep's target languages."
-  @spec update_sweep_langs([String.t()]) :: {:ok, struct()} | {:error, term()}
-  def update_sweep_langs(langs) when is_list(langs) do
-    Settings.update_json_setting_with_module(@langs_key, %{"codes" => langs}, @module_key)
+  @spec update_sweep_langs([String.t()], keyword()) :: {:ok, struct()} | {:error, term()}
+  def update_sweep_langs(langs, opts \\ []) when is_list(langs) do
+    Settings.update_json_setting_with_module(
+      @langs_key,
+      %{"codes" => langs},
+      @module_key,
+      write_opts(opts)
+    )
   end
 
   @doc """
@@ -167,10 +194,19 @@ defmodule PhoenixKitCatalogue.Web.Settings do
   end
 
   @doc "Sets the most catalogue translation jobs waiting or running at once."
-  @spec update_sweep_max_per_run(pos_integer()) :: {:ok, struct()} | {:error, term()}
-  def update_sweep_max_per_run(n) when is_integer(n) and n > 0 do
-    Settings.update_setting_with_module(@max_per_run_key, Integer.to_string(n), @module_key)
+  @spec update_sweep_max_per_run(pos_integer(), keyword()) :: {:ok, struct()} | {:error, term()}
+  def update_sweep_max_per_run(n, opts \\ []) when is_integer(n) and n > 0 do
+    Settings.update_setting_with_module(
+      @max_per_run_key,
+      Integer.to_string(n),
+      @module_key,
+      write_opts(opts)
+    )
   end
+
+  # What core's settings writers take for the history entry: who, and that
+  # the change came from an admin page.
+  defp write_opts(opts), do: [source: "settings"] ++ Keyword.take(opts, [:actor_uuid])
 
   defp default_sweep_langs do
     Multilang.enabled_languages() -- [Multilang.primary_language()]

@@ -66,6 +66,7 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   alias PhoenixKitAI.Translations
   alias PhoenixKitCatalogue.AITranslatable
   alias PhoenixKitCatalogue.AITranslatable.Sets
+  alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.TranslationStatus
   alias PhoenixKitCatalogue.Web.Components, as: Shared
@@ -208,6 +209,8 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
       with {:ok, type} <- row_type(type_str),
            {:ok, resource} <- fetch_resource(type, uuid),
            {:ok, _updated} <- TranslationStatus.stamp_fresh(resource, lang) do
+        log_baseline_stamped(socket, type, uuid, lang)
+
         socket
         |> put_flash(:info, gettext("Marked the current source as the translation baseline."))
         |> refresh_rows()
@@ -512,6 +515,25 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLive do
   defp fetch_resource(:category, uuid), do: AITranslatable.fetch("catalogue_category", uuid)
   defp fetch_resource(:set_label, uuid), do: Sets.fetch("catalogue_set_label", uuid)
   defp fetch_resource(:set_value, uuid), do: Sets.fetch("catalogue_set_value", uuid)
+
+  # Stamping takes the pair out of what the automatic sweep re-translates,
+  # so the feed records who decided that, for which row and language.
+  defp log_baseline_stamped(socket, type, uuid, lang) do
+    ActivityLog.log(%{
+      action: "translation.baseline_stamped",
+      mode: "manual",
+      actor_uuid: Helpers.actor_uuid(socket),
+      resource_type: activity_resource_type(type),
+      resource_uuid: uuid,
+      metadata: %{"language" => lang}
+    })
+  end
+
+  # Items and categories under the names the rest of the feed files them
+  # by, so the entry sits with that row's other history.
+  defp activity_resource_type(:item), do: "item"
+  defp activity_resource_type(:category), do: "category"
+  defp activity_resource_type(type), do: TranslationSweepWorker.resource_type_for(type)
 
   # Client-supplied `phx-value-type` — a crafted event must not reach
   # `String.to_existing_atom/1` (ArgumentError on an unrecognized string)

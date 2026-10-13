@@ -44,6 +44,7 @@ defmodule PhoenixKitCatalogue.Schemas.AttributeValue do
   # payload could otherwise bypass the unset-then-set transaction in
   # `Attributes.set_default_value/1` and trip the partial unique index.
   # Default flips go through that context function only.
+  @spec create_changeset(t(), map()) :: Ecto.Changeset.t(t())
   def create_changeset(value, attrs) do
     value
     |> cast(attrs, [:attribute_uuid, :key, :value, :data, :status, :position])
@@ -56,6 +57,7 @@ defmodule PhoenixKitCatalogue.Schemas.AttributeValue do
   end
 
   # `key` is deliberately not castable after creation.
+  @spec update_changeset(t(), map()) :: Ecto.Changeset.t(t())
   def update_changeset(value, attrs) do
     value
     |> cast(attrs, [:value, :data, :status, :position])

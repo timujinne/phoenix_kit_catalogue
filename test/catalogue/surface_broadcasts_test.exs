@@ -322,6 +322,55 @@ defmodule PhoenixKitCatalogue.Catalogue.SurfaceBroadcastsTest do
     end
   end
 
+  describe "the PRO100 template loader's activity entries" do
+    @actor "00000000-0000-7000-8000-0000000000aa"
+
+    defp loader_entries do
+      Enum.filter(
+        PhoenixKitCatalogue.ActivityLogAssertions.list_activities(),
+        &(&1.module == "catalogue")
+      )
+    end
+
+    test "every row it writes is the import's (mode auto) and names who ran it" do
+      plan = pro100_plan()
+      assert {:ok, _} = Pro100TemplateLoader.apply_plan(plan, dry_run: false, actor_uuid: @actor)
+
+      created = loader_entries()
+      actions = created |> Enum.map(& &1.action) |> Enum.sort()
+
+      assert actions == [
+               "catalogue.created",
+               "category.created",
+               "folder.created",
+               "item.created"
+             ]
+
+      for entry <- created do
+        assert entry.mode == "auto", "#{entry.action} logged as #{entry.mode}"
+        assert entry.actor_uuid == Ecto.UUID.dump!(@actor), "#{entry.action} has no actor"
+      end
+
+      # A second run with a changed price takes the update path.
+      changed =
+        update_in(plan, [:catalogues, Access.all(), :items, Access.all()], fn item ->
+          %{item | base_price: Decimal.new("99.00")}
+        end)
+
+      assert {:ok, %{stats: %{items_updated: 1}}} =
+               Pro100TemplateLoader.apply_plan(changed, dry_run: false, actor_uuid: @actor)
+
+      assert [updated] = Enum.filter(loader_entries(), &(&1.action == "item.updated"))
+      assert updated.mode == "auto"
+      assert updated.actor_uuid == Ecto.UUID.dump!(@actor)
+    end
+
+    test "a dry run logs nothing" do
+      assert {:ok, _} = Pro100TemplateLoader.apply_plan(pro100_plan(), actor_uuid: @actor)
+      assert loader_entries() == []
+    end
+  end
+
   describe "F13 — bulk_trash_categories broadcasts after the outer transaction commits" do
     test "one :category batch event per touched catalogue, after commit" do
       cat = catalogue!()

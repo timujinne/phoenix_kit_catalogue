@@ -44,6 +44,10 @@ conventions, contracts and non-obvious boundaries.
 - **Admin-only.** No public routes, JSON endpoints, or webhook receivers. The
   plain HTTP routes — the stateless export download and the redirects from
   the module's old addresses — are both behind `:phoenix_kit_require_admin`.
+  The export download also asks for the `catalogue` permission with the
+  module enabled (core's `require_module_access/2`): the admin plug alone
+  passes for any role that reaches the admin area, and the file carries
+  every item with its prices.
 - **No per-item versioning.** Soft-delete (`status`) is the only history
   mechanism; the activity log is the audit trail.
 - **No always-on background work.** Two jobs, both opt-in by config:
@@ -323,7 +327,9 @@ Key invariants to preserve:
 
 Settings keys (`PhoenixKit.Settings`). Every key a person can change is on
 Settings → Catalogues (`Web.SettingsLive`), read and written through
-`Web.Settings`, except the two noted:
+`Web.Settings`, except those noted. A write a person makes passes
+`actor_uuid:` and `source: "settings"`, or core's settings history files it
+under "system":
 
 | key | type | note |
 |---|---|---|
@@ -334,7 +340,8 @@ Settings → Catalogues (`Web.SettingsLive`), read and written through
 | `catalogue_translation_sweep_interval_minutes` | int | default `60` |
 | `catalogue_translation_sweep_langs` | json | `%{"codes" => [...]}`; a bare list is rejected by the `:map` column |
 | `catalogue_translation_sweep_max_per_run` | int | default `200`; despite the name, the most catalogue translation jobs queued at once — a tick tops up to it |
-| `catalogue_sort_catalogues` / `catalogue_sort_detail_items` / `catalogue_sort_detail_categories` | json | the module-global shared sort per scope (`%{"by" => …, "dir" => …}`), written by the admin sort selectors and read by the popup and widgets — not on the settings page |
+| `catalogue_sort_catalogues` / `catalogue_sort_detail_items` / `catalogue_sort_detail_categories` | string | the module-global shared sort per scope (`"<column>:<asc\|desc>"`), written by the admin sort selectors and read by the popup and widgets — not on the settings page. Core keeps every changed setting value as a permanent activity entry, so `ViewConfig.save_global_sort/4` writes only a changed sort and names the admin |
+| `catalogue_media_folder_uuid` / `catalogue_pdf_media_folder_uuid` | string | the `Catalogues` and `Catalogues/PDF` media folders the default layout created (`MediaFolders`), kept by uuid so a person may rename or move them — not on the settings page |
 
 Not a Settings key: per-user table/view preferences are core's
 `PhoenixKit.Users.ViewPrefs` rows (`Web.ViewConfig`) — `catalogue.<scope>` for a
@@ -403,6 +410,12 @@ in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
 - Test support: `test/support/data_case.ex`, `live_case.ex` (Test.Endpoint plus
   a router scoped at `/en/admin/catalogues`), `activity_log_assertions.ex`,
   `test_repo.ex`, `test_router.ex`, `test_layouts.ex`.
+- The test helper makes the test site multilingual with the locale prefix
+  kept (`Languages.enable_system/0` +
+  `set_default_language_no_prefix(false)`): core leaves the locale segment out
+  of an admin path on a single-language site, and the suite's expectations
+  are the `/en/admin/...` shape. `Test.Router` serves both prefixes in one
+  live session, so a patch between them stays on the same view.
 - `PGUSER` / `PGPASSWORD` / `PGHOST` are honoured. `PGDATABASE` and `PGPOOL`
   override the database name and pool size, so the suite can point at a database
   it does not own and cannot `CREATEDB` for itself, e.g.
@@ -497,6 +510,25 @@ Pointers, not docs — the moduledocs are the contract.
   and per-resource file folder into the catalogue/item forms (category form:
   featured image only). LVs must call `Attachments.inject_attachment_data/2`
   before save.
+- **Media folder layout** — `PhoenixKitCatalogue.MediaFolders` is on by
+  default: `mix.exs`'s `application/0` `env:` installs it as both
+  attachment hooks, giving `Catalogues/<catalogue>/<category…>/<item>` and
+  `Catalogues/PDF`. The defaults act as a pair — a host setting either key
+  gets the old behaviour for the other — and `nil` in both turns it off.
+  While it is in use, `MediaFolders.follow/2` (called by the context after
+  `update_*` and every move) renames and moves a record's folder with it,
+  but only a folder still where and as the hooks put it. A new path that
+  renames or moves a catalogue, category or item calls `follow/2` too; a
+  bulk path reads its `before` side with `MediaFolders.moving_items/1`
+  inside its transaction. A hard delete asks `MediaFolders.release_plan/1`
+  before it deletes and hands the plan to `release/1` after, which renames
+  the record's folder to its deterministic name (with a UUID suffix when
+  occupied) so a new record of that name cannot adopt the old files.
+  A test that changes a hook key uses
+  `Test.MediaHooks`, never `Application.delete_env/2` — that would strip
+  the defaults from every later test. Flat pre-layout folders are the
+  media reorganizer's (`mix phoenix_kit.media.reorganize --source
+  catalogue`).
 - **Metadata** — opt-in fields on items/catalogues stored in `data["meta"]`;
   definitions in `PhoenixKitCatalogue.Metadata`, whose labels are gettext-wrapped
   at call time — do not cache them. Unknown stored keys pass through as legacy
@@ -514,11 +546,17 @@ Pointers, not docs — the moduledocs are the contract.
 - **Import** — `PhoenixKitCatalogue.Import` is a source registry
   (`Import.Source.Universal` for CSV/XLSX, `Import.Source.Pro100` for Pro100
   cabinet-software data); execution goes through `Import.{Mapper, Executor}` and
-  the `ImportLive` wizard (ETS buffering).
+  the `ImportLive` wizard (ETS buffering). A text upload is UTF-8, or UTF-16
+  with a byte-order mark, by the time a parser sees it (`Import.Encoding`);
+  anything else is refused with a message, never guessed — Windows-1252,
+  -1257 and -1251 give the same byte different letters. The import task, not
+  the page, writes `import.completed` / `import.failed`, so the outcome is
+  logged when the operator has closed the tab.
 - **Export** — `PhoenixKitCatalogue.Export.build/1` with a
   destination/format registry (Universal JSON, Pro100); UI in `ExportLive`,
-  download via the admin-gated `ExportController`. Inbound mirror of the import
-  sources.
+  download via the permission-gated `ExportController`, which answers 400 for
+  a destination, format or uuid it does not know (`build/1` raises on them).
+  Inbound mirror of the import sources.
 - **PDF library** — `Catalogue.PdfLibrary` + `Workers.PdfExtractor`.
   Content-hash dedup on core `phoenix_kit_files`; search is literal ILIKE with a
   trigram fallback. `enqueue_extraction/1` fails visibly when the host Oban

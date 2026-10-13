@@ -1,0 +1,3794 @@
+## "default" domain translations for uk locale.
+msgid ""
+msgstr ""
+"Language: uk\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100 != 11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10||n%100>=20) ? 1 : 2);\n"
+
+## Tab labels
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:504
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:529
+#, elixir-autogen
+msgid "Catalogue"
+msgstr "Каталог"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2417
+#, elixir-autogen
+msgid "Catalogues"
+msgstr "Каталоги"
+
+msgid "Manufacturers"
+msgstr "Виробники"
+
+msgid "Suppliers"
+msgstr "Постачальники"
+
+msgid "Import"
+msgstr "Імпорт"
+
+msgid "Export"
+msgstr "Експорт"
+
+msgid "Events"
+msgstr "Події"
+
+msgid "PDFs"
+msgstr "PDF"
+
+msgid "PDF"
+msgstr "PDF"
+
+msgid "New catalogue"
+msgstr "Новий каталог"
+
+msgid "Edit Catalogue"
+msgstr "Редагувати каталог"
+
+msgid "New Manufacturer"
+msgstr "Новий виробник"
+
+msgid "Edit Manufacturer"
+msgstr "Редагувати виробника"
+
+msgid "New Supplier"
+msgstr "Новий постачальник"
+
+msgid "Edit Supplier"
+msgstr "Редагувати постачальника"
+
+msgid "New category"
+msgstr "Нова категорія"
+
+msgid "Edit Category"
+msgstr "Редагувати категорію"
+
+msgid "New item"
+msgstr "Нова позиція"
+
+msgid "Edit Item"
+msgstr "Редагувати позицію"
+
+## Page titles / form headings
+msgid "Edit %{name}"
+msgstr "Редагувати: %{name}"
+
+msgid "Create a new product catalogue to organize categories and items."
+msgstr "Створіть новий каталог товарів для впорядкування категорій і позицій."
+
+msgid "Update catalogue details and settings."
+msgstr "Оновіть деталі та налаштування каталогу."
+
+msgid "Add a new manufacturer to your catalogue system."
+msgstr "Додайте нового виробника до системи каталогів."
+
+msgid "Update manufacturer details and supplier links."
+msgstr "Оновіть дані виробника та зв'язки з постачальниками."
+
+msgid "Add a new supplier to your catalogue system."
+msgstr "Додайте нового постачальника до системи каталогів."
+
+msgid "Update supplier details and manufacturer links."
+msgstr "Оновіть дані постачальника та зв'язки з виробниками."
+
+msgid "Add a new category to organize items within this catalogue."
+msgstr "Додайте нову категорію для впорядкування позицій у цьому каталозі."
+
+msgid "Update category details and ordering."
+msgstr "Оновіть деталі категорії та порядок."
+
+msgid "Create a new category — fill in the details below"
+msgstr "Створіть нову категорію — заповніть поля нижче"
+
+## Status labels
+msgid "Active"
+msgstr "Активний"
+
+msgid "Inactive"
+msgstr "Неактивний"
+
+msgid "Archived"
+msgstr "В архіві"
+
+msgid "Deleted"
+msgstr "Видалено"
+
+msgid "Discontinued"
+msgstr "Знято з виробництва"
+
+msgid "Toggle folder"
+msgstr "Згорнути/розгорнути папку"
+
+msgid "Up"
+msgstr "Вгору"
+
+msgid "Drop here to move to root (unfiled)"
+msgstr "Перетягніть сюди, щоб перемістити в корінь (без папки)"
+
+msgid "Drag to reorder or move into a folder"
+msgstr "Перетягніть, щоб змінити порядок або перемістити до папки"
+
+msgid "This will permanently delete this folder. Only empty folders can be deleted. This cannot be undone."
+msgstr "Це остаточно видалить цю папку. Видаляти можна лише порожні папки. Цю дію не можна скасувати."
+
+msgid "Only empty folders can be deleted — move its contents out first."
+msgstr "Видаляти можна лише порожні папки — спочатку перемістіть її вміст."
+
+msgid "Empty folder"
+msgstr "Порожня папка"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:856
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1110
+#, elixir-autogen
+msgid "Subcategories"
+msgstr "Підкатегорії"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:478
+#, elixir-autogen
+msgid "Unknown"
+msgstr "Невідомо"
+
+## PDF status labels
+msgid "Pending"
+msgstr "Очікує"
+
+msgid "Extracting"
+msgstr "Витягування"
+
+msgid "Extracted"
+msgstr "Витягнуто"
+
+msgid "Scanned (no text)"
+msgstr "Відскановано (без тексту)"
+
+msgid "Failed"
+msgstr "Помилка"
+
+## Metadata field labels
+msgid "Color"
+msgstr "Колір"
+
+msgid "Weight"
+msgstr "Вага"
+
+msgid "Width"
+msgstr "Ширина"
+
+msgid "Height"
+msgstr "Висота"
+
+msgid "Depth"
+msgstr "Глибина"
+
+msgid "Material"
+msgstr "Матеріал"
+
+msgid "Finish"
+msgstr "Оздоблення"
+
+msgid "Brand"
+msgstr "Бренд"
+
+msgid "Collection"
+msgstr "Колекція"
+
+msgid "Season"
+msgstr "Сезон"
+
+msgid "Region"
+msgstr "Регіон"
+
+msgid "Vendor reference"
+msgstr "Артикул постачальника"
+
+## Error messages
+msgid "Cannot move a category under itself or one of its descendants."
+msgstr "Неможливо перемістити категорію саму в себе або в одну з її дочірніх категорій."
+
+msgid "Target belongs to a different catalogue. Move the category to the target catalogue first."
+msgstr "Цільовий елемент належить іншому каталогу. Спочатку перемістіть категорію до цільового каталогу."
+
+msgid "Parent category not found."
+msgstr "Батьківську категорію не знайдено."
+
+msgid "Categories must share the same parent to be reordered."
+msgstr "Щоб змінити порядок, категорії мають мати спільну батьківську категорію."
+
+msgid "Category not found."
+msgstr "Категорію не знайдено."
+
+msgid "Catalogue not found."
+msgstr "Каталог не знайдено."
+
+msgid "Item is already in this catalogue."
+msgstr "Позиція вже є в цьому каталозі."
+
+msgid "You must be logged in to upload files."
+msgstr "Щоб завантажувати файли, потрібно увійти в систему."
+
+msgid "Unsupported file format."
+msgstr "Непідтримуваний формат файлу."
+
+msgid "Unsupported file format. Please upload .xlsx or .csv."
+msgstr "Непідтримуваний формат файлу. Завантажте файл .xlsx або .csv."
+
+msgid "Not found."
+msgstr "Не знайдено."
+
+msgid "Missing item name."
+msgstr "Відсутня назва позиції."
+
+msgid "CSV file is empty."
+msgstr "Файл CSV порожній."
+
+msgid "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
+msgstr "Цей CSV-файл не в кодуванні UTF-8. Збережіть його в табличному редакторі як «CSV UTF-8» і завантажте знову."
+
+msgid "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
+msgstr "Цей JSON-файл не є експортом каталогу: у ньому має бути список «items» із позицій із простими значеннями."
+
+msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+msgstr "Неможливо відновити — батьківський каталог видалено. Спочатку відновіть каталог."
+
+msgid "Cannot delete: %{count} smart items still reference this catalogue."
+msgstr "Неможливо видалити: смарт-позицій, що посилаються на цей каталог: %{count}."
+
+msgid "Each catalogue can only be referenced once per item."
+msgstr "Кожен каталог можна вказати в позиції лише один раз."
+
+msgid "Invalid price: %{raw}"
+msgstr "Недійсна ціна: %{raw}"
+
+msgid "Invalid markup: %{raw}"
+msgstr "Недійсна націнка: %{raw}"
+
+msgid "Sheet '%{sheet}' is empty."
+msgstr "Аркуш '%{sheet}' порожній."
+
+msgid "Failed to read sheet '%{sheet}'."
+msgstr "Не вдалося прочитати аркуш '%{sheet}'."
+
+msgid "Failed to open XLSX file."
+msgstr "Не вдалося відкрити файл XLSX."
+
+msgid "Failed to read XLSX file."
+msgstr "Не вдалося прочитати файл XLSX."
+
+msgid "Failed to parse CSV file."
+msgstr "Не вдалося розібрати файл CSV."
+
+msgid "Unexpected error: %{reason}"
+msgstr "Неочікувана помилка: %{reason}"
+
+## Time-ago strings
+msgid "just now"
+msgstr "щойно"
+
+msgid "%{n}m ago"
+msgstr "%{n} хв тому"
+
+msgid "%{n}h ago"
+msgstr "%{n} год тому"
+
+msgid "%{n}d ago"
+msgstr "%{n} дн. тому"
+
+msgid "%b %d, %Y"
+msgstr "%d.%m.%Y"
+
+## Flash messages
+msgid "Catalogue created."
+msgstr "Каталог створено."
+
+msgid "Catalogue updated."
+msgstr "Каталог оновлено."
+
+msgid "Catalogue moved to deleted."
+msgstr "Каталог переміщено до видалених."
+
+msgid "Catalogue restored."
+msgstr "Каталог відновлено."
+
+msgid "Catalogue permanently deleted."
+msgstr "Каталог видалено остаточно."
+
+msgid "Manufacturer created."
+msgstr "Виробника створено."
+
+msgid "Manufacturer not found."
+msgstr "Виробника не знайдено."
+
+msgid "Manufacturer updated."
+msgstr "Виробника оновлено."
+
+msgid "Supplier created."
+msgstr "Постачальника створено."
+
+msgid "Supplier not found."
+msgstr "Постачальника не знайдено."
+
+msgid "Supplier updated."
+msgstr "Постачальника оновлено."
+
+msgid "Category created."
+msgstr "Категорію створено."
+
+msgid "Category updated."
+msgstr "Категорію оновлено."
+
+msgid "Category moved to deleted."
+msgstr "Категорію переміщено до видалених."
+
+msgid "Category restored."
+msgstr "Категорію відновлено."
+
+msgid "Category permanently deleted."
+msgstr "Категорію видалено остаточно."
+
+msgid "Category moved."
+msgstr "Категорію переміщено."
+
+msgid "Working…"
+msgstr "Виконується…"
+
+msgid "Unknown target language — refresh the page and try again."
+msgstr "Невідома цільова мова — оновіть сторінку та спробуйте ще раз."
+
+msgid "Category moved into %{name}."
+msgstr "Категорію переміщено до «%{name}»."
+
+msgid "Category moved to the top level."
+msgstr "Категорію переміщено на верхній рівень."
+
+msgid "Category moved to another catalogue."
+msgstr "Категорію переміщено до іншого каталогу."
+
+msgid "Item created."
+msgstr "Позицію створено."
+
+msgid "Item updated."
+msgstr "Позицію оновлено."
+
+msgid "Item moved to deleted."
+msgstr "Позицію переміщено до видалених."
+
+msgid "Item restored."
+msgstr "Позицію відновлено."
+
+msgid "Item permanently deleted."
+msgstr "Позицію видалено остаточно."
+
+msgid "Item moved."
+msgstr "Позицію переміщено."
+
+msgid "Item not found."
+msgstr "Позицію не знайдено."
+
+msgid "Failed to delete catalogue."
+msgstr "Не вдалося видалити каталог."
+
+msgid "Failed to delete category."
+msgstr "Не вдалося видалити категорію."
+
+msgid "Failed to delete categories."
+msgstr "Не вдалося видалити категорії."
+
+msgid "Failed to delete item."
+msgstr "Не вдалося видалити позицію."
+
+msgid "Failed to delete manufacturer."
+msgstr "Не вдалося видалити виробника."
+
+msgid "Failed to delete supplier."
+msgstr "Не вдалося видалити постачальника."
+
+msgid "Failed to move category."
+msgstr "Не вдалося перемістити категорію."
+
+msgid "Failed to move item."
+msgstr "Не вдалося перемістити позицію."
+
+msgid "Failed to reorder categories."
+msgstr "Не вдалося змінити порядок категорій."
+
+msgid "Failed to reorder items."
+msgstr "Не вдалося змінити порядок позицій."
+
+msgid "Failed to restore catalogue."
+msgstr "Не вдалося відновити каталог."
+
+msgid "Failed to restore category."
+msgstr "Не вдалося відновити категорію."
+
+msgid "Failed to restore item."
+msgstr "Не вдалося відновити позицію."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2137
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2575
+#, elixir-autogen
+msgid "Failed to save the new order."
+msgstr "Не вдалося зберегти новий порядок."
+
+msgid "PDF moved to trash."
+msgstr "PDF переміщено до кошика."
+
+msgid "PDF permanently deleted."
+msgstr "PDF остаточно видалено."
+
+msgid "PDF restored."
+msgstr "PDF відновлено."
+
+msgid "PDF not found."
+msgstr "PDF не знайдено."
+
+msgid "Could not move the PDF to trash."
+msgstr "Не вдалося перемістити PDF до кошика."
+
+msgid "Could not permanently delete the PDF."
+msgstr "Не вдалося остаточно видалити PDF."
+
+msgid "Could not restore the PDF."
+msgstr "Не вдалося відновити PDF."
+
+## UI strings - general
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2320
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2321
+#, elixir-autogen
+msgid "Back"
+msgstr "Назад"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2809
+#, elixir-autogen
+msgid "Cancel"
+msgstr "Скасувати"
+
+msgid "Save Changes"
+msgstr "Зберегти зміни"
+
+msgid "Delete"
+msgstr "Видалити"
+
+msgid "Restore"
+msgstr "Відновити"
+
+msgid "Edit"
+msgstr "Редагувати"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:622
+#, elixir-autogen
+msgid "View"
+msgstr "Переглянути"
+
+msgid "Create Catalogue"
+msgstr "Створити каталог"
+
+msgid "Create Category"
+msgstr "Створити категорію"
+
+msgid "Create Manufacturer"
+msgstr "Створити виробника"
+
+msgid "Create Supplier"
+msgstr "Створити постачальника"
+
+msgid "Create Item"
+msgstr "Створити позицію"
+
+msgid "Add category"
+msgstr "Додати категорію"
+
+msgid "Add item"
+msgstr "Додати позицію"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:819
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1142
+#, elixir-autogen
+msgid "Name"
+msgstr "Назва"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:859
+#, elixir-autogen
+msgid "Description"
+msgstr "Опис"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:865
+#, elixir-autogen
+msgid "Status"
+msgstr "Статус"
+
+msgid "Details"
+msgstr "Деталі"
+
+msgid "Metadata"
+msgstr "Метадані"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:862
+#: lib/phoenix_kit_catalogue/web/components.ex:881
+#, elixir-autogen
+msgid "Files"
+msgstr "Файли"
+
+msgid "Notes"
+msgstr "Примітки"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:639
+#, elixir-autogen
+msgid "Actions"
+msgstr "Дії"
+
+msgid "Search…"
+msgstr "Пошук…"
+
+msgid "Upload"
+msgstr "Завантажити"
+
+msgid "Download"
+msgstr "Завантажити"
+
+msgid "Move"
+msgstr "Перемістити"
+
+msgid "Position"
+msgstr "Порядок"
+
+msgid "Confirm"
+msgstr "Підтвердити"
+
+msgid "Saving…"
+msgstr "Збереження…"
+
+msgid "Featured image"
+msgstr "Головне зображення"
+
+msgid "No featured image set."
+msgstr "Головне зображення не задано."
+
+msgid "Change"
+msgstr "Змінити"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2885
+#, elixir-autogen
+msgid "Remove"
+msgstr "Прибрати"
+
+msgid "Set featured image"
+msgstr "Вказати головне зображення"
+
+msgid "Open original"
+msgstr "Відкрити оригінал"
+
+msgid "Add metadata"
+msgstr "Додати метадані"
+
+msgid "— Pick a field —"
+msgstr "— Виберіть поле —"
+
+msgid "Legacy"
+msgstr "Застарілий"
+
+msgid "Attached files"
+msgstr "Прикріплені файли"
+
+msgid "No files attached yet."
+msgstr "Файли ще не прикріплено."
+
+msgid "Drag file here or click to browse"
+msgstr "Перетягніть файл сюди або натисніть, щоб вибрати"
+
+msgid "Click to upload"
+msgstr "Натисніть, щоб завантажити"
+
+msgid "or drag & drop"
+msgstr "або перетягніть"
+
+msgid "File is too large (max 10MB)."
+msgstr "Файл завеликий (макс. 10MB)."
+
+msgid "Only PDF files are accepted."
+msgstr "Приймаються лише файли PDF."
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:822
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:462
+#, elixir-autogen
+msgid "Category"
+msgstr "Категорія"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:361
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2418
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2508
+#, elixir-autogen
+msgid "Categories"
+msgstr "Категорії"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:821
+#, elixir-autogen
+msgid "Manufacturer"
+msgstr "Виробник"
+
+msgid "Supplier"
+msgstr "Постачальник"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:461
+#, elixir-autogen
+msgid "Item"
+msgstr "Позиція"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3065
+#: lib/phoenix_kit_catalogue/web/components.ex:853
+#: lib/phoenix_kit_catalogue/web/components.ex:972
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2430
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2496
+#, elixir-autogen
+msgid "Items"
+msgstr "Позиції"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:820
+#, elixir-autogen
+msgid "SKU"
+msgstr "SKU"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:824
+#, elixir-autogen
+msgid "Price"
+msgstr "Ціна"
+
+msgid "Final price"
+msgstr "Кінцева ціна"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:823
+#, elixir-autogen
+msgid "Unit"
+msgstr "Одиниця"
+
+msgid "Unknown item"
+msgstr "Невідома позиція"
+
+msgid "Unknown supplier"
+msgstr "Невідомий постачальник"
+
+msgid "Unit of measure"
+msgstr "Одиниця виміру"
+
+msgid "Kind"
+msgstr "Тип"
+
+msgid "Smart"
+msgstr "Смарт"
+
+msgid "Standard"
+msgstr "Стандартний"
+
+msgid "Standard — items priced directly"
+msgstr "Стандартний — позиції з прямими цінами"
+
+msgid "Smart — items reference other catalogues"
+msgstr "Смарт — позиції посилаються на інші каталоги"
+
+msgid "Markup %"
+msgstr "Націнка, %"
+
+msgid "Markup"
+msgstr "Націнка"
+
+msgid "Discount"
+msgstr "Знижка"
+
+msgid "Table view"
+msgstr "Табличний вигляд"
+
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:245
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2444
+#, elixir-autogen
+msgid "Card view"
+msgstr "Вигляд карток"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2561
+#, elixir-autogen, elixir-format
+msgid "Comfy list view"
+msgstr "Просторий список"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2562
+#, elixir-autogen, elixir-format
+msgid "Compact list view"
+msgstr "Компактний список"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2385
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2386
+#, elixir-autogen
+msgid "Clear"
+msgstr "Очистити"
+
+msgid "Clear all"
+msgstr "Очистити все"
+
+msgid "Trash"
+msgstr "Кошик"
+
+msgid "Trash is empty."
+msgstr "Кошик порожній."
+
+msgid "No catalogues yet."
+msgstr "Каталогів ще немає."
+
+msgid "No categories yet. Add one to start organizing items."
+msgstr "Категорій ще немає. Додайте категорію, щоб почати впорядковувати позиції."
+
+msgid "No manufacturers yet."
+msgstr "Виробників ще немає."
+
+msgid "No suppliers yet."
+msgstr "Постачальників ще немає."
+
+msgid "No items found."
+msgstr "Позицій не знайдено."
+
+msgid "No events recorded yet."
+msgstr "Подій ще не зафіксовано."
+
+msgid "No PDFs uploaded yet."
+msgstr "PDF ще не завантажено."
+
+msgid "Upload PDF"
+msgstr "Завантажити PDF"
+
+msgid "PDF library"
+msgstr "Бібліотека PDF"
+
+msgid "PDF search"
+msgstr "Пошук у PDF"
+
+msgid "Find this item in PDFs"
+msgstr "Знайти цю позицію в PDF"
+
+msgid "Pages"
+msgstr "Сторінки"
+
+msgid "Import complete"
+msgstr "Імпорт завершено"
+
+msgid "Import another"
+msgstr "Імпортувати ще"
+
+msgid "Confirm import"
+msgstr "Підтвердити імпорт"
+
+msgid "Back to mapping"
+msgstr "Назад до зіставлення"
+
+msgid "Import items"
+msgstr "Імпорт позицій"
+
+msgid "Export items"
+msgstr "Експорт позицій"
+
+msgid "Destination"
+msgstr "Призначення"
+
+msgid "Format"
+msgstr "Формат"
+
+msgid "— Select a format —"
+msgstr "— Виберіть формат —"
+
+msgid "Add the catalogue name to the item name"
+msgstr "Додати назву каталогу до назви позиції"
+
+msgid "Map columns"
+msgstr "Зіставити стовпці"
+
+msgid "All events loaded"
+msgstr "Усі події завантажено"
+
+msgid "Events: %{count}"
+msgstr "Події: %{count}"
+
+msgid "Danger zone"
+msgstr "Небезпечна зона"
+
+msgid "Permanently delete catalogue"
+msgstr "Видалити каталог остаточно"
+
+msgid "Permanently delete category"
+msgstr "Видалити категорію остаточно"
+
+msgid "Permanently delete item"
+msgstr "Видалити позицію остаточно"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:871
+#, elixir-autogen
+msgid "Created"
+msgstr "Створено"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:868
+#, elixir-autogen
+msgid "Updated"
+msgstr "Оновлено"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:969
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:398
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1197
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1212
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2228
+#, elixir-autogen
+msgid "Uncategorized"
+msgstr "Без категорії"
+
+msgid "Linked Manufacturers"
+msgstr "Прив'язані виробники"
+
+msgid "Linked Suppliers"
+msgstr "Прив'язані постачальники"
+
+msgid "Scope"
+msgstr "Область"
+
+msgid "Catalogue rules"
+msgstr "Правила каталогу"
+
+msgid "View catalogue"
+msgstr "Переглянути каталог"
+
+msgid "View details"
+msgstr "Докладніше"
+
+msgid "Back to library"
+msgstr "До бібліотеки"
+
+msgid "Search PDFs"
+msgstr "Пошук у PDF"
+
+## Plural forms
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2795
+#, elixir-autogen
+msgid "%{count} item"
+msgid_plural "%{count} items"
+msgstr[0] "%{count} позиція"
+msgstr[1] "%{count} позиції"
+msgstr[2] "%{count} позицій"
+
+msgid "%{count} category"
+msgid_plural "%{count} categories"
+msgstr[0] "%{count} категорія"
+msgstr[1] "%{count} категорії"
+msgstr[2] "%{count} категорій"
+
+msgid "%{count} subcategory"
+msgid_plural "%{count} subcategories"
+msgstr[0] "%{count} підкатегорія"
+msgstr[1] "%{count} підкатегорії"
+msgstr[2] "%{count} підкатегорій"
+
+msgid "%{count} catalogue"
+msgid_plural "%{count} catalogues"
+msgstr[0] "%{count} каталог"
+msgstr[1] "%{count} каталоги"
+msgstr[2] "%{count} каталогів"
+
+msgid "%{active} of %{total} catalogue selected"
+msgid_plural "%{active} of %{total} catalogues selected"
+msgstr[0] "Вибрано %{active} із %{total} каталогу"
+msgstr[1] "Вибрано %{active} із %{total} каталогів"
+msgstr[2] "Вибрано %{active} із %{total} каталогів"
+
+msgid "%{count} result for “%{query}”"
+msgid_plural "%{count} results for “%{query}”"
+msgstr[0] "%{count} результат за запитом «%{query}»"
+msgstr[1] "%{count} результати за запитом «%{query}»"
+msgstr[2] "%{count} результатів за запитом «%{query}»"
+
+msgid "%{count} PDFs"
+msgid_plural "%{count} PDFs"
+msgstr[0] "%{count} PDF"
+msgstr[1] "%{count} PDF"
+msgstr[2] "%{count} PDF"
+
+msgid "%{count} events"
+msgid_plural "%{count} events"
+msgstr[0] "%{count} подія"
+msgstr[1] "%{count} події"
+msgstr[2] "%{count} подій"
+
+msgid "%{count} pages"
+msgid_plural "%{count} pages"
+msgstr[0] "%{count} сторінка"
+msgstr[1] "%{count} сторінки"
+msgstr[2] "%{count} сторінок"
+
+msgid "%{count} selected"
+msgid_plural "%{count} selected"
+msgstr[0] "Вибрано: %{count}"
+msgstr[1] "Вибрано: %{count}"
+msgstr[2] "Вибрано: %{count}"
+
+msgid "Deleted %{count} categories."
+msgstr "Видалено категорій: %{count}."
+
+msgid "Deleted %{count} items."
+msgstr "Видалено позицій: %{count}."
+
+msgid "Restored %{count} categories."
+msgstr "Відновлено категорій: %{count}."
+
+msgid "Restored %{count} items."
+msgstr "Відновлено позицій: %{count}."
+
+msgid "Moved %{count} items."
+msgstr "Переміщено позицій: %{count}."
+
+msgid "Permanently deleted %{count} items."
+msgstr "Остаточно видалено позицій: %{count}."
+
+## Catalogue table toolbar
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:659
+#, elixir-autogen
+msgid "Columns"
+msgstr "Стовпці"
+
+msgid "Apply"
+msgstr "Застосувати"
+
+msgid "Toggle sort direction"
+msgstr "Змінити напрямок сортування"
+
+## Catalogue table columns
+msgid "Folder"
+msgstr "Папка"
+
+msgid "Discount %"
+msgstr "Знижка, %"
+
+msgid "Contact Info"
+msgstr "Контактні дані"
+
+msgid "Website"
+msgstr "Вебсайт"
+
+#: lib/phoenix_kit_catalogue/web/table_config.ex:66
+#: lib/phoenix_kit_catalogue/web/table_config.ex:162
+#: lib/phoenix_kit_catalogue/web/table_config.ex:183
+#, elixir-autogen
+msgid "Manual order"
+msgstr "Ручний порядок"
+
+## Catalogue index toolbar / filters
+msgid "Folders"
+msgstr "Папки"
+
+msgid "All folders"
+msgstr "Усі папки"
+
+msgid "All statuses"
+msgstr "Усі статуси"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2144
+#, elixir-autogen
+msgid "Clear search and filters to drag-and-drop reorder."
+msgstr "Скиньте пошук і фільтри, щоб змінювати порядок перетягуванням."
+
+## Folder management modal
+msgid "Nothing in the trash."
+msgstr "У кошику нічого немає."
+
+msgid "New folder"
+msgstr "Нова папка"
+
+msgid "New subfolder"
+msgstr "Нова підпапка"
+
+msgid "Move to folder"
+msgstr "Перемістити до папки"
+
+msgid "Rename"
+msgstr "Перейменувати"
+
+msgid "Permanently delete folder"
+msgstr "Видалити папку остаточно"
+
+msgid "Moving…"
+msgstr "Переміщення…"
+
+msgid "— Root (unfiled) —"
+msgstr "— Корінь (без папки) —"
+
+msgid "Choose a destination folder for this folder."
+msgstr "Виберіть папку призначення для цієї папки."
+
+msgid "Choose a destination folder for this catalogue."
+msgstr "Виберіть папку призначення для цього каталогу."
+
+msgid "Can't move a folder into itself or one of its subfolders."
+msgstr "Не можна перемістити папку саму в себе або в одну з її підпапок."
+
+msgid "That folder is in the trash."
+msgstr "Ця папка в кошику."
+
+msgid "That folder no longer exists."
+msgstr "Цієї папки більше не існує."
+
+msgid "This will permanently delete this folder. Subfolders are moved to root and catalogues filed here are unfiled — neither is deleted. This cannot be undone."
+msgstr "Це остаточно видалить цю папку. Підпапки буде переміщено в корінь, а каталоги з цієї папки стануть каталогами без папки — жоден з них не буде видалено. Цю дію неможливо скасувати."
+
+msgid "Folder moved."
+msgstr "Папку переміщено."
+
+msgid "Folder not found."
+msgstr "Папку не знайдено."
+
+msgid "Folder permanently deleted."
+msgstr "Папку остаточно видалено."
+
+msgid "Failed to create folder."
+msgstr "Не вдалося створити папку."
+
+msgid "That name is too long: %{count} characters at most."
+msgstr "Ця назва задовга: не більше %{count} символів."
+
+msgid "Could not save that name."
+msgstr "Не вдалося зберегти цю назву."
+
+msgid "Failed to delete folder."
+msgstr "Не вдалося видалити папку."
+
+msgid "Failed to restore folder."
+msgstr "Не вдалося відновити папку."
+
+msgid "Failed to move folder."
+msgstr "Не вдалося перемістити папку."
+
+msgid "Failed to move catalogue."
+msgstr "Не вдалося перемістити каталог."
+
+msgid "Failed to move."
+msgstr "Не вдалося перемістити."
+
+msgid "Unexpected request. Please try again."
+msgstr "Неочікуваний запит. Спробуйте ще раз."
+
+## Catalogue confirm-delete dialogs
+msgid "Catalogue moved."
+msgstr "Каталог переміщено."
+
+msgid "Delete Manufacturer"
+msgstr "Видалити виробника"
+
+msgid "Delete Supplier"
+msgstr "Видалити постачальника"
+
+msgid "This will permanently delete this catalogue, all its categories, and all items. This cannot be undone."
+msgstr "Це остаточно видалить цей каталог, усі його категорії та всі позиції. Цю дію неможливо скасувати."
+
+msgid "This will permanently delete this manufacturer. Items referencing it will lose the association."
+msgstr "Це остаточно видалить цього виробника. Позиції, що на нього посилаються, втратять цей зв'язок."
+
+msgid "This will permanently delete this supplier. Manufacturer links will be removed."
+msgstr "Це остаточно видалить цього постачальника. Зв'язки з виробниками буде прибрано."
+
+msgid "No results found."
+msgstr "Нічого не знайдено."
+
+## Supplier-info junction UI (V149 wave)
+msgid "Add Supplier"
+msgstr "Додати постачальника"
+
+msgid "Primary supplier"
+msgstr "Основний постачальник"
+
+msgid "Supplier SKU"
+msgstr "SKU постачальника"
+
+msgid "Lead time (days)"
+msgstr "Строк постачання (днів)"
+
+msgid "Min. order qty"
+msgstr "Мін. к-сть замовлення"
+
+msgid "Suppliers not set."
+msgstr "Постачальників не вказано."
+
+msgid "Lead (d)"
+msgstr "Строк (дн.)"
+
+msgid "MOQ"
+msgstr "Мін. к-сть"
+
+msgid "Primary"
+msgstr "Основний"
+
+msgid "Make primary"
+msgstr "Зробити основним"
+
+msgid "-- Select supplier --"
+msgstr "-- Виберіть постачальника --"
+
+msgid "Please select a supplier."
+msgstr "Виберіть постачальника."
+
+msgid "Supplier added."
+msgstr "Постачальника додано."
+
+msgid "Failed to add supplier."
+msgstr "Не вдалося додати постачальника."
+
+msgid "Failed to set primary supplier."
+msgstr "Не вдалося встановити основного постачальника."
+
+msgid "Supplier removed."
+msgstr "Постачальника прибрано."
+
+msgid "Failed to remove supplier."
+msgstr "Не вдалося прибрати постачальника."
+
+msgid "History"
+msgstr "Історія"
+
+msgid "Price history"
+msgstr "Історія цін"
+
+msgid "No price history."
+msgstr "Історії цін немає."
+
+msgid "Currency"
+msgstr "Валюта"
+
+msgid "Valid from"
+msgstr "Діє з"
+
+msgid "Valid to"
+msgstr "Діє до"
+
+msgid "Current"
+msgstr "Поточна"
+
+## Import — PRO100 sync skip reasons
+msgid "Row %{row}: belongs to %{group}, not to this catalogue"
+msgstr "Рядок %{row}: належить до %{group}, а не до цього каталогу"
+
+## Media picker
+msgid "Select featured image"
+msgstr "Вибрати головне зображення"
+
+## Product card
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:481
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:482
+#, elixir-autogen
+msgid "View item details"
+msgstr "Переглянути деталі позиції"
+
+msgid "Show this image"
+msgstr "Показати це зображення"
+
+msgid "Close"
+msgstr "Закрити"
+
+msgid "Open"
+msgstr "Відкрити"
+
+msgid "Hide"
+msgstr "Приховати"
+
+msgid "Previous"
+msgstr "Назад"
+
+msgid "Next"
+msgstr "Далі"
+
+msgid "Show image %{number}"
+msgstr "Показати зображення %{number}"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3774
+#, elixir-autogen
+msgid "Reorder all"
+msgstr "Змінити порядок усіх"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3593
+#, elixir-autogen
+msgid "catalogue"
+msgstr "каталог"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3594
+#, elixir-autogen
+msgid "catalogues"
+msgstr "каталогів"
+
+msgid "category"
+msgstr "категорія"
+
+msgid "categories"
+msgstr "категорій"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2108
+#, elixir-autogen
+msgid "Catalogues reordered."
+msgstr "Порядок каталогів змінено."
+
+msgid "Categories reordered."
+msgstr "Порядок категорій змінено."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2113
+#, elixir-autogen
+msgid "Failed to reorder."
+msgstr "Не вдалося змінити порядок."
+
+msgid "Photos and files"
+msgstr "Фото та файли"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:1550
+#: lib/phoenix_kit_catalogue/web/components.ex:1612
+#, elixir-autogen
+msgid "Comfortable view"
+msgstr "Просторий вигляд"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:1559
+#: lib/phoenix_kit_catalogue/web/components.ex:1620
+#, elixir-autogen
+msgid "Compact view"
+msgstr "Компактний вигляд"
+
+msgid "Save"
+msgstr "Зберегти"
+
+msgid "Save & exit"
+msgstr "Зберегти й вийти"
+
+msgid "Attributes"
+msgstr "Атрибути"
+
+msgid "Archive"
+msgstr "Архівувати"
+
+msgid "Add"
+msgstr "Додати"
+
+msgid "New attribute group"
+msgstr "Нова група атрибутів"
+
+msgid "Edit Attribute Group"
+msgstr "Редагувати групу атрибутів"
+
+msgid "Delete attribute group"
+msgstr "Видалити групу атрибутів"
+
+msgid "Attribute group not found."
+msgstr "Групу атрибутів не знайдено."
+
+msgid "Attribute group created."
+msgstr "Групу атрибутів створено."
+
+msgid "Attribute group updated."
+msgstr "Групу атрибутів оновлено."
+
+msgid "Attribute group deleted."
+msgstr "Групу атрибутів видалено."
+
+msgid "Failed to delete attribute group."
+msgstr "Не вдалося видалити групу атрибутів."
+
+msgid "Failed to update attribute group."
+msgstr "Не вдалося оновити групу атрибутів."
+
+msgid "This group is used by items — archive it instead."
+msgstr "Ця група використовується позиціями — архівуйте її замість видалення."
+
+msgid "No attribute groups yet. Create one to define reusable options like colors and finishes."
+msgstr "Груп атрибутів поки немає. Створіть групу, щоб задати багаторазові опції, як-от кольори та оздоблення."
+
+msgid "This will permanently delete this group with all its attributes and values. Groups used by items cannot be deleted — archive them instead."
+msgstr "Це остаточно видалить цю групу разом з усіма її атрибутами та значеннями. Групи, що використовуються позиціями, видалити неможливо — архівуйте їх."
+
+msgid "e.g., Idea doors"
+msgstr "напр., Двері Idea"
+
+msgid "Define a reusable set of options — colors, trims, surfaces — that items can inherit."
+msgstr "Задайте багаторазовий набір опцій — кольори, декоративні планки, поверхні — які можуть успадковувати позиції."
+
+msgid "Manage this group's attributes, values, and translations."
+msgstr "Керуйте атрибутами, значеннями та перекладами цієї групи."
+
+msgid "No attributes yet. Add one below — e.g., Color, Trim, Surface."
+msgstr "Атрибутів поки немає. Додайте нижче — напр., Колір, Декоративна планка, Поверхня."
+
+msgid "Failed to add attribute."
+msgstr "Не вдалося додати атрибут."
+
+msgid "Failed to add value."
+msgstr "Не вдалося додати значення."
+
+msgid "Delete attribute"
+msgstr "Видалити атрибут"
+
+msgid "This removes the attribute and all its values from the group."
+msgstr "Атрибут і всі його значення буде видалено з групи."
+
+msgid "Add value…"
+msgstr "Додати значення…"
+
+msgid "New attribute name…"
+msgstr "Назва нового атрибута…"
+
+msgid "Default value"
+msgstr "Значення за замовчуванням"
+
+msgid "Make default"
+msgstr "Встановити за замовчуванням"
+
+msgid "Remove value"
+msgstr "Прибрати значення"
+
+msgid "You are editing translations. Empty fields fall back to the primary language; new attributes and values are always created in the primary language."
+msgstr "Ви редагуєте переклади. Порожні поля замінюються значенням основної мови; нові атрибути та значення завжди створюються основною мовою."
+
+msgid "Attribute group"
+msgstr "Група атрибутів"
+
+msgid "Pick a group to give this item its options — colors, trims, surfaces. Applied when you save."
+msgstr "Виберіть групу, щоб задати цій позиції її опції — кольори, декоративні планки, поверхні. Застосовується під час збереження."
+
+msgid "Manage groups"
+msgstr "Керування групами"
+
+msgid "— Attribute group not set —"
+msgstr "— Групу атрибутів не вказано —"
+
+msgid "archived"
+msgstr "в архіві"
+
+msgid "No values defined yet."
+msgstr "Значень ще не визначено."
+
+msgid "This value has no slug and cannot be selected"
+msgstr "У цього значення немає slug, тому його не можна вибрати"
+
+msgid "This group has no attributes yet."
+msgstr "У цій групі поки немає атрибутів."
+
+msgid "View old values (%{count})"
+msgstr "Переглянути старі значення (%{count})"
+
+msgid "Hand-typed metadata from before attribute groups. Kept so nothing is lost — move what matters into a group, then clear these."
+msgstr "Метадані, введені вручну до появи груп атрибутів. Збережено, щоб нічого не втратилося — перенесіть потрібне до групи, а потім очистіть їх."
+
+msgid "Has attribute set"
+msgstr "Має набір атрибутів"
+
+msgid "AI translate names & values"
+msgstr "Перекласти назви та значення за допомогою ШІ"
+
+msgid "AI-translate all attribute names and values that are missing a language."
+msgstr "Перекласти за допомогою ШІ всі назви атрибутів і значення, для яких бракує мови."
+
+msgid "Queued %{count} AI translations for attributes and values."
+msgstr "У чергу поставлено переклади ШІ для атрибутів і значень: %{count}."
+
+msgid "Nothing to translate."
+msgstr "Нічого перекладати."
+
+msgid "Select an AI endpoint and prompt in the translate dialog first."
+msgstr "Спочатку виберіть кінцеву точку ШІ та промпт у діалозі перекладу."
+
+msgid "Add value"
+msgstr "Додати значення"
+
+msgid "Search PDF contents"
+msgstr "Пошук за вмістом PDF"
+
+msgid "Search inside every PDF…"
+msgstr "Шукати в усіх PDF…"
+
+msgid "Type at least 2 characters to search the text of every PDF."
+msgstr "Введіть щонайменше 2 символи, щоб шукати в тексті всіх PDF."
+
+msgid "No pages match your search."
+msgstr "Жодна сторінка не відповідає вашому запиту."
+
+msgid "Search by filename…"
+msgstr "Пошук за назвою файлу…"
+
+msgid "Attribute sets need the Entities module enabled."
+msgstr "Для наборів атрибутів потрібен увімкнений модуль Сутності."
+
+msgid "New Attribute Set"
+msgstr "Новий набір атрибутів"
+
+msgid "Invalid value for %{field}."
+msgstr "Недійсне значення для %{field}."
+
+msgid "A field with this name already exists."
+msgstr "Поле з такою назвою вже існує."
+
+msgid "Failed to add field."
+msgstr "Не вдалося додати поле."
+
+msgid "Name is required."
+msgstr "Назва обов'язкова."
+
+msgid "Attribute set created."
+msgstr "Набір атрибутів створено."
+
+msgid "Failed to create the set — is the name unique?"
+msgstr "Не вдалося створити набір — чи унікальна назва?"
+
+msgid "Attribute set updated."
+msgstr "Набір атрибутів оновлено."
+
+msgid "Failed to update the set."
+msgstr "Не вдалося оновити набір."
+
+msgid "Attribute set archived."
+msgstr "Набір атрибутів архівовано."
+
+msgid "Failed to archive attribute set."
+msgstr "Не вдалося архівувати набір атрибутів."
+
+msgid "Attribute set restored."
+msgstr "Набір атрибутів відновлено."
+
+msgid "Failed to restore attribute set."
+msgstr "Не вдалося відновити набір атрибутів."
+
+msgid "A set is one dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
+msgstr "Набір — це один вимір від одного постачальника — кольори Ikea, декоративні планки HomeDepot. До позицій можна прив'язати будь-яку кількість наборів."
+
+msgid "Manage this set's values and extra fields."
+msgstr "Керуйте значеннями та додатковими полями цього набору."
+
+msgid "e.g., Ikea colors"
+msgstr "напр., кольори Ikea"
+
+msgid "Key: %{key} — stable, referenced by items and orders."
+msgstr "Ключ: %{key} — стабільний, на нього посилаються позиції та замовлення."
+
+msgid "Values"
+msgstr "Значення"
+
+msgid "No values yet. Add one below — e.g. Oak, White, Anthracite."
+msgstr "Значень поки немає. Додайте нижче — напр. Дуб, Білий, Антрацит."
+
+msgid "Extra fields"
+msgstr "Додаткові поля"
+
+msgid "Extra info every value carries — price per liter, drying time. Each value above gets an input per field."
+msgstr "Додаткові дані, які має кожне значення, — ціна за літр, час висихання. Для кожного значення вище з'явиться поле введення."
+
+msgid "Remove field"
+msgstr "Прибрати поле"
+
+msgid "New field name..."
+msgstr "Назва нового поля..."
+
+msgid "Text"
+msgstr "Текст"
+
+msgid "Number"
+msgstr "Число"
+
+msgid "Yes / No"
+msgstr "Так / Ні"
+
+msgid "Date"
+msgstr "Дата"
+
+msgid "Remove extra field"
+msgstr "Прибрати додаткове поле"
+
+msgid "The field disappears from every value. Data already entered is kept but hidden until a field with the same name is re-added."
+msgstr "Поле зникне з усіх значень. Уже введені дані буде збережено, але приховано, доки не буде знову додано поле з такою самою назвою."
+
+msgid "Attribute set deleted."
+msgstr "Набір атрибутів видалено."
+
+msgid "This set is attached to items — detach it everywhere first."
+msgstr "Цей набір прив'язано до позицій — спочатку відв'яжіть його всюди."
+
+msgid "Failed to delete attribute set."
+msgstr "Не вдалося видалити набір атрибутів."
+
+msgid "Migrated: %{sets} sets, %{values} values, %{attachments} item attachments."
+msgstr "Перенесено: наборів — %{sets}, значень — %{values}, прив'язок до позицій — %{attachments}."
+
+msgid "Migration failed — nothing was lost; check the logs and re-run."
+msgstr "Міграція не вдалася — нічого не втрачено; перевірте журнали та запустіть знову."
+
+msgid "Attribute sets"
+msgstr "Набори атрибутів"
+
+msgid "Show archived"
+msgstr "Показати архівні"
+
+msgid "One dimension from one vendor — Ikea colors, HomeDepot trims. Items attach any number of sets."
+msgstr "Один вимір від одного постачальника — кольори Ikea, декоративні планки HomeDepot. До позицій можна прив'язати будь-яку кількість наборів."
+
+msgid "New set"
+msgstr "Новий набір"
+
+msgid "No sets yet. Create one, or migrate your legacy groups below."
+msgstr "Наборів поки немає. Створіть новий або перенесіть застарілі групи нижче."
+
+msgid "Legacy attribute groups"
+msgstr "Застарілі групи атрибутів"
+
+msgid "The old system. Migration copies every group's attributes into sets and re-attaches items — nothing is deleted."
+msgstr "Стара система. Міграція копіює атрибути кожної групи до наборів і повторно прив'язує позиції — нічого не видаляється."
+
+msgid "Migrate to sets"
+msgstr "Перенести до наборів"
+
+msgid "Delete Attribute Set"
+msgstr "Видалити набір атрибутів"
+
+msgid "This deletes the set and all its values. Sets attached to items cannot be deleted."
+msgstr "Буде видалено набір і всі його значення. Набори, прив'язані до позицій, видалити неможливо."
+
+msgid "Migrate groups to sets"
+msgstr "Перенести групи до наборів"
+
+msgid "Each group attribute becomes its own set, values keep their keys, and every item's group assignment is re-attached as sets. The old groups stay untouched and re-running is safe."
+msgstr "Кожен атрибут групи стає окремим набором, значення зберігають свої ключі, а призначення групи кожній позиції повторно оформлюється як набори. Старі групи залишаються без змін, повторний запуск безпечний."
+
+msgid "Migrate"
+msgstr "Перенести"
+
+msgid "Attach any number of sets — Ikea colors, HomeDepot trims. Applied when you save."
+msgstr "Прив'яжіть будь-яку кількість наборів — кольори Ikea, декоративні планки HomeDepot. Застосовується під час збереження."
+
+msgid "Manage sets"
+msgstr "Керування наборами"
+
+msgid "unavailable"
+msgstr "недоступно"
+
+msgid "Detach set"
+msgstr "Відв'язати набір"
+
+msgid "Selected, but archived — no longer offered for new picks"
+msgstr "Вибрано, але в архіві — більше не пропонується для нового вибору"
+
+msgid "— Attach a set —"
+msgstr "— Прив'язати набір —"
+
+msgid "No sets exist yet — create one under Manage sets."
+msgstr "Наборів ще немає — створіть один у розділі «Керування наборами»."
+
+msgid "Attribute group (legacy)"
+msgstr "Група атрибутів (застаріла)"
+
+msgid "Unknown set"
+msgstr "Невідомий набір"
+
+msgid "This set was deleted in another session."
+msgstr "Цей набір було видалено в іншому сеансі."
+
+msgid "No sets yet. Create one to define the options items can attach."
+msgstr "Наборів поки немає. Створіть один, щоб визначити опції, які можна прив'язувати до позицій."
+
+msgid "Attribute groups have been replaced by sets — your groups were migrated automatically."
+msgstr "Групи атрибутів замінено наборами — ваші групи було перенесено автоматично."
+
+msgid "Text area"
+msgstr "Багаторядкове поле"
+
+msgid "Select"
+msgstr "Вибір"
+
+msgid "Image"
+msgstr "Зображення"
+
+msgid "Video"
+msgstr "Відео"
+
+msgid "Options, comma-separated (Select)"
+msgstr "Варіанти через кому (Вибір)"
+
+msgid "Select fields need options — list them comma-separated."
+msgstr "Полям типу «Вибір» потрібні варіанти — перелічіть їх через кому."
+
+msgid "Select Image"
+msgstr "Вибрати зображення"
+
+msgid "Select Video"
+msgstr "Вибрати відео"
+
+msgid "Value"
+msgstr "Значення"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:567
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:635
+#, elixir-autogen
+msgid "Type"
+msgstr "Тип"
+
+msgid "Add field"
+msgstr "Додати поле"
+
+msgid "Edit field"
+msgstr "Редагувати поле"
+
+msgid "Add extra field"
+msgstr "Додати додаткове поле"
+
+msgid "Edit extra field"
+msgstr "Редагувати додаткове поле"
+
+msgid "e.g. Price per liter"
+msgstr "напр. Ціна за літр"
+
+msgid "Shown as a label on every value."
+msgstr "Відображається як підпис у кожного значення."
+
+msgid "Key: %{key}"
+msgstr "Ключ: %{key}"
+
+msgid "Type can't be changed. Remove the field and add a new one if you need a different type."
+msgstr "Тип змінити не можна. Якщо потрібен інший тип — приберіть поле й додайте нове."
+
+msgid "Choices"
+msgstr "Варіанти вибору"
+
+msgid "Each value picks one of these from a dropdown."
+msgstr "Кожне значення вибирає один із них у списку, що розкривається."
+
+msgid "Remove choice"
+msgstr "Прибрати варіант"
+
+msgid "Add choice"
+msgstr "Додати варіант"
+
+msgid "Renaming or removing a choice clears that pick on values that used it."
+msgstr "Перейменування або прибирання варіанта скидає цей вибір у значеннях, які його використовували."
+
+msgid "Add at least one choice."
+msgstr "Додайте щонайменше один варіант."
+
+msgid "Failed to save the field."
+msgstr "Не вдалося зберегти поле."
+
+msgid "Save field"
+msgstr "Зберегти поле"
+
+msgid "Each value gets a text input."
+msgstr "У кожного значення буде текстове поле введення."
+
+msgid "Each value gets a multi-line text box."
+msgstr "У кожного значення буде багаторядкове текстове поле."
+
+msgid "Each value gets a number input."
+msgstr "У кожного значення буде числове поле введення."
+
+msgid "Each value gets a yes/no toggle."
+msgstr "У кожного значення буде перемикач так/ні."
+
+msgid "Each value gets a date picker."
+msgstr "У кожного значення буде вибір дати."
+
+msgid "Each value gets an image picked from the media library."
+msgstr "У кожного значення буде зображення, вибране з медіатеки."
+
+msgid "Each value gets a video picked from the media library."
+msgstr "У кожного значення буде відео, вибране з медіатеки."
+
+msgid "Attach sets, then tick what applies: one tick — this exact item; several — the options it comes in; none — the whole set. Applied when you save."
+msgstr "Прив'яжіть набори, а потім позначте, що застосовується: один прапорець — саме ця позиція; кілька — варіанти, у яких вона постачається; жодного — весь набір. Застосовується під час збереження."
+
+msgid "This exact item."
+msgstr "Саме ця позиція."
+
+msgid "Available in %{count} of %{total} options."
+msgstr "Доступно в %{count} із %{total} варіантів."
+
+msgid "Up one level"
+msgstr "На рівень вгору"
+
+msgid "All categories"
+msgstr "Усі категорії"
+
+msgid "All catalogues"
+msgstr "Усі каталоги"
+
+msgid " or drag & drop"
+msgstr " або перетягніть сюди"
+
+msgid "%b %d, %Y %H:%M"
+msgstr "%d.%m.%Y %H:%M"
+
+msgid "%{count} items already exist in this catalogue with identical data."
+msgstr "Позицій з ідентичними даними, що вже є в цьому каталозі: %{count}."
+
+msgid "%{count} items will be moved to the Deleted view. They can be restored later."
+msgstr "Позицій, які буде переміщено до видалених: %{count}. Їх можна буде відновити пізніше."
+
+msgid "%{count} items will be permanently deleted. This cannot be undone."
+msgstr "Позицій, які буде видалено остаточно: %{count}. Цю дію неможливо скасувати."
+
+msgid "%{count} rows in your file are identical duplicates."
+msgstr "Рядків у вашому файлі, що є ідентичними дублікатами: %{count}."
+
+msgid "%{count}d ago"
+msgstr "%{count} дн. тому"
+
+msgid "%{count}h ago"
+msgstr "%{count} год тому"
+
+msgid "%{count}m ago"
+msgstr "%{count} хв тому"
+
+msgid "%{total} catalogues available — none selected"
+msgstr "Доступно каталогів: %{total} — жодного не вибрано"
+
+msgid "-- No category --"
+msgstr "-- Без категорії --"
+
+msgid "— Manufacturer not set —"
+msgstr "— Виробника не вказано —"
+
+msgid "-- Select catalogue --"
+msgstr "-- Виберіть каталог --"
+
+msgid "— Select category —"
+msgstr "— Виберіть категорію —"
+
+msgid "0.00"
+msgstr "0.00"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2777
+#, elixir-autogen
+msgid "A → Z by name"
+msgstr "А → Я за назвою"
+
+msgid "Action"
+msgstr "Дія"
+
+msgid "Add a new product or material to the catalogue."
+msgstr "Додайте до каталогу новий товар або матеріал."
+
+msgid "All actions"
+msgstr "Усі дії"
+
+msgid "All columns are already mapped. Free one up by setting it to '— Skip —' in the column mapping section below, or by switching another picker (Category, Manufacturer, or Supplier) out of 'Use a column' mode."
+msgstr "Усі стовпці вже зіставлено. Звільніть один, вибравши для нього '— Пропустити —' у розділі зіставлення стовпців нижче, або перемкніть інше поле вибору (Категорія, Виробник чи Постачальник) з режиму 'Використати стовпець'."
+
+msgid "Applied on top of the sale price to compute the final price. 0..100. Individual items can override this."
+msgstr "Застосовується поверх ціни продажу для розрахунку кінцевої ціни. 0..100. Окремі позиції можуть це перевизначити."
+
+msgid "Applied to all item base prices to calculate sale prices. Leave blank for no markup."
+msgstr "Застосовується до базових цін усіх позицій для розрахунку цін продажу. Залиште порожнім, якщо націнки немає."
+
+msgid "Applying…"
+msgstr "Застосування…"
+
+msgid "Archived catalogues are hidden from active views."
+msgstr "Архівні каталоги не відображаються в активних списках."
+
+msgid "Article code"
+msgstr "Артикул"
+
+msgid "Attach any metadata fields that apply to this catalogue. Blank values are dropped on save."
+msgstr "Прив'яжіть будь-які поля метаданих, що стосуються цього каталогу. Порожні значення відкидаються під час збереження."
+
+msgid "Attach any metadata fields that apply. Blank values are dropped on save."
+msgstr "Прив'яжіть будь-які відповідні поля метаданих. Порожні значення відкидаються під час збереження."
+
+msgid "Brief description of this manufacturer..."
+msgstr "Короткий опис цього виробника..."
+
+msgid "Brief description of this supplier..."
+msgstr "Короткий опис цього постачальника..."
+
+msgid "Brief description of what this catalogue contains…"
+msgstr "Короткий опис вмісту цього каталогу…"
+
+msgid "Brochures, spec sheets, datasheets. Any file type is accepted."
+msgstr "Брошури, специфікації, технічні описи. Приймається файл будь-якого типу."
+
+msgid "By default the importer only matches existing categories by their name in the current import language. Turn this on to also match translations in any other language — useful for multilingual catalogues where the same category is named differently in each language."
+msgstr "За замовчуванням імпортер зіставляє наявні категорії лише за назвою мовою поточного імпорту. Увімкніть, щоб зіставляти також переклади будь-якою іншою мовою — корисно для багатомовних каталогів, де одну категорію названо по-різному кожною мовою."
+
+msgid "Catalogue and all its contents permanently deleted."
+msgstr "Каталог і весь його вміст видалено остаточно."
+
+msgid "Categories that will be created:"
+msgstr "Категорії, які буде створено:"
+
+msgid "Categories to create:"
+msgstr "Категорії для створення:"
+
+msgid "Category and all its items permanently deleted."
+msgstr "Категорію та всі її позиції видалено остаточно."
+
+msgid "Changes"
+msgstr "Зміни"
+
+msgid "Choose where each column should be imported to."
+msgstr "Виберіть, куди імпортувати кожен стовпець."
+
+msgid "Classification"
+msgstr "Класифікація"
+
+msgid "Clearing…"
+msgstr "Очищення…"
+
+msgid "Click to toggle manufacturer associations."
+msgstr "Натисніть, щоб перемкнути прив'язки до виробників."
+
+msgid "Click to toggle supplier associations."
+msgstr "Натисніть, щоб перемкнути прив'язки до постачальників."
+
+msgid "Close modal"
+msgstr "Закрити вікно"
+
+msgid "Contact & Web"
+msgstr "Контакти й вебсайт"
+
+msgid "Continue"
+msgstr "Продовжити"
+
+msgid "Continue to confirm"
+msgstr "Перейти до підтвердження"
+
+msgid "Cost/purchase price before catalogue markup."
+msgstr "Собівартість/закупівельна ціна до націнки каталогу."
+
+msgid "Could not create the new category. Please check the form and try again."
+msgstr "Не вдалося створити нову категорію. Перевірте форму й спробуйте ще раз."
+
+msgid "Could not create the new manufacturer. Please check the form and try again."
+msgstr "Не вдалося створити нового виробника. Перевірте форму й спробуйте ще раз."
+
+msgid "Could not create the new supplier. Please check the form and try again."
+msgstr "Не вдалося створити нового постачальника. Перевірте форму й спробуйте ще раз."
+
+msgid "Could not load more matches. Please try again."
+msgstr "Не вдалося завантажити більше збігів. Спробуйте ще раз."
+
+msgid "Could not remove file."
+msgstr "Не вдалося прибрати файл."
+
+msgid "The photo order could not be saved. Try again."
+msgstr "Не вдалося зберегти порядок фото. Спробуйте ще раз."
+
+msgid "Could not save the uploaded file. Please try again or contact support if it persists."
+msgstr "Не вдалося зберегти завантажений файл. Спробуйте ще раз або зверніться до підтримки, якщо помилка повторюється."
+
+msgid "Could not start extraction. The :catalogue_pdf Oban queue may not be running."
+msgstr "Не вдалося запустити витягування. Черга Oban :catalogue_pdf, можливо, не працює."
+
+msgid "Create categories"
+msgstr "Створити категорії"
+
+msgid "Create a new manufacturer — fill in the details below"
+msgstr "Створіть нового виробника — заповніть дані нижче"
+
+msgid "Create a new supplier — link to all touched manufacturers"
+msgstr "Створіть нового постачальника — його буде прив'язано до всіх задіяних виробників"
+
+msgid "Create one first"
+msgstr "Спочатку створіть його"
+
+msgid "Default unit"
+msgstr "Одиниця за замовчуванням"
+
+msgid "Move category and items to Deleted"
+msgstr "Перемістити категорію та позиції до видалених"
+
+msgid "Move category to Deleted — what about its items?"
+msgstr "Переміщення категорії до видалених — що робити з її позиціями?"
+
+msgid "Delete forever"
+msgstr "Видалити назавжди"
+
+msgid "Move items to Deleted with the category"
+msgstr "Перемістити позиції до видалених разом із категорією"
+
+msgid "Delete selected items?"
+msgstr "Видалити вибрані позиції?"
+
+msgid "Deleting…"
+msgstr "Видалення…"
+
+msgid "Discontinued items are kept for reference but hidden from active listings."
+msgstr "Позиції, зняті з виробництва, зберігаються для довідки, але приховані з активних списків."
+
+msgid "Discount override (%)"
+msgstr "Перевизначення знижки (%)"
+
+msgid "Discount percentage"
+msgstr "Відсоток знижки"
+
+msgid "Drag to reorder"
+msgstr "Перетягніть, щоб змінити порядок"
+
+msgid "Drag to reorder (among siblings)"
+msgstr "Перетягніть, щоб змінити порядок (серед сусідніх)"
+
+msgid "Each catalogue can only appear once in the rules list."
+msgstr "Кожен каталог може з'явитися в списку правил лише один раз."
+
+msgid "Email or phone"
+msgstr "Email або телефон"
+
+msgid "Errors"
+msgstr "Помилки"
+
+msgid "Extraction failed"
+msgstr "Не вдалося витягти текст"
+
+msgid "File"
+msgstr "Файл"
+
+msgid "File format does not match the selected format."
+msgstr "Формат файлу не відповідає вибраному."
+
+msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
+msgstr "Цей файл не в кодуванні UTF-8. Збережіть його в UTF-8 і завантажте знову."
+
+msgid "File has too many rows to import. Please split it into smaller files."
+msgstr "Файл містить забагато рядків для імпорту. Розділіть його на менші файли."
+
+msgid "File is too large to import. Please split it into smaller files."
+msgstr "Файл завеликий для імпорту. Розділіть його на менші файли."
+
+msgid "File is too large."
+msgstr "Файл завеликий."
+
+msgid "File type not supported. Use .xlsx or .csv."
+msgstr "Тип файлу не підтримується. Використовуйте .xlsx або .csv."
+
+msgid "Filename"
+msgstr "Ім'я файлу"
+
+msgid "Flags"
+msgstr "Прапорці"
+
+msgid "Flat"
+msgstr "Фіксована"
+
+msgid "Flat amount"
+msgstr "Фіксована сума"
+
+#: lib/phoenix_kit_catalogue/web/components.ex:878
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:1177
+#, elixir-autogen
+msgid "Has subcategories"
+msgstr "Містить підкатегорії"
+
+msgid "Import %{count} items"
+msgstr "Імпортувати позицій: %{count}"
+
+msgid "Import into category"
+msgstr "Імпортувати до категорії"
+
+msgid "Import language"
+msgstr "Мова імпорту"
+
+msgid "Import all — create everything including duplicates"
+msgstr "Імпортувати все — створити все, включно з дублікатами"
+
+msgid "Import failed: %{reason}"
+msgstr "Не вдалося виконати імпорт: %{reason}"
+
+msgid "Importing…"
+msgstr "Імпорт…"
+
+msgid "Inactive manufacturers won't appear in item dropdowns."
+msgstr "Неактивні виробники не з'являтимуться у списках, що розкриваються, для позицій."
+
+msgid "Inactive suppliers won't appear in manufacturer linking."
+msgstr "Неактивні постачальники не з'являтимуться під час прив'язування виробників."
+
+msgid "Inherit catalogue discount"
+msgstr "Успадкувати знижку каталогу"
+
+msgid "Inherit catalogue markup"
+msgstr "Успадкувати націнку каталогу"
+
+msgid "Inherit: %{discount}%"
+msgstr "Успадковується: %{discount}%"
+
+msgid "Inherit: %{markup}%"
+msgstr "Успадковується: %{markup}%"
+
+msgid "Inherit: %{value}"
+msgstr "Успадковується: %{value}"
+
+msgid "Internal notes about this manufacturer..."
+msgstr "Внутрішні примітки про цього виробника..."
+
+msgid "Internal notes about this supplier..."
+msgstr "Внутрішні примітки про цього постачальника..."
+
+msgid "Item name"
+msgstr "Назва позиції"
+
+msgid "Some selected items are no longer in this catalogue. Reload the page and try again."
+msgstr "Деяких вибраних позицій більше немає в цьому каталозі. Перезавантажте сторінку й спробуйте ще раз."
+
+msgid "Items keep their catalogue but lose their category."
+msgstr "Позиції залишаються в каталозі, але втрачають категорію."
+
+msgid "Restoring the category brings them back with it."
+msgstr "Відновлення категорії повертає їх разом із нею."
+
+msgid "Items reordered."
+msgstr "Порядок позицій змінено."
+
+msgid "Items stay in this catalogue without a category. Restoring the category later does not put them back."
+msgstr "Позиції залишаються в цьому каталозі без категорії. Подальше відновлення категорії не поверне їх назад."
+
+msgid "Leave blank to inherit the catalogue's discount. Set (including 0) to override just this item."
+msgstr "Залиште порожнім, щоб успадкувати знижку каталогу. Задайте значення (зокрема 0), щоб перевизначити лише для цієї позиції."
+
+msgid "Leave blank to inherit the catalogue's markup. Set (including 0) to override just this item."
+msgstr "Залиште порожнім, щоб успадкувати націнку каталогу. Задайте значення (зокрема 0), щоб перевизначити лише для цієї позиції."
+
+msgid "Link to supplier"
+msgstr "Прив'язати до постачальника"
+
+msgid "Loading…"
+msgstr "Завантаження…"
+
+msgid "Logo URL"
+msgstr "URL логотипа"
+
+msgid "Lower numbers appear first."
+msgstr "Менші числа йдуть першими."
+
+msgid "Make items uncategorized"
+msgstr "Зробити позиції без категорії"
+
+msgid "Manual"
+msgstr "Вручну"
+
+msgid "System"
+msgstr "Система"
+
+msgid "Scheduled"
+msgstr "За розкладом"
+
+msgid "Automatic"
+msgstr "Автоматично"
+
+msgid "Manufacturer created but failed to link some suppliers."
+msgstr "Виробника створено, але не вдалося прив'язати деяких постачальників."
+
+msgid "Manufacturer updated but failed to sync supplier links."
+msgstr "Виробника оновлено, але не вдалося синхронізувати прив'язки до постачальників."
+
+msgid "Manufacturers that will be created or matched:"
+msgstr "Виробники, які буде створено або зіставлено:"
+
+msgid "Map"
+msgstr "Зіставити"
+
+msgid "Map each value to a system unit:"
+msgstr "Зіставте кожне значення із системною одиницею:"
+
+msgid "Markup override (%)"
+msgstr "Перевизначення націнки (%)"
+
+msgid "Markup percentage"
+msgstr "Відсоток націнки"
+
+msgid "Match across all languages"
+msgstr "Зіставляти за всіма мовами"
+
+msgid "Move items"
+msgstr "Перемістити позиції"
+
+msgid "Move category to Deleted"
+msgstr "Перемістити категорію до видалених"
+
+msgid "Move items to another category"
+msgstr "Перемістити позиції до іншої категорії"
+
+msgid "Move selected items"
+msgstr "Перемістити вибрані позиції"
+
+msgid "Move this PDF to trash?"
+msgstr "Перемістити цей PDF до кошика?"
+
+msgid "Move this category and all its items to a different catalogue — at its top level or under one of its categories."
+msgstr "Перемістіть цю категорію та всі її позиції до іншого каталогу — на його верхній рівень або в одну з його категорій."
+
+msgid "Move this item into a different smart catalogue. Its catalogue rules stay attached."
+msgstr "Перемістіть цю позицію до іншого смарт-каталогу. Правила її каталогів залишаються прив'язаними."
+
+msgid "Move this item to a category in any catalogue."
+msgstr "Перемістіть цю позицію до категорії будь-якого каталогу."
+
+msgid "Move to another catalogue"
+msgstr "Перемістити до іншого каталогу"
+
+msgid "Move to Another Category"
+msgstr "Перемістити до іншої категорії"
+
+msgid "Move to another parent"
+msgstr "Перемістити до іншої батьківської категорії"
+
+msgid "Move to Another Smart Catalogue"
+msgstr "Перемістити до іншого смарт-каталогу"
+
+msgid "Name *"
+msgstr "Назва *"
+
+msgid "New categories"
+msgstr "Нові категорії"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2779
+#, elixir-autogen
+msgid "Newest first"
+msgstr "Спочатку нові"
+
+msgid "No PDF mentions this item by name."
+msgstr "Жоден PDF не згадує цю позицію за назвою."
+
+msgid "No PDFs matching your search."
+msgstr "Немає PDF, що відповідають вашому пошуку."
+
+msgid "No categories available — use Uncategorized instead."
+msgstr "Немає доступних категорій — використайте «Без категорії»."
+
+msgid "No categories or items yet. Add a category or item to get started."
+msgstr "Поки що немає ні категорій, ні позицій. Додайте категорію або позицію, щоб розпочати."
+
+msgid "No category — import items without a category"
+msgstr "Без категорії — імпортувати позиції без категорії"
+
+msgid "No discontinued items here."
+msgstr "Знятих з виробництва позицій тут немає."
+
+msgid "No extractable text"
+msgstr "Немає тексту для витягування"
+
+msgid "No inactive items here."
+msgstr "Неактивних позицій тут немає."
+
+msgid "No items in this category."
+msgstr "У цій категорії немає позицій."
+
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:303
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2648
+#, elixir-autogen
+msgid "No items match your search."
+msgstr "Жодна позиція не відповідає вашому пошуку."
+
+msgid "No manufacturer — items imported without a maker"
+msgstr "Без виробника — позиції імпортуються без виробника"
+
+msgid "Metadata not set."
+msgstr "Метадані не задано."
+
+msgid "No other catalogues available to reference yet."
+msgstr "Інших каталогів для посилання поки що немає."
+
+msgid "No other categories available — use Uncategorized instead."
+msgstr "Немає інших категорій — використайте «Без категорії»."
+
+msgid "No stuck extractions to re-queue."
+msgstr "Немає завислих витягувань для повторної постановки в чергу."
+
+msgid "No supplier — leave manufacturers unlinked"
+msgstr "Без постачальника — залишити виробників непов'язаними"
+
+msgid "No uncategorized items."
+msgstr "Позицій без категорії немає."
+
+msgid "Nothing deleted here."
+msgstr "Тут нічого не видалено."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2780
+#, elixir-autogen
+msgid "Oldest first"
+msgstr "Спочатку найстаріші"
+
+msgid "Only one file allowed"
+msgstr "Дозволено лише один файл"
+
+msgid "Open the PDF in a new tab"
+msgstr "Відкрити PDF у новій вкладці"
+
+msgid "PDF files only. Identical content is deduplicated; same file uploaded again under a new name shares one underlying file + extraction."
+msgstr "Лише файли PDF. Ідентичний вміст дедуплікується; той самий файл, завантажений повторно під новою назвою, використовує один спільний файл і одне витягування тексту."
+
+msgid "PRO100 sync preview"
+msgstr "Попередній перегляд синхронізації PRO100"
+
+msgid "Parent category"
+msgstr "Батьківська категорія"
+
+msgid "Parent must live in the same catalogue."
+msgstr "Батьківська категорія має належати до того самого каталогу."
+
+msgid "Percent (%)"
+msgstr "Відсоток (%)"
+
+msgid "Permanently delete selected items?"
+msgstr "Видалити вибрані позиції остаточно?"
+
+msgid "Permanently delete this PDF? If no other library entry references the same file content, the underlying file will be queued for hard deletion."
+msgstr "Видалити цей PDF остаточно? Якщо жоден інший запис бібліотеки не посилається на той самий вміст файлу, базовий файл буде поставлено в чергу на остаточне видалення."
+
+msgid "Pick a parent to nest this category inside, or leave blank to keep it at the top level. You can move it later."
+msgstr "Виберіть батьківську категорію, всередину якої вкласти цю категорію, або залиште поле порожнім, щоб залишити її на верхньому рівні. Пізніше її можна перемістити."
+
+msgid "Pick a strategy before applying."
+msgstr "Виберіть стратегію перед застосуванням."
+
+msgid "Pick a target category in this catalogue; the category being moved to Deleted and its subtree are excluded. Restoring the category later does not move them back."
+msgstr "Виберіть цільову категорію в цьому каталозі; категорія, яку переміщують до видалених, і її піддерево виключені. Відновлення категорії пізніше не поверне їх назад."
+
+msgid "Pick where %{count} items should go."
+msgstr "Виберіть, куди перемістити позиції: %{count}."
+
+msgid "Pick which catalogues this item applies to and set a value + unit per catalogue. Rows left blank inherit the defaults below."
+msgstr "Виберіть, до яких каталогів застосовується ця позиція, і вкажіть значення та одиницю для кожного каталогу. Порожні рядки успадковують значення за замовчуванням нижче."
+
+msgid "Piece"
+msgstr "Штука"
+
+msgid "Please give the new category a name before continuing."
+msgstr "Вкажіть назву нової категорії, перш ніж продовжити."
+
+msgid "Please give the new manufacturer a name before continuing."
+msgstr "Вкажіть назву нового виробника, перш ніж продовжити."
+
+msgid "Please give the new supplier a name before continuing."
+msgstr "Вкажіть назву нового постачальника, перш ніж продовжити."
+
+msgid "Please select a catalogue first."
+msgstr "Спочатку виберіть каталог."
+
+msgid "Please select a format."
+msgstr "Виберіть формат."
+
+msgid "Please upload a file."
+msgstr "Завантажте файл."
+
+msgid "Pricing & identification"
+msgstr "Ціни та ідентифікація"
+
+msgid "Product specifications, dimensions, materials…"
+msgstr "Специфікації товару, розміри, матеріали…"
+
+msgid "Re-queue any PDFs whose text extraction never ran or got stuck (e.g., after the job queue was down)."
+msgstr "Повторно поставте в чергу PDF, у яких витягування тексту не запустилося або зависло (напр., після простою черги завдань)."
+
+msgid "Re-queued %{count} stuck extraction(s)."
+msgstr "Повторно поставлено в чергу завислих витягувань: %{count}."
+
+msgid "Re-queued %{count} stuck extraction(s); %{skipped} already running."
+msgstr "Повторно поставлено в чергу завислих витягувань: %{count}; уже виконується: %{skipped}."
+
+msgid "Re-queued %{ok}; %{failed} could not be queued — the :catalogue_pdf queue may not be running."
+msgstr "Повторно поставлено в чергу: %{ok}; не вдалося поставити в чергу: %{failed} — черга :catalogue_pdf, імовірно, не працює."
+
+msgid "Re-queued text extraction."
+msgstr "Витягування тексту повторно поставлено в чергу."
+
+msgid "Re-queuing…"
+msgstr "Постановка в чергу…"
+
+msgid "Remove from catalogue"
+msgstr "Прибрати з каталогу"
+
+msgid "Remove from category"
+msgstr "Прибрати з категорії"
+
+msgid "Remove from item"
+msgstr "Прибрати з позиції"
+
+msgid "Remove this file from the catalogue? If it's not attached to any other resource, it will be moved to trash (admins can restore)."
+msgstr "Прибрати цей файл з каталогу? Якщо він не прикріплений до жодного іншого ресурсу, його буде переміщено до кошика (адміністратори можуть відновити)."
+
+msgid "Remove this file from the category? If it's not attached to any other resource, it will be moved to trash (admins can restore)."
+msgstr "Прибрати цей файл з категорії? Якщо він не прикріплений до жодного іншого ресурсу, його буде переміщено до кошика (адміністратори можуть відновити)."
+
+msgid "Remove this file from the item? If it's not attached to any other item, it will be moved to trash (admins can restore)."
+msgstr "Прибрати цей файл з позиції? Якщо він не прикріплений до жодної іншої позиції, його буде переміщено до кошика (адміністратори можуть відновити)."
+
+msgid "Removing…"
+msgstr "Прибирання…"
+
+msgid "Reparent this category within its catalogue. Its subtree comes along."
+msgstr "Перемістіть цю категорію під іншу батьківську в межах її каталогу. Піддерево переміститься разом з нею."
+
+msgid "Replace"
+msgstr "Замінити"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:634
+#, elixir-autogen
+msgid "Resource"
+msgstr "Ресурс"
+
+msgid "Restoring…"
+msgstr "Відновлення…"
+
+msgid "Retry"
+msgstr "Повторити"
+
+msgid "Retry extraction"
+msgstr "Повторити витягування"
+
+msgid "Retry stuck"
+msgstr "Повторити завислі"
+
+msgid "Retrying…"
+msgstr "Повторна спроба…"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2781
+#, elixir-autogen
+msgid "Reverse current order"
+msgstr "Змінити поточний порядок на зворотний"
+
+msgid "Row %{row}: %{msg}"
+msgstr "Рядок %{row}: %{msg}"
+
+msgid "Row %{row}: %{reason}"
+msgstr "Рядок %{row}: %{reason}"
+
+msgid "Row %{row}: multiple items match (%{matches})"
+msgstr "Рядок %{row}: збігається кілька позицій (%{matches})"
+
+msgid "Row %{row}: no id, cannot be created"
+msgstr "Рядок %{row}: немає id, створити неможливо"
+
+msgid "Row %{row}: no matching item found"
+msgstr "Рядок %{row}: відповідну позицію не знайдено"
+
+msgid "Row %{row}: no matching item, not created"
+msgstr "Рядок %{row}: відповідної позиції немає, не створено"
+
+msgid "Row %{row}: no name, cannot be created"
+msgstr "Рядок %{row}: немає назви, створити неможливо"
+
+msgid "Rows with errors (will be skipped):"
+msgstr "Рядки з помилками (буде пропущено):"
+
+msgid "Set (kmpl)"
+msgstr "Комплект (компл.)"
+
+msgid "Running meter"
+msgstr "Погонний метр"
+
+msgid "Sample data (first 5 rows)"
+msgstr "Приклад даних (перші 5 рядків)"
+
+msgid "Search failed. Please try again."
+msgstr "Не вдалося виконати пошук. Спробуйте ще раз."
+
+msgid "Search is temporarily unavailable. Please try again in a moment."
+msgstr "Пошук тимчасово недоступний. Спробуйте ще раз за хвилину."
+
+msgid "Search items by name, description, or SKU…"
+msgstr "Шукайте позиції за назвою, описом або SKU…"
+
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:233
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2372
+#, elixir-autogen
+msgid "Search items…"
+msgstr "Пошук позицій…"
+
+msgid "Search uncategorized items…"
+msgstr "Пошук позицій без категорії…"
+
+msgid "Search within this category…"
+msgstr "Пошук у цій категорії…"
+
+msgid "Searched for: %{name}"
+msgstr "Шукали: %{name}"
+
+msgid "Searches the entire PDF library for the item's name across all enabled languages."
+msgstr "Шукає назву позиції в усій бібліотеці PDF на всіх увімкнених мовах."
+
+msgid "Searching for “%{query}”…"
+msgstr "Пошук «%{query}»…"
+
+msgid "Searching…"
+msgstr "Пошук…"
+
+msgid "— Select a catalogue —"
+msgstr "— Виберіть каталог —"
+
+msgid "— Select a column —"
+msgstr "— Виберіть стовпець —"
+
+msgid "Select all items"
+msgstr "Вибрати всі позиції"
+
+msgid "Selected image could not be loaded."
+msgstr "Не вдалося завантажити вибране зображення."
+
+msgid "Selected items share positions. Apply “Reorder all” first to normalise."
+msgstr "У вибраних позицій збігається порядок. Спочатку застосуйте «Змінити порядок усіх», щоб його нормалізувати."
+
+msgid "Set manufacturer"
+msgstr "Вказати виробника"
+
+msgid "Sheet:"
+msgstr "Аркуш:"
+
+msgid "Show %{n} more"
+msgstr "Показати ще %{n}"
+
+msgid "Showing %{loaded} of %{count} results for “%{query}”"
+msgstr "Показано %{loaded} із %{count} результатів за запитом «%{query}»"
+
+msgid "Showing first 20 of %{count} items."
+msgstr "Показано перші 20 із %{count} позицій."
+
+msgid "Shown in lists and detail views."
+msgstr "Відображається у списках і на сторінках деталей."
+
+msgid "Shown on catalogue listings and category landing pages."
+msgstr "Відображається у списках каталогів і на сторінках категорій."
+
+msgid "Shown on catalogue listings and detail views."
+msgstr "Відображається у списках каталогів і на сторінках деталей."
+
+msgid "Shown on listings and detail views."
+msgstr "Відображається у списках і на сторінках деталей."
+
+msgid "Size"
+msgstr "Розмір"
+
+msgid "Skip duplicates — only import new, unique items"
+msgstr "Пропускати дублікати — імпортувати лише нові, унікальні позиції"
+
+msgid "Skipped"
+msgstr "Пропущено"
+
+msgid "Smart catalogues hold items like “Delivery” whose cost is a per-catalogue %/flat rule picked from other catalogues. Items here reference other catalogues instead of carrying a base price of their own."
+msgstr "Смарт-каталоги містять позиції на кшталт «Доставка», вартість яких — правило (%/фіксована сума) для кожного каталогу, вибране з інших каталогів. Позиції тут посилаються на інші каталоги замість власної базової ціни."
+
+msgid "Smart rule"
+msgstr "Смарт-правило"
+
+msgid "Some categories couldn't be restored. The catalogue may be deleted — restore it first."
+msgstr "Деякі категорії не вдалося відновити. Каталог, можливо, видалено — спочатку відновіть його."
+
+msgid "Source"
+msgstr "Джерело"
+
+msgid "Spec sheets, drawings, photos. Any file type is accepted."
+msgstr "Специфікації, креслення, фото. Приймається будь-який тип файлів."
+
+msgid "Standard catalogues hold items priced directly — each item has its own base price, markup, and discount. This is the normal flow for materials, products, or anything with a fixed price tag."
+msgstr "Стандартні каталоги містять позиції з прямим ціноутворенням — кожна позиція має власну базову ціну, націнку та знижку. Це звичайний сценарій для матеріалів, товарів або будь-чого з фіксованою ціною."
+
+msgid "Starting import…"
+msgstr "Запуск імпорту…"
+
+msgid "Still uploading — please wait a moment."
+msgstr "Завантаження ще триває — зачекайте трохи."
+
+msgid "Supplier created but failed to link some manufacturers."
+msgstr "Постачальника створено, але не вдалося прив'язати деяких виробників."
+
+msgid "Supplier updated but failed to sync manufacturer links."
+msgstr "Постачальника оновлено, але не вдалося синхронізувати зв'язки з виробниками."
+
+msgid "Suppliers that will be created or matched:"
+msgstr "Постачальники, які буде створено або зіставлено:"
+
+msgid "Supports .xlsx, .csv, .txt, .json files (max 10MB)"
+msgstr "Підтримуються файли .xlsx, .csv, .txt, .json (макс. 10MB)"
+
+msgid "Sync complete"
+msgstr "Синхронізацію завершено"
+
+msgid "Target catalogue"
+msgstr "Цільовий каталог"
+
+msgid "Target category not found."
+msgstr "Цільову категорію не знайдено."
+
+msgid "Text extraction in progress. This page will refresh automatically when it completes."
+msgstr "Триває витягування тексту. Сторінка оновиться автоматично після завершення."
+
+msgid "The file is empty."
+msgstr "Файл порожній."
+
+msgid "This PDF appears to be scanned. OCR support is planned for a future iteration."
+msgstr "Схоже, цей PDF відсканований. Підтримку OCR заплановано в одній із майбутніх ітерацій."
+
+msgid "This catalogue was just deleted."
+msgstr "Цей каталог щойно видалено."
+
+msgid "This category and all its items will be permanently deleted. This cannot be undone."
+msgstr "Цю категорію та всі її позиції буде видалено остаточно. Цю дію не можна скасувати."
+
+msgid "This item was imported in %{lang}. Please fill in the %{primary} translation and save to set it as the primary language."
+msgstr "Цю позицію було імпортовано мовою %{lang}. Заповніть переклад мовою %{primary} і збережіть, щоб зробити її основною мовою."
+
+msgid "This item will be permanently deleted. This cannot be undone."
+msgstr "Цю позицію буде видалено остаточно. Цю дію не можна скасувати."
+
+msgid "This will permanently delete this catalogue, all its categories, and all items within them."
+msgstr "Це остаточно видалить цей каталог, усі його категорії та всі позиції в них."
+
+msgid "This will permanently delete this catalogue, all its categories, and all items within them. This cannot be undone."
+msgstr "Це остаточно видалить цей каталог, усі його категорії та всі позиції в них. Цю дію не можна скасувати."
+
+msgid "This will permanently delete this category and all its items."
+msgstr "Це остаточно видалить цю категорію та всі її позиції."
+
+msgid "This will permanently delete this category and all its items. This cannot be undone."
+msgstr "Це остаточно видалить цю категорію та всі її позиції. Цю дію не можна скасувати."
+
+msgid "To create"
+msgstr "Буде створено"
+
+msgid "Too many files at once."
+msgstr "Забагато файлів одночасно."
+
+msgid "Trashed"
+msgstr "Видалено"
+
+msgid "Trashing…"
+msgstr "Переміщення до кошика…"
+
+msgid "Type to refine search…"
+msgstr "Введіть, щоб уточнити пошук…"
+
+msgid "Unfiled (root)"
+msgstr "Без папки (корінь)"
+
+msgid "Update item details, pricing, and classification."
+msgstr "Оновіть дані позиції, ціни та класифікацію."
+
+msgid "Updates"
+msgstr "Оновлення"
+
+msgid "Upload & parse"
+msgstr "Завантажити й обробити"
+
+msgid "Upload failed for an unexpected reason. Please try again."
+msgstr "Не вдалося завантажити з неочікуваної причини. Спробуйте ще раз."
+
+msgid "Uploaded"
+msgstr "Завантажено"
+
+msgid "Uploading…"
+msgstr "Завантаження…"
+
+msgid "Use a column — create categories from column values"
+msgstr "Використати стовпець — створити категорії зі значень стовпця"
+
+msgid "Use a column — create or match manufacturers from column values"
+msgstr "Використати стовпець — створити або зіставити виробників зі значень стовпця"
+
+msgid "Use a column — link per-row supplier to row's manufacturer"
+msgstr "Використати стовпець — прив'язати постачальника рядка до виробника цього рядка"
+
+msgid "Used for any selected catalogue that doesn't have its own unit."
+msgstr "Використовується для кожного вибраного каталогу, що не має власної одиниці."
+
+msgid "Used for any selected catalogue that doesn't have its own value. If no catalogues are selected, this is the item's standalone fee (e.g., $50 flat)."
+msgstr "Використовується для кожного вибраного каталогу, що не має власного значення. Якщо жодного каталогу не вибрано, це окрема плата за позицію (напр., $50 фіксовано)."
+
+msgid "Validating…"
+msgstr "Перевірка…"
+
+msgid "Waiting for uploads…"
+msgstr "Очікування завантажень…"
+
+msgid "What kinds of items belong in this category…"
+msgstr "Які позиції належать до цієї категорії…"
+
+msgid "Which column contains the category names?"
+msgstr "У якому стовпці містяться назви категорій?"
+
+msgid "Which column contains the manufacturer names?"
+msgstr "У якому стовпці містяться назви виробників?"
+
+msgid "Which column contains the supplier names?"
+msgstr "У якому стовпці містяться назви постачальників?"
+
+msgid "You must map at least one column to 'Item Name'. Scroll down to the column mapping section and pick the column that holds item names."
+msgstr "Потрібно зіставити принаймні один стовпець із 'Назва позиції'. Прокрутіть до розділу зіставлення стовпців і виберіть стовпець, у якому містяться назви позицій."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:2778
+#, elixir-autogen
+msgid "Z → A by name"
+msgstr "Я → А за назвою"
+
+msgid "all catalogues"
+msgstr "усі каталоги"
+
+msgid "all categories"
+msgstr "усі категорії"
+
+msgid "and its subtree contain %{count} active items. The category moves to the Deleted view, where it can be restored. Choose what happens to its items."
+msgstr "і її піддерево містять активних позицій: %{count}. Категорію буде переміщено до розділу «Видалені», звідки її можна відновити. Виберіть, що робити з її позиціями."
+
+msgid "columns"
+msgstr "стовпців"
+
+msgid "e.g., 10.0"
+msgstr "напр., 10.0"
+
+msgid "e.g., 15.0"
+msgstr "напр., 15.0"
+
+msgid "e.g., 5"
+msgstr "напр., 5"
+
+msgid "e.g., ABC-001"
+msgstr "напр., ABC-001"
+
+msgid "e.g., Acme Distributors"
+msgstr "напр., Acme Distributors"
+
+msgid "e.g., Blum"
+msgstr "напр., Blum"
+
+msgid "e.g., Blum, Hettich"
+msgstr "напр., Blum, Hettich"
+
+msgid "e.g., Cabinet Frames"
+msgstr "напр., Корпуси шаф"
+
+msgid "e.g., KF-001"
+msgstr "напр., KF-001"
+
+msgid "e.g., Kitchen Furniture"
+msgstr "напр., Кухонні меблі"
+
+msgid "e.g., Oak Panel 18mm"
+msgstr "напр., Дубова панель 18 мм"
+
+msgid "e.g., Regional Distributors Inc."
+msgstr "напр., Regional Distributors Inc."
+
+msgid "https://..."
+msgstr "https://..."
+
+msgid "item"
+msgstr "позиція"
+
+msgid "items"
+msgstr "позицій"
+
+msgid "m²"
+msgstr "м²"
+
+msgid "m² (square meter)"
+msgstr "м² (квадратний метр)"
+
+msgid "page %{n}"
+msgstr "сторінка %{n}"
+
+msgid "pair"
+msgstr "пара"
+
+msgid "pc"
+msgstr "шт."
+
+msgid "price?"
+msgstr "ціна?"
+
+msgid "rm"
+msgstr "пог. м"
+
+msgid "rows"
+msgstr "рядків"
+
+msgid "service data only"
+msgstr "лише службові дані"
+
+msgid "set"
+msgstr "компл."
+
+msgid "sheet"
+msgstr "арк."
+
+msgid "h"
+msgstr "год"
+
+msgid "service"
+msgstr "послуга"
+
+msgid "visit"
+msgstr "виїзд"
+
+msgid "km"
+msgstr "км"
+
+msgid "pack"
+msgstr "уп."
+
+msgid "roll"
+msgstr "рул."
+
+msgid "kg"
+msgstr "кг"
+
+msgid "l"
+msgstr "л"
+
+msgid "m³"
+msgstr "м³"
+
+msgid "Hour"
+msgstr "Година"
+
+msgid "Service (teenus)"
+msgstr "Послуга (teenus)"
+
+msgid "Visit (väljasõit)"
+msgstr "Виїзд (väljasõit)"
+
+msgid "Kilometer"
+msgstr "Кілометр"
+
+msgid "Pack"
+msgstr "Упаковка"
+
+msgid "Roll"
+msgstr "Рулон"
+
+msgid "Kilogram"
+msgstr "Кілограм"
+
+msgid "Litre"
+msgstr "Літр"
+
+msgid "m³ (cubic meter)"
+msgstr "м³ (кубічний метр)"
+
+msgid "Pair"
+msgstr "Пара"
+
+msgid "Sheet"
+msgstr "Аркуш"
+
+msgid "Units for goods"
+msgstr "Одиниці для товарів"
+
+msgid "Units for services"
+msgstr "Одиниці для послуг"
+
+msgid "unit"
+msgstr "од."
+
+msgid "unit?"
+msgstr "од.?"
+
+msgid "— Skip —"
+msgstr "— Пропустити —"
+
+msgid "— Top level (no parent) —"
+msgstr "— Верхній рівень (без батьківської) —"
+
+msgid "…and %{count} more"
+msgstr "…і ще %{count}"
+
+msgid "Edit Attribute Set"
+msgstr "Редагувати набір атрибутів"
+
+msgid "Could not save the change."
+msgstr "Не вдалося зберегти зміну."
+
+msgid "This set's configuration is invalid. Contact an administrator."
+msgstr "Конфігурація цього набору недійсна. Зверніться до адміністратора."
+
+msgid "The attribute sets module is not enabled."
+msgstr "Модуль наборів атрибутів не ввімкнено."
+
+msgid "Invalid selection mode."
+msgstr "Недійсний режим вибору."
+
+msgid "This set is not attached to the item."
+msgstr "Цей набір не прив'язано до позиції."
+
+msgid "Unsupported field type."
+msgstr "Непідтримуваний тип поля."
+
+msgid "Unknown field."
+msgstr "Невідоме поле."
+
+msgid "Invalid value."
+msgstr "Недійсне значення."
+
+msgid "…"
+msgstr "…"
+
+msgid "CRM Company"
+msgstr "Компанія в CRM"
+
+msgid "Details come from CRM wherever this is used. The fields above are no longer shown to anyone."
+msgstr "Дані беруться з CRM скрізь, де це використовується. Поля вище більше нікому не показуються."
+
+msgid "Linked to"
+msgstr "Прив'язано до"
+
+msgid "The linked CRM company could not be found. Unlink to edit locally again."
+msgstr "Прив'язану компанію в CRM не знайдено. Відв'яжіть її, щоб знову редагувати локально."
+
+msgid "Unlink"
+msgstr "Відв'язати"
+
+msgid "No CRM companies yet."
+msgstr "У CRM поки немає компаній."
+
+msgid "Select a CRM company..."
+msgstr "Виберіть компанію в CRM..."
+
+msgid "Link"
+msgstr "Прив'язати"
+
+msgid "Linking..."
+msgstr "Прив'язування..."
+
+msgid "Link this supplier to the CRM company it represents. The company gains the supplier role, and its details are then used everywhere this supplier appears."
+msgstr "Прив'яжіть цього постачальника до компанії в CRM, яку він представляє. Компанія отримає роль постачальника, а її дані надалі використовуватимуться всюди, де зустрічається цей постачальник."
+
+msgid "Link this manufacturer to the CRM company it represents. Link only a real company — a brand you never deal with belongs in the catalogue alone."
+msgstr "Прив'яжіть цього виробника до компанії в CRM, яку він представляє. Прив'язуйте лише реальну компанію — бренд, з яким ви не працюєте, належить лише до каталогу."
+
+msgid "Choose a CRM company first."
+msgstr "Спершу виберіть компанію в CRM."
+
+msgid "Linked to CRM."
+msgstr "Прив'язано до CRM."
+
+msgid "Unlinked from CRM."
+msgstr "Відв'язано від CRM."
+
+msgid "The CRM module is not available."
+msgstr "Модуль CRM недоступний."
+
+msgid "That CRM company no longer exists."
+msgstr "Цієї компанії в CRM більше не існує."
+
+msgid "That CRM company is already linked to another record."
+msgstr "Ця компанія в CRM уже прив'язана до іншого запису."
+
+msgid "Could not give that CRM company the role, so nothing was linked."
+msgstr "Не вдалося надати цій компанії в CRM роль, тому нічого не прив'язано."
+
+msgid "Someone else changed this link first. Reload the page and try again."
+msgstr "Хтось інший першим змінив цей зв'язок. Перезавантажте сторінку й спробуйте ще раз."
+
+msgid "Suppliers and manufacturer"
+msgstr "Постачальники та виробник"
+
+msgid "A field was removed while this was open. Close and reopen the form."
+msgstr "Поле було видалено, поки форма була відкрита. Закрийте й знову відкрийте форму."
+
+msgid "Add supplier"
+msgstr "Додати постачальника"
+
+msgid "Changing the cost closes the current price and starts a new one, kept in History."
+msgstr "Зміна собівартості закриває поточну ціну й починає нову, що зберігається в історії."
+
+msgid "Could not save the supplier."
+msgstr "Не вдалося зберегти постачальника."
+
+msgid "Done"
+msgstr "Готово"
+
+msgid "Edit supplier"
+msgstr "Редагувати постачальника"
+
+msgid "Extra fields need the Entities module, which is turned off."
+msgstr "Додаткові поля потребують модуля Сутності, який вимкнено."
+
+msgid "Extra info every supplier row carries — incoterm, carton quantity, certification expiry. These apply to every item, not just this one."
+msgstr "Додаткові відомості, які містить кожен рядок постачальника — інкотерм, кількість у коробці, строк дії сертифіката. Вони застосовуються до всіх позицій, а не лише до цієї."
+
+msgid "Failed to remove the field."
+msgstr "Не вдалося прибрати поле."
+
+msgid "Field removed."
+msgstr "Поле прибрано."
+
+msgid "Fields"
+msgstr "Поля"
+
+msgid "No"
+msgstr "Ні"
+
+msgid "No extra fields yet."
+msgstr "Додаткових полів поки немає."
+
+msgid "One of the extra fields has invalid input."
+msgstr "В одному з додаткових полів введено недійсне значення."
+
+msgid "Remove this field? Values already saved on supplier rows stay in the database but stop being shown."
+msgstr "Прибрати це поле? Значення, уже збережені в рядках постачальників, залишаться в базі даних, але більше не відображатимуться."
+
+msgid "Supplier extra fields"
+msgstr "Додаткові поля постачальника"
+
+msgid "Unit cost"
+msgstr "Собівартість одиниці"
+
+msgid "Unit cost must be a number."
+msgstr "Собівартість одиниці має бути числом."
+
+msgid "Yes"
+msgstr "Так"
+
+msgid "e.g., Incoterm"
+msgstr "напр., Інкотерм"
+
+msgid "Comments"
+msgstr "Коментарі"
+
+msgid "About this supplier for this item only. The company's own comments stay on its CRM page."
+msgstr "Лише про цього постачальника для цієї позиції. Власні коментарі компанії залишаються на її сторінці в CRM."
+
+msgid "Add a comment"
+msgstr "Додати коментар"
+
+msgid "No comments yet."
+msgstr "Коментарів поки немає."
+
+msgid "Open comments"
+msgstr "Відкрити коментарі"
+
+msgid "Show all %{count} comments"
+msgstr "Показати всі коментарі (%{count})"
+
+msgid "This supplier is already on the item. Edit the existing row instead."
+msgstr "Цього постачальника вже додано до позиції. Натомість відредагуйте наявний рядок."
+
+msgid "That selection is not in this catalogue."
+msgstr "Цього вибору немає в цьому каталозі."
+
+msgid "That id is not valid."
+msgstr "Недійсний ідентифікатор."
+
+msgid "Could not copy the files folder."
+msgstr "Не вдалося скопіювати папку з файлами."
+
+msgid "This supplier row is no longer current."
+msgstr "Цей рядок постачальника більше не актуальний."
+
+msgid "Cannot move items into a category that is being deleted."
+msgstr "Неможливо перемістити позиції до категорії, яка видаляється."
+
+msgid "contact"
+msgstr "контакт"
+
+msgid "imported"
+msgstr "імпортовано"
+
+msgid "Open the company"
+msgstr "Відкрити компанію"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:372
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:480
+#, elixir-autogen
+msgid "All"
+msgstr "Усі"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:1166
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:1181
+#, elixir-autogen
+msgid "Quantity"
+msgstr "Кількість"
+
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:315
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2717
+#, elixir-autogen
+msgid "Load more"
+msgstr "Завантажити ще"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2204
+#, elixir-autogen
+msgid "Select items"
+msgstr "Вибрати позиції"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2771
+#, elixir-autogen
+msgid "Add to selection"
+msgstr "Додати до вибраного"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2769
+#, elixir-autogen
+msgid "Remove from selection"
+msgstr "Прибрати з вибраного"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2404
+#, elixir-autogen
+msgid "Browse"
+msgstr "Огляд"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:94
+#, elixir-autogen
+msgid "Computed"
+msgstr "Обчислюється"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2820
+#, elixir-autogen
+msgid "Confirm selection"
+msgstr "Підтвердити вибір"
+
+#: lib/phoenix_kit_catalogue/web/components/item_selector_modal.ex:2859
+#, elixir-autogen
+msgid "Not available in this selection"
+msgstr "Недоступно в цьому виборі"
+
+msgid "Shown on category landing pages."
+msgstr "Відображається на сторінках категорій."
+
+msgid "Import failed"
+msgstr "Помилка імпорту"
+
+msgid "The import stopped unexpectedly before it finished. Rows written before the failure were kept. Check the server log for details."
+msgstr "Імпорт несподівано зупинився до завершення. Рядки, записані до збою, збережено. Подробиці дивіться в журналі сервера."
+
+msgid "Move selected categories"
+msgstr "Перемістити вибрані категорії"
+
+msgid "Move categories"
+msgstr "Перемістити категорії"
+
+msgid "Pick where %{count} categories should go. Each one brings its subcategories and items along."
+msgstr "Виберіть, куди перемістити категорії (%{count}). Кожна забирає з собою свої підкатегорії та позиції."
+
+msgid "Make them top-level categories"
+msgstr "Зробити їх категоріями верхнього рівня"
+
+msgid "They leave their parent and sit at the root of this catalogue."
+msgstr "Вони залишають свою батьківську категорію й опиняються в корені цього каталогу."
+
+msgid "Nest them under another category"
+msgstr "Вкласти їх в іншу категорію"
+
+msgid "No category can take them — only the top level is left."
+msgstr "Жодна категорія не може їх прийняти — залишився лише верхній рівень."
+
+msgid "Moved %{count} categories."
+msgstr "Переміщено категорій: %{count}."
+
+msgid "%{count} categories could not be moved."
+msgstr "Не вдалося перемістити категорій: %{count}."
+
+msgid "Select all categories"
+msgstr "Вибрати всі категорії"
+
+msgid "Duplicate"
+msgstr "Дублювати"
+
+msgid "Duplicate selected items"
+msgstr "Дублювати вибрані позиції"
+
+msgid "Duplicate selected categories"
+msgstr "Дублювати вибрані категорії"
+
+msgid "Duplicate items"
+msgstr "Дублювати позиції"
+
+msgid "Duplicate categories"
+msgstr "Дублювати категорії"
+
+msgid "%{count} items will be copied with their files, attribute sets, supplier rows and catalogue rules. Comments are not copied."
+msgstr "Позиції (%{count}) буде скопійовано разом із їхніми файлами, наборами атрибутів, рядками постачальників і правилами каталогу. Коментарі не копіюються."
+
+msgid "%{count} categories will be copied with their subcategories and items."
+msgstr "Категорії (%{count}) буде скопійовано разом із підкатегоріями та позиціями."
+
+msgid "Each copy is named after its original with “(copy)” added and placed right after it."
+msgstr "Кожна копія отримує назву оригіналу з доданим «(копія)» і розміщується одразу після нього."
+
+msgid "Duplicated %{count} items."
+msgstr "Продубльовано позицій: %{count}."
+
+msgid "Duplicated %{count} categories."
+msgstr "Продубльовано категорій: %{count}."
+
+msgid "%{count} items could not be duplicated."
+msgstr "Не вдалося продублювати позицій: %{count}."
+
+msgid "%{count} categories could not be duplicated."
+msgstr "Не вдалося продублювати категорій: %{count}."
+
+msgid "%{name} (copy)"
+msgstr "%{name} (копія)"
+
+msgid "Supplier price"
+msgstr "Ціна постачальника"
+
+#: lib/phoenix_kit_catalogue/web/components/catalogue_browse.ex:244
+#, elixir-autogen, elixir-format
+msgid "List view"
+msgstr "Вигляд списку"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:826
+#, elixir-autogen, elixir-format
+msgid "Qty"
+msgstr "К-сть"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:825
+#, elixir-autogen, elixir-format
+msgid "Base price"
+msgstr "Базова ціна"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:691
+#, elixir-autogen, elixir-format
+msgid "Category prefix"
+msgstr "Префікс категорії"
+
+#: lib/phoenix_kit_catalogue/web/components/browse.ex:690
+#, elixir-autogen, elixir-format
+msgid "Photo"
+msgstr "Фото"
+
+## Attribute sets viewer (2026-08-27 — editing moved to Entities)
+msgid "Edit values"
+msgstr "Редагувати значення"
+
+msgid "Set settings"
+msgstr "Налаштування набору"
+
+msgid "None yet — add them in Entities."
+msgstr "Поки немає — додайте їх у модулі «Сутності»."
+
+msgid "No items attached."
+msgstr "Немає прив'язаних позицій."
+
+msgid "Archived value"
+msgstr "Значення в архіві"
+
+msgid "New attribute set"
+msgstr "Новий набір атрибутів"
+
+msgid "Create and edit in Entities"
+msgstr "Створити й редагувати в модулі «Сутності»"
+
+msgid "You'll be taken straight to adding the set's values in Entities."
+msgstr "Ви одразу перейдете до додавання значень набору в модулі «Сутності»."
+
+msgid "Could not create the set — check the name."
+msgstr "Не вдалося створити набір — перевірте назву."
+
+msgid "Could not create the set."
+msgstr "Не вдалося створити набір."
+
+msgid "One dimension from one vendor — a color range, a trim series. Items attach any number of sets. Sets are edited in the Entities module."
+msgstr "Один вимір від одного постачальника — діапазон кольорів, серія декоративних планок. До позицій можна прив'язати будь-яку кількість наборів. Набори редагуються в модулі «Сутності»."
+
+## Attribute sets viewer listing (2026-08-27 scale pass)
+msgid "Search sets and values…"
+msgstr "Пошук наборів і значень…"
+
+msgid "No sets match your search."
+msgstr "Жоден набір не відповідає вашому пошуку."
+
+msgid "No values yet."
+msgstr "Значень поки немає."
+
+msgid "Creating…"
+msgstr "Створення…"
+
+# Set items popup (2026-08-28)
+msgid "View items"
+msgstr "Переглянути позиції"
+
+# Catalogue search covers categories too (2026-08-28)
+msgid "Nothing matches your search."
+msgstr "Нічого не відповідає вашому пошуку."
+
+# Attribute filter (2026-08-28)
+msgid "Clear filters"
+msgstr "Скинути фільтри"
+
+# Attribute filter: dead values (2026-08-28)
+msgid "Nothing matches this together with the filters already on."
+msgstr "Нічого не відповідає цьому разом із уже застосованими фільтрами."
+
+msgid "Attribute set not found."
+msgstr "Набір атрибутів не знайдено."
+
+msgid "Multiple values"
+msgstr "Кілька значень"
+
+msgid "Fixed value"
+msgstr "Фіксоване значення"
+
+msgid "Previous page"
+msgstr "Попередня сторінка"
+
+msgid "Next page"
+msgstr "Наступна сторінка"
+
+msgid "Create %{count} unmatched position"
+msgid_plural "Create %{count} unmatched positions"
+msgstr[0] "Створити %{count} незіставлену позицію"
+msgstr[1] "Створити %{count} незіставлені позиції"
+msgstr[2] "Створити %{count} незіставлених позицій"
+
+msgid "%{count} row skipped"
+msgid_plural "%{count} rows skipped"
+msgstr[0] "%{count} рядок пропущено"
+msgstr[1] "%{count} рядки пропущено"
+msgstr[2] "%{count} рядків пропущено"
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3641
+#, elixir-autogen, elixir-format
+msgid "No items match."
+msgstr "Немає відповідних позицій."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3684
+#, elixir-autogen, elixir-format
+msgid "View in catalogue"
+msgstr "Відкрити в каталозі"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4861
+#, elixir-autogen, elixir-format
+msgid "A category cannot move into its own subtree."
+msgstr "Категорію не можна перемістити в її власне піддерево."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4867
+#, elixir-autogen, elixir-format
+msgid "Categories can only move within their own catalogue."
+msgstr "Категорії можна переміщувати лише в межах свого каталогу."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4643
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5004
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5121
+#, elixir-autogen, elixir-format
+msgid "Drag to reorder or nest"
+msgstr "Перетягніть, щоб змінити порядок або вкласти"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4607
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4924
+#, elixir-autogen, elixir-format
+msgid "Drop here to move to this level"
+msgstr "Перетягніть сюди, щоб перемістити на цей рівень"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4588
+#, elixir-autogen, elixir-format
+msgid "No categories here yet."
+msgstr "Тут ще немає категорій."
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4667
+#, elixir-autogen, elixir-format
+msgid "Toggle category"
+msgstr "Згорнути/розгорнути категорію"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3406
+#, elixir-autogen, elixir-format
+msgid "Include subcategory items"
+msgstr "Враховувати позиції підкатегорій"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:4523
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5033
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:5136
+#, elixir-autogen, elixir-format
+msgid "New subcategory"
+msgstr "Нова підкатегорія"
+
+#: lib/phoenix_kit_catalogue/web/catalogue_detail_live.ex:3459
+#, elixir-autogen, elixir-format
+msgid "Search for"
+msgstr "Шукати"
+
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:1981
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:2034
+#, elixir-autogen, elixir-format
+msgid "That category belongs to another catalogue."
+msgstr "Ця категорія належить іншому каталогу."
+
+#: lib/phoenix_kit_catalogue/web/category_form_live.ex:679
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:2764
+#, elixir-autogen, elixir-format
+msgid "SEO description"
+msgstr "SEO-опис"
+
+#: lib/phoenix_kit_catalogue/web/category_form_live.ex:671
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:2756
+#, elixir-autogen, elixir-format
+msgid "SEO title"
+msgstr "SEO-заголовок"
+
+#: lib/phoenix_kit_catalogue/web/category_form_live.ex:653
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:2727
+#, elixir-autogen, elixir-format
+msgid "URL slug"
+msgstr "URL slug"
+
+#: lib/phoenix_kit_catalogue/web/category_form_live.ex:654
+#: lib/phoenix_kit_catalogue/web/item_form_live.ex:2728
+#, elixir-autogen, elixir-format
+msgid "auto-generated from the name"
+msgstr "створюється автоматично з назви"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:529
+#, elixir-autogen, elixir-format
+msgid "%{count} rows"
+msgstr "Рядків: %{count}"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:326
+#, elixir-autogen, elixir-format
+msgid "A translation job for this row is already queued."
+msgstr "Завдання на переклад для цього рядка вже в черзі."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:510
+#, elixir-autogen, elixir-format
+msgid "AI translation is not configured"
+msgstr "Переклад за допомогою ШІ не налаштовано"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:580
+#, elixir-autogen, elixir-format
+msgid "All languages"
+msgstr "Усі мови"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:468
+#, elixir-autogen, elixir-format
+msgid "All types"
+msgstr "Усі типи"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:515
+#, elixir-autogen, elixir-format
+msgid "Configure AI"
+msgstr "Налаштувати ШІ"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:335
+#, elixir-autogen, elixir-format
+msgid "Could not queue the translation."
+msgstr "Не вдалося поставити переклад у чергу."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:194
+#, elixir-autogen, elixir-format
+msgid "Could not update the translation baseline."
+msgstr "Не вдалося оновити еталон перекладу."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:479
+#, elixir-autogen, elixir-format
+msgid "Fresh"
+msgstr "Актуальний"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:578
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:636
+#, elixir-autogen, elixir-format
+msgid "Language"
+msgstr "Мова"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:179
+#, elixir-autogen, elixir-format
+msgid "Marked the current source as the translation baseline."
+msgstr "Поточне джерело позначено як еталон перекладу."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:476
+#, elixir-autogen, elixir-format
+msgid "Missing"
+msgstr "Відсутній"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:628
+#, elixir-autogen, elixir-format
+msgid "No rows match the current filter."
+msgstr "Жоден рядок не відповідає поточному фільтру."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:392
+#, elixir-autogen, elixir-format
+msgid "Nothing matched the current filter."
+msgstr "Нічого не відповідає поточному фільтру."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:491
+#, elixir-autogen, elixir-format
+msgid "Queue translation for %{count} row(s)?"
+msgstr "Поставити в чергу переклад для рядків: %{count}?"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:409
+#, elixir-autogen, elixir-format
+msgid "Queued %{ok}; %{failed} could not be queued."
+msgstr "У чергу поставлено: %{ok}; не вдалося поставити в чергу: %{failed}."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:620
+#, elixir-autogen, elixir-format
+msgid "Retranslate all stale"
+msgstr "Перекласти заново все застаріле"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:593
+#, elixir-autogen, elixir-format
+msgid "Search by name…"
+msgstr "Пошук за назвою…"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:463
+#, elixir-autogen, elixir-format
+msgid "Set label"
+msgstr "Назва набору"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:512
+#, elixir-autogen, elixir-format
+msgid "Set up an AI endpoint before translating catalogue content."
+msgstr "Налаштуйте кінцеву точку ШІ перед перекладом вмісту каталогу."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:464
+#, elixir-autogen, elixir-format
+msgid "Set value"
+msgstr "Значення набору"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:477
+#, elixir-autogen, elixir-format
+msgid "Stale"
+msgstr "Застарілий"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:680
+#, elixir-autogen, elixir-format
+msgid "Stamp fresh"
+msgstr "Позначити як актуальний"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:637
+#, elixir-autogen, elixir-format
+msgid "State"
+msgstr "Стан"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:189
+#, elixir-autogen, elixir-format
+msgid "This row has no translation yet — nothing to stamp."
+msgstr "У цього рядка ще немає перекладу — нічого позначати."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:669
+#, elixir-autogen, elixir-format
+msgid "Translate"
+msgstr "Перекласти"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:611
+#, elixir-autogen, elixir-format
+msgid "Translate all missing"
+msgstr "Перекласти все відсутнє"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:331
+#, elixir-autogen, elixir-format
+msgid "Translation queued."
+msgstr "Переклад поставлено в чергу."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:124
+#, elixir-autogen, elixir-format
+msgid "Translations"
+msgstr "Переклади"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:656
+#, elixir-autogen, elixir-format
+msgid "queued"
+msgstr "у черзі"
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:421
+#, elixir-autogen, elixir-format
+msgid "More rows match — click again to queue the next batch."
+msgstr "Є ще відповідні рядки — натисніть ще раз, щоб поставити в чергу наступну партію."
+
+#: lib/phoenix_kit_catalogue/web/translations_live.ex:397
+#, elixir-autogen, elixir-format
+msgid "Queued %{count} translation."
+msgid_plural "Queued %{count} translations."
+msgstr[0] "У чергу поставлено %{count} переклад."
+msgstr[1] "У чергу поставлено %{count} переклади."
+msgstr[2] "У чергу поставлено %{count} перекладів."
+
+#: lib/phoenix_kit_catalogue/web/catalogues_live.ex:3373
+#, elixir-autogen, elixir-format
+msgid "sets"
+msgstr "наборів"
+
+msgid "Delete value"
+msgstr "Видалити значення"
+
+msgid "This permanently removes the value. It cannot be undone."
+msgstr "Значення буде остаточно видалено. Цю дію неможливо скасувати."
+
+msgid "Failed to delete value."
+msgstr "Не вдалося видалити значення."
+
+msgid "Permanently delete selected categories?"
+msgstr "Видалити вибрані категорії остаточно?"
+
+msgid "%{count} categories and everything in them will be permanently deleted. This cannot be undone."
+msgstr "Категорії (%{count}) і весь їхній вміст буде остаточно видалено. Цю дію неможливо скасувати."
+
+msgid "Permanently deleted %{count} categories."
+msgstr "Остаточно видалено категорій: %{count}."
+
+msgid "The catalogue changed while this was running. Please try again."
+msgstr "Каталог змінився під час виконання. Спробуйте ще раз."
+
+msgid "It was restored in the meantime, so it was not deleted."
+msgstr "Тим часом відновлення вже виконано, тому видалення не відбулося."
+
+msgid "This category, %{subcategories} subcategories and %{items} items inside it will be permanently deleted. This cannot be undone."
+msgstr "Цю категорію, підкатегорії (%{subcategories}) і позиції (%{items}) у ній буде остаточно видалено. Цю дію неможливо скасувати."
+
+msgid "Failed to delete attribute."
+msgstr "Не вдалося видалити атрибут."
+
+msgid "%{value} (archived)"
+msgstr "%{value} (в архіві)"
+
+msgid "Standard and smart catalogues can't exchange items or categories."
+msgstr "Стандартні та смарт-каталоги не можуть обмінюватися позиціями чи категоріями."
+
+msgid "Items go to the chosen catalogue without a category."
+msgstr "Позиції потраплять до вибраного каталогу без категорії."
+
+msgid "Put items in a category there"
+msgstr "Помістити позиції в категорію вибраного каталогу"
+
+msgid "They sit at the root of the chosen catalogue."
+msgstr "Вони опиняться на верхньому рівні вибраного каталогу."
+
+msgid "%{name} (this catalogue)"
+msgstr "%{name} (цей каталог)"
+
+msgid "%{catalogue} — no category"
+msgstr "%{catalogue} — без категорії"
+
+msgid "%{catalogue} — top level"
+msgstr "%{catalogue} — верхній рівень"
+
+msgid "— Select destination —"
+msgstr "— Виберіть призначення —"
+
+msgid "%{name} (copy %{number})"
+msgstr "%{name} (копія %{number})"
+
+msgid "This catalogue is already being duplicated."
+msgstr "Цей каталог уже дублюється."
+
+msgid "Duplicate catalogue"
+msgstr "Дублювати каталог"
+
+msgid "Creates a copy of “%{name}” with all its categories (%{categories}) and items (%{items}), in the same folder and with “(copy)” after its name."
+msgstr "Створює копію каталогу «%{name}» з усіма його категоріями (%{categories}) і позиціями (%{items}) у тій самій папці, із «(копія)» після назви."
+
+msgid "Not copied: items in Deleted, comments, history and links to other systems (such as a shop's product ids)."
+msgstr "Не копіюються: позиції у видалених, коментарі, історія та зв'язки з іншими системами (наприклад, ідентифікатори товарів магазину)."
+
+msgid "Shared with the original, not duplicated. Removing one from either catalogue leaves the other untouched."
+msgstr "Спільні з оригіналом, не дублюються. Прибирання з одного каталогу не впливає на інший."
+
+msgid "Duplicating “%{name}”…"
+msgstr "Дублювання «%{name}»…"
+
+msgid "Created “%{name}” (categories: %{categories}, items: %{items})."
+msgstr "Створено «%{name}» (категорій: %{categories}, позицій: %{items})."
+
+msgid "Failed to duplicate the catalogue."
+msgstr "Не вдалося дублювати каталог."
+
+msgid "Copy SKUs"
+msgstr "Копіювати SKU"
+
+msgid "Copy images and files"
+msgstr "Копіювати зображення та файли"
+
+msgid "Copy suppliers and purchase prices"
+msgstr "Копіювати постачальників і закупівельні ціни"
+
+msgid "Start the copy archived"
+msgstr "Створити копію в архіві"
+
+msgid "Otherwise it gets the original's status."
+msgstr "Інакше вона отримає статус оригіналу."
+
+msgid "Switch catalogue"
+msgstr "Змінити каталог"
+
+msgid "Switch category"
+msgstr "Змінити категорію"
+
+msgid "Search catalogues…"
+msgstr "Пошук каталогів…"
+
+msgid "Search categories…"
+msgstr "Пошук категорій…"
+
+msgid "— Add supplier —"
+msgstr "— Додати постачальника —"
+
+msgid "Location"
+msgstr "Розташування"
+
+msgid "Undo"
+msgstr "Скасувати"
+
+msgid "Unsaved changes"
+msgstr "Незбережені зміни"
+
+msgid "Choose a location"
+msgstr "Виберіть розташування"
+
+msgid "Search catalogues and categories…"
+msgstr "Пошук каталогів і категорій…"
+
+msgid "No matches."
+msgstr "Нічого не знайдено."
+
+msgid "New"
+msgstr "Новий"
+
+msgid "Collapse"
+msgstr "Згорнути"
+
+msgid "Expand"
+msgstr "Розгорнути"
+
+msgid "Currency must be a three-letter code, like EUR."
+msgstr "Валюта має бути трибуквенним кодом, наприклад EUR."
+
+msgid "Some supplier values are not valid."
+msgstr "Деякі значення постачальників недійсні."
+
+msgid "That location no longer exists. Choose another."
+msgstr "Цього розташування більше не існує. Виберіть інше."
+
+msgid "A language turned off under Languages stops receiving sweep jobs whether or not it is ticked here."
+msgstr "Мова, вимкнена в розділі «Мови», перестає отримувати завдання обходу, незалежно від того, позначена вона тут чи ні."
+
+msgid "AI translation sweep"
+msgstr "Обхід перекладу ШІ"
+
+msgid "Could not save that."
+msgstr "Не вдалося це зберегти."
+
+msgid "Enter a whole number above 0."
+msgstr "Введіть ціле число більше 0."
+
+msgid "Enter a whole number of minutes above 0."
+msgstr "Введіть ціле число хвилин більше 0."
+
+msgid "How the catalogue's admin lists behave."
+msgstr "Як поводяться списки каталогу в адмінпанелі."
+
+msgid "Languages to translate into"
+msgstr "Мови для перекладу"
+
+msgid "Lists"
+msgstr "Списки"
+
+msgid "Minutes between runs"
+msgstr "Хвилин між запусками"
+
+msgid "Most jobs queued at once"
+msgstr "Найбільше завдань у черзі одночасно"
+
+msgid "Off by default. Turning it on starts the schedule immediately; each tick enqueues translation jobs for whatever is still missing."
+msgstr "За замовчуванням вимкнено. Після ввімкнення розклад запускається одразу; кожен запуск ставить у чергу завдання перекладу всього, що ще не перекладено."
+
+msgid "Only the primary language is enabled, so there is nothing to sweep."
+msgstr "Увімкнено лише основну мову, тому обходити нічого."
+
+msgid "Right-click a row for its actions"
+msgstr "Дії за правим кліком на рядку"
+
+msgid "Right-clicking anywhere on a row opens the same menu its ⋮ button does, at the pointer. Turn this off to leave the browser's own menu — copy, open in a new tab, inspect — in place everywhere."
+msgstr "Правий клік будь-де на рядку відкриває біля курсора те саме меню, що й кнопка ⋮. Вимкніть, щоб скрізь залишити стандартне меню браузера — копіювання, відкриття в новій вкладці, перегляд коду."
+
+msgid "Run the sweep automatically"
+msgstr "Запускати обхід автоматично"
+
+msgid "Saved."
+msgstr "Збережено."
+
+msgid "Settings"
+msgstr "Налаштування"
+
+msgid "Translates catalogue content in the background, on a timer."
+msgstr "Перекладає вміст каталогу у фоновому режимі за таймером."
+
+msgid "See what is missing, or translate on demand."
+msgstr "Подивіться, що не перекладено, або перекладіть на вимогу."
+
+msgid "Turn the whole module on or off under Modules."
+msgstr "Увімкнути чи вимкнути весь модуль можна в розділі «Модулі»."
+
+msgid "Each list's sort is set from the list itself."
+msgstr "Сортування кожного списку задається в самому списку."
+
+msgid "Enable more languages."
+msgstr "Увімкнути більше мов."
+
+msgid "Rename folder"
+msgstr "Перейменувати папку"
+
+msgid "Folder name"
+msgstr "Назва папки"
+
+msgid "Edit category"
+msgstr "Редагувати категорію"
+
+msgid "Edit catalogue"
+msgstr "Редагувати каталог"
+
+msgid "Item form"
+msgstr "Форма позиції"
+
+msgid "Show the URL slug and SEO fields"
+msgstr "Показувати URL slug і поля SEO"
+
+msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
+msgstr "Якщо вимкнено, їх приховано у формі позиції; те, що в них уже є, зберігається без змін і повернеться, коли ви знову ввімкнете цей параметр."
+
+msgid "An existing category — pick it below"
+msgstr "Наявна категорія — виберіть нижче"
+
+msgid "Destination:"
+msgstr "Призначення:"
+
+msgid "Pick a category to nest this one inside, or the catalogue itself for its top level. You can move it later."
+msgstr "Виберіть категорію, у яку вкласти цю, або сам каталог — для його верхнього рівня. Перемістити її можна й пізніше."
+
+msgid "The chosen parent is no longer available. Pick another place."
+msgstr "Вибрана батьківська категорія більше недоступна. Виберіть інше місце."
+
+msgid "Pick where it goes: a catalogue's top level, or under a category. Its subcategories and items come along."
+msgstr "Виберіть, куди її перемістити: на верхній рівень каталогу чи всередину категорії. Підкатегорії та позиції переміщуються разом із нею."
+
+msgid "Select all"
+msgstr "Вибрати все"
+
+msgid "Top level"
+msgstr "Верхній рівень"
+
+msgid "top level"
+msgstr "верхній рівень"
+
+msgid "uncategorized"
+msgstr "без категорії"
+
+msgid "Pick the category to import into, or choose another option."
+msgstr "Виберіть категорію для імпорту або інший варіант."
+
+msgid "Item type"
+msgstr "Тип позиції"
+
+msgid "Default item type"
+msgstr "Тип позицій за замовчуванням"
+
+msgid "Goods"
+msgstr "Товар"
+
+msgid "Service"
+msgstr "Послуга"
+
+msgid "— As in catalogue (%{type}) —"
+msgstr "— Як у каталозі (%{type}) —"
+
+msgid "Universal"
+msgstr "Універсальний"
+
+msgid "Furniture"
+msgstr "Фурнітура"
+
+msgid "Materials"
+msgstr "Матеріали"
+
+msgid "JSON (export)"
+msgstr "JSON (експорт)"
+
+msgid "View options"
+msgstr "Параметри вигляду"
+
+msgid "Filters"
+msgstr "Фільтри"
+
+msgid "Sort by"
+msgstr "Сортувати за"
+
+msgid "Layout"
+msgstr "Макет"
+
+msgid "Reorder all categories"
+msgstr "Змінити порядок усіх категорій"
+
+msgid "Reorder all items"
+msgstr "Змінити порядок усіх позицій"

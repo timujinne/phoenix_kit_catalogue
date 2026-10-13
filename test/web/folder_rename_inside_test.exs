@@ -93,4 +93,82 @@ defmodule PhoenixKitCatalogue.Web.FolderRenameInsideTest do
     {:ok, view, _html} = live(conn, @base)
     refute has_element?(view, "#location-rename-button")
   end
+
+  describe "a name the folder cannot take" do
+    @too_long String.duplicate("n", 256)
+
+    test "Enter leaves the field open on what was typed, and says why", %{
+      conn: conn,
+      folder: folder
+    } do
+      view = inside(conn, folder)
+      view |> element("#location-rename-button") |> render_click()
+
+      html =
+        view
+        |> form("#location-rename-#{folder.uuid}", %{"name" => @too_long})
+        |> render_submit()
+
+      assert html =~ "That name is too long: 255 characters at most."
+      assert Catalogue.get_folder(folder.uuid).name == "Old name"
+
+      assert has_element?(
+               view,
+               ~s(#location-rename-#{folder.uuid} input[name="name"][value="#{@too_long}"])
+             )
+
+      # Corrected in the same field, it saves and the field closes.
+      view |> form("#location-rename-#{folder.uuid}", %{"name" => "Short"}) |> render_submit()
+
+      assert Catalogue.get_folder(folder.uuid).name == "Short"
+      refute has_element?(view, "#location-rename-#{folder.uuid}")
+    end
+
+    test "clicking away does the same", %{conn: conn, folder: folder} do
+      view = inside(conn, folder)
+      view |> element("#location-rename-button") |> render_click()
+
+      html =
+        view
+        |> element("#location-rename-#{folder.uuid} input")
+        |> render_blur(%{"value" => @too_long})
+
+      assert html =~ "That name is too long: 255 characters at most."
+      assert has_element?(view, ~s(#location-rename-#{folder.uuid} input[value="#{@too_long}"]))
+    end
+
+    test "Escape closes the field and forgets what was typed", %{conn: conn, folder: folder} do
+      view = inside(conn, folder)
+      view |> element("#location-rename-button") |> render_click()
+      view |> form("#location-rename-#{folder.uuid}", %{"name" => @too_long}) |> render_submit()
+
+      view
+      |> element("#location-rename-#{folder.uuid} input")
+      |> render_keydown(%{"key" => "Escape"})
+
+      refute has_element?(view, "#location-rename-#{folder.uuid}")
+
+      view |> element("#location-rename-button") |> render_click()
+      assert has_element?(view, ~s(#location-rename-#{folder.uuid} input[value="Old name"]))
+    end
+
+    # The same field is drawn in the tree and on a folder's card.
+    test "every rename field stops typing at the limit", %{conn: conn, folder: folder} do
+      {:ok, child} = Catalogue.create_folder(%{name: "Child", parent_uuid: folder.uuid})
+
+      view = inside(conn, folder)
+      render_click(view, "start_rename_folder", %{"uuid" => child.uuid})
+      assert has_element?(view, ~s(form[phx-submit="rename_folder"] input[maxlength="255"]))
+
+      html =
+        render_submit(view, "rename_folder", %{"uuid" => child.uuid, "name" => @too_long})
+
+      assert html =~ "That name is too long"
+      assert has_element?(view, ~s(form[phx-submit="rename_folder"] input[value="#{@too_long}"]))
+      assert Catalogue.get_folder(child.uuid).name == "Child"
+
+      view |> element("#location-rename-button") |> render_click()
+      assert has_element?(view, ~s(#location-rename-#{folder.uuid} input[maxlength="255"]))
+    end
+  end
 end

@@ -55,6 +55,8 @@ defmodule PhoenixKitCatalogue.Errors do
           | :missing_item_name
           | :unsupported_file_format
           | :csv_empty
+          | :csv_not_utf8
+          | :bad_json_shape
           | :file_too_large
           | :too_many_rows
           | :parent_catalogue_deleted
@@ -169,6 +171,20 @@ defmodule PhoenixKitCatalogue.Errors do
 
   def message(:csv_empty),
     do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "CSV file is empty.")
+
+  def message(:csv_not_utf8),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
+      )
+
+  def message(:bad_json_shape),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
+      )
 
   def message(:file_too_large),
     do:

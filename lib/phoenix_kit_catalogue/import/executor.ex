@@ -56,6 +56,10 @@ defmodule PhoenixKitCatalogue.Import.Executor do
     * `:supplier_uuid` — fixed supplier UUID; in phase 3 this supplier
       is linked (M:N) to every distinct manufacturer the items in
       this import ended up assigned to
+    * `:on_result` — a 1-arity function called with the result map
+      before `notify_pid` is told, in the process running the import.
+      What it records is therefore there whether or not `notify_pid` is
+      still alive, and already there when `notify_pid` hears.
   """
   @spec execute(map(), String.t(), pid() | nil, keyword()) :: import_result()
   def execute(import_plan, catalogue_uuid, notify_pid, opts \\ []) do
@@ -177,6 +181,11 @@ defmodule PhoenixKitCatalogue.Import.Executor do
     # zero-created imports so any in-progress UI ("Importing…" flash,
     # etc.) gets a definitive "done" signal.
     PubSub.broadcast(:catalogue, catalogue_uuid, catalogue_uuid)
+
+    case Keyword.get(opts, :on_result) do
+      on_result when is_function(on_result, 1) -> on_result.(result)
+      nil -> :ok
+    end
 
     maybe_notify(notify_pid, {:import_result, result})
 

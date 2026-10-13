@@ -128,7 +128,9 @@ defmodule PhoenixKitCatalogue.Catalogue.PubSub do
   `PhoenixKitCatalogue.Web.ViewConfig.global_sort?/1`), so every open
   catalogues index switches to the new ordering live. `from` rides in the
   message — the originating LV already applied the change locally and
-  skips its own event.
+  skips its own event. Subscribers treat the message as "the sort changed"
+  and read the stored one: deliveries from two writers are not ordered, so
+  the sort in a message may no longer be the setting.
   """
   @spec broadcast_view_sort_changed(atom(), String.t(), :asc | :desc, pid()) :: :ok
   def broadcast_view_sort_changed(scope, sort_by, sort_dir, from \\ self()) do

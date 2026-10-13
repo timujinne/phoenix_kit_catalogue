@@ -29,6 +29,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
       trim_param: 1,
+      rename_error: 1,
       actor_opts: 1,
       actor_uuid: 1,
       log_operation_error: 3,
@@ -701,9 +702,16 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
       end
 
     case result do
-      :noop -> {:noreply, reload_group(socket)}
-      {:ok, _} -> {:noreply, reload_group(socket)}
-      {:error, _} -> {:noreply, reload_group(socket)}
+      :noop ->
+        {:noreply, reload_group(socket)}
+
+      {:ok, _} ->
+        {:noreply, reload_group(socket)}
+
+      # The field shows the stored name again, so say why the typed one
+      # was not kept.
+      {:error, reason} ->
+        {:noreply, socket |> put_flash(:error, rename_error(reason)) |> reload_group()}
     end
   end
 
@@ -855,6 +863,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
                       type="text"
                       value={lang_text(attribute, :name, assigns)}
                       placeholder={attribute.name}
+                      maxlength="255"
                       phx-blur="rename_attribute"
                       phx-value-uuid={attribute.uuid}
                       class="input input-sm input-bordered bg-base-100 font-medium flex-1 min-w-0"
@@ -916,6 +925,7 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupFormLive do
                         type="text"
                         value={lang_text(value, :value, assigns)}
                         placeholder={value.value}
+                        maxlength="255"
                         phx-blur="rename_value"
                         phx-value-uuid={value.uuid}
                         size={max(String.length(lang_text(value, :value, assigns) || value.value), 4)}

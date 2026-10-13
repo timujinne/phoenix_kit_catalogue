@@ -239,6 +239,12 @@ msgstr ""
 msgid "CSV file is empty."
 msgstr ""
 
+msgid "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
+msgstr "Ce fichier CSV n’est pas du texte UTF-8. Enregistrez-le au format « CSV UTF-8 » dans votre tableur, puis importez-le à nouveau."
+
+msgid "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
+msgstr "Ce fichier JSON n’est pas un export de catalogue : il doit contenir une liste « items » d’articles aux valeurs simples."
+
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr ""
 
@@ -1021,6 +1027,12 @@ msgstr ""
 
 msgid "Failed to create folder."
 msgstr ""
+
+msgid "That name is too long: %{count} characters at most."
+msgstr "Ce nom est trop long : %{count} caractères au maximum."
+
+msgid "Could not save that name."
+msgstr "Impossible d’enregistrer ce nom."
 
 msgid "Failed to delete folder."
 msgstr ""
@@ -1912,6 +1924,9 @@ msgstr ""
 
 msgid "File format does not match the selected format."
 msgstr ""
+
+msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
+msgstr "Ce fichier n’est pas du texte UTF-8. Enregistrez-le en UTF-8, puis importez-le à nouveau."
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr ""

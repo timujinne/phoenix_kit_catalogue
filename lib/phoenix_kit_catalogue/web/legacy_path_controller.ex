@@ -11,7 +11,9 @@ defmodule PhoenixKitCatalogue.Web.LegacyPathController do
   `/admin/settings/catalogues`.
 
   The rest of the path, the locale and URL prefix in front of it, and the
-  query string all carry over unchanged.
+  query string all carry over. Characters a redirect target may not hold
+  are percent-encoded in the query, which a reader decodes back to the
+  same value; a path holding one is no page of this module and gets a 404.
 
   Admin-only, like the module's other HTTP route: a signed-out visitor is
   sent to log in, not told where the admin pages live.
@@ -38,18 +40,22 @@ defmodule PhoenixKitCatalogue.Web.LegacyPathController do
     {"/admin/catalogue", "/admin/catalogues"}
   ]
 
+  # What `Phoenix.Controller.redirect/2` refuses in a local target by
+  # raising, plus the line breaks a response header cannot carry.
+  @unsafe_in_target ["\\", "/%09", "/\t", "\r", "\n"]
+
   @doc """
   301 to the current address, or 404 when the request is not for an old one
-  — never a redirect to the address it came in on.
+  or its address cannot be a redirect target — never a redirect to the
+  address it came in on, and never an exception.
   """
   @spec forward(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def forward(conn, _params) do
-    case target(conn.request_path, conn.query_string) do
-      {:ok, to} ->
-        conn |> put_status(:moved_permanently) |> redirect(to: to)
-
-      :unchanged ->
-        conn |> put_status(:not_found) |> text("Not found")
+    with {:ok, to} <- target(conn.request_path, conn.query_string),
+         false <- String.contains?(to, @unsafe_in_target) do
+      conn |> put_status(:moved_permanently) |> redirect(to: to)
+    else
+      _unchanged_or_unsafe -> conn |> put_status(:not_found) |> text("Not found")
     end
   end
 
@@ -81,7 +87,19 @@ defmodule PhoenixKitCatalogue.Web.LegacyPathController do
     cond do
       moved == path -> :unchanged
       query in [nil, ""] -> {:ok, moved}
-      true -> {:ok, moved <> "?" <> query}
+      true -> {:ok, moved <> "?" <> encode_unsafe(query)}
     end
+  end
+
+  # Percent-encodes what a redirect target may not hold. Each replacement
+  # decodes back to the character it stands for, so the page behind the
+  # redirect reads the query the request carried.
+  defp encode_unsafe(query) do
+    query
+    |> String.replace("\\", "%5C")
+    |> String.replace("\t", "%09")
+    |> String.replace("\r", "%0D")
+    |> String.replace("\n", "%0A")
+    |> String.replace("/%09", "%2F%09")
   end
 end

@@ -149,6 +149,43 @@ defmodule PhoenixKitCatalogue.Web.TranslationsLiveTest do
       assert TranslationStatus.state(reloaded, @lang) == :fresh
     end
 
+    test "Stamp fresh is logged with who did it, the row and the language", %{
+      conn: conn,
+      scope: scope
+    } do
+      item = create_item!("Logged Widget")
+
+      new_data = AITranslatable.force_put_language(item.data, @lang, %{"_name" => "Widget FR"})
+      {:ok, item} = Catalogue.update_item(item, %{data: new_data})
+
+      {:ok, view, _html} = live(with_scope(conn, scope), @base <> "?lang=#{@lang}")
+
+      view
+      |> element("button[phx-click='stamp_fresh'][phx-value-uuid='#{item.uuid}']")
+      |> render_click()
+
+      row =
+        assert_activity_logged("translation.baseline_stamped",
+          resource_uuid: item.uuid,
+          actor_uuid: scope.user.uuid,
+          metadata_has: %{"language" => @lang}
+        )
+
+      assert row.module == "catalogue"
+      assert row.resource_type == "item"
+      assert row.mode == "manual"
+    end
+
+    test "a stamp that changes nothing is not logged", %{conn: conn, scope: scope} do
+      # No translation for the language: nothing to stamp, nothing to record.
+      item = create_item!("Untranslated Widget")
+      {:ok, view, _html} = live(with_scope(conn, scope), @base <> "?lang=#{@lang}")
+
+      render_click(view, "stamp_fresh", %{"type" => "item", "uuid" => item.uuid, "lang" => @lang})
+
+      refute_activity_logged("translation.baseline_stamped")
+    end
+
     test "bulk Translate all missing only enqueues rows matching the current filter", %{
       conn: conn
     } do

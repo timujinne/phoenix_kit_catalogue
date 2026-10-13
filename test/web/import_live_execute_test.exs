@@ -173,6 +173,103 @@ defmodule PhoenixKitCatalogue.Web.ImportLiveExecuteTest do
     end
   end
 
+  describe "the import's closing row does not need the page" do
+    defp start_import(conn, cat, scope, filename, csv) do
+      {:ok, view, _html} = live(with_scope(conn, scope), @import_url)
+      render_change(view, "validate_upload", %{"catalogue" => cat.uuid})
+
+      file =
+        Phoenix.LiveViewTest.file_input(view, "#upload-form", :import_file, [
+          %{last_modified: 1_700_000_000_000, name: filename, content: csv, type: "text/csv"}
+        ])
+
+      render_upload(file, filename)
+      render_submit(view, "parse_file", %{"catalogue" => cat.uuid})
+      render_click(view, "continue_to_confirm", %{})
+      view
+    end
+
+    test "closing the page mid-import still logs import.completed, once, by the importer",
+         %{conn: conn, catalogue: cat, scope: scope} do
+      rows = for n <- 1..150, do: "Orphan Import #{n}\n"
+      view = start_import(conn, cat, scope, "orphan.csv", IO.iodata_to_binary(["name\n" | rows]))
+
+      render_click(view, "execute_import", %{})
+      {task, _ref} = :sys.get_state(view.pid).socket.assigns.import_task
+
+      # Hold the task where it is, so the page is provably gone before the
+      # import finishes rather than usually gone. (No database read until
+      # it resumes: a suspended task may be holding the sandbox connection.)
+      true = :erlang.suspend_process(task)
+      task_ref = Process.monitor(task)
+      assert Process.alive?(task), "the import finished before the page could be closed"
+
+      Process.flag(:trap_exit, true)
+      view_ref = Process.monitor(view.pid)
+      Process.exit(view.pid, :kill)
+      assert_receive {:DOWN, ^view_ref, :process, _pid, :killed}
+
+      true = :erlang.resume_process(task)
+      assert_receive {:DOWN, ^task_ref, :process, _pid, :normal}, 30_000
+
+      row =
+        assert_activity_logged("import.completed",
+          resource_uuid: cat.uuid,
+          actor_uuid: scope.user.uuid,
+          metadata_has: %{"items_created" => 150, "errors" => 0, "filename" => "orphan.csv"}
+        )
+
+      assert row.module == "catalogue"
+      refute_activity_logged("import.failed")
+    end
+
+    # The plan is swapped in the page's state for one the executor cannot
+    # run; the task, its rescue and the activity write are the real ones.
+    defp run_with_plan(view, plan_fun) do
+      :sys.replace_state(view.pid, fn state ->
+        update_in(state.socket.assigns.import_plan, plan_fun)
+      end)
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        render_click(view, "execute_import", %{})
+
+        assert_eventually(fn ->
+          :sys.get_state(view.pid).socket.assigns.step in [:done, :failed]
+        end)
+      end)
+
+      :sys.get_state(view.pid).socket.assigns.step
+    end
+
+    for {label, items, step} <- [
+          # Postgres refuses a NUL in text: a Postgrex.Error, which the task
+          # reports to the page as a result with an error.
+          {"a database error", [%{name: "Secret\0Name"}], :done},
+          # Nothing the task expects: it crashes, and the page hears :DOWN.
+          {"a crash", [:not_an_item], :failed}
+        ] do
+      test "#{label} logs import.failed, once, with no row data in the reason",
+           %{conn: conn, catalogue: cat, scope: scope} do
+        view = start_import(conn, cat, scope, "raises.csv", "name\nFine Name\n")
+
+        assert run_with_plan(view, &%{&1 | items: unquote(Macro.escape(items))}) == unquote(step)
+
+        row =
+          assert_activity_logged("import.failed",
+            resource_uuid: cat.uuid,
+            actor_uuid: scope.user.uuid,
+            metadata_has: %{"filename" => "raises.csv", "catalogue_name" => "Execute Cat"}
+          )
+
+        assert row.module == "catalogue"
+        assert row.mode == "manual"
+        assert is_binary(row.metadata["reason"]) and row.metadata["reason"] != ""
+        refute row.metadata["reason"] =~ "Secret"
+        refute_activity_logged("import.completed")
+      end
+    end
+  end
+
   describe "duplicates and the item type" do
     test "confirmation reads the current catalogue type", %{conn: conn, catalogue: cat} do
       fixture_item(%{name: "Transport", catalogue_uuid: cat.uuid})

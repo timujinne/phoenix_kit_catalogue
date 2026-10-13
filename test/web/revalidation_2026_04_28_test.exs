@@ -21,57 +21,108 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
   end
 
   describe "Batch 2 — handle_info catch-all on every admin LV" do
-    test "EventsLive catch-all swallows stray messages and stays alive" do
+    setup do
       original_level = Logger.level()
       Logger.configure(level: :debug)
       on_exit(fn -> Logger.configure(level: original_level) end)
+    end
 
-      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/events")
-
+    # The message is sent and the view rendered inside the capture: the
+    # render is what makes the view process the message, so the debug line
+    # is in the log by the time the capture ends — and a view that crashed
+    # on the message fails the render.
+    defp assert_stray_message_ignored(view, name) do
       log =
         capture_log([level: :debug], fn ->
           send(view.pid, {:totally_unexpected, :message, %{nested: "payload"}})
-          # render forces the LV to flush handle_info — without it the
-          # debug log is racing with capture_log's exit.
-          _ = render(view)
+          assert is_binary(render(view))
         end)
 
-      assert Process.alive?(view.pid)
-      assert log =~ "EventsLive ignored unhandled message"
+      assert log =~ "#{name} ignored unhandled message: {:totally_unexpected, :message"
     end
 
-    test "CatalogueDetailLive catch-all swallows stray messages", %{catalogue: cat} do
+    test "EventsLive" do
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/events")
+      assert_stray_message_ignored(view, "EventsLive")
+    end
+
+    test "CatalogueDetailLive", %{catalogue: cat} do
       {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}")
-      send(view.pid, :totally_unexpected_message)
-      assert Process.alive?(view.pid)
+      assert_stray_message_ignored(view, "CatalogueDetailLive")
     end
 
-    test "CatalogueFormLive catch-all swallows stray messages" do
+    test "CatalogueFormLive" do
       {:ok, view, _html} = live(conn(), "/en/admin/catalogues/new")
-      send(view.pid, :totally_unexpected_message)
-      assert Process.alive?(view.pid)
+      assert_stray_message_ignored(view, "CatalogueFormLive")
     end
 
-    test "CategoryFormLive catch-all swallows stray messages", %{catalogue: cat} do
+    test "CategoryFormLive", %{catalogue: cat} do
       {:ok, view, _html} =
         live(conn(), "/en/admin/catalogues/#{cat.uuid}/categories/new")
 
-      send(view.pid, :totally_unexpected_message)
-      assert Process.alive?(view.pid)
+      assert_stray_message_ignored(view, "CategoryFormLive")
     end
 
-    test "ItemFormLive catch-all swallows stray messages", %{catalogue: cat} do
+    test "ItemFormLive", %{catalogue: cat} do
       {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}/items/new")
-      send(view.pid, :totally_unexpected_message)
-      assert Process.alive?(view.pid)
+      assert_stray_message_ignored(view, "ItemFormLive")
     end
 
-    test "ImportLive catch-all swallows stray messages", %{catalogue: cat} do
+    test "ImportLive", %{catalogue: cat} do
       {:ok, view, _html} =
         live(conn(), "/en/admin/catalogues/import?catalogue_uuid=#{cat.uuid}")
 
-      send(view.pid, :totally_unexpected_message)
-      assert Process.alive?(view.pid)
+      assert_stray_message_ignored(view, "ImportLive")
+    end
+
+    test "SettingsLive" do
+      {:ok, view, _html} = live(conn(), "/en/admin/settings/catalogues")
+      assert_stray_message_ignored(view, "SettingsLive")
+    end
+  end
+
+  # A payload the page never offers — a stale tab, a crafted push — is
+  # ignored with a debug line, not a crashed view.
+  describe "handle_event catch-all" do
+    setup do
+      original_level = Logger.level()
+      Logger.configure(level: :debug)
+      on_exit(fn -> Logger.configure(level: original_level) end)
+    end
+
+    test "CatalogueDetailLive ignores a column or sort event naming an unknown value",
+         %{catalogue: cat} do
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/#{cat.uuid}")
+
+      log =
+        capture_log([level: :debug], fn ->
+          for {event, params} <- [
+                {"add_column", %{"column_id" => "sku", "section" => "no_such_section"}},
+                {"remove_column", %{"column_id" => "sku", "section" => "catalogues"}},
+                {"reorder_columns", %{"ordered_ids" => [], "section" => 1}},
+                {"no_such_event", %{}}
+              ] do
+            assert is_binary(render_hook(view, event, params))
+          end
+        end)
+
+      for event <- ~w(add_column remove_column reorder_columns no_such_event) do
+        assert log =~ ~s(CatalogueDetailLive ignored unhandled event: "#{event}")
+      end
+    end
+
+    test "the item form's PDF search ignores an event it does not know", %{catalogue: cat} do
+      item = fixture_item(%{name: "Oak Panel", catalogue_uuid: cat.uuid})
+      {:ok, view, _html} = live(conn(), "/en/admin/catalogues/items/#{item.uuid}/edit")
+      render_click(view, "switch_tab", %{"tab" => "pdfs"})
+
+      log =
+        capture_log([level: :debug], fn ->
+          html = view |> with_target("#item-pdf-search") |> render_hook("no_such_event", %{})
+          assert html =~ "item-pdf-search-query-form"
+        end)
+
+      assert log =~ ~s(PdfSearchModal ignored unhandled event: "no_such_event")
     end
   end
 
@@ -98,17 +149,25 @@ defmodule PhoenixKitCatalogue.Web.Revalidation20260428Test do
       assert render(view)
     end
 
-    test "ImportLive handles import_progress + import_result", %{catalogue: cat} do
+    test "ImportLive takes import_progress, and ignores a result with no import running",
+         %{catalogue: cat} do
       {:ok, view, _html} =
         live(conn(), "/en/admin/catalogues/import?catalogue_uuid=#{cat.uuid}")
 
       send(view.pid, {:import_progress, 5, 10})
-      assert Process.alive?(view.pid)
-      # import_result triggers log_import_activity + step transition;
-      # asserting alive after is sufficient (no DB row pinning here —
-      # full activity log is exercised in activity_logging_test).
-      send(view.pid, {:import_result, %{inserted: 0, errors: [], skipped: 0}})
-      assert Process.alive?(view.pid)
+      _ = render(view)
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert {assigns.import_progress, assigns.import_total} == {5, 10}
+
+      # A result with no import running is one from a wizard already
+      # abandoned: it must not move this one to the done step.
+      send(view.pid, {:import_result, %{created: 3, errors: []}})
+      _ = render(view)
+
+      assigns = :sys.get_state(view.pid).socket.assigns
+      assert assigns.step == :upload
+      assert assigns.import_result == nil
     end
   end
 

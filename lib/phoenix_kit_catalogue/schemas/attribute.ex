@@ -49,6 +49,7 @@ defmodule PhoenixKitCatalogue.Schemas.Attribute do
     timestamps(type: :utc_datetime)
   end
 
+  @spec create_changeset(t(), map()) :: Ecto.Changeset.t(t())
   def create_changeset(attribute, attrs) do
     attribute
     |> cast(attrs, [:group_uuid, :key, :name, :data, :kind, :status, :position])
@@ -62,6 +63,7 @@ defmodule PhoenixKitCatalogue.Schemas.Attribute do
 
   # `key` is deliberately not castable after creation — it is the durable
   # identity future exclusion rules and order lines reference.
+  @spec update_changeset(t(), map()) :: Ecto.Changeset.t(t())
   def update_changeset(attribute, attrs) do
     attribute
     |> cast(attrs, [:name, :data, :kind, :status, :position])

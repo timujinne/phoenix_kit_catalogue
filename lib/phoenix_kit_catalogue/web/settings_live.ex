@@ -24,10 +24,13 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
   use Phoenix.LiveView
   use Gettext, backend: PhoenixKitCatalogue.Gettext
 
+  require Logger
+
   import PhoenixKitWeb.Components.Core.Checkbox, only: [checkbox: 1]
   import PhoenixKitWeb.Components.Core.FormSection, only: [form_section: 1]
   import PhoenixKitWeb.Components.Core.Icon, only: [icon: 1]
   import PhoenixKitWeb.Components.Core.Input, only: [input: 1]
+  import PhoenixKitCatalogue.Web.Helpers, only: [actor_opts: 1]
 
   alias PhoenixKit.Utils.Multilang
   alias PhoenixKit.Utils.Routes
@@ -69,31 +72,31 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
 
   @impl true
   def handle_event("toggle_context_menu", params, socket) do
-    {:noreply, save(socket, &Settings.update_context_menu_enabled/1, checked?(params))}
+    {:noreply, save(socket, &Settings.update_context_menu_enabled/2, checked?(params))}
   end
 
   def handle_event("toggle_seo_fields", params, socket) do
-    {:noreply, save(socket, &Settings.update_seo_fields_visible/1, checked?(params))}
+    {:noreply, save(socket, &Settings.update_seo_fields_visible/2, checked?(params))}
   end
 
   def handle_event("toggle_sweep", params, socket) do
-    {:noreply, save(socket, &Settings.update_sweep_enabled/1, checked?(params))}
+    {:noreply, save(socket, &Settings.update_sweep_enabled/2, checked?(params))}
   end
 
-  def handle_event("save_sweep_interval", %{"value" => value}, socket) do
+  def handle_event("save_sweep_interval", %{"value" => value}, socket) when is_binary(value) do
     case positive_integer(value) do
       {:ok, minutes} ->
-        {:noreply, save(socket, &Settings.update_sweep_interval_minutes/1, minutes)}
+        {:noreply, save(socket, &Settings.update_sweep_interval_minutes/2, minutes)}
 
       :error ->
         {:noreply, put_flash(socket, :error, gettext("Enter a whole number of minutes above 0."))}
     end
   end
 
-  def handle_event("save_sweep_max_per_run", %{"value" => value}, socket) do
+  def handle_event("save_sweep_max_per_run", %{"value" => value}, socket) when is_binary(value) do
     case positive_integer(value) do
       {:ok, n} ->
-        {:noreply, save(socket, &Settings.update_sweep_max_per_run/1, n)}
+        {:noreply, save(socket, &Settings.update_sweep_max_per_run/2, n)}
 
       :error ->
         {:noreply, put_flash(socket, :error, gettext("Enter a whole number above 0."))}
@@ -102,7 +105,18 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
 
   def handle_event("save_sweep_langs", params, socket) do
     picked = picked_langs(params, socket.assigns.available_langs)
-    {:noreply, save(socket, &Settings.update_sweep_langs/1, picked)}
+    {:noreply, save(socket, &Settings.update_sweep_langs/2, picked)}
+  end
+
+  def handle_event(event, _params, socket) do
+    Logger.debug("SettingsLive ignored unhandled event: #{inspect(event)}")
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(msg, socket) do
+    Logger.debug("SettingsLive ignored unhandled message: #{inspect(msg)}")
+    {:noreply, socket}
   end
 
   @doc """
@@ -111,8 +125,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
   An unticked group posts nothing at all, so an absent `"langs"` key means
   "none" — not "unchanged". A code that is not an enabled language is
   dropped, so a crafted post cannot store a language the sweep would then
-  target. Public for its tests: the LiveView only offers this group when a
-  second language is enabled, which a test database may not have.
+  target. Public so the shapes a post can take are tested directly.
   """
   @spec picked_langs(map(), [String.t()]) :: [String.t()]
   def picked_langs(params, available) do
@@ -136,7 +149,7 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
   end
 
   defp save(socket, fun, value) do
-    case fun.(value) do
+    case fun.(value, actor_opts(socket)) do
       {:ok, _} ->
         socket |> load_settings() |> put_flash(:info, gettext("Saved."))
 
@@ -289,13 +302,23 @@ defmodule PhoenixKitCatalogue.Web.SettingsLive do
               id="catalogue-sweep-langs-form"
               class="flex flex-wrap gap-x-6 gap-y-2"
             >
-              <.checkbox
+              <%!-- Plain inputs, not core's checkbox: that one posts
+                   "true"/"false" for a single switch, and this group has to
+                   post each ticked box's language code. --%>
+              <label
                 :for={lang <- @available_langs}
-                id={"catalogue-sweep-lang-#{lang}"}
-                name="langs[]"
-                checked={lang in @sweep_langs}
-                label={lang}
-              />
+                class="flex items-center gap-4 text-sm leading-6 text-base-content cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-primary"
+                  id={"catalogue-sweep-lang-#{lang}"}
+                  name="langs[]"
+                  value={lang}
+                  checked={lang in @sweep_langs}
+                />
+                <span>{lang}</span>
+              </label>
             </form>
 
             <p :if={@available_langs != []} class="text-xs text-base-content/50 mt-2">

@@ -239,6 +239,12 @@ msgstr "Toote nimi puudub."
 msgid "CSV file is empty."
 msgstr "CSV-fail on tühi."
 
+msgid "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
+msgstr "See CSV-fail ei ole UTF-8 tekst. Salvesta see tabelarvutusprogrammis vormingus «CSV UTF-8» ja laadi uuesti üles."
+
+msgid "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
+msgstr "See JSON-fail ei ole kataloogi eksport: selles peab olema loend «items», mille kirjetel on lihtväärtused."
+
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr "Taastamine ebaõnnestus — vanemkataloog on kustutatud. Taastage esmalt kataloog."
 
@@ -1021,6 +1027,12 @@ msgstr "Kaust kustutati jäädavalt."
 
 msgid "Failed to create folder."
 msgstr "Kausta loomine ebaõnnestus."
+
+msgid "That name is too long: %{count} characters at most."
+msgstr "See nimi on liiga pikk: kuni %{count} märki."
+
+msgid "Could not save that name."
+msgstr "Seda nime ei õnnestunud salvestada."
 
 msgid "Failed to delete folder."
 msgstr "Kausta kustutamine ebaõnnestus."
@@ -1911,6 +1923,9 @@ msgstr "Fail"
 
 msgid "File format does not match the selected format."
 msgstr "Faili formaat ei vasta valitud formaadile."
+
+msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
+msgstr "See fail ei ole UTF-8 tekst. Salvesta see UTF-8 kodeeringus ja laadi uuesti üles."
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr "Failis on importimiseks liiga palju ridu. Jaga see väiksemateks failideks."

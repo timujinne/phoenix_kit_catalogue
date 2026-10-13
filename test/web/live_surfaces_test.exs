@@ -243,11 +243,6 @@ defmodule PhoenixKitCatalogue.Web.LiveSurfacesTest do
         refute render(view) =~ "Has attribute set"
         refute Map.has_key?(assigns(view).attribute_map, item.uuid)
       end
-    else
-      @tag :skip
-      test "entities package lacks the Managed contract — skipped" do
-        assert true
-      end
     end
 
     test "removing an item's last document drops the paperclip count",

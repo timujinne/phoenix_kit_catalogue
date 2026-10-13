@@ -176,6 +176,11 @@ defmodule PhoenixKitCatalogue.Web.Components.PdfSearchModal do
     show_more(socket, pdf_uuid)
   end
 
+  def handle_event(event, _params, socket) do
+    Logger.debug("PdfSearchModal ignored unhandled event: #{inspect(event)}")
+    {:noreply, socket}
+  end
+
   defp library_search(socket, raw, query) do
     if String.length(query) < 2 do
       {:noreply,

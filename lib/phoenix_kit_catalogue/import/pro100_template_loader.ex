@@ -21,6 +21,8 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   upstream.
 
   `dry_run: true` performs every lookup and decision and writes nothing.
+  `actor_uuid:` names the person running the import in each row's activity
+  entry; the entries are logged with mode `"auto"`.
 
   Every write inside the transaction is muted (`broadcast: false`); once it
   has committed the loader emits one `:folder` event if it created the
@@ -42,6 +44,10 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   # Inside the transaction nothing fans out; see `broadcast_touched/1`.
   @muted [broadcast: false]
 
+  # What every write is passed: muted, logged as the import's doing rather
+  # than a hand edit, and attributed to whoever ran the import.
+  defp write_opts(opts), do: @muted ++ [mode: "auto"] ++ Keyword.take(opts, [:actor_uuid])
+
   @type report :: %{
           folder: :created | :reused,
           catalogues: [map()],
@@ -60,16 +66,16 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         {:error, {:plan_problems, plan.problems}}
 
       dry_run? ->
-        {report, _touched} = run(plan, true)
+        {report, _touched} = run(plan, true, [])
         {:ok, report}
 
       true ->
-        run_and_broadcast(plan)
+        run_and_broadcast(plan, write_opts(opts))
     end
   end
 
-  defp run_and_broadcast(plan) do
-    case repo().transaction(fn -> run_or_rollback(plan) end) do
+  defp run_and_broadcast(plan, w) do
+    case repo().transaction(fn -> run_or_rollback(plan, w) end) do
       {:ok, {report, touched}} ->
         broadcast_touched(touched)
         {:ok, report}
@@ -79,8 +85,8 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
     end
   end
 
-  defp run_or_rollback(plan) do
-    {report, _touched} = result = run(plan, false)
+  defp run_or_rollback(plan, w) do
+    {report, _touched} = result = run(plan, false, w)
     if report.stats.errors > 0, do: repo().rollback({:errors, report.reported})
     result
   end
@@ -96,12 +102,13 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
   # Returns `{report, touched}`; `touched` is what `broadcast_touched/1`
   # announces after the commit.
-  defp run(plan, dry?) do
-    folder = resolve_folder(plan.folder.name, dry?)
+  # `w` is the per-write options (`write_opts/1`), unused on a dry run.
+  defp run(plan, dry?, w) do
+    folder = resolve_folder(plan.folder.name, dry?, w)
 
     {catalogue_reports, name_to_uuid} =
       Enum.map_reduce(plan.catalogues, %{}, fn cat, acc ->
-        {report, uuid} = apply_catalogue(cat, folder, dry?)
+        {report, uuid} = apply_catalogue(cat, folder, dry?, w)
         {report, Map.put(acc, cat.name, uuid)}
       end)
 
@@ -113,7 +120,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
     rule_reports =
       plan.catalogues
       |> Enum.filter(&(&1.rules != []))
-      |> Enum.map(&apply_rules(&1, name_to_uuid, dry?))
+      |> Enum.map(&apply_rules(&1, name_to_uuid, dry?, w))
 
     absent = Enum.flat_map(catalogue_reports, & &1.absent)
     reported = Enum.flat_map(catalogue_reports, & &1.reported)
@@ -142,7 +149,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
   # ── Folder ───────────────────────────────────────────────────────
 
-  defp resolve_folder(name, dry?) do
+  defp resolve_folder(name, dry?, w) do
     case repo().one(from(f in Folder, where: f.name == ^name, limit: 1)) do
       %Folder{} = f ->
         %{uuid: f.uuid, status: :reused}
@@ -151,19 +158,19 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
         %{uuid: nil, status: :created}
 
       nil ->
-        {:ok, f} = Catalogue.create_folder(%{name: name}, @muted)
+        {:ok, f} = Catalogue.create_folder(%{name: name}, w)
         %{uuid: f.uuid, status: :created}
     end
   end
 
   # ── Catalogue ────────────────────────────────────────────────────
 
-  defp apply_catalogue(cat, folder, dry?) do
+  defp apply_catalogue(cat, folder, dry?, w) do
     existing = find_catalogue(cat, folder)
-    {uuid, status} = ensure_catalogue(cat, folder, existing, dry?)
+    {uuid, status} = ensure_catalogue(cat, folder, existing, dry?, w)
 
-    category_uuids = apply_categories(cat, uuid, dry?)
-    {items, absent, reported} = apply_items(cat, uuid, category_uuids, dry?)
+    category_uuids = apply_categories(cat, uuid, dry?, w)
+    {items, absent, reported} = apply_items(cat, uuid, category_uuids, dry?, w)
 
     report = %{
       name: cat.name,
@@ -203,12 +210,12 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   defp folder_clause(nil), do: dynamic([c], is_nil(c.folder_uuid))
   defp folder_clause(uuid), do: dynamic([c], c.folder_uuid == ^uuid)
 
-  defp ensure_catalogue(_cat, _folder, %CatalogueSchema{} = existing, _dry?),
+  defp ensure_catalogue(_cat, _folder, %CatalogueSchema{} = existing, _dry?, _w),
     do: {existing.uuid, :reused}
 
-  defp ensure_catalogue(_cat, _folder, nil, true), do: {nil, :created}
+  defp ensure_catalogue(_cat, _folder, nil, true, _w), do: {nil, :created}
 
-  defp ensure_catalogue(cat, folder, nil, false) do
+  defp ensure_catalogue(cat, folder, nil, false, w) do
     {:ok, created} =
       Catalogue.create_catalogue(
         %{
@@ -218,7 +225,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
           position: cat.position,
           data: %{"pro100" => %{"template_guid" => cat.template_guid}}
         },
-        @muted
+        w
       )
 
     {created.uuid, :created}
@@ -227,7 +234,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   # ── Categories ───────────────────────────────────────────────────
   # Sections first so a sub-heading can point at its parent's uuid.
 
-  defp apply_categories(cat, catalogue_uuid, dry?) do
+  defp apply_categories(cat, catalogue_uuid, dry?, w) do
     existing =
       if catalogue_uuid,
         do:
@@ -240,7 +247,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
     root_uuids =
       Enum.reduce(roots, %{}, fn c, acc ->
-        Map.put(acc, {nil, c.name}, ensure_category(c, nil, catalogue_uuid, existing, dry?))
+        Map.put(acc, {nil, c.name}, ensure_category(c, nil, catalogue_uuid, existing, dry?, w))
       end)
 
     Enum.reduce(subs, root_uuids, fn c, acc ->
@@ -249,12 +256,12 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
       Map.put(
         acc,
         {c.parent, c.name},
-        ensure_category(c, parent_uuid, catalogue_uuid, existing, dry?)
+        ensure_category(c, parent_uuid, catalogue_uuid, existing, dry?, w)
       )
     end)
   end
 
-  defp ensure_category(c, parent_uuid, catalogue_uuid, existing, dry?) do
+  defp ensure_category(c, parent_uuid, catalogue_uuid, existing, dry?, w) do
     case Map.get(existing, {parent_uuid, c.name}) do
       %Category{} = found ->
         {found.uuid, :reused}
@@ -271,7 +278,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
               parent_uuid: parent_uuid,
               position: c.position
             },
-            @muted
+            w
           )
 
         {created.uuid, :created}
@@ -283,7 +290,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
   # ── Items ────────────────────────────────────────────────────────
 
-  defp apply_items(cat, catalogue_uuid, category_uuids, dry?) do
+  defp apply_items(cat, catalogue_uuid, category_uuids, dry?, w) do
     existing = if catalogue_uuid, do: Catalogue.list_items_for_catalogue(catalogue_uuid), else: []
 
     by_guid =
@@ -299,11 +306,11 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
         case resolve_item(item, by_guid, by_name) do
           {:update, found} ->
-            {[write_update(found, item, category_uuid, dry?) | acc], MapSet.put(seen, found.uuid),
-             errs}
+            {[write_update(found, item, category_uuid, dry?, w) | acc],
+             MapSet.put(seen, found.uuid), errs}
 
           :create ->
-            {[write_create(item, catalogue_uuid, category_uuid, dry?) | acc], seen, errs}
+            {[write_create(item, catalogue_uuid, category_uuid, dry?, w) | acc], seen, errs}
 
           {:report, reason} ->
             {acc, seen, [%{name: item.name, reason: reason} | errs]}
@@ -338,9 +345,9 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
   defp guid_of(%Item{data: data}) when is_map(data), do: get_in(data, ["pro100", "template_guid"])
   defp guid_of(_), do: nil
 
-  defp write_create(_item, _catalogue_uuid, _category_uuid, true), do: :created
+  defp write_create(_item, _catalogue_uuid, _category_uuid, true, _w), do: :created
 
-  defp write_create(item, catalogue_uuid, category_uuid, false) do
+  defp write_create(item, catalogue_uuid, category_uuid, false, w) do
     {:ok, _} =
       Catalogue.create_item(
         %{
@@ -352,32 +359,31 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
           category_uuid: category_uuid,
           data: item.data
         },
-        skip_derive: true,
-        broadcast: false
+        [skip_derive: true] ++ w
       )
 
     :created
   end
 
-  defp write_update(found, item, category_uuid, dry?) do
+  defp write_update(found, item, category_uuid, dry?, w) do
     changes = item_changes(found, item, category_uuid)
 
     cond do
       changes == %{} -> :unchanged
       dry? -> :updated
-      true -> apply_update(found, changes)
+      true -> apply_update(found, changes, w)
     end
   end
 
-  defp apply_update(found, changes) do
+  defp apply_update(found, changes, w) do
     # The "pro100" namespace is the only data key this loader owns; an
     # owned-key write keeps whatever else landed on the row since `found`
     # was read (a photo pointer, a fingerprint) — sweep, 2026-09-13.
     {:ok, _} =
-      Catalogue.update_item(found, changes,
-        skip_derive: true,
-        broadcast: false,
-        data_owned_keys: ["pro100"]
+      Catalogue.update_item(
+        found,
+        changes,
+        [skip_derive: true, data_owned_keys: ["pro100"]] ++ w
       )
 
     :updated
@@ -417,7 +423,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
   # ── Rules ────────────────────────────────────────────────────────
 
-  defp apply_rules(cat, name_to_uuid, dry?) do
+  defp apply_rules(cat, name_to_uuid, dry?, w) do
     catalogue_uuid = Map.get(name_to_uuid, cat.name)
 
     items =
@@ -440,7 +446,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100TemplateLoader do
 
         case Map.get(items, item_name) do
           %Item{} = item when not dry? ->
-            {:ok, _} = Rules.put_catalogue_rules(item, payload, @muted)
+            {:ok, _} = Rules.put_catalogue_rules(item, payload, w)
             length(payload)
 
           _ ->

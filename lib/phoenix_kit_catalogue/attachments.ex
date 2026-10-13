@@ -58,8 +58,12 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   ## Parent folder
 
-  By default resource folders are created at the storage root. A host can
-  group them under per-type containers:
+  By default resource folders follow the catalogue's own layout,
+  `Catalogues/<catalogue>/<category…>/<item>` with PDFs in
+  `Catalogues/PDF` — `PhoenixKitCatalogue.MediaFolders`, installed as both
+  hooks below by `mix.exs`. A host can put its own hook in either key
+  (the default for the other key then steps back), or set both to `nil`
+  for the media root and the deterministic names:
 
       config :phoenix_kit_catalogue, :attachments_parent_folder, {MyApp.Media, :for_catalogue}
 
@@ -994,11 +998,14 @@ defmodule PhoenixKitCatalogue.Attachments do
   # See moduledoc "Host-named folders".
   @spec find_resource_folder(term(), String.t() | nil) ::
           PhoenixKit.Modules.Storage.Folder.t() | nil
-  def find_resource_folder(resource, actor_uuid) do
+  def find_resource_folder(resource, actor_uuid),
+    do: find_resource_folder(resource, actor_uuid, parent_folder_uuid(resource, actor_uuid))
+
+  defp find_resource_folder(resource, actor_uuid, parent_uuid) do
     case folder_name_for(resource) do
       {:ok, deterministic} ->
         ResourceFolders.resolve(
-          parent: parent_folder_uuid(resource, actor_uuid),
+          parent: parent_uuid,
           host_name: ResourceFolders.host_name(@app, resource, actor_uuid),
           name: deterministic,
           anywhere: true,
@@ -1069,19 +1076,44 @@ defmodule PhoenixKitCatalogue.Attachments do
   # the same locked step (`:claim`): a host name carries no uuid, so until
   # the pointer lands a same-named resource would take the folder for its
   # own.
-  defp ensure_resource_folder(resource, actor_uuid) do
-    parent_uuid = parent_folder_uuid(resource, actor_uuid)
+  defp ensure_resource_folder(resource, actor_uuid),
+    do: ensure_resource_folder(resource, actor_uuid, parent_folder_uuid(resource, actor_uuid))
 
+  defp ensure_resource_folder(resource, actor_uuid, parent_uuid) do
     case folder_name_for(resource) do
       {:ok, deterministic} ->
         ResourceFolders.ensure(folder_name(resource, actor_uuid), parent_uuid, actor_uuid,
-          lookup: fn -> find_resource_folder(resource, actor_uuid) end,
+          lookup: fn -> find_resource_folder(resource, actor_uuid, parent_uuid) end,
           fallback_name: deterministic,
           claim: &claim_folder(resource, &1)
         )
 
       :pending ->
         ResourceFolders.ensure(@pending_prefix <> Ecto.UUID.generate(), parent_uuid, actor_uuid)
+    end
+  end
+
+  @doc false
+  # A saved resource's folder under `parent_uuid`, found or created and
+  # claimed the way the forms do it, without asking the parent hook: the
+  # stored folder while it is live, wherever it is. The default folder
+  # hooks (`PhoenixKitCatalogue.MediaFolders`) build their container chain
+  # with it, top-down, so resolving one level never re-enters the hook.
+  @spec ensure_folder_under(struct(), String.t() | nil, String.t() | nil) ::
+          {:ok, String.t()} | {:error, term()}
+  def ensure_folder_under(resource, parent_uuid, actor_uuid) do
+    case ResourceFolders.live_folder(read_string(resource_data(resource), "files_folder_uuid")) do
+      %{uuid: uuid} ->
+        {:ok, uuid}
+
+      nil ->
+        case folder_name_for(resource) do
+          :pending ->
+            {:error, :not_persisted}
+
+          {:ok, _} ->
+            resource |> ensure_resource_folder(actor_uuid, parent_uuid) |> folder_result()
+        end
     end
   end
 

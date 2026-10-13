@@ -127,6 +127,52 @@ defmodule PhoenixKitCatalogue.Web.LegacyPathTest do
                ["/evil.example/admin/catalogues"]
     end
 
+    # `Plug.Test.conn/2` would parse these, so the raw request line is set
+    # the way an adapter hands it over.
+    defp forward_raw(path, query) do
+      :get
+      |> Plug.Test.conn("/admin/catalogue")
+      |> Phoenix.Controller.put_format("html")
+      |> Map.merge(%{request_path: path, query_string: query})
+      |> Legacy.forward(%{})
+    end
+
+    # `redirect/2` raises on a backslash, on `/%09` and on `/<tab>` anywhere
+    # in a local target, and a header refuses a line break.
+    test "a hostile query still redirects, with the offending characters encoded" do
+      for {query, encoded} <- [
+            {"search=a\\b", "search=a%5Cb"},
+            {"next=/%09evil.example", "next=%2F%09evil.example"},
+            {"next=/\tevil.example", "next=%2F%09evil.example"},
+            {"q=a\tb", "q=a%09b"},
+            {"next=//evil.example", "next=//evil.example"},
+            {"q=a\r\nSet-Cookie: x=1", "q=a%0D%0ASet-Cookie: x=1"},
+            {"\\", "%5C"}
+          ] do
+        conn = forward_raw("/admin/catalogue", query)
+
+        assert conn.status == 301, "#{inspect(query)}: #{conn.status}"
+
+        assert Plug.Conn.get_resp_header(conn, "location") == ["/admin/catalogues?" <> encoded]
+        assert URI.decode_query(encoded) == URI.decode_query(query)
+      end
+    end
+
+    test "a path no redirect can carry is a 404, never a crash" do
+      for path <- [
+            "/admin/catalogue/a\\b",
+            "/admin/catalogue/%09",
+            "/admin/catalogue/\tx",
+            "/admin/catalogue/a\r\nb",
+            "//evil.example\\/admin/catalogue"
+          ] do
+        conn = forward_raw(path, "q=1")
+
+        assert conn.status == 404, "#{inspect(path)}: #{conn.status}"
+        assert Plug.Conn.get_resp_header(conn, "location") == []
+      end
+    end
+
     test "never a redirect to the address it came in on" do
       conn = forward("/phoenix_kit/en/admin/catalogues/abc")
 

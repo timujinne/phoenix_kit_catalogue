@@ -144,6 +144,50 @@ defmodule PhoenixKitCatalogue.Import.ParserTest do
   # in a public repository.
   defp sample_xlsx_path, do: System.get_env("CATALOGUE_SAMPLE_XLSX")
 
+  describe "parse/3 with an XLSX built here" do
+    alias PhoenixKitCatalogue.XlsxFixture
+
+    test "a well-formed workbook parses" do
+      xlsx =
+        XlsxFixture.workbook(
+          XlsxFixture.row(1, ["Name", "SKU"]) <> XlsxFixture.row(2, ["Oak", "A1"])
+        )
+
+      assert {:ok, result} = Parser.parse(xlsx, "ok.xlsx")
+      assert result.headers == ["Name", "SKU"]
+      assert result.rows == [["Oak", "A1"]]
+      assert result.sheets == ["Sheet1"]
+      assert Parser.list_sheets(xlsx) == {:ok, ["Sheet1"]}
+    end
+
+    for {label, rows_xml} <- [
+          {"a row number that is not a number", ~s(<row r="x"><c><v>1</v></c></row>)},
+          {"XML that is cut off", ~s(<row r="1"><c><v>1</v>)}
+        ] do
+      test "#{label} is an error tuple, never a raise" do
+        xlsx = XlsxFixture.workbook(unquote(rows_xml))
+
+        assert {:error, reason} = Parser.parse(xlsx, "bad.xlsx")
+        assert elem(reason, 0) in [:xlsx_read_failed, :sheet_read_failed]
+        assert PhoenixKitCatalogue.Errors.message(reason) =~ "Failed to read"
+      end
+    end
+
+    test "random bytes under an .xlsx name are an error tuple" do
+      :rand.seed(:exsss, {4, 5, 6})
+
+      for size <- [0, 1, 4, 64, 1024, 8192] do
+        bytes = :rand.bytes(size)
+
+        assert {:error, {:xlsx_open_failed, _}} = Parser.parse(bytes, "random.xlsx")
+        assert {:error, {:xlsx_read_failed, _}} = Parser.list_sheets(bytes)
+        # A ZIP signature in front gets past the first check a reader makes.
+        assert {:error, {tag, _}} = Parser.parse("PK\x03\x04" <> bytes, "random.xlsx")
+        assert tag in [:xlsx_open_failed, :xlsx_read_failed]
+      end
+    end
+  end
+
   describe "parse/3 with XLSX" do
     @tag :integration
     test "parses sample xlsx file" do

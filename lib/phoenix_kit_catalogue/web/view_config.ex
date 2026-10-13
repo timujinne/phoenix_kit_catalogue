@@ -121,14 +121,29 @@ defmodule PhoenixKitCatalogue.Web.ViewConfig do
     scope |> TableConfig.columns() |> Enum.any?(&(&1.id == id and &1.sortable?))
   end
 
-  @spec save_global_sort(TableConfig.scope(), String.t(), :asc | :desc) ::
+  @doc """
+  Stores the shared sort for a global-sort scope.
+
+  Core keeps every changed setting value as a permanent activity entry, so
+  a sort that is already the stored one writes nothing (`{:ok, :unchanged}`)
+  and a change is attributed: pass the acting admin as `actor_uuid:`.
+  """
+  @spec save_global_sort(TableConfig.scope(), String.t(), :asc | :desc, keyword()) ::
           {:ok, term()} | {:error, term()}
-  def save_global_sort(scope, sort_by, sort_dir) do
-    Settings.update_setting_with_module(
-      global_sort_setting_key(scope),
-      "#{sort_by}:#{sort_dir}",
-      PhoenixKitCatalogue.module_key()
-    )
+  def save_global_sort(scope, sort_by, sort_dir, opts \\ []) do
+    key = global_sort_setting_key(scope)
+    value = "#{sort_by}:#{sort_dir}"
+
+    if Settings.get_setting(key, nil) == value do
+      {:ok, :unchanged}
+    else
+      Settings.update_setting_with_module(
+        key,
+        value,
+        PhoenixKitCatalogue.module_key(),
+        [source: "settings"] ++ Keyword.take(opts, [:actor_uuid])
+      )
+    end
   end
 
   @spec load(map() | nil, TableConfig.scope()) :: map()

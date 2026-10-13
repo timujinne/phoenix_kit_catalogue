@@ -108,6 +108,14 @@ repo_available =
         end
       end
 
+      # Core leaves the locale segment out of an admin path on a
+      # single-language site and on a multilingual one that serves its
+      # primary language prefixless; this suite's routes and expectations
+      # are the prefixed `/en/admin/...` shape, so the test site is a
+      # multilingual one with the prefix kept.
+      {:ok, _} = PhoenixKit.Modules.Languages.enable_system()
+      {:ok, _} = PhoenixKit.Modules.Languages.set_default_language_no_prefix(false)
+
       Ecto.Adapters.SQL.Sandbox.mode(PhoenixKitCatalogue.Test.Repo, :manual)
       true
     rescue

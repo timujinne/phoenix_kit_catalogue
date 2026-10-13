@@ -72,6 +72,7 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   @success_terminals ~w(extracted scanned_no_text)
 
   @doc false
+  @spec success_terminal?(String.t() | nil) :: boolean()
   def success_terminal?(status), do: status in @success_terminals
 
   @impl Oban.Worker
@@ -256,6 +257,7 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   @doc false
   # Public for testability — pure-function text normalizer applied to
   # every page's engine output before storage.
+  @spec normalize(binary()) :: String.t()
   def normalize(text) when is_binary(text) do
     text
     |> scrub_utf8()
@@ -297,6 +299,7 @@ defmodule PhoenixKitCatalogue.Workers.PdfExtractor do
   # Public for testability — collapses internal worker error tuples
   # into the human-readable string stored in `extractions.error_message`
   # and surfaced by the LV's "Extraction failed" alert.
+  @spec inspect_reason(term()) :: String.t()
   def inspect_reason({:pdfinfo_failed, msg}), do: "pdfinfo: #{msg}"
 
   def inspect_reason({:no_engine, attempts}) do

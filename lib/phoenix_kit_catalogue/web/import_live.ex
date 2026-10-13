@@ -582,9 +582,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   def handle_info({:import_result, _result}, %{assigns: %{import_task: nil}} = socket),
     do: {:noreply, socket}
 
+  # The activity row is the task's to write (`start_import/6`): it is
+  # there when the operator has closed this page, and written once.
   def handle_info({:import_result, result}, socket) do
-    log_import_activity(socket, result)
-
     {:noreply,
      socket
      |> stop_import_monitor()
@@ -1355,12 +1355,18 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     log_import_started(socket, import_plan)
 
     match_across_languages = socket.assigns.category_match_across_languages
+    actor = actor_uuid(socket)
+
+    # Who, what and into where — read now, because the task outlives this
+    # process and writes the import's closing activity row itself.
+    log_context = import_log_context(socket)
 
     # Supervised under PhoenixKit.TaskSupervisor so the import survives a
-    # transient LV crash (the user's browser will reconnect to a new LV
-    # process; we still want the import to finish and surface its result
-    # in the activity feed via the executor's own logging) and so a task
-    # crash here can't leave an orphan process running indefinitely.
+    # transient LV crash or a closed tab (the browser reconnects to a new
+    # LV process, or never does; the import still finishes) and so a task
+    # crash here can't leave an orphan process running indefinitely. The
+    # task writes `import.completed` / `import.failed` itself, so the
+    # activity feed has the outcome whether or not this page is still open.
     {:ok, pid} =
       Task.Supervisor.start_child(PhoenixKit.TaskSupervisor, fn ->
         try do
@@ -1370,7 +1376,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             manufacturer_uuid: manufacturer_uuid,
             supplier_uuid: supplier_uuid,
             match_categories_across_languages: match_across_languages,
-            actor_uuid: actor_uuid(socket)
+            actor_uuid: actor,
+            on_result: &log_import_completed(log_context, &1)
           )
         rescue
           # Narrow to the exception families we actually expect from
@@ -1395,6 +1402,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             # supplier details. The module's own convention says so
             # (`web/helpers.ex:112`) and `import/executor.ex:583` follows it.
             Logger.error("Import failed: #{safe_exception_message(e)}")
+            log_import_failed(log_context, safe_exception_message(e))
 
             send(
               lv_pid,
@@ -1408,6 +1416,17 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                  manufacturer_supplier_links_created: 0
                }}
             )
+
+          # Anything else still crashes the task, after the feed is told the
+          # import did not finish. The exception's name only: its message
+          # can render the row it tripped on.
+          e ->
+            log_import_failed(log_context, inspect(e.__struct__))
+            reraise e, __STACKTRACE__
+        catch
+          kind, reason ->
+            log_import_failed(log_context, Atom.to_string(kind))
+            :erlang.raise(kind, reason, __STACKTRACE__)
         end
       end)
 
@@ -3070,28 +3089,24 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     })
   end
 
-  # Through `ActivityLog`, like every other catalogue entry: logging the
-  # map straight to core left the row without the catalogue's module key,
-  # so the catalogue's Events page never showed a finished import.
-  defp log_import_activity(socket, result), do: ActivityLog.log(build_import_log(socket, result))
-
-  defp build_import_log(socket, result) do
+  # What the import's closing row needs from the socket, as plain data the
+  # task can carry.
+  defp import_log_context(socket) do
     catalogue = socket.assigns[:selected_catalogue]
 
     %{
-      action: "import.completed",
-      mode: "manual",
       actor_uuid: actor_uuid(socket),
-      resource_type: "catalogue",
       resource_uuid: catalogue && catalogue.uuid,
-      metadata: import_log_metadata(socket, catalogue, result)
+      catalogue_name: catalogue_name(catalogue),
+      filename: socket.assigns[:filename] || ""
     }
   end
 
-  defp import_log_metadata(socket, catalogue, result) do
-    %{
-      "catalogue_name" => catalogue_name(catalogue),
-      "filename" => socket.assigns[:filename] || "",
+  # Through `ActivityLog`, like every other catalogue entry: logging the
+  # map straight to core left the row without the catalogue's module key,
+  # so the catalogue's Events page never showed a finished import.
+  defp log_import_completed(context, result) do
+    log_import_outcome(context, "import.completed", %{
       "items_created" => count_field(result, :created),
       "categories_created" => count_field(result, :categories_created),
       "manufacturers_created" => count_field(result, :manufacturers_created),
@@ -3099,7 +3114,25 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       "manufacturer_supplier_links_created" =>
         count_field(result, :manufacturer_supplier_links_created),
       "errors" => length(result[:errors] || [])
-    }
+    })
+  end
+
+  defp log_import_failed(context, reason),
+    do: log_import_outcome(context, "import.failed", %{"reason" => reason})
+
+  defp log_import_outcome(context, action, metadata) do
+    ActivityLog.log(%{
+      action: action,
+      mode: "manual",
+      actor_uuid: context.actor_uuid,
+      resource_type: "catalogue",
+      resource_uuid: context.resource_uuid,
+      metadata:
+        Map.merge(
+          %{"catalogue_name" => context.catalogue_name, "filename" => context.filename},
+          metadata
+        )
+    })
   end
 
   defp catalogue_name(nil), do: ""
@@ -3224,6 +3257,13 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     Gettext.gettext(
       PhoenixKitCatalogue.Gettext,
       "File format does not match the selected format."
+    )
+  end
+
+  defp pro100_error_message(:not_utf8) do
+    Gettext.gettext(
+      PhoenixKitCatalogue.Gettext,
+      "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
     )
   end
 

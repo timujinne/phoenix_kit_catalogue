@@ -149,6 +149,7 @@ defmodule PhoenixKitCatalogue do
 
   @doc false
   # The resource types this module deep-links, for the conformance test.
+  @spec record_link_types() :: [String.t()]
   def record_link_types, do: Map.keys(@record_links)
 
   defp record_links do
@@ -179,6 +180,7 @@ defmodule PhoenixKitCatalogue do
   # 2.24.0. No `@impl`: the pin floor predates the callback, where `@impl`
   # would warn. `ModuleRegistry.all_media_reorganizers/0` looks the function
   # up by name, so it is collected on any core that ships the engine.
+  @spec media_reorganizer() :: module()
   def media_reorganizer, do: PhoenixKitCatalogue.MediaReorganizer
 
   @impl PhoenixKit.Module
@@ -213,6 +215,7 @@ defmodule PhoenixKitCatalogue do
     ]
   end
 
+  @spec ai_translatables() :: [{String.t(), module()}]
   def ai_translatables do
     [
       {"catalogue", PhoenixKitCatalogue.AITranslatable},

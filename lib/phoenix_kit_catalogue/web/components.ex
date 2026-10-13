@@ -720,6 +720,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   """
   # The attribute filter as a slug list. Stored in the URL as one
   # comma-joined string so a filtered view is a shareable link.
+  @spec attribute_filter_slugs(Phoenix.LiveView.Socket.t() | map()) :: [String.t()]
   def attribute_filter_slugs(%{assigns: assigns}), do: attribute_filter_slugs(assigns)
 
   def attribute_filter_slugs(assigns) when is_map(assigns) do
@@ -840,6 +841,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   Classes for the `:card_media` frame every catalogue card uses. Kept in
   one place so the bands cannot drift apart page by page.
   """
+  @spec card_media_band() :: String.t()
   def card_media_band, do: "relative h-40 bg-base-200 overflow-hidden"
 
   @doc """
@@ -872,6 +874,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   catalogue. The same rule that reads as "consistent" in the markup is what
   produced the inconsistency on screen.
   """
+  @spec search_width_class() :: String.t()
   def search_width_class, do: "w-full sm:w-80"
 
   @doc """
@@ -1083,6 +1086,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   `text-sm` — the one column a person scans was the smallest text in the
   row.
   """
+  @spec name_cell_class() :: String.t()
   def name_cell_class, do: "text-base font-medium"
 
   @doc """
@@ -1093,6 +1097,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   older core ignores the extra assign and renders the media unframed —
   the picture is still there, it just isn't held to a fixed height yet.
   """
+  @spec card_media_frame() :: %{card_media_class: String.t()}
   def card_media_frame, do: %{card_media_class: card_media_band()}
 
   @doc """
@@ -1700,6 +1705,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   # `"../../x"` must never reach it. `Ecto.UUID.cast/1` alone accepts any
   # 16-byte binary — equality with the cast result is the actual guard.
   @doc false
+  @spec featured_image_uuid(map() | nil) :: Ecto.UUID.t() | nil
   def featured_image_uuid(%{data: %{"featured_image_uuid" => uuid}})
       when is_binary(uuid) and uuid != "" do
     case Ecto.UUID.cast(uuid) do
@@ -1715,6 +1721,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   column in table views, so a table with no images at all doesn't spend a
   permanently empty column on them.
   """
+  @spec any_featured_thumb?(Enumerable.t()) :: boolean()
   def any_featured_thumb?(rows), do: Enum.any?(rows, &(featured_image_uuid(&1) != nil))
 
   @doc """
@@ -1722,6 +1729,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
   the media column earns its place when some row has an image OR attached
   documents (per the `counts` map from `Catalogue.attached_file_counts/1`).
   """
+  @spec any_media_thumb?(Enumerable.t(), %{optional(Ecto.UUID.t()) => non_neg_integer()}) ::
+          boolean()
   def any_media_thumb?(rows, counts) do
     Enum.any?(rows, fn row ->
       featured_image_uuid(row) != nil or Map.get(counts, row.uuid, 0) > 0
@@ -2107,6 +2116,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   The one localStorage key every catalogue surface shares, so a view
   chosen on one page is the view the next page opens with.
   """
+  @spec view_storage_key() :: String.t()
   def view_storage_key, do: "catalogue-view"
 
   @doc """
@@ -2302,6 +2312,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
       :if={@has_catalogues or @has_categories}
       id={@id}
       open={@open}
+      phx-mounted={Phoenix.LiveView.JS.ignore_attributes(["open"])}
       class={["collapse collapse-arrow bg-base-200 border border-base-300", @class]}
     >
       <summary class="collapse-title min-h-0 py-3 pr-10 text-sm font-medium cursor-pointer">
@@ -4051,6 +4062,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   `column_settings_modal/1` expects. `name` is deliberately absent: it is
   always shown, so it is not the picker's to remove.
   """
+  @spec party_items_columns() :: [%{id: String.t(), label: (-> String.t())}]
   def party_items_columns do
     [
       %{id: "sku", label: fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "SKU") end},
@@ -4076,6 +4088,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   end
 
   @doc "Default shown columns for `party_items_table/1`."
+  @spec party_items_default_columns() :: [String.t()]
   def party_items_default_columns, do: ~w(sku base_price unit status catalogue category)
 
   # An item is viewed inside its catalogue, filtered to its category — there

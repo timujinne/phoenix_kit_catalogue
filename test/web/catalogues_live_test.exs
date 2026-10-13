@@ -1012,7 +1012,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       end
 
       {:ok, view, _html} = live(conn, "#{@base}?q=widget")
-      html = render_async(view)
+      # This waits for a database-backed page of 50 results, not a
+      # timing assertion; the default 100ms is too tight under load.
+      html = render_async(view, 5_000)
 
       # Manual-ordered (positions are assigned in creation order, so
       # 01..55 is also the walk), one page of 50: 01 is on it, 55 is
@@ -1021,7 +1023,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       refute html =~ "Widget 55"
 
       render_click(view, "load_more_items", %{})
-      html = render_async(view)
+      html = render_async(view, 5_000)
       assert html =~ "Widget 55"
 
       # Million-items paranoia (Max, 2026-08-29): the pages must tile —

@@ -6,6 +6,7 @@ defmodule PhoenixKitCatalogue.MediaReorganizerTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.MediaReorganizer
   alias PhoenixKitCatalogue.Schemas.{Category, Item, Pdf}
+  alias PhoenixKitCatalogue.Test.MediaHooks
 
   defmodule Hook do
     def parent(:item, _actor, %Item{}), do: {:ok, Process.get(:target_folder)}
@@ -93,10 +94,9 @@ defmodule PhoenixKitCatalogue.MediaReorganizerTest do
   end
 
   setup do
-    on_exit(fn ->
-      Application.delete_env(:phoenix_kit_catalogue, :attachments_parent_folder)
-      Application.delete_env(:phoenix_kit_catalogue, :attachments_folder_name)
-    end)
+    # These tests drive the hook machinery with explicit host hooks; the
+    # defaults `mix.exs` installs are covered in `media_folders_test.exs`.
+    MediaHooks.without_hooks()
 
     {:ok, user_uuid: fixture_user_uuid()}
   end

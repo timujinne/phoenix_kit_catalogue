@@ -171,25 +171,6 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
       assert Process.alive?(view.pid)
       assert :sys.get_state(view.pid).socket.assigns[:show_media_selector] == false
     end
-
-    test "media_selected with a uuid sets featured_image_uuid",
-         %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
-
-      # First, open with target = :featured_image.
-      render_click(view, "open_featured_image_picker", %{})
-
-      file_uuid = Ecto.UUID.generate()
-      send(view.pid, {:media_selected, [file_uuid]})
-      _ = render(view)
-
-      assigns = :sys.get_state(view.pid).socket.assigns
-      # If the target was :featured_image, the helper should set the
-      # uuid. Otherwise the message is ignored — both contracts are
-      # acceptable as long as the LV stays alive.
-      assert Process.alive?(view.pid)
-      assert is_binary(assigns[:featured_image_uuid]) or assigns[:featured_image_uuid] == nil
-    end
   end
 
   describe "remove_file (trash_file)" do
@@ -207,43 +188,44 @@ defmodule PhoenixKitCatalogue.Web.AttachmentsLVTest do
     end
 
     test "remove_file when the file exists in the resource's folder trashes it",
-         %{conn: conn, catalogue: cat} do
-      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}/edit")
+         %{conn: conn, catalogue: cat, scope: scope} do
+      {:ok, view, _html} = live(with_scope(conn, scope), "/en/admin/catalogues/#{cat.uuid}/edit")
 
+      # The folder is made on first use; opening the picker is a first use.
+      render_click(view, "open_featured_image_picker", %{})
       folder_uuid = :sys.get_state(view.pid).socket.assigns[:files_folder_uuid]
+      assert is_binary(folder_uuid), "the resource's folder was not created"
 
-      if is_nil(folder_uuid) do
-        # Folder ensure failed in this test env — pin the no-op
-        # contract documented above.
-        assert true
-      else
-        file_uuid = Ecto.UUID.generate()
+      {:ok, %{uuid: file_uuid}} =
+        Storage.create_file(%{
+          user_uuid: scope.user.uuid,
+          folder_uuid: folder_uuid,
+          original_file_name: "a.jpg",
+          file_name: "a.jpg",
+          mime_type: "image/jpeg",
+          file_type: "image",
+          ext: "jpg",
+          file_checksum: "checksum-remove-file",
+          user_file_checksum: "user-checksum-remove-file",
+          size: 100,
+          status: "active"
+        })
 
-        # Insert a file row directly so trash_file has something to
-        # detach. We bypass changeset validation; columns mirror
-        # the test migration shape.
-        {:ok, _} =
-          TestRepo.query("""
-          INSERT INTO phoenix_kit_files
-            (uuid, file_name, original_file_name, mime_type, file_type,
-             size, file_path, folder_uuid, status, metadata,
-             inserted_at, updated_at)
-          VALUES
-            ('#{file_uuid}', 'a.jpg', 'a.jpg', 'image/jpeg', 'image',
-             100, 'k', '#{folder_uuid}', 'active', '{}'::jsonb, NOW(), NOW())
-          """)
+      render_click(view, "close_media_selector", %{})
+      assert file_uuid in Enum.map(files(view), & &1.uuid)
 
-        render_click(view, "remove_file", %{"uuid" => file_uuid})
+      render_click(view, "remove_file", %{"uuid" => file_uuid})
 
-        # The file should be marked as deleted on the row.
-        {:ok, %{rows: [[status]]}} =
-          TestRepo.query(
-            "SELECT status FROM phoenix_kit_files WHERE uuid = $1",
-            [Ecto.UUID.dump!(file_uuid)]
-          )
+      {:ok, %{rows: [[status]]}} =
+        TestRepo.query(
+          "SELECT status FROM phoenix_kit_files WHERE uuid = $1",
+          [Ecto.UUID.dump!(file_uuid)]
+        )
 
-        assert status == "deleted"
-      end
+      assert status == "trashed"
+      refute file_uuid in Enum.map(files(view), & &1.uuid)
     end
   end
+
+  defp files(view), do: :sys.get_state(view.pid).socket.assigns[:files_state][:files]
 end

@@ -1,7 +1,7 @@
 defmodule PhoenixKitCatalogue.MixProject do
   use Mix.Project
 
-  @version "0.47.1"
+  @version "0.48.1"
   @source_url "https://github.com/BeamLabEU/phoenix_kit_catalogue"
 
   def project do
@@ -56,7 +56,13 @@ defmodule PhoenixKitCatalogue.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :phoenix_kit]
+      extra_applications: [:logger, :phoenix_kit],
+      # The default media folder layout (`PhoenixKitCatalogue.MediaFolders`):
+      # a host's own `config :phoenix_kit_catalogue, ...` replaces either key.
+      env: [
+        attachments_parent_folder: {PhoenixKitCatalogue.MediaFolders, :default_parent_for},
+        attachments_folder_name: {PhoenixKitCatalogue.MediaFolders, :default_folder_name}
+      ]
     ]
   end
 

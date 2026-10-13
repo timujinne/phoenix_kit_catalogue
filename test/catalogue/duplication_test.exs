@@ -19,6 +19,7 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
   alias PhoenixKitCatalogue.Catalogue.ItemSupplierInfos
   alias PhoenixKitCatalogue.Catalogue.PubSub, as: CataloguePubSub
   alias PhoenixKitCatalogue.Schemas.{CatalogueRule, Item, ItemSupplierInfo}
+  alias PhoenixKitCatalogue.Test.MediaHooks
   alias PhoenixKitCatalogue.Test.Repo
 
   defmodule SharedNameHook do
@@ -151,6 +152,7 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
     end
 
     test "files are linked into the copy's own folder, never moved", %{a: a} do
+      MediaHooks.without_hooks()
       user_uuid = insert_user!()
 
       {:ok, folder} =
@@ -176,13 +178,13 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicationTest do
 
     test "a copy whose host folder name is its source's takes the deterministic one",
          %{a: a} do
+      MediaHooks.without_hooks()
+
       Application.put_env(
         :phoenix_kit_catalogue,
         :attachments_folder_name,
         {SharedNameHook, :name}
       )
-
-      on_exit(fn -> Application.delete_env(:phoenix_kit_catalogue, :attachments_folder_name) end)
 
       user_uuid = insert_user!()
       {:ok, folder} = Storage.create_folder(%{name: "Shared", user_uuid: user_uuid})

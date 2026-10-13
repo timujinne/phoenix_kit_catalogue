@@ -12,9 +12,13 @@ defmodule PhoenixKitCatalogue.Paths do
 
   # ── Catalogues ───────────────────────────────────────────────────
 
+  @spec index() :: String.t()
   def index, do: Routes.path(@base)
+  @spec catalogue_new() :: String.t()
   def catalogue_new, do: Routes.path("#{@base}/new")
+  @spec catalogue_detail(Ecto.UUID.t()) :: String.t()
   def catalogue_detail(uuid), do: Routes.path("#{@base}/#{uuid}")
+  @spec catalogue_edit(Ecto.UUID.t()) :: String.t()
   def catalogue_edit(uuid), do: Routes.path("#{@base}/#{uuid}/edit")
 
   # Drill-down levels on the catalogue detail page. The current category is
@@ -22,18 +26,22 @@ defmodule PhoenixKitCatalogue.Paths do
   # are deep-linkable and back-button friendly. Root level is plain
   # `catalogue_detail/1`; `category_browse/2` drills into a category;
   # `uncategorized_browse/1` opens the uncategorized bucket.
+  @spec category_browse(Ecto.UUID.t(), Ecto.UUID.t()) :: String.t()
   def category_browse(catalogue_uuid, category_uuid),
     do: Routes.path("#{@base}/#{catalogue_uuid}?category=#{category_uuid}")
 
+  @spec uncategorized_browse(Ecto.UUID.t()) :: String.t()
   def uncategorized_browse(catalogue_uuid),
     do: Routes.path("#{@base}/#{catalogue_uuid}?category=uncategorized")
 
   # ── Import ───────────────────────────────────────────────────────
 
+  @spec import() :: String.t()
   def import, do: Routes.path("#{@base}/import")
 
   # ── Export ───────────────────────────────────────────────────────
 
+  @spec export() :: String.t()
   def export, do: Routes.path("#{@base}/export")
 
   @doc """
@@ -66,6 +74,7 @@ defmodule PhoenixKitCatalogue.Paths do
 
   # ── Events ──────────────────────────────────────────────────────
 
+  @spec events() :: String.t()
   def events, do: Routes.path("#{@base}/events")
 
   # ── Translations ─────────────────────────────────────────────────
@@ -79,20 +88,27 @@ defmodule PhoenixKitCatalogue.Paths do
 
   # ── Attribute groups ─────────────────────────────────────────────
 
+  @spec attribute_groups() :: String.t()
   def attribute_groups, do: Routes.path("#{@base}/attributes")
+  @spec attribute_group_new() :: String.t()
   def attribute_group_new, do: Routes.path("#{@base}/attributes/new")
+  @spec attribute_group_edit(Ecto.UUID.t()) :: String.t()
   def attribute_group_edit(uuid), do: Routes.path("#{@base}/attributes/#{uuid}/edit")
 
   # ── Attribute sets (2026-08-18 rework) ───────────────────────────
 
   # ── Categories ───────────────────────────────────────────────────
 
+  @spec category_new(Ecto.UUID.t()) :: String.t()
   def category_new(catalogue_uuid), do: Routes.path("#{@base}/#{catalogue_uuid}/categories/new")
+  @spec category_edit(Ecto.UUID.t()) :: String.t()
   def category_edit(uuid), do: Routes.path("#{@base}/categories/#{uuid}/edit")
 
   # ── Items ────────────────────────────────────────────────────────
 
+  @spec item_new(Ecto.UUID.t()) :: String.t()
   def item_new(catalogue_uuid), do: Routes.path("#{@base}/#{catalogue_uuid}/items/new")
+  @spec item_edit(Ecto.UUID.t()) :: String.t()
   def item_edit(uuid), do: Routes.path("#{@base}/items/#{uuid}/edit")
 
   @doc """

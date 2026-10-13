@@ -59,6 +59,31 @@ defmodule PhoenixKitCatalogue.Web.Helpers do
   def trim_param(_), do: ""
 
   @doc """
+  Why an inline rename was refused, as one line for a flash.
+
+  An inline name field has no form around it to carry a changeset's
+  errors, so the reason is said here: the length rule by name (the one a
+  person can hit by typing), anything else as a plain refusal.
+  """
+  @spec rename_error(term()) :: String.t()
+  def rename_error(%Ecto.Changeset{errors: errors}) do
+    case Enum.find(errors, fn {_field, {_msg, opts}} -> opts[:validation] == :length end) do
+      {_field, {_msg, opts}} ->
+        Gettext.gettext(
+          PhoenixKitCatalogue.Gettext,
+          "That name is too long: %{count} characters at most.",
+          count: opts[:count]
+        )
+
+      nil ->
+        rename_error(:refused)
+    end
+  end
+
+  def rename_error(_reason),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Could not save that name.")
+
+  @doc """
   Rewrites the given keys of a `"validate"`/`"save"` params map from
   free-decimal text ("2,5") to the normalized dot form ("2.5") that an
   `Ecto.Changeset` `:decimal` field cast already understands — pairs

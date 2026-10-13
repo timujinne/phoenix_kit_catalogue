@@ -15,6 +15,7 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PubSub
+  alias PhoenixKitCatalogue.Test.Repo, as: TestRepo
 
   @actor "00000000-0000-7000-8000-000000000001"
 
@@ -134,6 +135,14 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
 
       assert_activity_logged("folder.trashed", resource_uuid: folder.uuid, actor_uuid: @actor)
       assert_activity_logged("folder.restored", resource_uuid: folder.uuid, actor_uuid: @actor)
+    end
+
+    test "restore_folder restores the row even when handed the pre-trash struct" do
+      {:ok, folder} = Catalogue.create_folder(%{name: "Stale"}, actor_opts())
+      {:ok, _} = Catalogue.trash_folder(folder, actor_opts())
+
+      assert {:ok, %{status: "active"}} = Catalogue.restore_folder(folder, actor_opts())
+      assert Catalogue.get_folder(folder.uuid).status == "active"
     end
 
     test "reorder_folders logs folder.reordered" do
@@ -735,6 +744,85 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       {:catalogue_data_changed, _, _, _} -> flush_messages()
     after
       0 -> :ok
+    end
+  end
+
+  # A trash or a restore that changes nothing is not an event. Each is
+  # called twice — with the stale struct the caller still holds and with
+  # the fresh row — and must leave exactly the one entry the first call
+  # wrote.
+  describe "a repeated trash or restore logs nothing" do
+    test "trash_catalogue on a catalogue already in the trash", %{catalogue: cat} do
+      {:ok, trashed} = Catalogue.trash_catalogue(cat, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_catalogue(cat, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_catalogue(trashed, actor_opts())
+
+      assert_activity_logged("catalogue.trashed", resource_uuid: cat.uuid)
+    end
+
+    test "trash_category on a category already in the trash", %{catalogue: cat} do
+      {:ok, category} = Catalogue.create_category(%{name: "Twice", catalogue_uuid: cat.uuid})
+      {:ok, _item} = Catalogue.create_item(%{name: "In it", category_uuid: category.uuid})
+
+      {:ok, trashed} = Catalogue.trash_category(category, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_category(category, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_category(trashed, actor_opts())
+
+      assert_activity_logged("category.trashed",
+        resource_uuid: category.uuid,
+        metadata_has: %{"items_handled" => 1}
+      )
+    end
+
+    test "trash_item on an item already in the trash", %{catalogue: cat} do
+      {:ok, item} = Catalogue.create_item(%{name: "Twice", catalogue_uuid: cat.uuid})
+
+      {:ok, trashed} = Catalogue.trash_item(item, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_item(item, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_item(trashed, actor_opts())
+
+      assert_activity_logged("item.trashed", resource_uuid: item.uuid)
+    end
+
+    test "trash_folder on a folder already in the trash, restore_folder on a live one" do
+      {:ok, first} = Catalogue.create_folder(%{name: "First"}, actor_opts())
+      {:ok, folder} = Catalogue.create_folder(%{name: "Twice"}, actor_opts())
+      {:ok, _last} = Catalogue.create_folder(%{name: "Last"}, actor_opts())
+
+      {:ok, trashed} = Catalogue.trash_folder(folder, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_folder(folder, actor_opts())
+      assert {:ok, %{status: "deleted"}} = Catalogue.trash_folder(trashed, actor_opts())
+      assert_activity_logged("folder.trashed", resource_uuid: folder.uuid)
+
+      {:ok, restored} = Catalogue.restore_folder(trashed, actor_opts())
+      assert {:ok, again} = Catalogue.restore_folder(trashed, actor_opts())
+      assert {:ok, _} = Catalogue.restore_folder(restored, actor_opts())
+      assert_activity_logged("folder.restored", resource_uuid: folder.uuid)
+
+      # A live folder keeps its place: a second restore does not send it
+      # to the end of its level again.
+      assert again.position == restored.position
+      assert Catalogue.get_folder(first.uuid).position < restored.position
+    end
+
+    test "trash_catalogue still sweeps and logs when a trashed catalogue holds a live row",
+         %{catalogue: cat} do
+      {:ok, _} = Catalogue.trash_catalogue(cat, actor_opts())
+
+      # A row left live under a trashed catalogue, as a trash that predates
+      # the cascade left them.
+      {:ok, %{num_rows: 1}} =
+        TestRepo.query(
+          "INSERT INTO phoenix_kit_cat_items (uuid, name, catalogue_uuid, status, inserted_at, updated_at) " <>
+            "VALUES ($1, 'Left behind', $2, 'active', NOW(), NOW())",
+          [Ecto.UUID.dump!(UUIDv7.generate()), Ecto.UUID.dump!(cat.uuid)]
+        )
+
+      {:ok, _} = Catalogue.trash_catalogue(cat, actor_opts())
+
+      assert length(Enum.filter(list_activities(), &(&1.action == "catalogue.trashed"))) == 2
+
+      assert Catalogue.list_items_for_catalogue(cat.uuid) == []
     end
   end
 end

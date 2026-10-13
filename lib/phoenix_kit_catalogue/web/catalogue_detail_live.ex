@@ -526,21 +526,26 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     do: {:noreply, socket}
 
   # Another admin changed a shared detail sort (global-sort scopes) —
-  # apply it without re-persisting or re-broadcasting.
-  def handle_info({:catalogue_view_sort_changed, :detail_items, by, dir, from}, socket) do
-    if from == self() do
+  # apply it without re-persisting or re-broadcasting. The message says only
+  # THAT the sort changed; the sort applied is the stored one, because two
+  # admins' broadcasts can arrive in the opposite order to their writes.
+  def handle_info({:catalogue_view_sort_changed, :detail_items, _by, _dir, from}, socket) do
+    {by, dir} = ViewConfig.load_global_sort(:detail_items)
+    field = detail_items_sort_field(by)
+
+    if from == self() or
+         {field, dir} == {socket.assigns.items_sort_by, socket.assigns.items_sort_dir} do
       {:noreply, socket}
     else
-      dir = if dir == :desc, do: :desc, else: :asc
-      {:noreply, apply_items_sort(socket, detail_items_sort_field(by), dir)}
+      {:noreply, apply_items_sort(socket, field, dir)}
     end
   end
 
-  def handle_info({:catalogue_view_sort_changed, :detail_categories, by, dir, from}, socket) do
+  def handle_info({:catalogue_view_sort_changed, :detail_categories, _by, _dir, from}, socket) do
     if from == self() do
       {:noreply, socket}
     else
-      dir = if dir == :desc, do: :desc, else: :asc
+      {by, dir} = ViewConfig.load_global_sort(:detail_categories)
       field = detail_categories_sort_field(by)
 
       socket = assign(socket, categories_sort_by: field, categories_sort_dir: dir)
@@ -1848,6 +1853,14 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
      )}
   end
 
+  # Many clauses above match only the values the page offers (a section, a
+  # sort field, a strategy). A payload naming anything else — a stale tab,
+  # a crafted push — is ignored rather than taking the page down.
+  def handle_event(event, _params, socket) do
+    Logger.debug("CatalogueDetailLive ignored unhandled event: #{inspect(event)}")
+    {:noreply, socket}
+  end
+
   # ── Bulk-action helpers ──────────────────────────────────────────
 
   # Client-captured uuids: anything that is not a uuid is dropped here,
@@ -1975,17 +1988,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp persist_detail_sort(socket, :detail_items) do
     by = Atom.to_string(socket.assigns.items_sort_by)
-    dir = socket.assigns.items_sort_dir
-    ViewConfig.save_global_sort(:detail_items, by, dir)
-    PubSub.broadcast_view_sort_changed(:detail_items, by, dir)
-    socket
+    persist_detail_sort(socket, :detail_items, by, socket.assigns.items_sort_dir)
   end
 
   defp persist_detail_sort(socket, :detail_categories) do
     by = Atom.to_string(socket.assigns.categories_sort_by)
-    dir = socket.assigns.categories_sort_dir
-    ViewConfig.save_global_sort(:detail_categories, by, dir)
-    PubSub.broadcast_view_sort_changed(:detail_categories, by, dir)
+    persist_detail_sort(socket, :detail_categories, by, socket.assigns.categories_sort_dir)
+  end
+
+  # Other pages re-read the setting on the broadcast, so it goes out only
+  # once the setting holds the new sort.
+  defp persist_detail_sort(socket, scope, by, dir) do
+    with {:ok, _} <- ViewConfig.save_global_sort(scope, by, dir, actor_opts(socket)) do
+      PubSub.broadcast_view_sort_changed(scope, by, dir)
+    end
+
     socket
   end
 

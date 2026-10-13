@@ -238,6 +238,8 @@ defmodule PhoenixKitCatalogue.Web.TreeSortTest do
       {:ok, view, _html} = live(conn, "#{@base}/#{c.uuid}")
       render_click(view, "toggle_category_expand", %{"uuid" => b.uuid})
 
+      # The page applies the stored sort, so the other page's write comes first.
+      {:ok, _} = ViewConfig.save_global_sort(:detail_categories, "name", :asc)
       send(view.pid, {:catalogue_view_sort_changed, :detail_categories, "name", :asc, self()})
 
       html = render(view)

@@ -15,18 +15,22 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
     %{smart: smart, item: item}
   end
 
-  describe "smart-catalogue ItemFormLive — rules render branches" do
-    test "ItemFormLive renders for a smart-catalogue item", %{conn: conn, item: item} do
-      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+  # Each rule is one row of the item form's rules picker, found by the
+  # catalogue it points at: a checkbox, the value field and the unit select.
+  defp rule_checkbox(ref), do: ~s(input[type="checkbox"][phx-value-uuid="#{ref.uuid}"])
+  defp rule_value(ref), do: ~s(input[name="value"][phx-value-uuid="#{ref.uuid}"])
+  defp rule_unit(ref, unit), do: ~s(#rule-unit-#{ref.uuid} option[value="#{unit}"][selected])
 
-      assert is_binary(html)
-      # Smart-rule UI elements should appear.
-      assert html =~ "smart" or html =~ "Smart" or html =~ "rule" or html =~ "Rule" or
-               html =~ "kind" or html =~ "% "
+  describe "smart-catalogue ItemFormLive — rules render branches" do
+    test "with no standard catalogue to point at, the picker says so", %{conn: conn, item: item} do
+      {:ok, view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+
+      assert html =~ "No other catalogues available to reference yet."
+      refute has_element?(view, ~s(input[name="value"][phx-blur="set_catalogue_rule_value"]))
     end
 
-    test "rule with attached value + unit renders without crashing",
-         %{conn: conn, item: item, smart: smart} do
+    test "a rule's stored value shows without its trailing zeros, beside its unit",
+         %{conn: conn, item: item} do
       # Create a referenced standard catalogue first, then attach a
       # rule pointing at it.
       {:ok, ref} = Catalogue.create_catalogue(%{name: "RefCat", kind: "standard"})
@@ -39,12 +43,11 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
           unit: "percent"
         })
 
-      _ = smart
-      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
-      # The rule should render with the trailing-zero-stripped value
-      # (15.0000 → 15) and unit symbol (%).
-      assert is_binary(html)
+      assert has_element?(view, rule_checkbox(ref) <> "[checked]")
+      assert has_element?(view, rule_value(ref) <> ~s([value="15"]))
+      assert has_element?(view, rule_unit(ref, "percent"))
     end
 
     test "rule with unit: flat renders the gettext label",
@@ -59,11 +62,13 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
           unit: "flat"
         })
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
-      assert html =~ "Flat" or html =~ "flat"
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+
+      assert has_element?(view, rule_unit(ref, "flat"))
+      assert view |> element(rule_unit(ref, "flat")) |> render() =~ "Flat"
     end
 
-    test "rule with no value renders blank without crashing",
+    test "a rule with no value is ticked with an empty value field",
          %{conn: conn, item: item} do
       {:ok, ref} = Catalogue.create_catalogue(%{name: "NoValRef", kind: "standard"})
 
@@ -74,24 +79,42 @@ defmodule PhoenixKitCatalogue.Web.ComponentsBranchesTest do
           unit: "percent"
         })
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
-      assert is_binary(html)
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+
+      assert has_element?(view, rule_checkbox(ref) <> "[checked]")
+      assert has_element?(view, rule_value(ref))
+      refute has_element?(view, rule_value(ref) <> ~S|[value]:not([value=""])|)
+      refute has_element?(view, rule_value(ref) <> "[disabled]")
+    end
+
+    test "a catalogue with no rule is unticked and its fields are off",
+         %{conn: conn, item: item} do
+      {:ok, ref} = Catalogue.create_catalogue(%{name: "UntickedRef", kind: "standard"})
+
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+
+      refute has_element?(view, rule_checkbox(ref) <> "[checked]")
+      assert has_element?(view, rule_value(ref) <> "[disabled]")
     end
   end
 
   describe "ItemFormLive — set_catalogue_rule_value + set_catalogue_rule_unit" do
-    test "set_catalogue_rule_value updates working_rules entry",
-         %{conn: conn, item: item, smart: smart} do
+    test "ticking a catalogue and leaving its value field stores and shows the value",
+         %{conn: conn, item: item} do
       {:ok, ref} = Catalogue.create_catalogue(%{name: "SetValRef", kind: "standard"})
 
-      {:ok, _view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/items/#{item.uuid}/edit")
 
-      # The working_rules state is keyed by referenced_catalogue_uuid.
-      # We can't directly trigger the event without proper rule render,
-      # but we can pin the state-update path via the existing
-      # toggle_catalogue_rule + set_catalogue_rule_value cycle.
-      _ = {smart, ref}
-      assert true
+      view |> element(rule_checkbox(ref)) |> render_click()
+      view |> element(rule_value(ref)) |> render_blur(%{"value" => "12.50"})
+
+      rules = :sys.get_state(view.pid).socket.assigns.working_rules
+      assert Decimal.equal?(rules[ref.uuid].value, Decimal.new("12.5"))
+      assert has_element?(view, rule_value(ref) <> ~s([value="12.5"]))
+
+      # A value that is not a number clears it rather than keeping the old one.
+      view |> element(rule_value(ref)) |> render_blur(%{"value" => "abc"})
+      assert :sys.get_state(view.pid).socket.assigns.working_rules[ref.uuid].value == nil
     end
 
     test "set_catalogue_rule_unit with empty string clears the unit",

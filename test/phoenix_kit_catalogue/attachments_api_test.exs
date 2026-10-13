@@ -17,9 +17,13 @@ defmodule PhoenixKitCatalogue.AttachmentsApiTest do
   alias PhoenixKit.Modules.Storage.ResourceFolders
   alias PhoenixKitCatalogue.Attachments
   alias PhoenixKitCatalogue.Catalogue
+  alias PhoenixKitCatalogue.Test.MediaHooks
   alias PhoenixKitCatalogue.Test.Repo
 
   setup do
+    # The deterministic folder-name rule; the default layout is covered in
+    # `media_folders_test.exs`.
+    MediaHooks.without_hooks()
     cat = fixture_catalogue(%{name: "Attach API"})
     item = fixture_item(%{catalogue_uuid: cat.uuid, name: "Vase"})
     user_uuid = insert_user!()

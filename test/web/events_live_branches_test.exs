@@ -25,13 +25,23 @@ defmodule PhoenixKitCatalogue.Web.EventsLiveBranchesTest do
 
       _ = {cat, cat_obj, m, s}
 
-      {:ok, _view, html} = live(conn, "/en/admin/catalogues/events")
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/events")
 
-      # The filter dropdown lists each humanize_resource_type clause's
-      # output. Pin that the localized labels render — at least one
-      # type beyond "item" should appear.
-      assert is_binary(html)
-      assert html =~ "Item" or html =~ "Catalogue"
+      # The type filter offers every type that has an event, under its
+      # label rather than its raw key.
+      for {type, label} <- [
+            {"catalogue", "Catalogue"},
+            {"category", "Category"},
+            {"item", "Item"},
+            {"manufacturer", "Manufacturer"},
+            {"supplier", "Supplier"}
+          ] do
+        assert has_element?(
+                 view,
+                 ~s(select[name="filter[resource_type]"] option[value="#{type}"]),
+                 label
+               )
+      end
     end
   end
 

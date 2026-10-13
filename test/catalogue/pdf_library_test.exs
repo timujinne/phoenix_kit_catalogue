@@ -21,6 +21,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.PdfLibrary
   alias PhoenixKitCatalogue.Schemas.{Pdf, PdfExtraction, PdfPage, PdfPageContent}
+  alias PhoenixKitCatalogue.Test.MediaHooks
 
   defp now_truncated, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -669,10 +670,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfLibraryTest do
     end
 
     setup do
-      on_exit(fn ->
-        Application.delete_env(:phoenix_kit_catalogue, :attachments_parent_folder)
-      end)
-
+      MediaHooks.without_hooks()
       :ok
     end
 

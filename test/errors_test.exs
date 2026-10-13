@@ -81,6 +81,16 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
       assert Errors.message(:csv_empty) == "CSV file is empty."
     end
 
+    test "csv_not_utf8 tells the operator how to fix the file" do
+      assert Errors.message(:csv_not_utf8) ==
+               "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
+    end
+
+    test "bad_json_shape" do
+      assert Errors.message(:bad_json_shape) ==
+               "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
+    end
+
     test "parent_catalogue_deleted" do
       assert Errors.message(:parent_catalogue_deleted) ==
                "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."

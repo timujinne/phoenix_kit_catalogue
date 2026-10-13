@@ -263,9 +263,9 @@ defmodule PhoenixKitCatalogue.Web.ComponentsTest do
           id: "empty-table"
         )
 
-      # Either an empty table body or a placeholder — just make sure
-      # nothing raises.
-      assert is_binary(html)
+      # The header still names the column; the body has no row.
+      assert html =~ ~r/<th[^>]*>\s*Name\s*<\/th>/
+      assert html =~ ~r/<tbody[^>]*>\s*<\/tbody>/
     end
 
     test "logs a warning and renders a dash for an unknown column" do

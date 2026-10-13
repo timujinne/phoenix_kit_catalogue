@@ -38,7 +38,14 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   import PhoenixKitCatalogue.Web.TableToolbar
 
   import PhoenixKitCatalogue.Web.Helpers,
-    only: [trim_param: 1, actor_opts: 1, actor_uuid: 1, log_operation_error: 3, status_label: 1]
+    only: [
+      trim_param: 1,
+      rename_error: 1,
+      actor_opts: 1,
+      actor_uuid: 1,
+      log_operation_error: 3,
+      status_label: 1
+    ]
 
   alias PhoenixKit.Utils.Routes, as: KitRoutes
   alias PhoenixKitCatalogue.Catalogue
@@ -128,6 +135,9 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        folder_lookup: %{},
        expanded_folders: MapSet.new(),
        renaming_folder: nil,
+       # What was typed into a rename field the folder refused; the field
+       # stays open on it.
+       rename_draft: nil,
        move_dialog: nil,
        move_tree: [],
        move_pick: nil,
@@ -172,12 +182,17 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # at render time (derive_rows), so no data reload is needed; when the sort
   # lands on "position" the drag handles appear on the next render the same
   # way they do for the admin who switched.
-  def handle_info({:catalogue_view_sort_changed, scope, sort_by, sort_dir, from}, socket) do
+  #
+  # The message says only THAT the sort changed. The sort applied is the
+  # stored one: two admins' broadcasts can arrive in the opposite order to
+  # their writes, and the payload of the late one is no longer the setting.
+  def handle_info({:catalogue_view_sort_changed, scope, _sort_by, _sort_dir, from}, socket) do
     cfg = socket.assigns.view_configs[scope]
 
-    if from == self() or is_nil(cfg) do
+    if from == self() or is_nil(cfg) or not ViewConfig.global_sort?(scope) do
       {:noreply, socket}
     else
+      {sort_by, sort_dir} = ViewConfig.load_global_sort(scope)
       updated = %{cfg | sort_by: sort_by, sort_dir: sort_dir}
 
       {:noreply,
@@ -378,8 +393,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
     # travel through put_cfg) don't rewrite the setting or spam the topic.
     if ViewConfig.global_sort?(scope) and
          {cfg.sort_by, cfg.sort_dir} != {prev.sort_by, prev.sort_dir} do
-      ViewConfig.save_global_sort(scope, cfg.sort_by, cfg.sort_dir)
-      PubSub.broadcast_view_sort_changed(scope, cfg.sort_by, cfg.sort_dir)
+      # Other pages re-read the setting on this message, so it goes out
+      # only once the setting holds the new sort.
+      with {:ok, _} <-
+             ViewConfig.save_global_sort(scope, cfg.sort_by, cfg.sort_dir, actor_opts(socket)) do
+        PubSub.broadcast_view_sort_changed(scope, cfg.sort_by, cfg.sort_dir)
+      end
     end
 
     assign(socket, :view_configs, Map.put(socket.assigns.view_configs, scope, cfg))
@@ -1365,6 +1384,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:cfg, :map, required: true)
   attr(:current, :any, default: nil)
   attr(:renaming_folder, :any, default: nil)
+  attr(:rename_draft, :any, default: nil)
   attr(:file_counts, :map, default: %{})
   attr(:row_context_menu, :boolean, default: false)
 
@@ -1384,6 +1404,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
       cats_by_folder: Enum.group_by(assigns.catalogue_rows, & &1[:folder_uuid]),
       cfg: assigns.cfg,
       renaming_folder: assigns.renaming_folder,
+      rename_draft: assigns.rename_draft,
       file_counts: assigns.file_counts,
       context_menu: assigns.row_context_menu
     }
@@ -1512,7 +1533,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             <input
               type="text"
               name="name"
-              value={@folder.name}
+              value={@ctx.rename_draft || @folder.name}
+              maxlength="255"
+              phx-keydown="cancel_rename"
+              phx-key="Escape"
               phx-mounted={Phoenix.LiveView.JS.focus()}
               phx-blur="rename_folder"
               phx-value-uuid={@folder.uuid}
@@ -1694,6 +1718,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   attr(:cfg, :map, required: true)
   attr(:current, :any, default: nil)
   attr(:renaming_folder, :any, default: nil)
+  attr(:rename_draft, :any, default: nil)
   attr(:file_counts, :map, default: %{})
 
   # Threaded from the page: one setting, not a read per row.
@@ -1839,7 +1864,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                         <input
                           type="text"
                           name="name"
-                          value={folder.name}
+                          value={@rename_draft || folder.name}
+                          maxlength="255"
+                          phx-keydown="cancel_rename"
+                          phx-key="Escape"
                           phx-mounted={Phoenix.LiveView.JS.focus()}
                           phx-blur="rename_folder"
                           phx-value-uuid={folder.uuid}
@@ -2180,7 +2208,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
      socket
      |> assign(:catalogue_view_mode, mode)
      |> assign(:confirm_delete, nil)
-     |> assign(:renaming_folder, nil)
+     |> assign(renaming_folder: nil, rename_draft: nil)
      |> load_data(:index)}
   end
 
@@ -2250,11 +2278,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   end
 
   def handle_event("start_rename_folder", %{"uuid" => uuid}, socket) do
-    {:noreply, assign(socket, :renaming_folder, uuid)}
+    {:noreply, assign(socket, renaming_folder: uuid, rename_draft: nil)}
   end
 
   def handle_event("cancel_rename", _params, socket) do
-    {:noreply, assign(socket, :renaming_folder, nil)}
+    {:noreply, assign(socket, renaming_folder: nil, rename_draft: nil)}
   end
 
   # Commits the inline rename and closes the field. Fired by Enter
@@ -2263,20 +2291,20 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   # Only the folder whose field is open: Enter closes the field, and the
   # blur its removal can fire afterwards must not write a second time. And
   # only a live one — another admin may have removed it meanwhile.
+  # A name the folder cannot take leaves the field open on what was typed,
+  # with the reason: closing it would put the old name back without a word.
   def handle_event("rename_folder", %{"uuid" => uuid} = params, socket) do
     name = trim_param(params["name"] || params["value"])
 
-    socket =
-      with true <- socket.assigns.renaming_folder == uuid,
-           true <- name != "",
-           %{status: "active"} = folder <- Catalogue.get_folder(uuid),
-           {:ok, _} <- Catalogue.update_folder(folder, %{name: name}, actor_opts(socket)) do
-        socket
-      else
-        _ -> socket
-      end
-
-    {:noreply, socket |> assign(:renaming_folder, nil) |> load_data(:index)}
+    with true <- socket.assigns.renaming_folder == uuid,
+         true <- name != "",
+         %{status: "active"} = folder <- Catalogue.get_folder(uuid),
+         {:error, reason} <- Catalogue.update_folder(folder, %{name: name}, actor_opts(socket)) do
+      {:noreply, socket |> assign(:rename_draft, name) |> put_flash(:error, rename_error(reason))}
+    else
+      _ ->
+        {:noreply, socket |> assign(renaming_folder: nil, rename_draft: nil) |> load_data(:index)}
+    end
   end
 
   # The catalogue's own View card. Payloads are client-forgeable, so the
@@ -3522,7 +3550,10 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
                   <input
                     type="text"
                     name="name"
-                    value={location.name}
+                    value={@rename_draft || location.name}
+                    maxlength="255"
+                    phx-keydown="cancel_rename"
+                    phx-key="Escape"
                     aria-label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Folder name")}
                     phx-mounted={Phoenix.LiveView.JS.focus()}
                     phx-blur="rename_folder"
@@ -3562,6 +3593,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             cfg={cfg}
             current={current_tree_folder(cfg, @folder_lookup)}
             renaming_folder={@renaming_folder}
+            rename_draft={@rename_draft}
           />
           <.catalogues_card_level
             :if={card_level?}
@@ -3571,6 +3603,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
             cfg={cfg}
             current={current_tree_folder(cfg, @folder_lookup)}
             renaming_folder={@renaming_folder}
+            rename_draft={@rename_draft}
             file_counts={@catalogue_file_counts}
           />
           <div

@@ -490,9 +490,48 @@ All component text (column headers, action labels, toggle tooltips, result count
 
 ## Attachments (featured image + files)
 
-All three resource types support a **featured image** through the shared `PhoenixKitCatalogue.Attachments` module. Catalogues and items additionally support an **inline files dropzone**; categories keep the lightweight featured-image-only treatment (they're a taxonomy node, so a full file grid per category is overkill). Each resource owns one folder in `phoenix_kit_media_folders` (named `catalogue-<uuid>` / `catalogue-category-<uuid>` / `catalogue-item-<uuid>`); `data["files_folder_uuid"]` on the resource points at it, and `data["featured_image_uuid"]` points at a `phoenix_kit_files` row. Folders are created lazily the first time the picker opens, so resources that never set a featured image don't materialize one.
+All three resource types support a **featured image** through the shared `PhoenixKitCatalogue.Attachments` module. Catalogues and items additionally support an **inline files dropzone**; categories keep the lightweight featured-image-only treatment (they're a taxonomy node, so a full file grid per category is overkill). Each resource owns one folder in `phoenix_kit_media_folders`; `data["files_folder_uuid"]` on the resource points at it, and `data["featured_image_uuid"]` points at a `phoenix_kit_files` row. Folders are created lazily the first time the picker opens, so resources that never set a featured image don't materialize one.
 
 The featured-image picker opens phoenix_kit's `MediaSelectorModal` scoped to the resource's folder (via a new `scope_folder_id` attr in phoenix_kit core) — browse and post-upload home folder are both constrained to that scope, so uploading the same file to two items creates a `FolderLink` rather than yanking the file between resources. See `lib/phoenix_kit_catalogue/attachments.ex` for the full behaviour (detach semantics for shared files, pending-folder rename on first save, upload-error messages, etc.).
+
+### Media folders
+
+Out of the box the folders are laid out by `PhoenixKitCatalogue.MediaFolders` and named after their records, in the site's primary language:
+
+```
+Catalogues/
+  <catalogue>/
+    <category>/
+      <subcategory>/
+        <item>/
+    <item without a category>/
+  PDF/
+```
+
+Two items with the same name in the site's language in one place get their SKU appended (`Bolt (B-1)`); without a SKU, or when the generated name exceeds 255 characters, an item keeps the deterministic `catalogue-item-<uuid>`. Renaming or moving a catalogue, category or item renames or moves its folder too — unless a person has moved or renamed that folder by hand. A moved category takes its whole subtree along.
+
+The layout is two hooks that `mix.exs` installs as defaults. A host overrides either one in its own config — the other default then steps back to the old behaviour (folders at the media root, `catalogue-item-<uuid>` names), so hosts that already configured hooks see no change — or turns the layout off with both set to `nil`:
+
+```elixir
+config :phoenix_kit_catalogue,
+  attachments_parent_folder: nil,
+  attachments_folder_name: nil
+```
+
+Folders created before the layout (flat `catalogue-item-<uuid>` folders at the media root) are moved by the media reorganizer. After upgrading (and after any change to the hooks in `config.exs`, restart the app first — dev's code reloader does not pick up a changed config):
+
+```bash
+mix phoenix_kit.media.reorganize --source catalogue          # dry run: the plan
+mix phoenix_kit.media.reorganize --source catalogue --apply  # carry it out
+```
+
+Three things to know about that run:
+
+- The dry run is not entirely read-only. To plan a record's destination the hooks create the containers it would sit in (`Catalogues`, `Catalogues/<catalogue>`, the category folders) and write their pointers on the records — empty folders, and the places the files end up in anyway.
+- PDFs already in the library are not moved; the reorganizer only reports PDFs that sit at the storage root. New PDFs go to `Catalogues/PDF`.
+- The reorganizer decides whether a host has hooks from the parent-folder key alone. The default parent hook is that key, so a host that sets only a name hook now counts as having one (before this layout it had none and got an empty plan): its parent default steps back to the media root, and the run plans every folder there and still reports orphan and pending-upload folders.
+
+Hard-deleting a record (`delete_*`, `permanently_delete_*`, bulk delete) leaves its folder and files in the media library but renames the folder to the deterministic `catalogue-<kind>-<uuid>` (with a UUID suffix when occupied) — if it is still where and as the hooks put it — so a new record of the same name starts a folder of its own instead of taking the old files over. A catalogue named `PDF` is the one name kept out of the layout (it would share a folder with `Catalogues/PDF`) and gets the deterministic `catalogue-<uuid>` folder instead.
 
 There's no dedicated `Catalogue.set_featured_image/2` context helper — programmatic callers use `update_item`/`update_catalogue`/`update_category` with `%{data: %{"featured_image_uuid" => uuid, "files_folder_uuid" => folder_uuid}}`.
 

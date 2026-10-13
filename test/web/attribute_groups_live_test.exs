@@ -177,6 +177,36 @@ defmodule PhoenixKitCatalogue.Web.AttributeGroupsLiveTest do
       assert updated.key == "color"
     end
 
+    test "a name too long for an attribute or a value is refused with the reason, not silently",
+         %{conn: conn} do
+      group = create_group()
+      {:ok, attribute} = Catalogue.create_attribute(group, %{"name" => "Color"})
+      {:ok, value} = Catalogue.create_attribute_value(attribute, %{"value" => "White"})
+      too_long = String.duplicate("n", 256)
+
+      {:ok, view, _html} = live(conn, "#{@base}/attributes/#{group.uuid}/edit")
+
+      # Both fields stop typing at the limit; a longer name is a pasted or
+      # crafted one.
+      assert has_element?(view, ~s(input[id^="attr-name-#{attribute.uuid}"][maxlength="255"]))
+      assert has_element?(view, ~s(input[id^="value-text-#{value.uuid}"][maxlength="255"]))
+
+      html =
+        view
+        |> element(~s(input[id^="attr-name-#{attribute.uuid}"]))
+        |> render_blur(%{"value" => too_long})
+
+      assert html =~ "That name is too long: 255 characters at most."
+      assert Catalogue.get_attribute(attribute.uuid).name == "Color"
+
+      html =
+        view
+        |> element(~s(input[id^="value-text-#{value.uuid}"]))
+        |> render_blur(%{"value" => too_long})
+
+      assert html =~ "That name is too long: 255 characters at most."
+    end
+
     test "reorder_attributes persists the dragged order", %{conn: conn} do
       group = create_group()
       {:ok, a1} = Catalogue.create_attribute(group, %{"name" => "Color"})

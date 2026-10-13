@@ -2,8 +2,10 @@ defmodule PhoenixKitCatalogue.GettextTest do
   use ExUnit.Case, async: true
 
   alias PhoenixKit.Dashboard.Tab
+  alias PhoenixKitCatalogue.Schemas.Folder
   alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.Components
+  alias PhoenixKitCatalogue.Web.Helpers
 
   setup do
     previous = Gettext.get_locale(PhoenixKitCatalogue.Gettext)
@@ -938,6 +940,51 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert po_msgstr("en", "SEO description") == "SEO description"
       assert gettext_in("et", "SEO description") == "SEO kirjeldus"
       assert gettext_in("ru", "SEO description") == "SEO-описание"
+    end
+  end
+
+  describe "upload and rename refusals are present in every locale" do
+    # Each is a message a person reads at the moment something they did was
+    # refused; an untranslated one reads as English in an Estonian page.
+    for {msgid, et, ru} <- [
+          {"This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again.",
+           "See CSV-fail ei ole UTF-8 tekst. Salvesta see tabelarvutusprogrammis vormingus «CSV UTF-8» ja laadi uuesti üles.",
+           "Этот CSV-файл не в кодировке UTF-8. Сохраните его в табличном редакторе как «CSV UTF-8» и загрузите снова."},
+          {"This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values.",
+           "See JSON-fail ei ole kataloogi eksport: selles peab olema loend «items», mille kirjetel on lihtväärtused.",
+           "Этот JSON-файл не является экспортом каталога: в нём должен быть список «items» из позиций с простыми значениями."},
+          {"This file is not UTF-8 text. Save it as UTF-8 and upload it again.",
+           "See fail ei ole UTF-8 tekst. Salvesta see UTF-8 kodeeringus ja laadi uuesti üles.",
+           "Этот файл не в кодировке UTF-8. Сохраните его в UTF-8 и загрузите снова."},
+          {"Could not save that name.", "Seda nime ei õnnestunud salvestada.",
+           "Не удалось сохранить это название."}
+        ] do
+      test "#{msgid}" do
+        assert po_msgstr("en", unquote(msgid)) == unquote(msgid)
+        assert gettext_in("et", unquote(msgid)) == unquote(et)
+        assert gettext_in("ru", unquote(msgid)) == unquote(ru)
+
+        for locale <- ~w(de fr uk) do
+          refute gettext_in(locale, unquote(msgid)) == unquote(msgid), "#{locale} is untranslated"
+        end
+      end
+    end
+
+    test "the length refusal interpolates the limit" do
+      changeset =
+        Folder.changeset(%Folder{}, %{name: String.duplicate("n", 256)})
+
+      for {locale, expected} <- [
+            {"en", "That name is too long: 255 characters at most."},
+            {"et", "See nimi on liiga pikk: kuni 255 märki."},
+            {"ru", "Это название слишком длинное: не более 255 символов."},
+            {"de", "Dieser Name ist zu lang: höchstens 255 Zeichen."},
+            {"fr", "Ce nom est trop long : 255 caractères au maximum."},
+            {"uk", "Ця назва задовга: не більше 255 символів."}
+          ] do
+        Gettext.put_locale(PhoenixKitCatalogue.Gettext, locale)
+        assert Helpers.rename_error(changeset) == expected
+      end
     end
   end
 

@@ -141,6 +141,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   # the export's unix-second index (deterministic given the server timezone).
   # ":" is rendered as "-" because Windows filenames cannot contain a colon.
   @doc false
+  @spec datetime_str(integer()) :: String.t()
   def datetime_str(index) when is_integer(index) do
     utc = DateTime.from_unix!(index)
 
@@ -154,6 +155,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
   end
 
   @doc false
+  @spec format_price(Decimal.t() | nil) :: String.t()
   def format_price(nil), do: "0.00"
 
   def format_price(%Decimal{} = d),
@@ -161,6 +163,7 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
 
   # Sanitize a field value: strip TAB, CR, and LF so they never corrupt rows.
   @doc false
+  @spec sanitize(String.t() | nil) :: String.t()
   def sanitize(nil), do: ""
 
   def sanitize(str) when is_binary(str),
@@ -168,6 +171,5 @@ defmodule PhoenixKitCatalogue.Export.Pro100 do
 
   # PRO100 requires the ID column (column 2) to contain digits only, so keep
   # only 0-9 from the SKU (e.g. "76.0026.12" -> "76002612"). nil/no-digit -> "".
-  @doc false
-  def pro100_id(sku), do: Id.digits_only(sku)
+  defp pro100_id(sku), do: Id.digits_only(sku)
 end

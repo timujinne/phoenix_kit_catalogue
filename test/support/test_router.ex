@@ -21,53 +21,57 @@ defmodule PhoenixKitCatalogue.Test.Router do
     plug(:protect_from_forgery)
   end
 
-  # `PhoenixKit.Utils.Routes.path/1` prepends the default locale ("en")
-  # to every admin path. Our scope must match so `live/2` in tests can
-  # use the exact URL the LiveViews navigate to themselves.
-  scope "/en/admin/catalogues", PhoenixKitCatalogue.Web do
-    pipe_through(:browser)
+  # Core's `Routes.path/1` leaves the locale segment out of an admin path
+  # on a single-language site (`/admin/catalogues`) and adds it on a
+  # multilingual one (`/en/admin/catalogues`). A LiveView navigates to
+  # whichever it produces and a test may use either, so both prefixes sit
+  # in ONE live session — a patch between them stays on the same view.
+  live_session :catalogue_test,
+    on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
+    layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
+    for prefix <- ["/en/admin/catalogues", "/admin/catalogues"] do
+      scope prefix, PhoenixKitCatalogue.Web do
+        pipe_through(:browser)
 
-    live_session :catalogue_test,
-      on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
-      layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
-      live("/", CataloguesLive, :index)
-      live("/attributes", CataloguesLive, :attribute_groups)
+        live("/", CataloguesLive, :index)
+        live("/attributes", CataloguesLive, :attribute_groups)
 
-      # Attribute group CRUD (literal "/attributes" prefix; declared before
-      # the "/:uuid" catch-all)
-      live("/attributes/new", AttributeGroupFormLive, :new)
-      live("/attributes/:uuid/edit", AttributeGroupFormLive, :edit)
+        # Attribute group CRUD (literal "/attributes" prefix; declared before
+        # the "/:uuid" catch-all)
+        live("/attributes/new", AttributeGroupFormLive, :new)
+        live("/attributes/:uuid/edit", AttributeGroupFormLive, :edit)
 
-      # Catalogue CRUD
-      live("/new", CatalogueFormLive, :new)
-      live("/:uuid/edit", CatalogueFormLive, :edit)
+        # Catalogue CRUD
+        live("/new", CatalogueFormLive, :new)
+        live("/:uuid/edit", CatalogueFormLive, :edit)
 
-      # Category CRUD (scoped to catalogue)
-      live("/:catalogue_uuid/categories/new", CategoryFormLive, :new)
-      live("/categories/:uuid/edit", CategoryFormLive, :edit)
+        # Category CRUD (scoped to catalogue)
+        live("/:catalogue_uuid/categories/new", CategoryFormLive, :new)
+        live("/categories/:uuid/edit", CategoryFormLive, :edit)
 
-      # Item CRUD
-      live("/:catalogue_uuid/items/new", ItemFormLive, :new)
-      live("/items/:uuid/edit", ItemFormLive, :edit)
+        # Item CRUD
+        live("/:catalogue_uuid/items/new", ItemFormLive, :new)
+        live("/items/:uuid/edit", ItemFormLive, :edit)
 
-      # Import wizard (scoped to catalogue)
-      live("/import", ImportLive, :index)
-      live("/export", ExportLive, :index)
+        # Import wizard (scoped to catalogue)
+        live("/import", ImportLive, :index)
+        live("/export", ExportLive, :index)
 
-      # Events / activity feed
-      live("/events", EventsLive, :index)
+        # Events / activity feed
+        live("/events", EventsLive, :index)
 
-      # PDF library (literal "/pdfs" prefix; declared before the "/:uuid"
-      # catch-all so it isn't swallowed by CatalogueDetailLive).
-      live("/pdfs", PdfLibraryLive, :index)
-      live("/pdfs/:uuid", PdfDetailLive, :show)
+        # PDF library (literal "/pdfs" prefix; declared before the "/:uuid"
+        # catch-all so it isn't swallowed by CatalogueDetailLive).
+        live("/pdfs", PdfLibraryLive, :index)
+        live("/pdfs/:uuid", PdfDetailLive, :show)
 
-      # Translation freshness admin page (literal "/translations" prefix;
-      # declared before the "/:uuid" catch-all for the same reason as PDFs).
-      live("/translations", TranslationsLive, :index)
+        # Translation freshness admin page (literal "/translations" prefix;
+        # declared before the "/:uuid" catch-all for the same reason as PDFs).
+        live("/translations", TranslationsLive, :index)
 
-      # Catalogue detail (last so it doesn't swallow the static routes above)
-      live("/:uuid", CatalogueDetailLive, :show)
+        # Catalogue detail (last so it doesn't swallow the static routes above)
+        live("/:uuid", CatalogueDetailLive, :show)
+      end
     end
   end
 
@@ -75,13 +79,15 @@ defmodule PhoenixKitCatalogue.Test.Router do
   # /admin/settings, not /admin/catalogues — the real route comes from the
   # module's `settings_tabs/0`, which resolves a bare "catalogues" path
   # against the settings prefix.
-  scope "/en/admin/settings", PhoenixKitCatalogue.Web do
-    pipe_through(:browser)
+  live_session :catalogue_settings_test,
+    on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
+    layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
+    for prefix <- ["/en/admin/settings", "/admin/settings"] do
+      scope prefix, PhoenixKitCatalogue.Web do
+        pipe_through(:browser)
 
-    live_session :catalogue_settings_test,
-      on_mount: {PhoenixKitCatalogue.LiveCase, :assign_test_current_user},
-      layout: {PhoenixKitCatalogue.Test.Layouts, :app} do
-      live("/catalogues", SettingsLive, :settings)
+        live("/catalogues", SettingsLive, :settings)
+      end
     end
   end
 

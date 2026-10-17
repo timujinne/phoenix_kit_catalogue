@@ -101,6 +101,92 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailBranchesTest do
     end
   end
 
+  describe "restoring over a live row that took the external_id" do
+    defp with_external_id(catalogue, name, eid),
+      do: %{name: name, catalogue_uuid: catalogue.uuid, data: %{"api" => %{"external_id" => eid}}}
+
+    test "restore_item says why and leaves the item in the trash", %{conn: conn, catalogue: cat} do
+      {:ok, old} = Catalogue.create_item(with_external_id(cat, "Old", "R-1"))
+      {:ok, _} = Catalogue.trash_item(old)
+      {:ok, _live} = Catalogue.create_item(with_external_id(cat, "Live", "R-1"))
+
+      {:ok, view, _html} =
+        live(conn, "/en/admin/catalogues/#{cat.uuid}?category=uncategorized")
+
+      render_click(view, "switch_view", %{"mode" => "deleted"})
+      html = render_click(view, "restore_item", %{"uuid" => old.uuid})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "Failed to restore item."
+      assert Catalogue.get_item(old.uuid).status == "deleted"
+    end
+
+    test "a bulk restore says why when one item of the batch collides, and restores none",
+         %{conn: conn, catalogue: cat} do
+      {:ok, old} = Catalogue.create_item(with_external_id(cat, "Old", "R-3"))
+      {:ok, fine} = Catalogue.create_item(with_external_id(cat, "Fine", "R-4"))
+      {:ok, _} = Catalogue.trash_item(old)
+      {:ok, _} = Catalogue.trash_item(fine)
+      {:ok, _live} = Catalogue.create_item(with_external_id(cat, "Live", "R-3"))
+
+      {:ok, view, _html} =
+        live(conn, "/en/admin/catalogues/#{cat.uuid}?category=uncategorized")
+
+      render_click(view, "switch_view", %{"mode" => "deleted"})
+
+      html =
+        render_click(view, "request_bulk_restore_items", %{"uuids" => [old.uuid, fine.uuid]})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "Restored 0 items."
+      assert Catalogue.get_item(old.uuid).status == "deleted"
+      assert Catalogue.get_item(fine.uuid).status == "deleted"
+    end
+
+    test "restore_category says why and leaves the category in the trash",
+         %{conn: conn, catalogue: cat} do
+      shelf = fixture_category(cat, %{name: "Shelf"})
+
+      {:ok, _old} =
+        Catalogue.create_item(
+          Map.put(with_external_id(cat, "Old", "R-2"), :category_uuid, shelf.uuid)
+        )
+
+      {:ok, _} = Catalogue.trash_category(shelf)
+      {:ok, _live} = Catalogue.create_item(with_external_id(cat, "Live", "R-2"))
+
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
+      render_click(view, "switch_view", %{"mode" => "deleted"})
+      html = render_click(view, "restore_category", %{"uuid" => shelf.uuid})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "Failed to restore category."
+      assert Catalogue.get_category(shelf.uuid).status == "deleted"
+    end
+  end
+
+  describe "bulk category restore over a live row that took the external_id" do
+    test "says why instead of blaming a deleted catalogue", %{conn: conn, catalogue: cat} do
+      shelf = fixture_category(cat, %{name: "Shelf"})
+
+      {:ok, _old} =
+        Catalogue.create_item(
+          Map.put(with_external_id(cat, "Old", "R-5"), :category_uuid, shelf.uuid)
+        )
+
+      {:ok, _} = Catalogue.trash_category(shelf)
+      {:ok, _live} = Catalogue.create_item(with_external_id(cat, "Live", "R-5"))
+
+      {:ok, view, _html} = live(conn, "/en/admin/catalogues/#{cat.uuid}")
+      render_click(view, "switch_view", %{"mode" => "deleted"})
+      html = render_click(view, "request_bulk_restore_categories", %{"uuids" => [shelf.uuid]})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "restore it first"
+      assert Catalogue.get_category(shelf.uuid).status == "deleted"
+    end
+  end
+
   describe "trash_category / restore_category happy path" do
     test "request_trash_category trashes empty category directly + restore reverses",
          %{conn: conn, catalogue: cat} do

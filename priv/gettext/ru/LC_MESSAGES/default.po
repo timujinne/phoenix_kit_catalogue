@@ -248,6 +248,9 @@ msgstr "Этот JSON-файл не является экспортом ката
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr "Невозможно восстановить — родительский каталог удалён. Сначала восстановите каталог."
 
+msgid "Another active row already uses the same external id."
+msgstr "Другая активная запись уже использует этот внешний идентификатор."
+
 msgid "Cannot delete: %{count} smart items still reference this catalogue."
 msgstr "Невозможно удалить: %{count} смарт-позиций ссылаются на этот каталог."
 
@@ -1936,6 +1939,36 @@ msgstr "Формат файла не соответствует выбранно
 
 msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
 msgstr "Этот файл не в кодировке UTF-8. Сохраните его в UTF-8 и загрузите снова."
+
+msgid "This file is not in that encoding. Choose another one."
+msgstr "Этот файл не в этой кодировке. Выберите другую."
+
+msgid "File encoding"
+msgstr "Кодировка файла"
+
+msgid "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+msgstr "В файле не указано, в какой он кодировке. Проверьте, правильно ли читаются буквы в предпросмотре, и, если нет, выберите другую кодировку."
+
+msgid "Encoding"
+msgstr "Кодировка"
+
+msgid "Preview"
+msgstr "Предпросмотр"
+
+msgid "Western European (Windows-1252)"
+msgstr "Западноевропейская (Windows-1252)"
+
+msgid "Baltic (Windows-1257)"
+msgstr "Балтийская (Windows-1257)"
+
+msgid "Cyrillic (Windows-1251)"
+msgstr "Кириллица (Windows-1251)"
+
+msgid "Central European (Windows-1250)"
+msgstr "Центральноевропейская (Windows-1250)"
+
+msgid "Western European (ISO-8859-15)"
+msgstr "Западноевропейская (ISO-8859-15)"
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr "В файле слишком много строк для импорта. Разбейте его на файлы поменьше."

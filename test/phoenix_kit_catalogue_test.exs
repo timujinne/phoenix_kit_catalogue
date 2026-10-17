@@ -1,6 +1,10 @@
 defmodule PhoenixKitCatalogueTest do
   use ExUnit.Case
 
+  alias PhoenixKit.API.Tool
+  alias PhoenixKitCatalogue.API
+  alias PhoenixKitCatalogue.API.{Gate, Tools}
+
   # Ensure the module is loaded before `function_exported?/3` checks
   # below — test file order when running the full suite isn't stable,
   # and `function_exported?/3` returns `false` for unloaded modules.
@@ -65,6 +69,39 @@ defmodule PhoenixKitCatalogueTest do
     test "icon uses hero- prefix" do
       meta = PhoenixKitCatalogue.permission_metadata()
       assert String.starts_with?(meta.icon, "hero-")
+    end
+  end
+
+  describe "api_tools/0" do
+    test "is an optional callback of PhoenixKit.Module and this module exports it" do
+      assert {:api_tools, 0} in PhoenixKit.Module.behaviour_info(:optional_callbacks)
+      assert function_exported?(PhoenixKitCatalogue, :api_tools, 0)
+    end
+
+    test "returns catalogue tools that core accepts" do
+      tools = PhoenixKitCatalogue.api_tools()
+
+      assert tools != []
+      assert Enum.all?(tools, &match?({:ok, _}, Tool.validate(&1)))
+      assert Enum.all?(tools, &(&1.audience == :admin and &1.permission == "catalogue"))
+      assert API.tools() == tools
+    end
+
+    test "FAIL CLOSED: without the confirmation gate no danger: :always tool is declared" do
+      without = API.tools(false)
+
+      refute "catalogue.delete_products" in Enum.map(without, & &1.name)
+      refute "catalogue.delete_categories" in Enum.map(without, & &1.name)
+      assert Enum.all?(without, &(&1.danger != :always))
+
+      assert Enum.map(API.tools(true), & &1.name) ==
+               Enum.map(Tools.all(), & &1.name)
+    end
+
+    test "Gate.available?/1 looks at the exported function, not at a version" do
+      assert Gate.available?({Kernel, :is_atom, 1})
+      refute Gate.available?({Kernel, :no_such_function, 1})
+      refute Gate.available?({NoSuchModuleForTheGate, :active?, 1})
     end
   end
 

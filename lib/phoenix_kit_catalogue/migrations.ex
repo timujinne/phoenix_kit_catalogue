@@ -118,6 +118,30 @@ defmodule PhoenixKitCatalogue.Migrations do
   left alone (V2's precedent): `up/1` replays V1..V4, so a fresh install
   gets the columns from this version.
 
+  ## What V5 is
+
+  V5 makes the id an outside system gives an item or a category through the
+  shop API unique inside its catalogue. The id is stored at
+  `data["api"]["external_id"]` (nothing else of this module writes under
+  `data["api"]`), and each of the two tables gets a partial unique
+  expression index on `(catalogue_uuid, data -> 'api' ->> 'external_id')`
+  that covers live rows only (`status <> 'deleted'`) and only rows that have
+  an id. A trashed row therefore frees its id for a new row, and restoring
+  the trashed one afterwards fails on the index (the context turns that into
+  `{:error, :external_id_taken}`). Like V2's GIN index, an extra index on a
+  core-known table is outside what core's `ExpectedSchema` resolver looks
+  at, so no core release is needed. No existing install of this module holds a
+  `data["api"]` key, so building the unique index cannot fail on its own data.
+  A host that stored its own duplicates under `data["api"]["external_id"]`
+  would fail the whole `mix phoenix_kit.update` at this step, naming the index.
+
+  Both indexes are built with a plain `CREATE UNIQUE INDEX` inside the
+  migration's transaction (`CONCURRENTLY` cannot run there), which holds a
+  SHARE lock on the table, so writes to `phoenix_kit_cat_items` and
+  `phoenix_kit_cat_categories` wait for the build. That is milliseconds at a
+  few thousand rows; on a catalogue of hundreds of thousands, run the update
+  in a quiet window.
+
   ## What `down/1` is NOT
 
   `down/1` unstamps the version marker; it NEVER drops any of the
@@ -134,7 +158,7 @@ defmodule PhoenixKitCatalogue.Migrations do
 
   use Ecto.Migration
 
-  @current_version 4
+  @current_version 5
   @marker_prefix "pkc_schema:"
   @version_table "phoenix_kit_cat_catalogues"
 
@@ -218,7 +242,7 @@ defmodule PhoenixKitCatalogue.Migrations do
   tables/keys/checks/indexes below); `2` additionally adds V2's
   per-language `slug` column, its trigger projections, and the
   attribute-set GIN index; `3` the one-time view-preference copy; `4` the
-  item-type columns and their CHECKs. Mirrors `phoenix_kit_billing`'s version-aware
+  item-type columns and their CHECKs; `5` the `external_id` unique indexes. Mirrors `phoenix_kit_billing`'s version-aware
   `up_statements/2` — the wrapper migration core's update task generates
   calls this with an explicit `:version`, and a stale wrapper asking for
   `1` must not receive `2`'s objects.
@@ -234,12 +258,14 @@ defmodule PhoenixKitCatalogue.Migrations do
     v2 = if target >= 2, do: v2_statements(p), else: []
     v3 = if target >= 3, do: v3_statements(prefix, p), else: []
     v4 = if target >= 4, do: v4_statements(prefix, p), else: []
+    v5 = if target >= 5, do: v5_statements(p), else: []
 
     List.flatten([
       v1_statements(prefix, p),
       v2,
       v3,
       v4,
+      v5,
       "COMMENT ON TABLE #{p}#{@version_table} IS '#{@marker_prefix}#{target}'"
     ])
   end
@@ -276,6 +302,17 @@ defmodule PhoenixKitCatalogue.Migrations do
         "phoenix_kit_cat_items_item_type_check",
         "ALTER TABLE #{p}phoenix_kit_cat_items ADD CONSTRAINT phoenix_kit_cat_items_item_type_check CHECK (((item_type IS NULL) OR ((item_type)::text = ANY ((ARRAY['goods'::character varying, 'service'::character varying])::text[]))))"
       )
+    ]
+  end
+
+  # ── V5: external_id uniqueness for the shop API ────────────────────
+  #
+  # `data -> 'api' ->> 'external_id'` is the id an outside system gave the
+  # row. Unique per catalogue among live rows with an id; see the moduledoc.
+  defp v5_statements(p) do
+    [
+      "CREATE UNIQUE INDEX IF NOT EXISTS phoenix_kit_cat_items_external_id_uniq ON #{p}phoenix_kit_cat_items USING btree (catalogue_uuid, ((data -> 'api') ->> 'external_id')) WHERE (((status)::text <> 'deleted'::text) AND (((data -> 'api') ->> 'external_id') IS NOT NULL))",
+      "CREATE UNIQUE INDEX IF NOT EXISTS phoenix_kit_cat_categories_external_id_uniq ON #{p}phoenix_kit_cat_categories USING btree (catalogue_uuid, ((data -> 'api') ->> 'external_id')) WHERE (((status)::text <> 'deleted'::text) AND (((data -> 'api') ->> 'external_id') IS NOT NULL))"
     ]
   end
 

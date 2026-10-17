@@ -2,8 +2,10 @@
 
 Catalogues, categories and items soft-delete through their `status` column
 (`"deleted"`). This guide explains how a trash is recorded so that a restore
-can undo exactly that trash, and how the paths are serialized. The code is in
-`PhoenixKitCatalogue.Catalogue` (search for "Trash provenance").
+can undo exactly that trash, and how the paths are serialized. The stamps and
+the per-catalogue lock are in `PhoenixKitCatalogue.Catalogue.Trash`; the trash,
+restore and permanent-delete paths that use them are in `Catalogue.Catalogues`,
+`Catalogue.Categories` and `Catalogue.Items`.
 
 ## The rule
 

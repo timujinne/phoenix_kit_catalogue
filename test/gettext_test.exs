@@ -17,6 +17,36 @@ defmodule PhoenixKitCatalogue.GettextTest do
     assert Code.ensure_loaded?(PhoenixKitCatalogue.Gettext)
   end
 
+  test "the backend is split per locale and domain and still answers dgettext lookups" do
+    msgid = "Another active row already uses the same external id."
+
+    for {locale, expected} <- [
+          {"en", msgid},
+          {"ru", "Другая активная запись уже использует этот внешний идентификатор."},
+          {"uk", "Інший активний запис уже використовує цей зовнішній ідентифікатор."}
+        ] do
+      assert Gettext.with_locale(PhoenixKitCatalogue.Gettext, locale, fn ->
+               Gettext.dgettext(PhoenixKitCatalogue.Gettext, "default", msgid)
+             end) == expected
+    end
+
+    # A domain or a locale the backend has no catalogue for answers the msgid.
+    assert Gettext.with_locale(PhoenixKitCatalogue.Gettext, "uk", fn ->
+             Gettext.dgettext(PhoenixKitCatalogue.Gettext, "no_such_domain", msgid)
+           end) == msgid
+
+    assert Gettext.with_locale(PhoenixKitCatalogue.Gettext, "xx", fn ->
+             Gettext.dgettext(PhoenixKitCatalogue.Gettext, "default", msgid)
+           end) == msgid
+
+    # Each locale's default-domain catalogue is a module of its own.
+    for locale <- ~w(de en et fr ru uk) do
+      assert Code.ensure_loaded?(
+               Module.concat(PhoenixKitCatalogue.Gettext, "T_#{locale}_default")
+             )
+    end
+  end
+
   test "every string the UI shows is actually in the catalogues (ru + et)" do
     # The failure this guards is silent by construction: `gettext/1` returns
     # the msgid when a string is missing, so a page renders correct-looking
@@ -69,6 +99,9 @@ defmodule PhoenixKitCatalogue.GettextTest do
           # untranslated, so a green test guarded the bug.
           {"Attribute set not found.", "Набор атрибутов не найден.",
            "Atribuutide komplekti ei leitud."},
+          {"Another active row already uses the same external id.",
+           "Другая активная запись уже использует этот внешний идентификатор.",
+           "Mõni teine aktiivne kirje kasutab juba sama välist ID-d."},
           {"Multiple values", "Несколько значений", "Mitu väärtust"},
           {"Fixed value", "Фиксированное значение", "Kindel väärtus"},
           {"Previous page", "Предыдущая страница", "Eelmine leht"},
@@ -957,7 +990,25 @@ defmodule PhoenixKitCatalogue.GettextTest do
            "See fail ei ole UTF-8 tekst. Salvesta see UTF-8 kodeeringus ja laadi uuesti üles.",
            "Этот файл не в кодировке UTF-8. Сохраните его в UTF-8 и загрузите снова."},
           {"Could not save that name.", "Seda nime ei õnnestunud salvestada.",
-           "Не удалось сохранить это название."}
+           "Не удалось сохранить это название."},
+          # The import wizard's encoding step.
+          {"This file is not in that encoding. Choose another one.",
+           "See fail ei ole selles kodeeringus. Vali mõni teine.",
+           "Этот файл не в этой кодировке. Выберите другую."},
+          {"File encoding", "Faili kodeering", "Кодировка файла"},
+          {"This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not.",
+           "Failist ei selgu, mis kodeeringus see on. Kontrolli, kas tähed on eelvaates õiged, ja kui ei ole, vali teine kodeering.",
+           "В файле не указано, в какой он кодировке. Проверьте, правильно ли читаются буквы в предпросмотре, и, если нет, выберите другую кодировку."},
+          {"Encoding", "Kodeering", "Кодировка"},
+          {"Preview", "Eelvaade", "Предпросмотр"},
+          {"Western European (Windows-1252)", "Lääne-Euroopa (Windows-1252)",
+           "Западноевропейская (Windows-1252)"},
+          {"Baltic (Windows-1257)", "Balti (Windows-1257)", "Балтийская (Windows-1257)"},
+          {"Cyrillic (Windows-1251)", "Kirillitsa (Windows-1251)", "Кириллица (Windows-1251)"},
+          {"Central European (Windows-1250)", "Kesk-Euroopa (Windows-1250)",
+           "Центральноевропейская (Windows-1250)"},
+          {"Western European (ISO-8859-15)", "Lääne-Euroopa (ISO-8859-15)",
+           "Западноевропейская (ISO-8859-15)"}
         ] do
       test "#{msgid}" do
         assert po_msgstr("en", unquote(msgid)) == unquote(msgid)

@@ -2406,7 +2406,8 @@ defmodule PhoenixKitCatalogue.Catalogue.AttributeSets do
       actor_uuid: opts[:actor_uuid],
       resource_type: "attribute_set",
       resource_uuid: resource_uuid,
-      metadata: metadata
+      # the shop API's via / key_prefix / request_id / tool; the entry's own keys win
+      metadata: ActivityLog.with_extra(metadata, opts[:log_metadata])
     })
   end
 end

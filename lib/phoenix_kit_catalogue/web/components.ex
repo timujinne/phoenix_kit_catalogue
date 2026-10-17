@@ -129,6 +129,9 @@ defmodule PhoenixKitCatalogue.Web.Components do
 
     * `featured_image_uuid` — uuid string or nil; drives which branch renders
     * `featured_image_file` — the `%Storage.File{}` struct (for name/size) or nil
+    * `thumb_version` — the thumbnail instance's content version (a string) once
+      core has made it, else nil; a versioned URL differs from the pending
+      placeholder's, so the browser refetches (`Attachments` keeps it current)
     * `subtitle` — override the default caption text (optional)
     * `class` — extra classes merged onto the outer card
 
@@ -147,6 +150,14 @@ defmodule PhoenixKitCatalogue.Web.Components do
   """
   attr(:featured_image_uuid, :string, default: nil)
   attr(:featured_image_file, :any, default: nil)
+
+  attr(:thumb_version, :string,
+    default: nil,
+    doc:
+      "The thumbnail instance's content version once it exists (`?v=`); nil keeps the " <>
+        "unversioned URL, which core answers with a placeholder until the variant is made."
+  )
+
   attr(:subtitle, :string, default: nil)
   attr(:class, :string, default: "")
 
@@ -178,7 +189,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
               title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Open original")}
             >
               <img
-                src={URLSigner.signed_url(@featured_image_uuid, "thumbnail")}
+                src={URLSigner.signed_url(@featured_image_uuid, "thumbnail", version: @thumb_version)}
                 alt={@featured_image_file.original_file_name}
                 class="w-24 h-24 rounded-md object-cover bg-base-200 border border-base-300"
               />
@@ -246,6 +257,19 @@ defmodule PhoenixKitCatalogue.Web.Components do
   attr(:files_state, :map, required: true)
   attr(:featured_image_uuid, :any, default: nil)
   attr(:featured_image_file, :any, default: nil)
+
+  attr(:featured_thumb_version, :string,
+    default: nil,
+    doc: "The featured thumbnail's version (`@featured_thumb_version`); nil = unversioned URL."
+  )
+
+  attr(:thumb_versions, :map,
+    default: %{},
+    doc:
+      "File uuid => thumbnail version (`@thumb_versions`); a file missing from it " <>
+        "keeps the unversioned URL. Empty for a host not using `mount_attachments/3`."
+  )
+
   attr(:featured_subtitle, :string, required: true)
   attr(:files_hint, :string, required: true)
   attr(:remove_confirm, :string, required: true)
@@ -256,6 +280,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
     <.featured_image_card
       featured_image_uuid={@featured_image_uuid}
       featured_image_file={@featured_image_file}
+      thumb_version={@featured_thumb_version}
       subtitle={@featured_subtitle}
     />
 
@@ -361,7 +386,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
                   class="shrink-0"
                 >
                   <img
-                    src={URLSigner.signed_url(file.uuid, "thumbnail")}
+                    src={URLSigner.signed_url(file.uuid, "thumbnail", version: @thumb_versions[file.uuid])}
                     alt={file.original_file_name}
                     class="w-14 h-14 rounded object-cover bg-base-200 border border-base-300"
                   />

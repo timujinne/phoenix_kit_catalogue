@@ -50,6 +50,26 @@ defmodule PhoenixKitCatalogue.Attachments do
 
       :ok = Attachments.maybe_rename_pending_folder(socket, saved_resource)
 
+  ## Thumbnails that are not ready yet
+
+  A just-uploaded image is asked for as a `thumbnail` before core's
+  `ProcessFileJob` has written that instance, and the file controller then
+  answers a grey placeholder. The `src` would not change when the instance
+  appears, so the browser would never ask again. `mount_attachments/3`
+  therefore subscribes the LiveView to core's file events and attaches a
+  `:handle_info` lifecycle hook for `{:phoenix_kit_file_processed, uuid}`:
+  the hook re-reads that file's `thumbnail` instance and updates the
+  `:thumb_versions` / `:featured_thumb_version` assigns, which the
+  components turn into a versioned URL (`?v=<checksum>`) — a different
+  string, so the browser fetches the real image. **The host needs no new
+  `handle_info/2` clause**; it only passes both assigns to
+  `attachments_files_panel/1`. The hook returns `{:cont, socket}` for every
+  message, so the host's own catch-all (all three forms have one) absorbs
+  the events at debug level and a core `MediaBrowser` mounted later still
+  receives them. Every system-wide file event reaches the form this way: a
+  pattern match, and for `processed` an O(grid) membership check, with the
+  host's catch-all logging the copy at debug.
+
   ## Resource shape
 
   The module pattern-matches on the resource struct to derive the
@@ -100,15 +120,20 @@ defmodule PhoenixKitCatalogue.Attachments do
 
   import Phoenix.Component, only: [assign: 2, assign: 3]
 
+  import Ecto.Query, only: [from: 2]
+
   import Phoenix.LiveView,
     only: [
+      attach_hook: 4,
       cancel_upload: 3,
+      connected?: 1,
       consume_uploaded_entry: 3,
       put_flash: 3
     ]
 
   alias PhoenixKit.Modules.Storage
-  alias PhoenixKit.Modules.Storage.{File, ResourceFolders}
+  alias PhoenixKit.Modules.Storage.{File, FileInstance, ResourceFolders}
+  alias PhoenixKit.Modules.Storage.URLSigner
   alias PhoenixKit.Utils.Format
   alias PhoenixKitCatalogue.Catalogue.PubSub
   alias PhoenixKitCatalogue.Schemas.{Catalogue, Category, Item, Pdf}
@@ -146,6 +171,9 @@ defmodule PhoenixKitCatalogue.Attachments do
 
     socket =
       socket
+      # Before anything reads a thumbnail instance: a `processed` broadcast
+      # sent between a read and a later subscription would be lost for good.
+      |> subscribe_to_file_events()
       |> assign(:attachments_resource, resource)
       |> assign_files_folder(resource)
       # Featured image and the stored media order must be set before
@@ -169,7 +197,9 @@ defmodule PhoenixKitCatalogue.Attachments do
       if files_grid? do
         assign_files_state(socket)
       else
-        assign(socket, :files_state, %{files: []})
+        socket
+        |> assign(:files_state, %{files: []})
+        |> assign(:thumb_versions, %{})
       end
 
     assign_media_selector_defaults(socket)
@@ -194,7 +224,130 @@ defmodule PhoenixKitCatalogue.Attachments do
       |> compute_files_list()
       |> apply_media_order(socket.assigns[:media_order])
 
-    assign(socket, :files_state, %{files: files})
+    socket
+    |> assign(:files_state, %{files: files})
+    |> assign_thumb_versions(files)
+  end
+
+  # ── Thumbnail versions ───────────────────────────────────────────
+
+  # The file events are subscribed to once per process: `mount_attachments`
+  # runs once per LiveView today, the marker keeps it so if that changes.
+  # The hook returns `{:cont, socket}` for EVERY message, handled or not
+  # (core's own advice, `FeaturedImage`: attach before `setup_uploads`,
+  # return `:cont`). Nothing in this package mounts a core `MediaBrowser`
+  # today, but one added later is attached after this hook and must still
+  # get the events; the forms' catch-all `handle_info/2` (debug log) makes
+  # the unhandled copy harmless. Hence no halting, even for a message fully
+  # handled here.
+  defp subscribe_to_file_events(socket) do
+    if connected?(socket) and
+         not Map.get(socket.assigns, :attachments_file_events_attached, false) do
+      Storage.subscribe_to_file_events()
+
+      socket
+      |> attach_hook(:catalogue_attachment_file_events, :handle_info, &handle_file_event/2)
+      |> assign(:attachments_file_events_attached, true)
+    else
+      socket
+    end
+  end
+
+  # Only `processed`: it is what writes the `thumbnail` instance.
+  # `thumbnail_updated` concerns the annotated/rotated variant, trashed /
+  # restored / deleted do not prune the grid in this change.
+  defp handle_file_event({:phoenix_kit_file_processed, uuid}, socket) when is_binary(uuid) do
+    {:cont, refresh_thumb_version(socket, uuid)}
+  end
+
+  defp handle_file_event(_message, socket), do: {:cont, socket}
+
+  defp refresh_thumb_version(socket, uuid) do
+    in_grid? = Enum.any?(socket.assigns[:files_state][:files] || [], &(&1.uuid == uuid))
+    featured? = socket.assigns[:featured_image_uuid] == uuid
+
+    if in_grid? or featured? do
+      version = thumbnail_version(uuid)
+
+      socket
+      |> put_grid_version(in_grid?, uuid, version)
+      |> put_featured_version(featured?, version)
+    else
+      socket
+    end
+  end
+
+  defp put_grid_version(socket, true, uuid, version) when is_binary(version),
+    do: assign(socket, :thumb_versions, Map.put(thumb_versions(socket), uuid, version))
+
+  defp put_grid_version(socket, _in_grid?, _uuid, _version), do: socket
+
+  defp put_featured_version(socket, true, version) when is_binary(version),
+    do: assign(socket, :featured_thumb_version, version)
+
+  defp put_featured_version(socket, _featured?, _version), do: socket
+
+  defp thumb_versions(socket), do: socket.assigns[:thumb_versions] || %{}
+
+  # The THUMBNAIL instance's version, never the original's. Nil when no
+  # instance exists (yet, or ever: an image smaller than the size, failed
+  # processing) — the unversioned URL is then the right one.
+  defp thumbnail_version(uuid), do: uuid |> List.wrap() |> thumbnail_versions() |> Map.get(uuid)
+
+  # One query for all the grid's images; refreshed on every rebuild of the
+  # list so a version never outlives the list it was read for.
+  defp assign_thumb_versions(socket, files) do
+    uuids = for %{file_type: "image", uuid: uuid} <- files, do: uuid
+    assign(socket, :thumb_versions, thumbnail_versions(uuids))
+  end
+
+  defp thumbnail_versions([]), do: %{}
+
+  # Core has no batch reader for instances (only `get_file_instance_by_name/2`,
+  # one file at a time), hence the direct query. A failed read must never
+  # take the form down — it only means unversioned URLs.
+  defp thumbnail_versions(uuids) do
+    from(i in FileInstance,
+      where: i.file_uuid in ^uuids and i.variant_name == "thumbnail",
+      select: {i.file_uuid, i.checksum}
+    )
+    |> repo().all()
+    |> Enum.flat_map(fn {uuid, checksum} ->
+      case URLSigner.version(checksum) do
+        nil -> []
+        version -> [{uuid, version}]
+      end
+    end)
+    |> Map.new()
+  rescue
+    error ->
+      Logger.warning("thumbnail versions read failed: #{inspect(error)}")
+      %{}
+  catch
+    :exit, reason ->
+      Logger.warning("thumbnail versions read failed: #{inspect(reason)}")
+      %{}
+  end
+
+  defp repo, do: PhoenixKit.RepoHelper.repo()
+
+  # The single place the featured file is assigned, so its version is
+  # always read together with it.
+  defp assign_featured(socket, uuid, file) do
+    version =
+      case file do
+        %{file_type: "image", uuid: file_uuid} ->
+          thumbnail_version(file_uuid)
+
+        _ ->
+          nil
+      end
+
+    assign(socket,
+      featured_image_uuid: uuid,
+      featured_image_file: file,
+      featured_thumb_version: version
+    )
   end
 
   @doc """
@@ -271,10 +424,7 @@ defmodule PhoenixKitCatalogue.Attachments do
         file -> file
       end
 
-    assign(socket,
-      featured_image_uuid: if(file, do: uuid, else: nil),
-      featured_image_file: file
-    )
+    assign_featured(socket, if(file, do: uuid, else: nil), file)
   end
 
   defp assign_media_selector_defaults(socket) do
@@ -349,8 +499,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   def clear_featured_image(socket) do
     {:noreply,
      socket
-     |> assign(:featured_image_uuid, nil)
-     |> assign(:featured_image_file, nil)
+     |> assign_featured(nil, nil)
      |> refresh_files_from_folder()}
   end
 
@@ -1229,7 +1378,7 @@ defmodule PhoenixKitCatalogue.Attachments do
   defp refresh_files_from_folder(socket), do: assign_files_state(socket)
 
   defp apply_featured_image_selection(socket, []) do
-    assign(socket, featured_image_uuid: nil, featured_image_file: nil)
+    assign_featured(socket, nil, nil)
   end
 
   defp apply_featured_image_selection(socket, [uuid | _]) when is_binary(uuid) do
@@ -1246,14 +1395,14 @@ defmodule PhoenixKitCatalogue.Attachments do
         # reads `featured_image_file` to surface the featured file in
         # the grid even when it lives outside the folder.
         socket
-        |> assign(featured_image_uuid: uuid, featured_image_file: file)
+        |> assign_featured(uuid, file)
         |> refresh_files_from_folder()
     end
   end
 
   defp maybe_clear_featured_if_matches(socket, uuid) do
     if socket.assigns[:featured_image_uuid] == uuid do
-      assign(socket, featured_image_uuid: nil, featured_image_file: nil)
+      assign_featured(socket, nil, nil)
     else
       socket
     end

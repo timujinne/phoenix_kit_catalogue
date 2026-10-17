@@ -86,6 +86,11 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
                "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
     end
 
+    test "wrong_encoding" do
+      assert Errors.message(:wrong_encoding) ==
+               "This file is not in that encoding. Choose another one."
+    end
+
     test "bad_json_shape" do
       assert Errors.message(:bad_json_shape) ==
                "This JSON file is not a catalogue export: it needs an \"items\" list of items with plain values."
@@ -94,6 +99,11 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
     test "parent_catalogue_deleted" do
       assert Errors.message(:parent_catalogue_deleted) ==
                "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+    end
+
+    test "external_id_taken" do
+      assert Errors.message(:external_id_taken) ==
+               "Another active row already uses the same external id."
     end
 
     test "catalogue_moved" do

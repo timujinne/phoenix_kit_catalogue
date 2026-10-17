@@ -248,6 +248,9 @@ msgstr "Цей JSON-файл не є експортом каталогу: у н�
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr "Неможливо відновити — батьківський каталог видалено. Спочатку відновіть каталог."
 
+msgid "Another active row already uses the same external id."
+msgstr "Інший активний запис уже використовує цей зовнішній ідентифікатор."
+
 msgid "Cannot delete: %{count} smart items still reference this catalogue."
 msgstr "Неможливо видалити: смарт-позицій, що посилаються на цей каталог: %{count}."
 
@@ -1354,7 +1357,7 @@ msgid "No values defined yet."
 msgstr "Значень ще не визначено."
 
 msgid "This value has no slug and cannot be selected"
-msgstr "У цього значення немає slug, тому його не можна вибрати"
+msgstr "У цього значення немає слага, тому його не можна вибрати"
 
 msgid "This group has no attributes yet."
 msgstr "У цій групі поки немає атрибутів."
@@ -1936,6 +1939,36 @@ msgstr "Формат файлу не відповідає вибраному."
 
 msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
 msgstr "Цей файл не в кодуванні UTF-8. Збережіть його в UTF-8 і завантажте знову."
+
+msgid "This file is not in that encoding. Choose another one."
+msgstr "Цей файл не в цьому кодуванні. Виберіть інше."
+
+msgid "File encoding"
+msgstr "Кодування файлу"
+
+msgid "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+msgstr "У файлі не зазначено, у якому він кодуванні. Перевірте, чи правильно читаються літери в попередньому перегляді, і, якщо ні, виберіть інше кодування."
+
+msgid "Encoding"
+msgstr "Кодування"
+
+msgid "Preview"
+msgstr "Попередній перегляд"
+
+msgid "Western European (Windows-1252)"
+msgstr "Західноєвропейське (Windows-1252)"
+
+msgid "Baltic (Windows-1257)"
+msgstr "Балтійське (Windows-1257)"
+
+msgid "Cyrillic (Windows-1251)"
+msgstr "Кирилиця (Windows-1251)"
+
+msgid "Central European (Windows-1250)"
+msgstr "Центральноєвропейське (Windows-1250)"
+
+msgid "Western European (ISO-8859-15)"
+msgstr "Західноєвропейське (ISO-8859-15)"
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr "Файл містить забагато рядків для імпорту. Розділіть його на менші файли."
@@ -3304,7 +3337,7 @@ msgstr "SEO-заголовок"
 #: lib/phoenix_kit_catalogue/web/item_form_live.ex:2727
 #, elixir-autogen, elixir-format
 msgid "URL slug"
-msgstr "URL slug"
+msgstr "URL-слаг"
 
 #: lib/phoenix_kit_catalogue/web/category_form_live.ex:654
 #: lib/phoenix_kit_catalogue/web/item_form_live.ex:2728
@@ -3713,7 +3746,7 @@ msgid "Item form"
 msgstr "Форма позиції"
 
 msgid "Show the URL slug and SEO fields"
-msgstr "Показувати URL slug і поля SEO"
+msgstr "Показувати URL-слаг і поля SEO"
 
 msgid "Off hides them from the item form; what they already hold is kept and saved unchanged, and comes back when you turn this on."
 msgstr "Якщо вимкнено, їх приховано у формі позиції; те, що в них уже є, зберігається без змін і повернеться, коли ви знову ввімкнете цей параметр."

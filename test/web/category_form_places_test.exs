@@ -74,6 +74,24 @@ defmodule PhoenixKitCatalogue.Web.CategoryFormPlacesTest do
     )
   end
 
+  test "a move into a catalogue that holds the same external_id says why", %{conn: conn} do
+    from = fixture_catalogue(%{name: "From"})
+    to = fixture_catalogue(%{name: "To"})
+    category = fixture_category(from, %{name: "Clasher"})
+    eid = %{"api" => %{"external_id" => "CF-1"}}
+    _mover = fixture_item(%{category_uuid: category.uuid, name: "Inside", data: eid})
+    _holder = fixture_item(%{catalogue_uuid: to.uuid, name: "Holder", data: eid})
+
+    {:ok, view, _html} = live(conn, "#{@base}/categories/#{category.uuid}/edit")
+
+    send(view.pid, {TreePicker, "category-move-picker", "catalogue:" <> to.uuid})
+    html = view |> element("#category-move-button") |> render_click()
+
+    assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+    refute html =~ "Failed to move category."
+    assert Catalogue.get_category(category.uuid).catalogue_uuid == from.uuid
+  end
+
   # PR #136 review: Save posted the `:catalogue_uuid` assign, which a
   # move made elsewhere left behind, so the row alone went back to the
   # old catalogue while its subtree stayed in the new one.

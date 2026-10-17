@@ -25,8 +25,8 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_item_attribute_sets
   )
 
-  test "chain is V4 and marks phoenix_kit_cat_catalogues" do
-    assert Migrations.current_version() == 4
+  test "chain is V5 and marks phoenix_kit_cat_catalogues" do
+    assert Migrations.current_version() == 5
     assert Migrations.version_table() == "phoenix_kit_cat_catalogues"
   end
 
@@ -39,7 +39,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     end
 
     assert List.last(stmts) ==
-             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:4'"
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:5'"
   end
 
   test "no statement can destroy data, in either direction" do
@@ -136,6 +136,8 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_item_slugs_item_uuid_idx
     phoenix_kit_cat_category_slugs_category_uuid_idx
     phoenix_kit_cat_item_attribute_sets_selected_values_gin
+    phoenix_kit_cat_items_external_id_uniq
+    phoenix_kit_cat_categories_external_id_uniq
   )
 
   # Same source, all 50 constraint names (18 PKs + 19 FKs + 13 CHECKs),
@@ -252,7 +254,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
              "CREATE INDEX IF NOT EXISTS phoenix_kit_cat_item_attribute_sets_selected_values_gin ON public.phoenix_kit_cat_item_attribute_sets USING gin ((data -> 'selected_value_slugs'))"
 
     assert List.last(Migrations.up_statements("public")) ==
-             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:4'"
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:5'"
   end
 
   test "V4 adds the item-type columns and their guarded CHECKs" do
@@ -297,6 +299,34 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
            ]
   end
 
+  test "V5 adds the external_id unique indexes, partial and per catalogue" do
+    stmts = Migrations.up_statements("public")
+
+    for {table, index} <- [
+          {"phoenix_kit_cat_items", "phoenix_kit_cat_items_external_id_uniq"},
+          {"phoenix_kit_cat_categories", "phoenix_kit_cat_categories_external_id_uniq"}
+        ] do
+      statement = Enum.find(stmts, &(&1 =~ "CREATE UNIQUE INDEX IF NOT EXISTS #{index} ON "))
+      assert statement, "missing #{index}"
+      assert statement =~ "public.#{table} USING btree (catalogue_uuid, "
+      assert statement =~ "'external_id'"
+      assert statement =~ "'deleted'"
+      assert statement =~ "IS NOT NULL"
+    end
+  end
+
+  test "up_statements(prefix, 4) stops before V5" do
+    joined = Enum.join(Migrations.up_statements("public", 4), "\n")
+    refute joined =~ "external_id"
+    assert joined =~ "pkc_schema:4"
+  end
+
+  test "down from V5 to V4 only re-stamps the marker" do
+    assert Migrations.down_statements("public", 4) == [
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:4'"
+           ]
+  end
+
   test "down to 1 only re-stamps the marker" do
     assert Migrations.down_statements("public", 1) == [
              "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:1'"
@@ -323,7 +353,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
   end
 
   test "up_statements/2 defaults target to current_version/0" do
-    assert Migrations.up_statements("public") == Migrations.up_statements("public", 4)
+    assert Migrations.up_statements("public") == Migrations.up_statements("public", 5)
   end
 
   test "the module registers the chain" do

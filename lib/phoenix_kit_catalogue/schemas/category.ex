@@ -67,6 +67,10 @@ defmodule PhoenixKitCatalogue.Schemas.Category do
       name: "phoenix_kit_cat_category_slugs_pkey",
       message: "is already taken in this language"
     )
+    |> unique_constraint(:data,
+      name: "phoenix_kit_cat_categories_external_id_uniq",
+      message: "external_id is already taken in this catalogue"
+    )
   end
 
   # See the identical helper (and its full rationale) in

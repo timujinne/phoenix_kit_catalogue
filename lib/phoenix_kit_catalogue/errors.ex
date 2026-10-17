@@ -56,10 +56,12 @@ defmodule PhoenixKitCatalogue.Errors do
           | :unsupported_file_format
           | :csv_empty
           | :csv_not_utf8
+          | :wrong_encoding
           | :bad_json_shape
           | :file_too_large
           | :too_many_rows
           | :parent_catalogue_deleted
+          | :external_id_taken
           | :catalogue_moved
           | :not_in_trash
           | :cycle
@@ -179,6 +181,13 @@ defmodule PhoenixKitCatalogue.Errors do
         "This CSV file is not UTF-8 text. Save it as \"CSV UTF-8\" in your spreadsheet program and upload it again."
       )
 
+  def message(:wrong_encoding),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "This file is not in that encoding. Choose another one."
+      )
+
   def message(:bad_json_shape),
     do:
       Gettext.gettext(
@@ -205,6 +214,13 @@ defmodule PhoenixKitCatalogue.Errors do
       Gettext.gettext(
         PhoenixKitCatalogue.Gettext,
         "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
+      )
+
+  def message(:external_id_taken),
+    do:
+      Gettext.gettext(
+        PhoenixKitCatalogue.Gettext,
+        "Another active row already uses the same external id."
       )
 
   def message(:catalogue_moved),

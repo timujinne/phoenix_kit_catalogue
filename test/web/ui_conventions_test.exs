@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.UIConventionsTest do
   # Words that keep their capital inside a sentence-case string: names of
   # things, not headings. Acronyms (SKU, PDF) and words with digits (Pro100)
   # are allowed without listing.
-  @proper_nouns ~w(Deleted Shopify Entities Incoterm)
+  @proper_nouns ~w(Deleted Shopify Entities Incoterm Windows European)
 
   # The strings the code shows — gettext literals in lib/, not the whole
   # catalog (which also holds entries no page uses any more).

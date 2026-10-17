@@ -203,6 +203,22 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailCrossCatalogueMoveTest do
       assert Catalogue.get_item(item.uuid).catalogue_uuid == there.uuid
     end
 
+    test "a colliding external_id says why", %{conn: conn, here: here, there: there} do
+      category = fixture_category(here, %{name: "Moving"})
+      eid = %{"api" => %{"external_id" => "BM-1"}}
+      _mover = fixture_item(%{category_uuid: category.uuid, name: "Inside", data: eid})
+      _holder = fixture_item(%{catalogue_uuid: there.uuid, name: "Holder", data: eid})
+      {:ok, view, _html} = live(conn, "#{@base}/#{here.uuid}")
+
+      render_click(view, "request_bulk_move_categories", %{"uuids" => [category.uuid]})
+      pick(view, "bulk-move-categories-picker", "catalogue:" <> there.uuid)
+      html = confirm(view, "confirm_bulk_move_categories")
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "could not be moved"
+      assert Catalogue.get_category(category.uuid).catalogue_uuid == here.uuid
+    end
+
     test "nest under a category of another catalogue",
          %{conn: conn, here: here, there: there, landing: landing} do
       category = fixture_category(here, %{name: "Moving"})

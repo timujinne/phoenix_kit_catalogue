@@ -2116,7 +2116,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
               :kind_mismatch,
               :not_found,
               :same_catalogue,
-              :catalogue_moved
+              :catalogue_moved,
+              :external_id_taken
             ],
        do: Errors.message(reason)
 
@@ -4256,6 +4257,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
             files_state={@files_state}
             featured_image_uuid={@featured_image_uuid}
             featured_image_file={@featured_image_file}
+            featured_thumb_version={@featured_thumb_version}
+            thumb_versions={@thumb_versions}
             featured_subtitle={
               Gettext.gettext(PhoenixKitCatalogue.Gettext, "Shown in lists and detail views.")
             }

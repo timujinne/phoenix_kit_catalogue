@@ -691,6 +691,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     data =
       (data || %{})
       |> Map.drop(@data_keys_not_copied)
+      |> drop_external_id()
       |> then(&if(Keyword.get(opts, :files, true), do: &1, else: Map.drop(&1, @image_keys)))
       |> then(&if(kind == :catalogue, do: &1, else: Extensions.duplicate_data(kind, &1)))
 
@@ -698,6 +699,18 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
       do: Map.new(data, &suffix_language_entry(&1, owned, opts)),
       else: data
   end
+
+  # The id an outside system gave a record names THAT record. A copy is a
+  # new record, and with the V5 unique index it could not even be saved
+  # beside its source. Only the id goes; any other key under `api` is copied.
+  defp drop_external_id(%{"api" => %{} = api} = data) do
+    case Map.delete(api, "external_id") do
+      rest when map_size(rest) == 0 -> Map.delete(data, "api")
+      rest -> Map.put(data, "api", rest)
+    end
+  end
+
+  defp drop_external_id(data), do: data
 
   # The name column holds the content in its primary language, so the
   # suffix is in that language — not the admin's, and not the default a

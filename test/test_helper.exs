@@ -14,7 +14,8 @@ support_dir = Path.expand("support", __DIR__)
   "activity_log_assertions.ex",
   "data_case.ex",
   "live_case.ex",
-  "live_database_guard.ex"
+  "live_database_guard.ex",
+  "api_case.ex"
 ]
 |> Enum.each(&Code.require_file(&1, support_dir))
 
@@ -147,8 +148,11 @@ repo_available =
 
 Application.put_env(:phoenix_kit_catalogue, :test_repo_available, repo_available)
 
-# Exclude integration tests when DB is not available
-exclude = if repo_available, do: [], else: [:integration]
+# Exclude integration tests when DB is not available; the tests that drive a
+# tool through core's executor need a core that has the API.
+exclude =
+  if(repo_available, do: [], else: [:integration]) ++
+    if Code.ensure_loaded?(PhoenixKit.API.Executor), do: [], else: [:core_api]
 
 # Force PhoenixKit's URL prefix cache to an empty string for tests so
 # `Paths.index()` etc. produce paths the test router can match. Admin
@@ -177,6 +181,16 @@ end
 case Phoenix.PubSub.Supervisor.start_link(name: PhoenixKit.PubSub) do
   {:ok, _} -> :ok
   {:error, {:already_started, _}} -> :ok
+end
+
+# Core's API (keys, rate limits) and `Auth.register_user/2` count hits in the
+# Hammer ETS table this backend owns; without it the table is absent and the
+# executor tests die at `:ets.update_counter/4`.
+if Code.ensure_loaded?(PhoenixKit.Users.RateLimiter.Backend) do
+  case PhoenixKit.Users.RateLimiter.Backend.start_link([]) do
+    {:ok, _} -> :ok
+    {:error, {:already_started, _}} -> :ok
+  end
 end
 
 # Start a Task.Supervisor registered as `PhoenixKit.TaskSupervisor` so

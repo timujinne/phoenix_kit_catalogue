@@ -78,6 +78,14 @@ defmodule PhoenixKitCatalogue.Catalogue.Slugs do
   end
 
   @doc """
+  True when `slug` is the hash fallback `from_title/3` returns for `title`,
+  that is when `title` has no content a URL can carry.
+  """
+  @spec hash_fallback?(String.t(), String.t()) :: boolean()
+  def hash_fallback?(slug, title) when is_binary(slug) and is_binary(title),
+    do: slug == "item-" <> hash(title)
+
+  @doc """
   Fills missing per-language slugs on `changeset`'s `field` (default use
   is `:slug`) from the multilang name stored under `:data`, for every
   language present there. A language that already has a non-blank slug

@@ -3,6 +3,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   Multi-step import wizard for catalogue items.
 
   Steps: upload → map → confirm → importing → done
+
+  A text upload that does not name its own encoding (not UTF-8, no
+  byte-order mark) stops at an `:encoding` step between upload and the
+  rest: the wizard proposes a code page, shows the file's first lines read
+  in it, and goes on only with the page the operator confirmed. That page
+  is `file_encoding`, and every later parse of the same upload passes it.
   """
 
   use Phoenix.LiveView
@@ -41,7 +47,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   alias PhoenixKitCatalogue.Catalogue.ActivityLog
   alias PhoenixKitCatalogue.Catalogue.CrmLink
   alias PhoenixKitCatalogue.Import
-  alias PhoenixKitCatalogue.Import.{Executor, Mapper, Parser, Pro100Plan}
+  alias PhoenixKitCatalogue.Import.{Encoding, Executor, Mapper, Parser, Pro100Plan}
   alias PhoenixKitCatalogue.Import.Source.Universal
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.{Category, Item, Manufacturer, Supplier}
@@ -96,6 +102,16 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        selected_sheet: nil,
        filename: nil,
        file_binary: nil,
+       # The code page confirmed for the parsed upload; nil when the file
+       # names its own encoding.
+       file_encoding: nil,
+       # Encoding step: the upload waiting for a code page, the page
+       # currently shown, the file's first lines in it, and how many of
+       # the file's bytes that page has no character for.
+       pending_file: nil,
+       encoding_choice: nil,
+       encoding_preview: [],
+       encoding_undefined: 0,
        # Mapping
        column_mappings: [],
        unit_values: [],
@@ -185,7 +201,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   # ── Sheet Selection ─────────────────────────────────────────────
 
   def handle_event("select_sheet", %{"sheet" => sheet_name}, socket) do
-    case Parser.parse(socket.assigns.file_binary, socket.assigns.filename, sheet: sheet_name) do
+    case Parser.parse(socket.assigns.file_binary, socket.assigns.filename,
+           sheet: sheet_name,
+           encoding: socket.assigns.file_encoding
+         ) do
       {:ok, data} ->
         # Clear and reload ETS
         if socket.assigns.ets_table, do: :ets.delete_all_objects(socket.assigns.ets_table)
@@ -213,6 +232,32 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
         Logger.warning("Import sheet parse error: #{inspect(reason)}")
 
         {:noreply, put_flash(socket, :error, PhoenixKitCatalogue.Errors.message(reason))}
+    end
+  end
+
+  # ── Encoding ────────────────────────────────────────────────────
+
+  def handle_event("choose_encoding", %{"encoding" => value}, socket) do
+    with %{} <- socket.assigns.pending_file,
+         {:ok, page} <- Encoding.parse_code_page(value) do
+      {:noreply, assign_encoding_choice(socket, page)}
+    else
+      _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("confirm_encoding", _params, %{assigns: %{pending_file: nil}} = socket),
+    do: {:noreply, socket}
+
+  # A page the file holds bytes outside of would import replacement
+  # characters, so it is refused here whatever the disabled button did.
+  def handle_event("confirm_encoding", _params, socket) do
+    %{pending_file: %{binary: binary, filename: filename}, encoding_choice: page} = socket.assigns
+
+    if socket.assigns.encoding_undefined > 0 do
+      {:noreply, put_flash(socket, :error, PhoenixKitCatalogue.Errors.message(:wrong_encoding))}
+    else
+      handle_parsed_file(socket, binary, filename, page)
     end
   end
 
@@ -429,6 +474,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
        import_total: 0,
        ets_table: nil
      )
+     |> reset_encoding_state()
      |> reset_picker_state()
      |> allow_upload(:import_file,
        accept: ~w(.xlsx .csv .txt .json),
@@ -439,6 +485,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
   end
 
   # ── Navigation helpers ──────────────────────────────────────────
+
+  def handle_event("go_back", _params, %{assigns: %{step: :encoding}} = socket) do
+    {:noreply, socket |> reset_encoding_state() |> assign(:step, :upload)}
+  end
 
   def handle_event("go_back", _params, socket) do
     prev_step =
@@ -693,16 +743,54 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     end
   end
 
-  defp handle_parsed_file(socket, binary, filename) do
+  # `encoding` is the code page confirmed on the encoding step, nil for an
+  # upload that has not been through it.
+  defp handle_parsed_file(socket, binary, filename, encoding \\ nil) do
     source_mod = Import.source_by_key(socket.assigns.selected_source)
 
     case source_mod && source_mod.flow() do
-      :sync -> handle_sync_file(socket, binary, source_mod)
-      _ -> handle_mapping_file(socket, binary, filename)
+      :sync -> handle_sync_file(socket, binary, filename, source_mod, encoding)
+      _ -> handle_mapping_file(socket, binary, filename, encoding)
     end
   end
 
-  defp handle_sync_file(socket, binary, source_mod) do
+  # A text file that is not UTF-8 is not refused: its code page cannot be
+  # read from its bytes, so the operator is asked. A NUL byte still means
+  # the file is not text, and that keeps the parser's message.
+  defp ask_encoding?(reason, binary, nil) when reason in [:not_utf8, :csv_not_utf8],
+    do: Encoding.needs_code_page?(binary)
+
+  defp ask_encoding?(_reason, _binary, _encoding), do: false
+
+  defp ask_encoding(socket, binary, filename) do
+    locale = socket.assigns[:current_locale] || Gettext.get_locale(PhoenixKitCatalogue.Gettext)
+
+    socket
+    |> assign(step: :encoding, pending_file: %{binary: binary, filename: filename})
+    |> assign_encoding_choice(Encoding.guess(binary, locale))
+  end
+
+  defp assign_encoding_choice(socket, page) do
+    %{binary: binary} = socket.assigns.pending_file
+
+    assign(socket,
+      encoding_choice: page,
+      encoding_preview: Encoding.preview(binary, page),
+      encoding_undefined: Encoding.undefined_bytes(binary, page)
+    )
+  end
+
+  defp reset_encoding_state(socket) do
+    assign(socket,
+      file_encoding: nil,
+      pending_file: nil,
+      encoding_choice: nil,
+      encoding_preview: [],
+      encoding_undefined: 0
+    )
+  end
+
+  defp handle_sync_file(socket, binary, filename, source_mod, encoding) do
     case socket.assigns.selected_format do
       nil ->
         {:noreply,
@@ -721,7 +809,8 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
                binary,
                format_atom,
                items,
-               socket.assigns.selected_catalogue.name
+               socket.assigns.selected_catalogue.name,
+               encoding: encoding
              ) do
           {:ok, plan} ->
             # Default the create checkbox ON only when there is nothing to
@@ -729,25 +818,32 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
             # otherwise offer no action at all. A routine price sync (which
             # has updates) never creates rows unless the operator asks.
             {:noreply,
-             assign(socket,
+             socket
+             |> reset_encoding_state()
+             |> assign(
                import_plan: plan,
                create_unmatched: plan.updates == [],
                step: :preview,
-               ets_table: nil
+               ets_table: nil,
+               file_encoding: encoding
              )}
 
           {:error, reason} ->
-            Logger.warning("PRO100 analyze error: #{inspect(reason)}")
-
-            {:noreply,
-             socket
-             |> assign(:ets_table, nil)
-             |> put_flash(:error, pro100_error_message(reason))}
+            sync_file_error(assign(socket, :ets_table, nil), reason, binary, filename, encoding)
         end
     end
   end
 
-  defp handle_mapping_file(socket, binary, filename) do
+  defp sync_file_error(socket, reason, binary, filename, encoding) do
+    if ask_encoding?(reason, binary, encoding) do
+      {:noreply, ask_encoding(socket, binary, filename)}
+    else
+      Logger.warning("PRO100 analyze error: #{inspect(reason)}")
+      {:noreply, put_flash(socket, :error, pro100_error_message(reason))}
+    end
+  end
+
+  defp handle_mapping_file(socket, binary, filename, encoding) do
     format_atom =
       case socket.assigns.selected_format do
         nil ->
@@ -757,7 +853,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
           String.to_existing_atom(format_str)
       end
 
-    case Universal.parse(binary, filename, format_atom) do
+    case Universal.parse(binary, filename, format_atom, encoding: encoding) do
       {:ok, data} ->
         # Store in ETS
         ets_table = :ets.new(:import_data, [:ordered_set, :private])
@@ -775,8 +871,10 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
          socket
          # The selected catalogue's existing categories, as a list and a tree.
          |> assign_import_category_tree()
+         |> reset_encoding_state()
          |> assign(
            step: :map,
+           file_encoding: encoding,
            headers: data.headers,
            preview_rows: Enum.take(data.rows, @preview_rows),
            row_count: data.row_count,
@@ -791,8 +889,12 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
          )}
 
       {:error, reason} ->
-        Logger.warning("Import file parse error: #{inspect(reason)}")
-        {:noreply, put_flash(socket, :error, PhoenixKitCatalogue.Errors.message(reason))}
+        if ask_encoding?(reason, binary, encoding) do
+          {:noreply, ask_encoding(socket, binary, filename)}
+        else
+          Logger.warning("Import file parse error: #{inspect(reason)}")
+          {:noreply, put_flash(socket, :error, PhoenixKitCatalogue.Errors.message(reason))}
+        end
     end
   end
 
@@ -1518,6 +1620,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
 
       <%!-- Step content --%>
       <.upload_step :if={@step == :upload} {assigns} />
+      <.encoding_step :if={@step == :encoding} {assigns} />
       <.map_step :if={@step == :map} {assigns} />
       <.confirm_step :if={@step == :confirm} {assigns} />
       <.importing_step :if={@step == :importing} {assigns} />
@@ -2002,6 +2105,88 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     </div>
     """
   end
+
+  # ── Encoding Step ───────────────────────────────────────────────
+
+  defp encoding_step(assigns) do
+    ~H"""
+    <div class="card bg-base-100 shadow-sm">
+      <div class="card-body gap-6">
+        <h2 class="card-title">
+          <.icon name="hero-language" class="w-5 h-5" />
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "File encoding")}
+        </h2>
+
+        <div class="space-y-2 text-sm text-base-content/70">
+          <p>
+            <.icon name="hero-document-text" class="w-4 h-4 inline" />
+            {@pending_file.filename}
+          </p>
+          <p>
+            {Gettext.gettext(PhoenixKitCatalogue.Gettext, "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not.")}
+          </p>
+        </div>
+
+        <%!-- The select sits in a form: a phx-change outside one never
+             reaches the server. --%>
+        <form id="encoding-form" phx-change="choose_encoding" phx-submit="confirm_encoding" class="space-y-6">
+          <div class="w-full max-w-md">
+            <.label class="block">
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Encoding")}
+            </.label>
+            <.select
+              name="encoding"
+              id="import-encoding"
+              value={Atom.to_string(@encoding_choice)}
+              options={Enum.map(Encoding.code_pages(), &{code_page_label(&1), Atom.to_string(&1)})}
+            />
+          </div>
+
+          <div>
+            <.label class="block">
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Preview")}
+            </.label>
+            <div
+              id="encoding-preview"
+              class="overflow-x-auto rounded-lg border border-base-300 bg-base-200/40 p-3 font-mono text-sm"
+            >
+              <p :for={line <- @encoding_preview} class="whitespace-pre">{line}</p>
+            </div>
+            <p :if={@encoding_undefined > 0} id="encoding-refusal" class="text-error text-sm mt-2">
+              {PhoenixKitCatalogue.Errors.message(:wrong_encoding)}
+            </p>
+          </div>
+
+          <div class="flex gap-2">
+            <button type="button" class="btn btn-ghost btn-sm" phx-click="go_back">
+              <.icon name="hero-arrow-left" class="w-4 h-4" />
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Back")}
+            </button>
+            <button type="submit" class="btn btn-primary btn-sm" disabled={@encoding_undefined > 0}>
+              {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Continue")}
+              <.icon name="hero-arrow-right" class="w-4 h-4" />
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+  end
+
+  defp code_page_label(:windows_1252),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Western European (Windows-1252)")
+
+  defp code_page_label(:windows_1257),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Baltic (Windows-1257)")
+
+  defp code_page_label(:windows_1251),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Cyrillic (Windows-1251)")
+
+  defp code_page_label(:windows_1250),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Central European (Windows-1250)")
+
+  defp code_page_label(:iso_8859_15),
+    do: Gettext.gettext(PhoenixKitCatalogue.Gettext, "Western European (ISO-8859-15)")
 
   # ── Map Step ────────────────────────────────────────────────────
 
@@ -3207,6 +3392,7 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
     if socket.assigns.ets_table, do: :ets.delete(socket.assigns.ets_table)
 
     socket
+    |> reset_encoding_state()
     |> assign(
       filename: nil,
       file_binary: nil,
@@ -3266,6 +3452,9 @@ defmodule PhoenixKitCatalogue.Web.ImportLive do
       "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
     )
   end
+
+  defp pro100_error_message(:wrong_encoding),
+    do: PhoenixKitCatalogue.Errors.message(:wrong_encoding)
 
   defp pro100_error_message(reason) do
     Gettext.gettext(PhoenixKitCatalogue.Gettext, "Import failed: %{reason}",

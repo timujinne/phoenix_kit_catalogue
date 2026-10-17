@@ -1276,6 +1276,24 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLiveTest do
       assert is_nil(moved.category_uuid)
     end
 
+    test "a move into a catalogue that holds the same external_id says why and stays staged",
+         %{conn: conn} do
+      catalogue = fixture_catalogue(%{name: "Here"})
+      other = fixture_catalogue(%{name: "There"})
+      eid = %{"api" => %{"external_id" => "CLASH-1"}}
+      item = fixture_item(%{name: "Clasher", catalogue_uuid: catalogue.uuid, data: eid})
+      _holder = fixture_item(%{name: "Holder", catalogue_uuid: other.uuid, data: eid})
+
+      {:ok, view, _html} = live(conn, edit_item_url(item.uuid))
+      pick(view, "catalogue:" <> other.uuid)
+
+      html = save_stay(view, %{"name" => "Clasher"})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "Failed to move item."
+      assert Catalogue.get_item(item.uuid).catalogue_uuid == catalogue.uuid
+    end
+
     test "Save & Exit after a move goes to the item's new catalogue", %{conn: conn} do
       catalogue = fixture_catalogue()
       other = fixture_catalogue()

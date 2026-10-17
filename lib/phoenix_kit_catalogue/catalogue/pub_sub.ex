@@ -180,6 +180,9 @@ defmodule PhoenixKitCatalogue.Catalogue.PubSub do
     * `:permanent_delete` — items are gone for good (same animation
       as `:trashed`; the row removal is harder to undo but the visual
       cue is the same).
+    * `:created` — items were just created in bulk (the shop API's batch
+      write): rows arrive, nothing leaves (green flash on arrival).
+    * `:updated` — items were edited in place in bulk: state refresh, no flash.
 
   `uuids` is the affected item list. The receiver does a full
   `reset_and_load` since a bulk change can rearrange every visible card;
@@ -188,7 +191,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PubSub do
   """
   @spec broadcast_bulk_change(
           Ecto.UUID.t(),
-          :trashed | :restored | :moved | :permanent_delete,
+          :trashed | :restored | :moved | :permanent_delete | :created | :updated,
           [Ecto.UUID.t()],
           pid()
         ) :: :ok

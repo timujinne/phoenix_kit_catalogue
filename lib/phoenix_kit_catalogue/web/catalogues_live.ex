@@ -2612,6 +2612,12 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
          )
          |> load_data(:index)}
 
+      {:error, :external_id_taken} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, Errors.message(:external_id_taken))
+         |> load_data(:index)}
+
       {:error, reason} ->
         log_operation_error(socket, "restore_catalogue", %{
           entity_type: "catalogue",

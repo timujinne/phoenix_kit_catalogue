@@ -248,6 +248,9 @@ msgstr "Ce fichier JSON n’est pas un export de catalogue : il doit contenir un
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr ""
 
+msgid "Another active row already uses the same external id."
+msgstr ""
+
 msgid "Cannot delete: %{count} smart items still reference this catalogue."
 msgstr ""
 
@@ -1927,6 +1930,36 @@ msgstr ""
 
 msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
 msgstr "Ce fichier n’est pas du texte UTF-8. Enregistrez-le en UTF-8, puis importez-le à nouveau."
+
+msgid "This file is not in that encoding. Choose another one."
+msgstr "Ce fichier n'est pas dans cet encodage. Choisissez-en un autre."
+
+msgid "File encoding"
+msgstr "Encodage du fichier"
+
+msgid "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+msgstr "Le fichier n'indique pas son encodage. Vérifiez que les lettres de l'aperçu s'affichent correctement et, sinon, choisissez un autre encodage."
+
+msgid "Encoding"
+msgstr "Encodage"
+
+msgid "Preview"
+msgstr "Aperçu"
+
+msgid "Western European (Windows-1252)"
+msgstr "Europe occidentale (Windows-1252)"
+
+msgid "Baltic (Windows-1257)"
+msgstr "Balte (Windows-1257)"
+
+msgid "Cyrillic (Windows-1251)"
+msgstr "Cyrillique (Windows-1251)"
+
+msgid "Central European (Windows-1250)"
+msgstr "Europe centrale (Windows-1250)"
+
+msgid "Western European (ISO-8859-15)"
+msgstr "Europe occidentale (ISO-8859-15)"
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr ""

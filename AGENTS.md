@@ -7,7 +7,7 @@ Guidance for AI agents working on `phoenix_kit_catalogue`.
 Product catalogue management as a pluggable PhoenixKit module: manufacturers,
 suppliers, catalogues, nested categories and items, with soft-delete,
 multilingual names/descriptions, move operations, attribute sets, a PDF library
-and import/export. Admin-only LiveView UI; no public API surface. Deep feature
+and import/export. Admin-only LiveView UI; no public routes of its own; the shop API tools are served by core. Deep feature
 semantics live in module `@moduledoc`s and `dev_docs/` — this file holds
 conventions, contracts and non-obvious boundaries.
 
@@ -41,13 +41,17 @@ conventions, contracts and non-obvious boundaries.
 - **No authorization in the context.** Mutating functions accept `actor_uuid`
   only for activity logging. Permission gating happens at the LiveView mount
   layer (`live_session :phoenix_kit_admin`, `:catalogue` permission key).
-- **Admin-only.** No public routes, JSON endpoints, or webhook receivers. The
-  plain HTTP routes — the stateless export download and the redirects from
-  the module's old addresses — are both behind `:phoenix_kit_require_admin`.
-  The export download also asks for the `catalogue` permission with the
-  module enabled (core's `require_module_access/2`): the admin plug alone
-  passes for any role that reaches the admin area, and the file carries
-  every item with its prices.
+- **Admin-only.** No public routes, JSON endpoints of its own, or webhook
+  receivers. The plain HTTP routes — the stateless export download and the
+  redirects from the module's old addresses — are both behind
+  `:phoenix_kit_require_admin`. The export download also asks for the
+  `catalogue` permission with the module enabled (core's
+  `require_module_access/2`): the admin plug alone passes for any role that
+  reaches the admin area, and the file carries every item with its prices. The
+  one exception to "no JSON surface" is the shop API: nine `catalogue.*` tools
+  (`api_tools/0`, `PhoenixKitCatalogue.API`) that core's API layer serves
+  behind its own keys, scopes and rate limits; this module declares them and
+  adds no route.
 - **No per-item versioning.** Soft-delete (`status`) is the only history
   mechanism; the activity log is the audit trail.
 - **No always-on background work.** Two jobs, both opt-in by config:
@@ -128,12 +132,19 @@ Repo-local aliases:
   In `admin_tabs/0`, declare static paths **before** wildcard `:uuid` paths, and
   use `match:` to control sidebar highlighting.
 - **Single public context** — all business logic goes through
-  `PhoenixKitCatalogue.Catalogue`. Internal submodules (`Catalogue.{Rules,
-  SmartPricing, Search, Tree, Slugs, Manufacturers, Suppliers, Links,
-  ItemSupplierInfos, Counts, Translations, Duplication, AttributeSets,
-  SupplierFields, SupplierComments, CrmLink, PdfLibrary, PdfEngines, PubSub,
-  ActivityLog, Helpers}`) are an implementation detail re-exported via
-  `defdelegate`; LiveViews and external consumers must not call them directly.
+  `PhoenixKitCatalogue.Catalogue`. `catalogue.ex` is the facade: its moduledoc
+  and `defdelegate`s, nothing else — implementation lives in `Catalogue.*`
+  (`Catalogues`, `Categories`, `Folders`, `Items`, `Rules`, `SmartPricing`,
+  `Search`, `Tree`, `Slugs`, `Manufacturers`, `Suppliers`, `Links`,
+  `ItemSupplierInfos`, `Counts`, `Translations`, `Duplication`,
+  `AttributeSets`, `SupplierFields`, `SupplierComments`, `CrmLink`,
+  `PdfLibrary`, `PdfEngines`, `PubSub`, `ActivityLog`, `Trash`, `Shared`,
+  `Helpers`). A new public function goes in its section module with its
+  `@doc` and `@spec`, plus a `defdelegate` in the facade. A section calls
+  another section's public function through the facade, and a private helper
+  a second section needs moves to `Catalogue.Shared` (`@doc false`) rather
+  than being copied. LiveViews and external consumers never call a submodule
+  directly.
 - **LiveViews `use Phoenix.LiveView` directly** — no `use PhoenixKitWeb,
   :live_view` in this standalone package. Four LVs layer
   `use PhoenixKitWeb.Live.UrlState` on top for URL-backed state; the export
@@ -178,7 +189,7 @@ Repo-local aliases:
 - **Soft-delete via `status`** for catalogues/categories/items (`"deleted"`);
   PDFs use `"active" | "trashed"`; manufacturers and suppliers are hard-delete
   only. A trash or restore path goes through the provenance helpers in
-  `Catalogue`: stamp only live rows with `stamp_trashed/4` /
+  `Catalogue.Trash`: stamp only live rows with `stamp_trashed/4` /
   `stamp_trashed_self/2`, restore with `restore_trashed/3` filtered by the
   stamp's root, and take `lock_catalogue!/1` before reading what it decides
   on. Skipping the stamp brings back resurrection of rows trashed on their
@@ -259,13 +270,19 @@ Repo-local aliases:
 ```
 lib/phoenix_kit_catalogue.ex          PhoenixKit.Module implementation (tabs, callbacks, children/0)
 lib/phoenix_kit_catalogue/
-  catalogue.ex                        the single public context (defdelegates)
-  catalogue/                          Rules, SmartPricing, Search, Tree, Slugs, AttributeSets,
+  catalogue.ex                        the single public context — moduledoc + defdelegates only
+  catalogue/                          its implementation, one module per section:
+    catalogues.ex  categories.ex      catalogue / category CRUD, moves, trash, positions
+    folders.ex  items.ex              folder tree; item CRUD, listing, bulk actions, pricing
+    trash.ex                          trash provenance stamps + the per-catalogue lock
+    shared.ex                         helpers several sections call (activity log, level positions, slugs)
+    …                                 Rules, SmartPricing, Search, Tree, Slugs, AttributeSets,
                                       SupplierFields, SupplierComments, CrmLink, PdfLibrary,
-                                      PdfEngines, PubSub, ActivityLog, Duplication, …
+                                      PdfEngines, PubSub, ActivityLog, Duplication, Helpers, …
   schemas/                            18 Ecto schemas, one per phoenix_kit_cat_* table
   migrations.ex                       module-owned versioned chain
   paths.ex  errors.ex  metadata.ex  attachments.ex
+  api.ex  api/                        shop API tools and reference resolution (api_tools/0)
   extension.ex  extensions.ex         the duck-typed item/category form extension slot
   import/  export/  pro100/           source + destination registries
   ai_translatable*.ex  ai_prompt.ex   phoenix_kit_ai integration
@@ -322,8 +339,8 @@ Key invariants to preserve:
   (`Catalogue.SmartPricing`) is the canonical evaluator consumers call rather
   than reimplementing the math.
 - Tree/position semantics (orphan promotion, cycle guards, sibling-scoped swap)
-  live in `Catalogue` and `Catalogue.Tree` — reuse them, never hand-write
-  recursive queries in LiveViews.
+  live in `Catalogue.Categories`, `Catalogue.Folders` and `Catalogue.Tree` —
+  reuse them, never hand-write recursive queries in LiveViews.
 
 Settings keys (`PhoenixKit.Settings`). Every key a person can change is on
 Settings → Catalogues (`Web.SettingsLive`), read and written through
@@ -357,7 +374,7 @@ PubSub topic: `"phoenix_kit_catalogue"`.
 
 Owns a versioned chain: `PhoenixKitCatalogue.Migrations` via
 `migration_module/0`, marker `pkc_schema:<N>` as a `COMMENT ON TABLE
-phoenix_kit_cat_catalogues`, currently V4. `mix phoenix_kit.update` applies it
+phoenix_kit_cat_catalogues`, currently V5. `mix phoenix_kit.update` applies it
 in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
 `execute/1`, which only works inside an `Ecto.Migration` run).
 
@@ -387,6 +404,15 @@ in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
   core's dump, `DROP TRIGGER IF EXISTS` before a recreate, and a slug
   projection's own sync function deleting only projection rows it is about to
   re-insert.
+- **V5 is the shop API's `external_id` uniqueness**: two partial unique expression
+  indexes (`phoenix_kit_cat_items_external_id_uniq`,
+  `phoenix_kit_cat_categories_external_id_uniq`) on `(catalogue_uuid,
+  data -> 'api' ->> 'external_id')` for live rows that have an id. A trashed row
+  frees its id; the changesets map the index to an error on `:data`; a restore
+  that would collide answers `{:error, :external_id_taken}`
+  (`Catalogue.Trash.guard_external_id/1`; inside a caller's own transaction the
+  Postgrex error is re-raised instead, the transaction being aborted by then),
+  and a copy drops the id (`Duplication.copy_data/3`).
 - UUIDv7 PKs and `use PhoenixKit.SchemaPrefix` on every table-backed schema.
 
 ## Testing
@@ -472,6 +498,32 @@ Pointers, not docs — the moduledocs are the contract.
   trashed card counts what its Restore brings back), and how to add a path
   without breaking the randomized combination test:
   `dev_docs/guides/trash-and-restore.md`.
+- **Shop API tools** — the handlers (`API.ListProducts`, `GetProducts`,
+  `CreateProducts`, `UpdateProducts`, `SetTranslations`, `DeleteProducts`,
+  `ListCategories`, `UpsertCategories`, `DeleteCategories`; each `call/2`) run
+  after core has checked the key, its scope, its owner's `catalogue` permission
+  and the input schema.
+  Rules: write only through the `Catalogue` facade, with `API.Common.write_opts/3`
+  (key owner as actor, `mode: "auto"`, `via: "api"` metadata); never accept
+  `base_price`, markup, discount or raw `data` (the conformance test walks every
+  schema); write `data` only through `:data_owned_paths`; answer a batch per row
+  and never stop at a bad one; support `ctx.dry_run?` with a preview and a
+  fingerprint. A reference is `{id}`, `{sku}` or `{external_id}`
+  (`API.resolve_refs/2`, shared with the sibling modules). The API layer is the
+  one place besides the facade that calls `Catalogue.Slugs` and
+  `Catalogue.Translations` directly (the handler builds the slug changeset
+  itself), and `Catalogue.RefLookup` through the facade only.
+  `catalogue.delete_products` and `catalogue.delete_categories` are
+  `danger: :always` and trash, never hard-delete: they must only ever run under
+  a core that enforces the confirmation gate. A category goes with its subtree
+  (`items: :cascade`, the admin's default), and the dry run of an always-confirm
+  tool carries `requires_confirmation: true` (`Common.preview/2`). `API.Gate`
+  keeps those tools out of the registry on a core that lacks the gate; raise the
+  `phoenix_kit` floor in `mix.exs` to the first release that ships the shop API.
+  `update_products` refuses a sku another live item of the catalogue holds
+  (`sku_taken`; no DB index backs it).
+  Guide: `dev_docs/guides/api-tools.md`; tests: `test/phoenix_kit_catalogue/api/`,
+  through `Test.ApiCase`.
 - **Moves and copies** — a move lands only in a live catalogue (and
   live category) of the same kind — standard and smart items price
   differently — and tells both catalogues. Duplicate (`Catalogue.Duplication`:
@@ -520,10 +572,36 @@ Pointers, not docs — the moduledocs are the contract.
   but only a folder still where and as the hooks put it. A new path that
   renames or moves a catalogue, category or item calls `follow/2` too; a
   bulk path reads its `before` side with `MediaFolders.moving_items/1`
-  inside its transaction. A hard delete asks `MediaFolders.release_plan/1`
-  before it deletes and hands the plan to `release/1` after, which renames
-  the record's folder to its deterministic name (with a UUID suffix when
-  occupied) so a new record of that name cannot adopt the old files.
+  inside its transaction. `update_items/2` (the shop API's batch write) follows
+  its changed rows in one pass after the commit. Called inside a caller's
+  transaction, as the shop API's price, availability and image writes do (they
+  also reach `update_item/3` through `attach_files/3`), that "after" is only
+  after its own statements: the activity entries, their announcement and the
+  catalogue's bulk events go out before the caller commits (`broadcast: false`
+  holds back the catalogue events, not core's activity announcement), the folder
+  pass runs inside the transaction, and neither it nor the activity insert runs
+  under a savepoint, so a failing statement of either aborts the caller's
+  transaction while the function still answers `{:ok, _}`. Such a caller writes
+  only rows that move no folder. A caller moving many items
+  uses `move_item_to_category_deferred/3`, which returns the `{before, moved}`
+  pair (`before` is the row the move locked, not the caller's copy), and hands
+  the pairs to `Catalogue.follow_moved_items/2` once; that re-reads the moved
+  rows in one query first, so a rename made meanwhile is followed too, and the
+  caller runs it in an `after` so that a row that raises does not leave the
+  earlier moves' folders behind (`update_products` does). A pass costs per
+  renamed record about 12 queries and 2 advisory locks (the folder-tree lock
+  and a name lock; a plain move into one container is one `UPDATE` for the whole
+  group): 100 renames through `update_items/2` measured 1,209 queries and 187 ms
+  against 206 and 37 ms with the layout off, with core's settings cache running
+  (without it each rename adds some 35 settings reads, which the test environment
+  shows). `MediaFolders.follow/2` renames one folder at a time, so a 500-row
+  rename (the API's cap) is some 6,000 post-commit queries in the request.
+  A hard delete asks
+  `MediaFolders.release_plan/1` before it deletes and hands the plan to
+  `release/1` after, which renames the record's folder to its deterministic
+  name (with a UUID suffix when occupied) so a new record of that name cannot
+  adopt the old files. A trash leaves the trashed records' own folders where
+  they are.
   A test that changes a hook key uses
   `Test.MediaHooks`, never `Application.delete_env/2` — that would strip
   the defaults from every later test. Flat pre-layout folders are the
@@ -546,10 +624,15 @@ Pointers, not docs — the moduledocs are the contract.
 - **Import** — `PhoenixKitCatalogue.Import` is a source registry
   (`Import.Source.Universal` for CSV/XLSX, `Import.Source.Pro100` for Pro100
   cabinet-software data); execution goes through `Import.{Mapper, Executor}` and
-  the `ImportLive` wizard (ETS buffering). A text upload is UTF-8, or UTF-16
-  with a byte-order mark, by the time a parser sees it (`Import.Encoding`);
-  anything else is refused with a message, never guessed — Windows-1252,
-  -1257 and -1251 give the same byte different letters. The import task, not
+  the `ImportLive` wizard (ETS buffering). A text upload is UTF-8 by the time
+  a parser sees it (`Import.Encoding`): UTF-8 and UTF-16 with a byte-order
+  mark are read as they are, and any other text file is in a single-byte
+  code page its bytes cannot name — Windows-1252, -1257 and -1251 give the
+  same byte different letters. The wizard's encoding step proposes a page
+  and previews the file in it; a parser applies only the page the operator
+  confirmed (`encoding:`), never a guess of its own, and every later parse
+  of the same upload passes the wizard's `file_encoding`. A NUL byte, or a
+  byte the confirmed page does not define, is refused. The import task, not
   the page, writes `import.completed` / `import.failed`, so the outcome is
   logged when the operator has closed the tab.
 - **Export** — `PhoenixKitCatalogue.Export.build/1` with a

@@ -614,11 +614,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   def handle_info({:catalogue_category_reorder, _, _, _, _}, socket), do: {:noreply, socket}
 
   # Cross-tab live bulk change: another open detail page just bulk-
-  # trashed / restored / moved / hard-deleted items. Two-step animation
-  # for receivers — flash the "leaving" colour on every affected DOM
-  # row immediately, schedule the actual state refresh after the flash
-  # plays out (~800ms), then on refresh fire green flash for the
-  # arriving rows when the kind is :restored or :moved.
+  # trashed / restored / moved / hard-deleted / created / updated items.
+  # Two-step animation for receivers — flash the "leaving" colour on
+  # every affected DOM row immediately, schedule the actual state
+  # refresh after the flash plays out (~800ms), then on refresh fire
+  # green flash for the arriving rows when the kind is :restored,
+  # :moved or :created.
   def handle_info(
         {:catalogue_bulk_change, cat_uuid, kind, uuids, from},
         %{assigns: %{catalogue_uuid: catalogue_uuid}} = socket
@@ -626,8 +627,9 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       when cat_uuid == catalogue_uuid and from != self() do
     leaving_status =
       case kind do
-        # Restored items aren't currently visible — nothing to flash red.
-        :restored -> nil
+        # Restored, created and updated rows are not on their way out:
+        # nothing to flash red.
+        kind when kind in [:restored, :created, :updated] -> nil
         # Trashed / moved / permanent-deleted: they're on this tab now,
         # so red-flash them as they're about to leave.
         _ -> :error
@@ -650,7 +652,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   def handle_info({:catalogue_bulk_change, _, _, _, _}, socket), do: {:noreply, socket}
 
   # Tail of the cross-tab bulk animation — applies the actual state
-  # refresh and the arriving-side green flash (for moves / restores).
+  # refresh and the arriving-side green flash (for moves / restores / creates).
   # `reset_and_load/1` already loads the level (no second `refresh_counts`);
   # an active search is re-run too, since the batch `:item` event that
   # would have done it was held back by `bulk_change_pending`. The
@@ -664,7 +666,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       |> rerun_active_search()
 
     socket =
-      if kind in [:restored, :moved],
+      if kind in [:restored, :moved, :created],
         do: Enum.reduce(uuids, socket, &flash_reorder(&2, &1, :ok)),
         else: socket
 
@@ -959,8 +961,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item not found.")
          )}
 
-      {:error, :parent_catalogue_deleted} ->
-        {:noreply, put_flash(socket, :error, Errors.message(:parent_catalogue_deleted))}
+      {:error, reason} when reason in [:parent_catalogue_deleted, :external_id_taken] ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
 
       {:error, reason} ->
         log_operation_error(socket, "restore_item", %{
@@ -1349,8 +1351,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
            Gettext.gettext(PhoenixKitCatalogue.Gettext, "Category not found.")
          )}
 
-      {:error, :parent_catalogue_deleted} ->
-        {:noreply, put_flash(socket, :error, Errors.message(:parent_catalogue_deleted))}
+      {:error, reason} when reason in [:parent_catalogue_deleted, :external_id_taken] ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
 
       {:error, reason} ->
         log_operation_error(socket, "restore_category", %{
@@ -2105,18 +2107,23 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
   end
 
   defp do_bulk_restore_items(socket, uuids) do
-    {count, _} = Catalogue.bulk_restore_items(uuids, scoped_muted_actor_opts(socket))
-    PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :restored, uuids)
-    broadcast_item_batch(socket)
+    case Catalogue.bulk_restore_items(uuids, scoped_muted_actor_opts(socket)) do
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, Errors.message(reason))}
 
-    socket
-    |> clear_item_selection()
-    |> put_flash(
-      :info,
-      Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restored %{count} items.", count: count)
-    )
-    |> reset_and_load()
-    |> then(&{:noreply, &1})
+      {count, _} ->
+        PubSub.broadcast_bulk_change(socket.assigns.catalogue_uuid, :restored, uuids)
+        broadcast_item_batch(socket)
+
+        socket
+        |> clear_item_selection()
+        |> put_flash(
+          :info,
+          Gettext.gettext(PhoenixKitCatalogue.Gettext, "Restored %{count} items.", count: count)
+        )
+        |> reset_and_load()
+        |> then(&{:noreply, &1})
+    end
   end
 
   defp do_bulk_move_items(socket, uuids, destination) do
@@ -2371,6 +2378,12 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     end)
   end
 
+  # A collision on an external id is the one failure the operator can act
+  # on, so it names itself; any other mix keeps the generic sentence.
+  defp bulk_failure_message(reasons, generic) do
+    if :external_id_taken in reasons, do: Errors.message(:external_id_taken), else: generic
+  end
+
   defp do_bulk_move_categories(socket, uuids, catalogue_uuid, target_uuid) do
     {:ok, %{moved: moved, errors: errors}} =
       Catalogue.bulk_move_categories_to_catalogue(
@@ -2389,10 +2402,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       Gettext.gettext(PhoenixKitCatalogue.Gettext, "Moved %{count} categories.", count: moved),
       errors,
       "bulk_move_categories_to_catalogue",
-      Gettext.gettext(
-        PhoenixKitCatalogue.Gettext,
-        "%{count} categories could not be moved.",
-        count: length(errors)
+      bulk_failure_message(
+        Enum.map(errors, &elem(&1, 1)),
+        Gettext.gettext(
+          PhoenixKitCatalogue.Gettext,
+          "%{count} categories could not be moved.",
+          count: length(errors)
+        )
       )
     )
     |> reset_and_load()
@@ -2467,15 +2483,21 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     if errors == [] do
       {:noreply, socket}
     else
-      log_operation_error(socket, "bulk_restore_categories_partial", %{reasons: errors})
+      log_operation_error(socket, "bulk_restore_categories_partial", %{
+        reason: :partial_failure,
+        errors: errors
+      })
 
       {:noreply,
        put_flash(
          socket,
          :error,
-         Gettext.gettext(
-           PhoenixKitCatalogue.Gettext,
-           "Some categories couldn't be restored. The catalogue may be deleted — restore it first."
+         bulk_failure_message(
+           errors,
+           Gettext.gettext(
+             PhoenixKitCatalogue.Gettext,
+             "Some categories couldn't be restored. The catalogue may be deleted — restore it first."
+           )
          )
        )}
     end

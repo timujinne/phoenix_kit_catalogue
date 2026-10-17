@@ -183,6 +183,11 @@ defmodule PhoenixKitCatalogue do
   @spec media_reorganizer() :: module()
   def media_reorganizer, do: PhoenixKitCatalogue.MediaReorganizer
 
+  # The shop API's admin tools (`PhoenixKitCatalogue.API`). `api_tools/0` is an
+  # optional `PhoenixKit.Module` callback. No `@impl`, as for `media_reorganizer/0`
+  # above: the pin floor predates the callback, where `@impl` would warn.
+  def api_tools, do: PhoenixKitCatalogue.API.tools()
+
   @impl PhoenixKit.Module
   def children do
     # DeleteGuards registers both entities delete guards at boot — the

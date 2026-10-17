@@ -248,6 +248,9 @@ msgstr "See JSON-fail ei ole kataloogi eksport: selles peab olema loend «items�
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr "Taastamine ebaõnnestus — vanemkataloog on kustutatud. Taastage esmalt kataloog."
 
+msgid "Another active row already uses the same external id."
+msgstr "Mõni teine aktiivne kirje kasutab juba sama välist ID-d."
+
 msgid "Cannot delete: %{count} smart items still reference this catalogue."
 msgstr "Kustutamine ebaõnnestus: %{count} nutikat toodet viitab endiselt sellele kataloogile."
 
@@ -1926,6 +1929,36 @@ msgstr "Faili formaat ei vasta valitud formaadile."
 
 msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
 msgstr "See fail ei ole UTF-8 tekst. Salvesta see UTF-8 kodeeringus ja laadi uuesti üles."
+
+msgid "This file is not in that encoding. Choose another one."
+msgstr "See fail ei ole selles kodeeringus. Vali mõni teine."
+
+msgid "File encoding"
+msgstr "Faili kodeering"
+
+msgid "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+msgstr "Failist ei selgu, mis kodeeringus see on. Kontrolli, kas tähed on eelvaates õiged, ja kui ei ole, vali teine kodeering."
+
+msgid "Encoding"
+msgstr "Kodeering"
+
+msgid "Preview"
+msgstr "Eelvaade"
+
+msgid "Western European (Windows-1252)"
+msgstr "Lääne-Euroopa (Windows-1252)"
+
+msgid "Baltic (Windows-1257)"
+msgstr "Balti (Windows-1257)"
+
+msgid "Cyrillic (Windows-1251)"
+msgstr "Kirillitsa (Windows-1251)"
+
+msgid "Central European (Windows-1250)"
+msgstr "Kesk-Euroopa (Windows-1250)"
+
+msgid "Western European (ISO-8859-15)"
+msgstr "Lääne-Euroopa (ISO-8859-15)"
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr "Failis on importimiseks liiga palju ridu. Jaga see väiksemateks failideks."

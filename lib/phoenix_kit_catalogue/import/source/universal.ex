@@ -19,10 +19,14 @@ defmodule PhoenixKitCatalogue.Import.Source.Universal do
   @impl true
   def flow, do: :mapping
 
-  @doc "Parse an uploaded file into the mapper's parsed_file shape."
-  @spec parse(binary(), String.t(), atom()) :: {:ok, map()} | {:error, term()}
-  def parse(binary, _filename, :json), do: parse_json(binary)
-  def parse(binary, filename, _spreadsheet), do: Parser.parse(binary, filename)
+  @doc """
+  Parse an uploaded file into the mapper's parsed_file shape. `opts` are
+  `Parser.parse/3`'s; JSON is UTF-8 by definition and takes none.
+  """
+  @spec parse(binary(), String.t(), atom(), keyword()) :: {:ok, map()} | {:error, term()}
+  def parse(binary, filename, format, opts \\ [])
+  def parse(binary, _filename, :json, _opts), do: parse_json(binary)
+  def parse(binary, filename, _spreadsheet, opts), do: Parser.parse(binary, filename, opts)
 
   @json_headers ~w(name sku base_price unit item_type catalogue)
 

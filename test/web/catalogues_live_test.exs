@@ -588,6 +588,39 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
       assert Catalogue.get_catalogue(catalogue.uuid).status == "active"
     end
 
+    test "restore_catalogue says why when a restored item would take a live item's external_id",
+         %{conn: conn} do
+      import Ecto.Query, only: [from: 2]
+      catalogue = fixture_catalogue(%{name: "Clashing comeback"})
+
+      attrs = %{
+        name: "Twin",
+        catalogue_uuid: catalogue.uuid,
+        data: %{"api" => %{"external_id" => "RC-1"}}
+      }
+
+      {:ok, old} = Catalogue.create_item(attrs)
+
+      # Trashed before trash provenance existed: a catalogue restore revives it.
+      {1, _} =
+        PhoenixKit.RepoHelper.repo().update_all(
+          from(i in PhoenixKitCatalogue.Schemas.Item, where: i.uuid == ^old.uuid),
+          set: [status: "deleted"]
+        )
+
+      {:ok, _live} = Catalogue.create_item(attrs)
+      {:ok, _} = Catalogue.trash_catalogue(catalogue)
+
+      {:ok, view, _html} = live(conn, @base)
+      _ = render_click(view, "switch_catalogue_view", %{"mode" => "deleted"})
+
+      html = render_click(view, "restore_catalogue", %{"uuid" => catalogue.uuid})
+
+      assert html =~ PhoenixKitCatalogue.Errors.message(:external_id_taken)
+      refute html =~ "Failed to restore catalogue."
+      assert Catalogue.get_catalogue(catalogue.uuid).status == "deleted"
+    end
+
     test "permanently_delete_catalogue deletes from DB", %{conn: conn} do
       catalogue = fixture_catalogue(%{name: "Forever gone"})
       Catalogue.trash_catalogue(catalogue)

@@ -52,6 +52,45 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
   end
 
   @doc """
+  Logs a batch of entries with one insert and one broadcast (core's
+  `PhoenixKit.Activity.log_many/2`), the module key injected into each.
+  Always returns `:ok`; like `log/1` it never fails the caller's operation.
+  An empty list does nothing.
+  """
+  @spec log_many([map()]) :: :ok
+  def log_many([]), do: :ok
+
+  def log_many(entries) when is_list(entries) do
+    _ = PhoenixKit.Activity.log_many(Enum.map(entries, &Map.put(&1, :module, @module_key)))
+    :ok
+  end
+
+  # Keys the entry itself owns; an extra map never supplies them, even when the
+  # entry has no value for them.
+  @reserved_keys ["changes", "name", "sku"]
+
+  @doc """
+  Merges `extra` (the API's `via` / `key_prefix` / `request_id` / `tool`) into an
+  entry's metadata. Only string keys are taken, and never the reserved ones
+  (`"name"`, `"sku"` and `"changes"`), so a caller cannot supply the identity
+  or the diff. On a clash the entry's own key wins. `nil` and `%{}` change
+  nothing.
+  """
+  @spec with_extra(map(), map() | nil) :: map()
+  def with_extra(metadata, extra) when is_map(metadata) and is_map(extra) do
+    extra =
+      for {key, value} <- extra,
+          is_binary(key),
+          key not in @reserved_keys,
+          into: %{},
+          do: {key, value}
+
+    Map.merge(extra, metadata)
+  end
+
+  def with_extra(metadata, _extra), do: metadata
+
+  @doc """
   Adds a `"changes"` map to `metadata` when anything actually moved.
 
   The diff lives under a RESERVED key, never merged into the metadata's own
@@ -65,10 +104,22 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
 
   Identity stays at the top level so a row is readable and linkable; the
   change sits beside it so a reader can tell the two apart.
+
+  `data_paths` names `data` sub-paths (`["ecommerce", "compare_at_price"]`) whose
+  values are compared too; each that moved appears under the key
+  `"data.ecommerce.compare_at_price"`. A map or list leaf is written as JSON;
+  any value is clipped to 500 characters. The key joins the path with dots, so
+  a path segment that itself contains a dot cannot be told apart from two
+  segments.
   """
-  @spec with_changes(map(), struct(), struct(), [atom()]) :: map()
-  def with_changes(metadata, before, now, fields) do
-    case changed_fields(before, now, fields) do
+  @spec with_changes(map(), struct(), struct(), [atom()], [[String.t()]]) :: map()
+  def with_changes(metadata, before, now, fields, data_paths \\ []) do
+    changes =
+      before
+      |> changed_fields(now, fields)
+      |> Map.merge(changed_data_paths(before, now, data_paths))
+
+    case changes do
       empty when map_size(empty) == 0 -> metadata
       changes -> Map.put(metadata, "changes", changes)
     end
@@ -112,6 +163,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
 
       cond do
         equal_values?(old, new) -> acc
+        field == :slug -> Map.merge(acc, slug_changes(old, new))
         field in @flag_only_fields -> Map.put(acc, to_string(field), %{"changed" => true})
         true -> Map.put(acc, to_string(field), diff_pair(field, old, new))
       end
@@ -126,6 +178,63 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
 
   defp diff_pair(_field, old, new),
     do: %{"from" => display_value(old), "to" => display_value(new)}
+
+  # `slug` is a lang -> value map. One entry per language that changed, so
+  # the old slug of a language stays readable in the log ("slug.en-US").
+  defp slug_changes(old, new) do
+    old = if is_map(old), do: old, else: %{}
+    new = if is_map(new), do: new, else: %{}
+
+    (Map.keys(old) ++ Map.keys(new))
+    |> Enum.uniq()
+    |> Enum.sort()
+    |> Enum.reduce(%{}, fn lang, acc ->
+      from = Map.get(old, lang)
+      to = Map.get(new, lang)
+
+      {from, to} = {display_value(from), display_value(to)}
+
+      if from == to,
+        do: acc,
+        else: Map.put(acc, "slug." <> to_string(lang), %{"from" => from, "to" => to})
+    end)
+  end
+
+  @max_data_display 500
+
+  defp changed_data_paths(_before, _now, []), do: %{}
+
+  defp changed_data_paths(before, now, paths) when is_list(paths) do
+    Enum.reduce(paths, %{}, fn path, acc ->
+      old = data_at(before, path)
+      new = data_at(now, path)
+
+      if equal_values?(old, new),
+        do: acc,
+        else:
+          Map.put(acc, "data." <> Enum.join(path, "."), %{
+            "from" => data_display(old),
+            "to" => data_display(new)
+          })
+    end)
+  end
+
+  defp data_at(record, path), do: record |> Map.get(:data) |> dig(path)
+
+  defp dig(value, []), do: value
+  defp dig(%{} = map, [key | rest]), do: map |> Map.get(key) |> dig(rest)
+  defp dig(_other, _path), do: nil
+
+  defp data_display(value) when is_map(value) or is_list(value),
+    do: value |> Jason.encode!() |> clip()
+
+  defp data_display(value), do: value |> display_value() |> clip()
+
+  defp clip(text) when is_binary(text) do
+    if String.length(text) > @max_data_display,
+      do: String.slice(text, 0, @max_data_display) <> "…",
+      else: text
+  end
 
   # A bulk row records which rows it touched, but not an unbounded list of
   # them: a 500-item move would put 18KB of uuids into every reader's page,

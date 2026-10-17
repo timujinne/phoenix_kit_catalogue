@@ -10,11 +10,20 @@ current code.
   `priv/gettext` and passes for all six
   (`test/phoenix_kit_catalogue/uk_locale_test.exs`).
 
+## Fixed (Batch 2 — 2026-10-14)
+
+- ~~`priv/gettext/uk/LC_MESSAGES/default.po` kept `msgid "URL slug"` /
+  `msgstr "URL slug"`~~ — now `URL-слаг`, as in the Russian file. The two
+  other Ukrainian strings that spelled the word in Latin letters follow it
+  (`Показувати URL-слаг і поля SEO`, `У цього значення немає слага, …`), so
+  the settings switch names the field the way the form labels it.
+
 ## Files touched
 
 | File | Change |
 |---|---|
 | `test/phoenix_kit_catalogue/uk_locale_test.exs` | Parity check runs for every locale |
+| `priv/gettext/uk/LC_MESSAGES/default.po` | `slug` → `слаг` in three msgstrs |
 
 ## Verification
 
@@ -22,6 +31,4 @@ current code.
 
 ## Open
 
-- `priv/gettext/uk/LC_MESSAGES/default.po` keeps `msgid "URL slug"` /
-  `msgstr "URL slug"` (ru has `URL-слаг`). The reviewer called it a native
-  speaker's choice; it waits for the maintainer's fix-or-skip decision.
+None.

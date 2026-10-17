@@ -50,6 +50,10 @@ defmodule PhoenixKitCatalogue.Import.Parser do
   ## Options
 
     * `:sheet` — sheet name to parse (XLSX only, defaults to first sheet)
+    * `:encoding` — the `t:PhoenixKitCatalogue.Import.Encoding.code_page/0`
+      to read a CSV in when it is not UTF-8 and carries no byte-order mark.
+      Without it such a file is `{:error, :csv_not_utf8}`; with a page the
+      file holds bytes outside of, `{:error, :wrong_encoding}`.
   """
   @spec parse(binary(), String.t(), keyword()) :: {:ok, parsed_file()} | {:error, term()}
   def parse(binary, filename, opts \\ []) do
@@ -58,7 +62,7 @@ defmodule PhoenixKitCatalogue.Import.Parser do
     else
       case detect_format(filename) do
         :xlsx -> binary |> parse_xlsx(opts) |> enforce_row_cap()
-        :csv -> binary |> parse_csv() |> enforce_row_cap()
+        :csv -> binary |> parse_csv(opts) |> enforce_row_cap()
         {:error, :unsupported} -> {:error, :unsupported_file_format}
       end
     end
@@ -154,12 +158,14 @@ defmodule PhoenixKitCatalogue.Import.Parser do
   # ── CSV Parsing ───────────────────────────────────────────────
 
   # Cells reach header matching, the JSON-serialised preview and the
-  # database, all of which need valid UTF-8 — a file in another encoding
-  # is refused here with a message rather than failing further on.
-  defp parse_csv(binary) do
-    case Encoding.to_utf8(binary) do
+  # database, all of which need valid UTF-8 — a file whose encoding is
+  # not known is refused here with a message rather than failing further
+  # on.
+  defp parse_csv(binary, opts) do
+    case Encoding.to_utf8(binary, Keyword.get(opts, :encoding)) do
       {:ok, text} -> parse_csv_text(text)
       {:error, :not_utf8} -> {:error, :csv_not_utf8}
+      {:error, :wrong_encoding} -> {:error, :wrong_encoding}
     end
   end
 

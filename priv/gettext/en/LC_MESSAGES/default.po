@@ -248,6 +248,9 @@ msgstr "This JSON file is not a catalogue export: it needs an \"items\" list of 
 msgid "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 msgstr "Cannot restore — the parent catalogue is deleted. Restore the catalogue first."
 
+msgid "Another active row already uses the same external id."
+msgstr "Another active row already uses the same external id."
+
 msgid "Cannot delete: %{count} smart items still reference this catalogue."
 msgstr "Cannot delete: %{count} smart items still reference this catalogue."
 
@@ -1926,6 +1929,36 @@ msgstr ""
 
 msgid "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
 msgstr "This file is not UTF-8 text. Save it as UTF-8 and upload it again."
+
+msgid "This file is not in that encoding. Choose another one."
+msgstr "This file is not in that encoding. Choose another one."
+
+msgid "File encoding"
+msgstr "File encoding"
+
+msgid "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+msgstr "This file does not say which encoding it is in. Check that the letters in the preview read correctly, and choose another encoding if they do not."
+
+msgid "Encoding"
+msgstr "Encoding"
+
+msgid "Preview"
+msgstr "Preview"
+
+msgid "Western European (Windows-1252)"
+msgstr "Western European (Windows-1252)"
+
+msgid "Baltic (Windows-1257)"
+msgstr "Baltic (Windows-1257)"
+
+msgid "Cyrillic (Windows-1251)"
+msgstr "Cyrillic (Windows-1251)"
+
+msgid "Central European (Windows-1250)"
+msgstr "Central European (Windows-1250)"
+
+msgid "Western European (ISO-8859-15)"
+msgstr "Western European (ISO-8859-15)"
 
 msgid "File has too many rows to import. Please split it into smaller files."
 msgstr ""

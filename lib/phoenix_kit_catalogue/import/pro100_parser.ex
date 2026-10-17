@@ -3,7 +3,9 @@ defmodule PhoenixKitCatalogue.Import.Pro100Parser do
   Parses the PRO100 fixed-layout text formats (`# Parts` / `# Materials`).
 
   UTF-8 with an optional leading BOM (or UTF-16 with one), TAB-separated,
-  CRLF (or LF) lines. Each data row begins with two empty fields (the leading `\\t\\t`); after dropping
+  CRLF (or LF) lines. PRO100 itself reads and writes the Windows code page
+  of the machine it runs on, so a file it wrote is single-byte text:
+  `parse/3` takes the page to read such a file in as `encoding:`. Each data row begins with two empty fields (the leading `\\t\\t`); after dropping
   them the positional columns are:
 
       Furniture: name  id  c3  price  c5  c6  c7
@@ -23,12 +25,14 @@ defmodule PhoenixKitCatalogue.Import.Pro100Parser do
           format: :furniture | :materials
         }
 
-  @spec parse(binary(), :furniture | :materials) :: {:ok, [row()]} | {:error, term()}
-  def parse(binary, format) when is_binary(binary) and format in [:furniture, :materials] do
-    case Encoding.to_utf8(binary) do
+  @spec parse(binary(), :furniture | :materials, keyword()) ::
+          {:ok, [row()]} | {:error, term()}
+  def parse(binary, format, opts \\ [])
+      when is_binary(binary) and format in [:furniture, :materials] do
+    case Encoding.to_utf8(binary, Keyword.get(opts, :encoding)) do
       {:ok, ""} -> {:error, :empty}
       {:ok, text} -> parse_text(text, format)
-      {:error, :not_utf8} -> {:error, :not_utf8}
+      {:error, reason} -> {:error, reason}
     end
   end
 

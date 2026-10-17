@@ -217,6 +217,10 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
       name: "phoenix_kit_cat_item_slugs_pkey",
       message: "is already taken in this language"
     )
+    |> unique_constraint(:data,
+      name: "phoenix_kit_cat_items_external_id_uniq",
+      message: "external_id is already taken in this catalogue"
+    )
   end
 
   # `nil` is never a legitimate STORED value for a top-level `data` key —

@@ -10,7 +10,8 @@ enforced by `test/web/ui_conventions_test.exs`.
 - **Sentence case** for every label, button, heading, tab, column header and
   dialog title: "Add supplier", "Unit cost", "Save & exit". Capitals stay only
   on acronyms (SKU, PDF, SEO, URL, CRM, AI), words with digits (Pro100) and
-  names of things (the "Deleted" tab, Shopify, the Entities module). This is
+  names of things (the "Deleted" tab, Shopify, the Entities module, Windows
+  and "European" in a code page name). This is
   also what core, CRM and projects use.
 - **Unset value** in a select: "— X not set —" ("— Manufacturer not set —").
   Never "No X", which reads as if the list were empty.

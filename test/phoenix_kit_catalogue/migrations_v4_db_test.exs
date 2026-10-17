@@ -37,13 +37,13 @@ defmodule PhoenixKitCatalogue.MigrationsV4DBTest do
     count
   end
 
-  test "replaying the chain twice is idempotent and stamps pkc_schema:4" do
+  test "replaying the chain twice is idempotent and stamps the current marker" do
     replay_chain!()
     replay_chain!()
 
     assert constraint_count("phoenix_kit_cat_catalogues_item_type_check") == 1
     assert constraint_count("phoenix_kit_cat_items_item_type_check") == 1
-    assert Migrations.migrated_version_runtime(prefix: "public") == 4
+    assert Migrations.migrated_version_runtime(prefix: "public") == Migrations.current_version()
   end
 
   test "the columns have the declared shape" do

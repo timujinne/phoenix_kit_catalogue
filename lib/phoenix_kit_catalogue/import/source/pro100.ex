@@ -28,6 +28,8 @@ defmodule PhoenixKitCatalogue.Import.Source.Pro100 do
   …") while the sync targets one catalogue, and rows from the other groups must
   not be offered for creation here.
 
+  `opts` are the parser's (`encoding:` for a file that is not UTF-8).
+
   Note for future sources: `handle_sync_file` dispatches this call on whichever
   module the operator picked, so every `flow() == :sync` source must keep the
   same arity. PRO100 is the only one today.
@@ -36,10 +38,11 @@ defmodule PhoenixKitCatalogue.Import.Source.Pro100 do
           binary(),
           :furniture | :materials,
           [PhoenixKitCatalogue.Schemas.Item.t()],
-          String.t() | nil
+          String.t() | nil,
+          keyword()
         ) :: {:ok, map()} | {:error, term()}
-  def analyze(binary, format, catalogue_items, catalogue_name) do
-    with {:ok, rows} <- Pro100Parser.parse(binary, format) do
+  def analyze(binary, format, catalogue_items, catalogue_name, opts \\ []) do
+    with {:ok, rows} <- Pro100Parser.parse(binary, format, opts) do
       index = Matcher.index(catalogue_items)
       {:ok, Pro100Plan.build(rows, index, catalogue_name)}
     end

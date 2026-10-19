@@ -3814,7 +3814,7 @@ msgid "Reorder all items"
 msgstr "Järjesta kõik tooted ümber"
 
 msgid "Internal"
-msgstr "Sisemine"
+msgstr "Peidetud"
 
 msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
 msgstr "Ei ole nähtav toodete valijates ega sirvimisakendes, mida teised lehed kasutavad, koos alamkategooriate ja nende toodetega. Halduslehed näitavad seda endiselt."

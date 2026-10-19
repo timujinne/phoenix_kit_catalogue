@@ -97,6 +97,7 @@ defmodule PhoenixKitCatalogue.Web.Components do
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
   import PhoenixKitWeb.Components.Core.TableDefault
   import PhoenixKitWeb.Components.Core.TableRowMenu
+  import PhoenixKitWeb.Components.Core.Textarea, only: [textarea: 1]
 
   alias Phoenix.LiveView.JS
   alias PhoenixKit.Modules.Storage.URLSigner
@@ -2712,6 +2713,48 @@ defmodule PhoenixKitCatalogue.Web.Components do
   defp kind_label(_), do: nil
 
   @doc """
+  The permanent-delete confirmation's line about dependencies: other
+  items that list something this delete removes lose those lines with it
+  (the database cascades them), so the dialog says how many first. `[]`
+  when there are none — append it to the dialog's `messages`.
+  """
+  @spec dependents_delete_messages(non_neg_integer() | nil) :: [{:warning, String.t()}]
+  def dependents_delete_messages(count) when is_integer(count) and count > 0 do
+    [
+      {:warning,
+       Gettext.ngettext(
+         PhoenixKitCatalogue.Gettext,
+         "%{count} other item lists something this removes as a dependency. That line is removed with it.",
+         "%{count} other items list something this removes as a dependency. Those lines are removed with it.",
+         count
+       )}
+    ]
+  end
+
+  def dependents_delete_messages(_count), do: []
+
+  @doc """
+  The "Internal" badge for a category (or a row map of one) whose
+  `internal` flag is set — it and everything under it are kept out of the
+  embeddable pop-ups. Nothing for any other record.
+  """
+  attr(:record, :any, required: true)
+
+  def internal_badge(assigns) do
+    ~H"""
+    <span
+      :if={Map.get(@record, :internal) == true}
+      class="badge badge-outline badge-xs gap-1 shrink-0 text-base-content/70"
+      title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Not shown in the item pickers and browse pop-ups")}
+      data-internal-badge={@record.uuid}
+    >
+      <.icon name="hero-eye-slash" class="w-3 h-3" />
+      {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Internal")}
+    </span>
+    """
+  end
+
+  @doc """
   The "Service" badge for an item whose EFFECTIVE type is service — nothing
   for goods (every product saying "Goods" would be noise). Styled like the
   "Smart" catalogue badge.
@@ -3872,6 +3915,16 @@ defmodule PhoenixKitCatalogue.Web.Components do
       "Item types to include by EFFECTIVE type (`[\"goods\"]`; `nil`/`[]` = all) — search_items/2's :item_types."
   )
 
+  attr(:include_internal, :boolean,
+    default: false,
+    doc: "Also offer the items under `internal` categories (left out by default)."
+  )
+
+  attr(:clear_on_select, :boolean,
+    default: false,
+    doc: "Empty the input after a pick — for a picker that adds to a list."
+  )
+
   attr(:selected_item, :any, default: nil)
   attr(:excluded_uuids, :list, default: [])
   # Optional, like the LiveComponent it wraps: omitted, the process gettext
@@ -3904,6 +3957,8 @@ defmodule PhoenixKitCatalogue.Web.Components do
       only={@only}
       statuses={@statuses}
       item_types={@item_types}
+      include_internal={@include_internal}
+      clear_on_select={@clear_on_select}
       selected_item={@selected_item}
       excluded_uuids={@excluded_uuids}
       locale={@locale}
@@ -4136,4 +4191,30 @@ defmodule PhoenixKitCatalogue.Web.Components do
     do: safe_call(edit_path, item.uuid)
 
   defp item_name_link(_assigns, _item), do: nil
+
+  @doc """
+  The "Notes for AI" field the catalogue, category and item forms share:
+  one plain-text box in one language, for an AI that later reads or
+  analyses the products (`Catalogue.ai_notes_for_item/1` gathers an
+  item's with its category chain's and catalogue's). Not translatable and
+  never rendered by the embeddable pop-ups.
+  """
+  attr(:field, Phoenix.HTML.FormField, required: true)
+
+  def ai_notes_field(assigns) do
+    ~H"""
+    <div>
+      <.textarea
+        field={@field}
+        label={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Notes for AI")}
+        rows="4"
+        maxlength={PhoenixKitCatalogue.Schemas.Catalogue.ai_notes_max_length()}
+        placeholder={Gettext.gettext(PhoenixKitCatalogue.Gettext, "e.g., Sold by the sheet; the price excludes edge banding.")}
+      />
+      <span class="block text-xs text-base-content/50 mt-1">
+        {Gettext.gettext(PhoenixKitCatalogue.Gettext, "For AI tools that read the catalogue. Customers never see it, and it is not translated.")}
+      </span>
+    </div>
+    """
+  end
 end

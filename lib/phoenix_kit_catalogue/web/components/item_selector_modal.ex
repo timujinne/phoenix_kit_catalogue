@@ -65,6 +65,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     * `per_page` — page size for the listing and load-more. Default `50`.
     * `locale` — forces the display language; omitted, the process gettext
       locale applies (the fallback the browse widget and picker share).
+    * `include_internal` — also offer `internal` categories and what is
+      under them (left out by default, even where the scope names them). The scope's own
+      `:exclude_internal` key is set from this attr and cannot be passed.
+    * `show_dependencies` — add the item's dependencies to its details page
+      as a "Needs" row. Default `false`.
 
   ## Required host wiring (do not skip — silent failure otherwise)
 
@@ -271,6 +276,23 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   host allowed. Selection events are additionally accepted only for uuids
   the component itself has rendered (or that arrived preselected).
 
+  `show_dependencies: true` adds the item's dependencies to its details
+  page as one "Needs" row (`8 × Screws, 2 × Hinge`) — off by default,
+  since they are written for the people running the catalogue. A
+  dependency on something the popup hides (an internal category, an item
+  under one, a trashed one) is left out of that row; a target in a catalogue outside
+  the scope is named — the row says what the item needs, not what this
+  popup sells.
+
+  `internal` categories are left out with everything under them, even
+  where the scope names them: no tile, no subcategories, no items, no
+  search hits, no header, and a catalogue tile does not count their
+  items. Pass `include_internal: true` for a popup that should offer
+  them. A preselected item from one still hydrates and stays usable in the
+  tray — the host linked it directly, as an existing order line does —
+  but its details page stays closed. When every category the scope names
+  is internal, the popup says there is nothing to choose from.
+
   ## Preselection
 
   `selected` is `%{uuid => qty}` (string uuids, `Decimal` or integer
@@ -328,6 +350,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.BrowseState
   alias PhoenixKitCatalogue.Catalogue.Tree
+  alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
+  alias PhoenixKitCatalogue.Schemas.Category
+  alias PhoenixKitCatalogue.Schemas.Item
   alias PhoenixKitCatalogue.Web.ComponentRelay
   alias PhoenixKitCatalogue.Web.Components, as: Shared
   alias PhoenixKitCatalogue.Web.Components.Browse
@@ -389,7 +414,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     # vocabulary) so a string-keyed map cannot silently widen browsing.
     browse =
       BrowseState.init(
-        scope: expand_scope(original_scope),
+        scope:
+          original_scope
+          |> expand_scope()
+          |> Browse.put_internal_rule(assigns[:include_internal] == true),
         per_page: assigns[:per_page] || 24,
         # Admin-page semantics (2026-08-31): a drilled level lists its own
         # items; search still covers the subtree.
@@ -432,8 +460,10 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         mode: mode,
         locale: locale,
         current_user: assigns[:current_user],
+        show_dependencies?: Map.get(assigns, :show_dependencies, false) == true,
         context_header?: Map.get(assigns, :context_header, true),
-        header_context: header_context(assigns, original_scope, locale),
+        header_context: header_context(assigns, original_scope, scope, locale),
+        all_internal?: scope_all_internal?(scope, original_scope),
         qty_precision: qty_precision,
         qty_min: limits.qty_min,
         qty_max: limits.qty_max,
@@ -490,17 +520,48 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     %{browse: browse, original_scope: original, locale: locale} = socket.assigns
 
     browse = %{browse | order: Browse.global_items_order()}
-    {browse, effect} = BrowseState.command(browse, :refresh)
+    cat_tree = build_category_tree(browse.scope, original, locale)
+
+    # A catalogue that went away, or a category the user stands in that
+    # became internal (or sits under one that did), is gone from the tree;
+    # step back rather than stay on a level the popup no longer offers.
+    {browse, effect} =
+      cond do
+        stranded_catalogue?(browse, cat_tree) ->
+          BrowseState.command(browse, {:set_catalogue, nil})
+
+        stranded_category?(browse) ->
+          BrowseState.command(browse, {:set_category, nil})
+
+        true ->
+          BrowseState.command(browse, :refresh)
+      end
 
     socket
     |> assign(
       browse: browse,
-      cat_tree: build_category_tree(browse.scope, original, locale)
+      cat_tree: cat_tree,
+      all_internal?: scope_all_internal?(browse.scope, original),
+      # The host-scoped record may have become internal (or trashed) since.
+      header_context:
+        if(socket.assigns.context_header?,
+          do: resolve_header_context(original, browse.scope, locale)
+        )
     )
     |> rehydrate_selection()
     |> refresh_detail()
     |> run_fetch(effect)
   end
+
+  defp stranded_catalogue?(%{catalogue_uuid: uuid}, tree) when is_binary(uuid),
+    do: not Enum.any?(tree[:catalogues] || [], &(&1.uuid == uuid))
+
+  defp stranded_catalogue?(_browse, _tree), do: false
+
+  defp stranded_category?(%{category_uuid: uuid, scope: scope}) when is_binary(uuid),
+    do: Map.has_key?(Browse.hidden_categories(scope), uuid)
+
+  defp stranded_category?(_browse), do: false
 
   defp rehydrate_selection(%{assigns: %{selection: selection}} = socket)
        when selection == %{},
@@ -540,11 +601,35 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
 
   # Resolved from the ORIGINAL scope, before subtree expansion — the
   # host named a catalogue or category, and that record is the header.
-  defp header_context(assigns, original_scope, locale) do
+  defp header_context(assigns, original_scope, scope, locale) do
     if Map.get(assigns, :context_header, true),
-      do: resolve_header_context(original_scope, locale),
+      do: resolve_header_context(original_scope, scope, locale),
       else: nil
   end
+
+  # Every category the host's scope names is internal (or under one) —
+  # the popup has nothing to offer, and says so rather than showing a bare
+  # "no results". A catalogue scope always has its uncategorized items and
+  # visible categories, so only a category scope can be all-internal.
+  defp scope_all_internal?(%{exclude_internal: true} = scope, original) do
+    case List.wrap(original[:category_uuids]) do
+      [] ->
+        false
+
+      uuids ->
+        hidden = Browse.hidden_categories(scope)
+        Enum.all?(uuids, &Map.has_key?(hidden, to_string(normalize_uuid(&1))))
+    end
+  rescue
+    error ->
+      Logger.warning(
+        "ItemSelectorModal could not check the scope's categories: " <> Exception.message(error)
+      )
+
+      false
+  end
+
+  defp scope_all_internal?(_scope, _original), do: false
 
   # View / columns / selection flavour, as one resolution. Per-user saved
   # choices (2026-08-31): a host may pass current_user (the phoenix_kit
@@ -741,6 +826,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   defp build_category_tree(scope, original, locale) do
     scope
     |> derive_tree_catalogues(original)
+    |> put_hidden_categories()
     |> do_build_category_tree(original, locale)
     |> order_tree_tiles(Browse.global_categories_order())
   end
@@ -888,6 +974,22 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     _ -> scope
   end
 
+  # Internal categories and everything under them get no tiles — for the
+  # TREE only; the browse scope's fetches leave their items out through
+  # `:exclude_internal`. The set rides on the tree-building scope (never
+  # the browse scope). Fail closed: a read that cannot tell which
+  # categories are internal offers no tiles rather than all of them.
+  defp put_hidden_categories(scope) do
+    Map.put(scope, :hidden_categories, Browse.hidden_categories(scope))
+  rescue
+    error ->
+      Logger.warning(
+        "ItemSelectorModal could not apply the internal rule: " <> Exception.message(error)
+      )
+
+      Map.put(scope, :catalogue_uuids, [])
+  end
+
   defp do_build_category_tree(%{only: :uncategorized_only}, _original, _locale),
     do: @empty_cat_tree
 
@@ -916,20 +1018,28 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       end)
       |> Enum.reject(&is_nil/1)
 
-    category_counts =
-      catalogue_uuids
-      |> Enum.flat_map(fn catalogue_uuid ->
-        catalogue_uuid
-        |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
-        |> Map.to_list()
+    counts_by_catalogue =
+      Map.new(catalogue_uuids, fn catalogue_uuid ->
+        counts =
+          catalogue_uuid
+          |> Catalogue.item_counts_by_category_for_catalogue(type_opts)
+          |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end)
+
+        {catalogue_uuid, counts}
       end)
-      |> Map.new(fn {uuid, count} -> {to_string(uuid), count} end)
+
+    category_counts = counts_by_catalogue |> Map.values() |> Enum.reduce(%{}, &Map.merge/2)
 
     # Catalogue tiles show their total item count out of the same map the
-    # category tiles read — uuids never collide.
+    # category tiles read — uuids never collide. Items in hidden internal
+    # categories are not offered, so they are not counted either.
+    hidden = Map.get(scope, :hidden_categories, %{})
+
     catalogue_counts =
       Map.new(catalogue_uuids, fn catalogue_uuid ->
-        {catalogue_uuid, Catalogue.count_items_for_catalogue(catalogue_uuid, type_opts)}
+        hidden_items = hidden_item_count(Map.fetch!(counts_by_catalogue, catalogue_uuid), hidden)
+        total = Catalogue.count_items_for_catalogue(catalogue_uuid, type_opts)
+        {catalogue_uuid, total - hidden_items}
       end)
 
     Map.merge(base, %{
@@ -976,6 +1086,14 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # The level counters count what the browse can list: a scope's
   # `:item_types` narrows them too, so a category holding only services
   # does not read as non-empty in a goods-only picker.
+  # Direct item counts per category, so summing the hidden categories'
+  # counts never counts an item twice.
+  defp hidden_item_count(counts, hidden) do
+    counts
+    |> Enum.filter(fn {uuid, _count} -> Map.has_key?(hidden, uuid) end)
+    |> Enum.reduce(0, fn {_uuid, count}, sum -> sum + count end)
+  end
+
   defp item_type_opts(scope), do: [item_types: scope[:item_types]]
 
   # The level maps both tree shapes build identically: translated
@@ -983,6 +1101,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # tiles (the two clauses used to carry this verbatim twice —
   # external review, 2026-08-31).
   defp category_tree_base(catalogue_uuids, scope, original, locale) do
+    hidden = Map.get(scope, :hidden_categories, %{})
+
     raw_categories =
       catalogue_uuids
       |> Enum.flat_map(&Catalogue.list_categories_metadata_for_catalogue/1)
@@ -991,6 +1111,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         |> Map.put(:name, translated_name(category, locale) || category.name)
         |> Map.put(:uuid, to_string(category.uuid))
       end)
+      |> Enum.reject(&Map.has_key?(hidden, &1.uuid))
 
     categories = scope_categories(raw_categories, scope[:category_uuids])
 
@@ -1541,7 +1662,8 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       uuids
       |> Enum.flat_map(fn catalogue_uuid ->
         Catalogue.search_categories(normalize_uuid(catalogue_uuid), browse.search,
-          parent_uuid: browse.category_uuid
+          parent_uuid: browse.category_uuid,
+          exclude_internal: browse.scope[:exclude_internal] == true
         )
       end)
       |> Enum.map(&to_string(&1.uuid))
@@ -1743,7 +1865,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # what the user is looking at. Header chrome, not data: any failure
   # (unknown uuid, unloadable image, multi-entry scopes) resolves to nil
   # and the plain title renders instead.
-  defp resolve_header_context(scope, locale) do
+  defp resolve_header_context(scope, browse_scope, locale) do
     scope = if is_map(scope), do: scope, else: Map.new(scope)
 
     record =
@@ -1763,15 +1885,28 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       %{status: "deleted"} ->
         nil
 
+      # The same for a hidden internal category: a header must not name
+      # what the popup will not show.
       record ->
-        %{
-          name: translated_name(record, locale),
-          description: Catalogue.translated_description(record, locale),
-          image_url: Browse.featured_thumb_url(record)
-        }
+        if header_hidden?(browse_scope, record),
+          do: nil,
+          else: record_context(record, locale)
     end
   rescue
     _ -> nil
+  end
+
+  defp header_hidden?(scope, %Category{uuid: uuid}),
+    do: Map.has_key?(Browse.hidden_categories(scope), to_string(uuid))
+
+  defp header_hidden?(_scope, _catalogue), do: false
+
+  defp record_context(record, locale) do
+    %{
+      name: translated_name(record, locale),
+      description: Catalogue.translated_description(record, locale),
+      image_url: Browse.featured_thumb_url(record)
+    }
   end
 
   # ── Events: browsing ─────────────────────────────────────────────────
@@ -2295,9 +2430,21 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
     # Re-checked against the scope's item types: a listed row can have
     # changed type since it was rendered, and its detail is exactly what
     # the scope excludes.
-    types = socket.assigns.browse.scope[:item_types]
+    scope = socket.assigns.browse.scope
+    types = scope[:item_types]
 
-    case Enum.filter(Catalogue.list_items_by_uuids([uuid]), &item_type_ok?(types, &1)) do
+    # And against the internal rule: an item linked directly (preselected)
+    # stays usable in the tray, but its details are what the popup hides —
+    # and a catalogue that became internal while the page was open closes
+    # the page on the next refresh.
+    hidden = Browse.hidden_categories(scope)
+
+    shown? = fn item ->
+      item_type_ok?(types, item) and
+        not (is_binary(item.category_uuid) and Map.has_key?(hidden, item.category_uuid))
+    end
+
+    case Enum.filter(Catalogue.list_items_by_uuids([uuid]), shown?) do
       [item] ->
         locale = socket.assigns.locale
 
@@ -2316,7 +2463,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
               ProductCard.build_fields(item, locale,
                 include_price: socket.assigns.show_prices and :price in socket.assigns.columns,
                 include_sku: socket.assigns.show_sku and :sku in socket.assigns.columns
-              ),
+              ) ++ dependency_fields(socket, item),
             files: ProductCard.resolve_files(item)
           }
         )
@@ -2325,6 +2472,77 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
         if on_miss == :close, do: assign(socket, detail: nil), else: socket
     end
   end
+
+  # `show_dependencies` (off by default): the item's dependencies as one
+  # more row of the details page — "8 × Screws, 2 × Hinge". A target the
+  # popup would not show (an internal category or an item under one,
+  # without `include_internal`) or one in the trash is left out: the row must not
+  # name what the popup hides.
+  defp dependency_fields(%{assigns: %{show_dependencies?: true}} = socket, item) do
+    hidden = Browse.hidden_categories(socket.assigns.browse.scope)
+    locale = socket.assigns.locale
+
+    lines =
+      item
+      |> Catalogue.list_item_dependencies()
+      |> Enum.flat_map(&dependency_line(&1, hidden, locale))
+
+    case lines do
+      [] -> []
+      lines -> [{gettext("Needs"), Enum.join(lines, ", ")}]
+    end
+  rescue
+    error ->
+      Logger.warning(
+        "ItemSelectorModal could not read item dependencies: " <> Exception.message(error)
+      )
+
+      []
+  end
+
+  defp dependency_fields(_socket, _item), do: []
+
+  defp dependency_line(dependency, hidden, locale) do
+    case dependency_target(dependency) do
+      {target, catalogue} ->
+        if shown_target?(target, catalogue, hidden) do
+          [
+            gettext("%{quantity} × %{name}",
+              quantity: format_qty(dependency.quantity),
+              name: translated_name(target, locale) || target.name
+            )
+          ]
+        else
+          []
+        end
+
+      nil ->
+        []
+    end
+  end
+
+  # A trashed target, one in a trashed catalogue, and one the popup hides
+  # — an internal category, or an item filed under one — are left out.
+  defp shown_target?(target, catalogue, hidden) do
+    target.status != "deleted" and not match?(%{status: "deleted"}, catalogue) and
+      not hidden_target?(target, hidden)
+  end
+
+  defp hidden_target?(%Category{uuid: uuid}, hidden), do: Map.has_key?(hidden, to_string(uuid))
+
+  defp hidden_target?(%Item{category_uuid: uuid}, hidden) when is_binary(uuid),
+    do: Map.has_key?(hidden, uuid)
+
+  defp hidden_target?(_target, _hidden), do: false
+
+  defp dependency_target(%{target_catalogue: %CatalogueSchema{} = catalogue}),
+    do: {catalogue, catalogue}
+
+  defp dependency_target(%{target_category: %Category{} = category}),
+    do: {category, category.catalogue}
+
+  defp dependency_target(%{target_item: %Item{} = item}), do: {item, item.catalogue}
+  defp dependency_target(_), do: nil
 
   # A lenient zero probe for the quantity-first paths: parse_qty compares
   # against qty_min, but in that mode zero is the UNSELECTED state and must
@@ -3034,7 +3252,11 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
               class="text-center py-12"
             >
               <.icon name="hero-magnifying-glass" class="w-10 h-10 mx-auto mb-3 opacity-40" />
-              <p class="text-base-content/60">{gettext("No items match your search.")}</p>
+              <p class="text-base-content/60">
+                {if assigns[:all_internal?],
+                  do: gettext("There is nothing to choose from here."),
+                  else: gettext("No items match your search.")}
+              </p>
             </div>
 
             <%!-- Auto-load sentinel. COLOCATED, not core's InfiniteScroll:

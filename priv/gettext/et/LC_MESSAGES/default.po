@@ -3812,3 +3812,116 @@ msgstr "Järjesta kõik kategooriad ümber"
 
 msgid "Reorder all items"
 msgstr "Järjesta kõik tooted ümber"
+
+msgid "Internal"
+msgstr "Sisemine"
+
+msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
+msgstr "Ei ole nähtav toodete valijates ega sirvimisakendes, mida teised lehed kasutavad, koos alamkategooriate ja nende toodetega. Halduslehed näitavad seda endiselt."
+
+msgid "Not shown in the item pickers and browse pop-ups"
+msgstr "Ei ole nähtav toodete valijates ega sirvimisakendes"
+
+msgid "There is nothing to choose from here."
+msgstr "Siin pole midagi valida."
+
+msgid "Notes for AI"
+msgstr "Märkmed tehisintellektile"
+
+msgid "For AI tools that read the catalogue. Customers never see it, and it is not translated."
+msgstr "Tehisintellekti tööriistadele, mis kataloogi loevad. Kliendid seda ei näe ja seda ei tõlgita."
+
+msgid "e.g., Sold by the sheet; the price excludes edge banding."
+msgstr "nt. Müüakse plaadi kaupa; hind ei sisalda servakanti."
+
+msgid "Dependencies"
+msgstr "Sõltuvused"
+
+msgid "What this item needs from other catalogues, categories or items, and how many. It is for the people using the catalogue: nothing is calculated from it."
+msgstr "Mida see toode vajab teistest kataloogidest, kategooriatest või toodetest ja kui palju. See on kataloogi kasutajatele: selle põhjal midagi ei arvutata."
+
+msgid "No dependencies yet."
+msgstr "Sõltuvusi veel pole."
+
+msgid "In trash"
+msgstr "Prügikastis"
+
+msgid "Note"
+msgstr "Märkus"
+
+msgid "e.g., pick by wood type"
+msgstr "nt. vali puiduliigi järgi"
+
+msgid "Add a dependency"
+msgstr "Lisa sõltuvus"
+
+msgid "Search catalogues, categories and items…"
+msgstr "Otsi katalooge, kategooriaid ja tooteid…"
+
+msgid "Pick a catalogue, a category or an item, then say how many."
+msgstr "Vali kataloog, kategooria või toode ja märgi, mitu on vaja."
+
+msgid "Selected"
+msgstr "Valitud"
+
+msgid "Nothing selected yet."
+msgstr "Midagi pole veel valitud."
+
+msgid "What is already on the list, and anything inside it, is not offered."
+msgstr "Seda, mis on juba nimekirjas, ega selle sisu siin ei pakuta."
+
+msgid "Any item in %{place}"
+msgstr "Mis tahes toode kategooriast %{place}"
+
+msgid "Anything in %{place}"
+msgstr "Mis tahes asi kataloogist %{place}"
+
+msgid "The note is too long (%{max} characters at most)."
+msgstr "Märkus on liiga pikk (kõige rohkem %{max} märki)."
+
+msgid "Enter a quantity above zero, with at most four decimal places."
+msgstr "Sisesta kogus, mis on suurem kui null ja kuni nelja komakohaga."
+
+msgid "That no longer exists. Choose another."
+msgstr "Seda enam pole. Vali midagi muud."
+
+msgid "An item cannot depend on itself."
+msgstr "Toode ei saa sõltuda iseendast."
+
+msgid "Some dependency values are not valid."
+msgstr "Mõned sõltuvuste väärtused ei sobi."
+
+msgid "A dependency could not be saved. Check the Dependencies tab."
+msgstr "Sõltuvust ei õnnestunud salvestada. Vaata vahekaarti Sõltuvused."
+
+msgid "Needs"
+msgstr "Vajab"
+
+msgid "This no longer exists. Remove the line to save."
+msgstr "Seda enam pole. Salvestamiseks eemalda see rida."
+
+msgid "%{count} other item lists something this removes as a dependency. That line is removed with it."
+msgid_plural "%{count} other items list something this removes as a dependency. Those lines are removed with it."
+msgstr[0] "%{count} muu toode on lisanud midagi sellest sõltuvuseks. See rida kustutatakse koos sellega."
+msgstr[1] "%{count} muud toodet on lisanud midagi sellest sõltuvuseks. Need read kustutatakse koos sellega."
+
+msgid "%{quantity} × %{name}"
+msgstr "%{quantity} × %{name}"
+
+msgid "Dependencies linked"
+msgstr "Lingitud sõltuvused"
+
+msgid "Row %{row}: nothing found for “%{ref}”, so that dependency was left out."
+msgstr "Rida %{row}: „%{ref}” ei leitud, see sõltuvus jäeti välja."
+
+msgid "Someone else saved this item's dependencies while you were editing. Your list is still here: Save again to replace theirs, or reload the page to see theirs."
+msgstr "Keegi teine salvestas selle toote sõltuvused sinu muutmise ajal. Sinu loend on alles: salvesta uuesti, et tema oma asendada, või laadi leht uuesti, et tema oma näha."
+
+msgid "Unreadable dependency: %{raw}. Write each as “8 × SKU”, separated by semicolons."
+msgstr "Loetamatu sõltuvus: %{raw}. Kirjuta igaüks kujul „8 × SKU”, semikoolonitega eraldatult."
+
+msgid "Row %{row}: more than one match for “%{ref}”, so that dependency was left out. Add it on the item."
+msgstr "Rida %{row}: „%{ref}” sobib mitmele, see sõltuvus jäeti välja. Lisa see toote juures."
+
+msgid "Row %{row}: “%{ref}” could not be saved. Add it on the item."
+msgstr "Rida %{row}: „%{ref}” ei õnnestunud salvestada. Lisa see toote juures."

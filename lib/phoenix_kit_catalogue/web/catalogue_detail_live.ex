@@ -149,6 +149,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         # the assigns on a struct that includes mutable association maps.
         prior_category_uuid: :__unset__,
         current_category: nil,
+        level_internal?: false,
         # Trimmed active-ancestor chain above the current node (root and
         # current node excluded). Drives the breadcrumb.
         breadcrumb: [],
@@ -352,6 +353,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
       {:ok, current} ->
         socket
         |> assign(:current_category, Catalogue.localize_one(current, loc(socket)))
+        |> assign(:level_internal?, level_internal?(current))
         |> reset_and_load()
         |> maybe_auto_flip_to_active()
         # AFTER the level settles: the search stamp bakes in the view
@@ -1902,6 +1904,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
     case category_in_catalogue(socket, uuid) do
       %Category{} = category -> Catalogue.permanent_delete_scope(category)
       nil -> nil
+    end
+  end
+
+  defp delete_scope("item", _socket, uuid) do
+    case Catalogue.get_item(uuid) do
+      %Item{} = item -> %{dependents: Catalogue.count_outside_dependents(item)}
+      _ -> nil
     end
   end
 
@@ -4341,7 +4350,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
           <% level_desc = level_description(@current_category, @catalogue) %>
           <% level_img = level_image(@current_category, @catalogue) %>
           <div
-            :if={length(@status_tabs) > 1 or level_desc || level_img}
+            :if={length(@status_tabs) > 1 or level_desc || level_img || @level_internal?}
             id="detail-level-caption"
             class="flex items-center gap-3 min-w-0"
           >
@@ -4356,6 +4365,10 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
                 phx-value-mode={status}
               />
             </div>
+            <%!-- A level that is internal, or under an internal category,
+                 says so: it is the one place an admin sees why the
+                 pop-ups do not offer it. --%>
+            <.internal_badge :if={@level_internal?} record={%{internal: true, uuid: @current_category.uuid}} />
             <%!-- The place's own picture beside its description. Inside a
                  category there was no way to see the image attached to it
                  (boss via Max, 2026-09-21); the catalogue's top level shows
@@ -4672,7 +4685,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         on_cancel="cancel_delete"
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete item")}
         title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This item will be permanently deleted. This cannot be undone.")}]}
+        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This item will be permanently deleted. This cannot be undone.")} | dependents_delete_messages(@confirm_delete_scope[:dependents])]}
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
@@ -4683,7 +4696,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
         on_cancel="cancel_delete"
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete category")}
         title_icon="hero-trash"
-        messages={[{:warning, category_delete_warning(@confirm_delete_scope)}]}
+        messages={[{:warning, category_delete_warning(@confirm_delete_scope)} | dependents_delete_messages(@confirm_delete_scope[:dependents])]}
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
@@ -5521,12 +5534,15 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
              start, so the button and what it unfolds read as one column
              (Max, 2026-10-05). --%>
         <div class="flex flex-col items-start gap-1 min-w-0">
-          <.link
-            patch={Paths.category_browse(@catalogue.uuid, @cat.uuid)}
-            class="link link-hover font-medium truncate max-w-full"
-          >
-            {@cat.name}
-          </.link>
+          <div class="flex items-center gap-2 max-w-full min-w-0">
+            <.link
+              patch={Paths.category_browse(@catalogue.uuid, @cat.uuid)}
+              class="link link-hover font-medium truncate"
+            >
+              {@cat.name}
+            </.link>
+            <.internal_badge record={@cat} />
+          </div>
           <button
             :if={@child_count > 0}
             type="button"
@@ -5949,6 +5965,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
               >
                 {cat.name}
               </.link>
+              <.internal_badge record={cat} />
               <span class="badge badge-ghost badge-sm tabular-nums">
                 {Map.get(@child_counts, cat.uuid, 0)}
               </span>
@@ -6942,6 +6959,13 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailLive do
 
   defp level_image(nil, catalogue), do: if(featured_image_uuid(catalogue), do: catalogue)
   defp level_image(_uncategorized, _catalogue), do: nil
+
+  # The level being shown is internal itself or sits under an internal
+  # category — read once per level, not per render.
+  defp level_internal?(%Category{uuid: uuid}),
+    do: to_string(uuid) in Catalogue.internal_category_uuids()
+
+  defp level_internal?(_level), do: false
 
   defp level_description(%Category{description: desc}, _catalogue), do: presence(desc)
   defp level_description(nil, catalogue), do: presence(catalogue.description)

@@ -3825,3 +3825,117 @@ msgstr "Змінити порядок усіх категорій"
 
 msgid "Reorder all items"
 msgstr "Змінити порядок усіх позицій"
+
+msgid "Internal"
+msgstr "Внутрішній"
+
+msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
+msgstr "Не показується у вікнах вибору та перегляду позицій, які вбудовують інші сторінки, разом із підкатегоріями та їхніми позиціями. Сторінки адміністрування й надалі її показують."
+
+msgid "Not shown in the item pickers and browse pop-ups"
+msgstr "Не показується у вікнах вибору та перегляду позицій"
+
+msgid "There is nothing to choose from here."
+msgstr "Тут нема з чого вибирати."
+
+msgid "Notes for AI"
+msgstr "Нотатки для ШІ"
+
+msgid "For AI tools that read the catalogue. Customers never see it, and it is not translated."
+msgstr "Для ШІ-інструментів, які читають каталог. Клієнти його не бачать, і він не перекладається."
+
+msgid "e.g., Sold by the sheet; the price excludes edge banding."
+msgstr "напр., Продається листами; ціна без крайки."
+
+msgid "Dependencies"
+msgstr "Залежності"
+
+msgid "What this item needs from other catalogues, categories or items, and how many. It is for the people using the catalogue: nothing is calculated from it."
+msgstr "Що цій позиції потрібно з інших каталогів, категорій або позицій, і скільки. Це для людей, які працюють з каталогом: нічого з цього не розраховується."
+
+msgid "No dependencies yet."
+msgstr "Залежностей поки немає."
+
+msgid "In trash"
+msgstr "У кошику"
+
+msgid "Note"
+msgstr "Примітка"
+
+msgid "e.g., pick by wood type"
+msgstr "напр., добирати за типом деревини"
+
+msgid "Add a dependency"
+msgstr "Додати залежність"
+
+msgid "Search catalogues, categories and items…"
+msgstr "Пошук каталогів, категорій і позицій…"
+
+msgid "Pick a catalogue, a category or an item, then say how many."
+msgstr "Виберіть каталог, категорію або позицію та вкажіть, скільки потрібно."
+
+msgid "Selected"
+msgstr "Вибрано"
+
+msgid "Nothing selected yet."
+msgstr "Поки нічого не вибрано."
+
+msgid "What is already on the list, and anything inside it, is not offered."
+msgstr "Те, що вже є в списку, і все, що всередині нього, тут не пропонується."
+
+msgid "Any item in %{place}"
+msgstr "Будь-яка позиція з %{place}"
+
+msgid "Anything in %{place}"
+msgstr "Будь-що з %{place}"
+
+msgid "The note is too long (%{max} characters at most)."
+msgstr "Примітка задовга (не більше %{max} символів)."
+
+msgid "Enter a quantity above zero, with at most four decimal places."
+msgstr "Введіть кількість більше нуля, не більше чотирьох знаків після коми."
+
+msgid "That no longer exists. Choose another."
+msgstr "Цього більше немає. Виберіть інше."
+
+msgid "An item cannot depend on itself."
+msgstr "Позиція не може залежати від самої себе."
+
+msgid "Some dependency values are not valid."
+msgstr "Деякі значення залежностей неприпустимі."
+
+msgid "A dependency could not be saved. Check the Dependencies tab."
+msgstr "Не вдалося зберегти залежність. Перевірте вкладку «Залежності»."
+
+msgid "Needs"
+msgstr "Потребує"
+
+msgid "This no longer exists. Remove the line to save."
+msgstr "Цього більше немає. Видаліть рядок, щоб зберегти."
+
+msgid "%{count} other item lists something this removes as a dependency. That line is removed with it."
+msgid_plural "%{count} other items list something this removes as a dependency. Those lines are removed with it."
+msgstr[0] "%{count} інша позиція вказує щось із видаленого як залежність. Цей рядок буде видалено разом із ним."
+msgstr[1] "%{count} інші позиції вказують щось із видаленого як залежність. Ці рядки буде видалено разом із ним."
+msgstr[2] "%{count} інших позицій вказують щось із видаленого як залежність. Ці рядки буде видалено разом із ним."
+
+msgid "%{quantity} × %{name}"
+msgstr "%{quantity} × %{name}"
+
+msgid "Dependencies linked"
+msgstr "Пов'язано залежностей"
+
+msgid "Row %{row}: nothing found for “%{ref}”, so that dependency was left out."
+msgstr "Рядок %{row}: «%{ref}» не знайдено, цю залежність пропущено."
+
+msgid "Someone else saved this item's dependencies while you were editing. Your list is still here: Save again to replace theirs, or reload the page to see theirs."
+msgstr "Хтось інший зберіг залежності цієї позиції, поки ви редагували. Ваш список на місці: збережіть ще раз, щоб замінити його список, або перезавантажте сторінку, щоб побачити його."
+
+msgid "Unreadable dependency: %{raw}. Write each as “8 × SKU”, separated by semicolons."
+msgstr "Нечитабельна залежність: %{raw}. Пишіть кожну як «8 × SKU», через крапку з комою."
+
+msgid "Row %{row}: more than one match for “%{ref}”, so that dependency was left out. Add it on the item."
+msgstr "Рядок %{row}: «%{ref}» підходить кільком, цю залежність пропущено. Додайте її в позиції."
+
+msgid "Row %{row}: “%{ref}” could not be saved. Add it on the item."
+msgstr "Рядок %{row}: «%{ref}» не вдалося зберегти. Додайте її в позиції."

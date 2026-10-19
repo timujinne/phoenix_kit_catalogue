@@ -54,14 +54,16 @@ defmodule PhoenixKitCatalogue.API.DeleteCategories do
   end
 
   # `uuid` and everything below it, in any state.
-  defp subtree(uuid, tree), do: subtree([uuid], tree, MapSet.new())
+  # `seen` is a plain map: dialyzer reads a `MapSet` threaded through this
+  # recursion as a non-opaque term (`call_without_opaque`).
+  defp subtree(uuid, tree), do: subtree([uuid], tree, %{})
 
-  defp subtree([], _tree, seen), do: MapSet.to_list(seen)
+  defp subtree([], _tree, seen), do: Map.keys(seen)
 
   defp subtree([uuid | rest], tree, seen) do
-    if MapSet.member?(seen, uuid),
+    if Map.has_key?(seen, uuid),
       do: subtree(rest, tree, seen),
-      else: subtree(Map.get(tree.children, uuid, []) ++ rest, tree, MapSet.put(seen, uuid))
+      else: subtree(Map.get(tree.children, uuid, []) ++ rest, tree, Map.put(seen, uuid, true))
   end
 
   # What a trash of `uuid` takes, given its `subtree` and `items` (uuid => the live items

@@ -188,6 +188,11 @@ defmodule PhoenixKitCatalogue.ErrorsTest do
       assert Errors.message(:invalid_value) == "Invalid value."
     end
 
+    test "dependencies_changed" do
+      assert Errors.message(:dependencies_changed) =~
+               "Someone else saved this item's dependencies"
+    end
+
     test "already_linked" do
       assert Errors.message(:already_linked) ==
                "This supplier is already on the item. Edit the existing row instead."

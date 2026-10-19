@@ -13,10 +13,16 @@ defmodule PhoenixKitCatalogue.CorePinConformanceTest do
   outright, with no degraded mode. Nothing else in this repo's own test run
   would notice, which is why the check is a test rather than a convention.
 
-  The floor is `>= 2.38.0 and < 3.0.0`: the catalogue runs on core's shared
-  toolkits (`Activity.log/3`, `PhoenixKitWeb.Actor`, `TreePicker`,
+  The floor is `>= 2.63.0 and < 3.0.0`: the shop API tools build on core's
+  machine API (`PhoenixKit.API.Tool`, the optional `api_tools/0` callback,
+  `Activity.log_many/2`), first shipped in core 2.63.0 (#934); without it the
+  package does not compile (`PhoenixKit.API.Tool` is undefined) and
+  `Catalogue.update_items/2` cannot write its audit entries.
+
+  Before that it was `>= 2.38.0 and < 3.0.0`: the catalogue runs on core's
+  shared toolkits (`Activity.log/3`, `PhoenixKitWeb.Actor`, `TreePicker`,
   `ResourceFolders`, `PhoenixKitWeb.Attachments`, `Users.ViewPrefs`), all
-  first shipped in core 2.38.0 (#860), and does not compile without them.
+  first shipped in core 2.38.0 (#860).
 
   Before that it was `>= 2.34.0 and < 3.0.0`: the Events page and the bulk bar use
   `PhoenixKit.Activity.split_changes/1`, `humanize_metadata_key/1` and
@@ -38,10 +44,21 @@ defmodule PhoenixKitCatalogue.CorePinConformanceTest do
   at the top, same as `~> 2.8` was before it.
   """
 
-  @must_admit ["2.38.0", "2.38.1", "2.39.0", "2.50.0"]
-  @must_reject ["1.7.236", "2.3.0", "2.8.0", "2.13.4", "2.13.11", "2.34.0", "2.37.5", "3.0.0"]
+  @must_admit ["2.63.0", "2.63.1", "2.64.0", "2.80.0"]
+  @must_reject [
+    "1.7.236",
+    "2.3.0",
+    "2.8.0",
+    "2.13.4",
+    "2.13.11",
+    "2.34.0",
+    "2.37.5",
+    "2.38.0",
+    "2.62.2",
+    "3.0.0"
+  ]
 
-  test "the :phoenix_kit requirement admits every core >= 2.38.0 minor and nothing else" do
+  test "the :phoenix_kit requirement admits every core >= 2.63.0 minor and nothing else" do
     requirement = core_requirement()
 
     assert match?({:ok, _parsed}, Version.parse_requirement(requirement)),
@@ -52,7 +69,7 @@ defmodule PhoenixKitCatalogue.CorePinConformanceTest do
              "`:phoenix_kit` requirement #{inspect(requirement)} rejects core #{version}. " <>
                "A pin that excludes a core minor breaks `mix deps.get` for every host " <>
                "running this module alongside that core. Keep the floor patch-precise " <>
-               "and the ceiling open (`>= 2.38.0 and < 3.0.0`), never a three-segment `~>`."
+               "and the ceiling open (`>= 2.63.0 and < 3.0.0`), never a three-segment `~>`."
     end
 
     for version <- @must_reject do

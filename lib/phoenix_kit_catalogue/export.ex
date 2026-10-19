@@ -130,7 +130,8 @@ defmodule PhoenixKitCatalogue.Export do
       items: items,
       index: System.os_time(:second),
       catalogues: catalogues,
-      prefix_catalogue: prefix_catalogue
+      prefix_catalogue: prefix_catalogue,
+      dependencies: dependencies_for(destination_mod, items)
     }
 
     destination_mod.render(format_atom, ctx)
@@ -148,14 +149,22 @@ defmodule PhoenixKitCatalogue.Export do
     ArgumentError -> nil
   end
 
-  # Lightweight catalogue headers (uuid + name only) for the export context.
+  # Only the Universal JSON carries dependencies; PRO100 has nowhere to put
+  # them, so it does not pay for the query.
+  defp dependencies_for(PhoenixKitCatalogue.Export.Universal, items),
+    do: PhoenixKitCatalogue.Catalogue.dependencies_by_item(Enum.map(items, & &1.uuid))
+
+  defp dependencies_for(_destination, _items), do: %{}
+
+  # Lightweight catalogue headers (uuid, name and the notes for AI) for the
+  # export context.
   # Avoids Catalogue.get_catalogue!/1, which preloads the whole category+item
   # tree per catalogue — items are already loaded by list_export_items/1.
   defp list_catalogue_headers(catalogue_uuids) do
     from(c in PhoenixKitCatalogue.Schemas.Catalogue,
       where: c.uuid in ^catalogue_uuids,
       order_by: c.name,
-      select: %{uuid: c.uuid, name: c.name}
+      select: %{uuid: c.uuid, name: c.name, ai_notes: c.ai_notes}
     )
     |> repo().all()
   end

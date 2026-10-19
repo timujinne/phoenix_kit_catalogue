@@ -60,7 +60,8 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
     :only,
     :statuses,
     :include_descendants,
-    :item_types
+    :item_types,
+    :exclude_internal
   ]
 
   # The fields the module's shared item sort can name — TableConfig's
@@ -100,8 +101,10 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
 
     * `:scope` — map with any of `:catalogue_uuids`, `:category_uuids`,
       `:only`, `:statuses`, `:include_descendants`, `:item_types` (by the
-      EFFECTIVE type, e.g. `["goods"]`). Fixed for the state's lifetime.
-      Unknown keys raise `ArgumentError`.
+      EFFECTIVE type, e.g. `["goods"]`), `:exclude_internal` (leave out the
+      items of `internal` categories even where the other keys name them —
+      the pop-ups set it unless their host passes `include_internal`).
+      Fixed for the state's lifetime. Unknown keys raise `ArgumentError`.
     * `:per_page` — page size (default #{@default_per_page}).
     * `:drill` — what browsing INTO a category lists. `:subtree` (default)
       keeps today's flat-chip semantics: the category and everything under
@@ -321,7 +324,8 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseState do
         :only,
         :statuses,
         :include_descendants,
-        :item_types
+        :item_types,
+        :exclude_internal
       ])
 
     # The catalogue drill narrows WITHIN the scope's offered list —

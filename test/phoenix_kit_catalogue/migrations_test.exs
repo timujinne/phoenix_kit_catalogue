@@ -23,10 +23,11 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_attribute_values
     phoenix_kit_cat_item_attribute_groups
     phoenix_kit_cat_item_attribute_sets
+    phoenix_kit_cat_item_dependencies
   )
 
   test "chain is V5 and marks phoenix_kit_cat_catalogues" do
-    assert Migrations.current_version() == 5
+    assert Migrations.current_version() == 6
     assert Migrations.version_table() == "phoenix_kit_cat_catalogues"
   end
 
@@ -39,7 +40,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     end
 
     assert List.last(stmts) ==
-             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:5'"
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:6'"
   end
 
   test "no statement can destroy data, in either direction" do
@@ -138,6 +139,10 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_item_attribute_sets_selected_values_gin
     phoenix_kit_cat_items_external_id_uniq
     phoenix_kit_cat_categories_external_id_uniq
+    phoenix_kit_cat_item_dependencies_item_uuid_position_index
+    phoenix_kit_cat_item_dependencies_target_catalogue_uuid_index
+    phoenix_kit_cat_item_dependencies_target_category_uuid_index
+    phoenix_kit_cat_item_dependencies_target_item_uuid_index
   )
 
   # Same source, all 50 constraint names (18 PKs + 19 FKs + 13 CHECKs),
@@ -195,6 +200,17 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     phoenix_kit_cat_attribute_values_status_check
     phoenix_kit_cat_catalogues_item_type_check
     phoenix_kit_cat_items_item_type_check
+    phoenix_kit_cat_catalogues_ai_notes_length_check
+    phoenix_kit_cat_categories_ai_notes_length_check
+    phoenix_kit_cat_items_ai_notes_length_check
+    phoenix_kit_cat_item_dependencies_pkey
+    phoenix_kit_cat_item_dependencies_one_target_check
+    phoenix_kit_cat_item_dependencies_not_self_check
+    phoenix_kit_cat_item_dependencies_quantity_check
+    phoenix_kit_cat_item_dependencies_item_uuid_fkey
+    phoenix_kit_cat_item_dependencies_target_catalogue_uuid_fkey
+    phoenix_kit_cat_item_dependencies_target_category_uuid_fkey
+    phoenix_kit_cat_item_dependencies_target_item_uuid_fkey
   )
 
   test "every pinned index name appears inside a CREATE ... IF NOT EXISTS statement" do
@@ -254,7 +270,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
              "CREATE INDEX IF NOT EXISTS phoenix_kit_cat_item_attribute_sets_selected_values_gin ON public.phoenix_kit_cat_item_attribute_sets USING gin ((data -> 'selected_value_slugs'))"
 
     assert List.last(Migrations.up_statements("public")) ==
-             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:5'"
+             "COMMENT ON TABLE public.phoenix_kit_cat_catalogues IS 'pkc_schema:6'"
   end
 
   test "V4 adds the item-type columns and their guarded CHECKs" do
@@ -291,6 +307,38 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
     joined = Enum.join(Migrations.up_statements("public", 3), "\n")
     refute joined =~ "item_type"
     assert joined =~ "pkc_schema:3"
+  end
+
+  test "V6 adds the internal flag, the AI notes and the dependencies table" do
+    stmts = Migrations.up_statements("public")
+
+    assert "ALTER TABLE public.phoenix_kit_cat_categories ADD COLUMN IF NOT EXISTS internal boolean DEFAULT false NOT NULL" in stmts
+
+    for t <- ~w(phoenix_kit_cat_catalogues phoenix_kit_cat_categories phoenix_kit_cat_items) do
+      assert "ALTER TABLE public.#{t} ADD COLUMN IF NOT EXISTS ai_notes text" in stmts
+      check = Enum.find(stmts, &(&1 =~ "#{t}_ai_notes_length_check"))
+      assert check =~ ~r/DO \$\$/
+      assert check =~ "char_length(ai_notes) <= 10000"
+    end
+
+    one_target = Enum.find(stmts, &(&1 =~ "phoenix_kit_cat_item_dependencies_one_target_check"))
+
+    assert one_target =~
+             "num_nonnulls(target_catalogue_uuid, target_category_uuid, target_item_uuid) = 1"
+
+    for column <- ~w(item_uuid target_catalogue_uuid target_category_uuid target_item_uuid) do
+      fk = Enum.find(stmts, &(&1 =~ "phoenix_kit_cat_item_dependencies_#{column}_fkey"))
+      assert fk =~ "FOREIGN KEY (#{column})"
+      assert fk =~ "ON DELETE CASCADE"
+    end
+  end
+
+  test "up_statements(prefix, 5) stops before V6" do
+    joined = Enum.join(Migrations.up_statements("public", 5), "\n")
+    refute joined =~ "ai_notes"
+    refute joined =~ "phoenix_kit_cat_item_dependencies"
+    refute joined =~ "internal boolean"
+    assert joined =~ "pkc_schema:5"
   end
 
   test "down from V4 to V3 only re-stamps the marker" do
@@ -353,7 +401,7 @@ defmodule PhoenixKitCatalogue.MigrationsTest do
   end
 
   test "up_statements/2 defaults target to current_version/0" do
-    assert Migrations.up_statements("public") == Migrations.up_statements("public", 5)
+    assert Migrations.up_statements("public") == Migrations.up_statements("public", 6)
   end
 
   test "the module registers the chain" do

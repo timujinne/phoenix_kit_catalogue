@@ -3818,3 +3818,116 @@ msgstr ""
 
 msgid "Reorder all items"
 msgstr ""
+
+msgid "Internal"
+msgstr ""
+
+msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
+msgstr ""
+
+msgid "Not shown in the item pickers and browse pop-ups"
+msgstr ""
+
+msgid "There is nothing to choose from here."
+msgstr ""
+
+msgid "Notes for AI"
+msgstr ""
+
+msgid "For AI tools that read the catalogue. Customers never see it, and it is not translated."
+msgstr ""
+
+msgid "e.g., Sold by the sheet; the price excludes edge banding."
+msgstr ""
+
+msgid "Dependencies"
+msgstr ""
+
+msgid "What this item needs from other catalogues, categories or items, and how many. It is for the people using the catalogue: nothing is calculated from it."
+msgstr ""
+
+msgid "No dependencies yet."
+msgstr ""
+
+msgid "In trash"
+msgstr ""
+
+msgid "Note"
+msgstr ""
+
+msgid "e.g., pick by wood type"
+msgstr ""
+
+msgid "Add a dependency"
+msgstr ""
+
+msgid "Search catalogues, categories and items…"
+msgstr ""
+
+msgid "Pick a catalogue, a category or an item, then say how many."
+msgstr ""
+
+msgid "Selected"
+msgstr ""
+
+msgid "Nothing selected yet."
+msgstr ""
+
+msgid "What is already on the list, and anything inside it, is not offered."
+msgstr ""
+
+msgid "Any item in %{place}"
+msgstr ""
+
+msgid "Anything in %{place}"
+msgstr ""
+
+msgid "The note is too long (%{max} characters at most)."
+msgstr ""
+
+msgid "Enter a quantity above zero, with at most four decimal places."
+msgstr ""
+
+msgid "That no longer exists. Choose another."
+msgstr ""
+
+msgid "An item cannot depend on itself."
+msgstr ""
+
+msgid "Some dependency values are not valid."
+msgstr ""
+
+msgid "A dependency could not be saved. Check the Dependencies tab."
+msgstr ""
+
+msgid "Needs"
+msgstr ""
+
+msgid "This no longer exists. Remove the line to save."
+msgstr ""
+
+msgid "%{count} other item lists something this removes as a dependency. That line is removed with it."
+msgid_plural "%{count} other items list something this removes as a dependency. Those lines are removed with it."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%{quantity} × %{name}"
+msgstr ""
+
+msgid "Dependencies linked"
+msgstr ""
+
+msgid "Row %{row}: nothing found for “%{ref}”, so that dependency was left out."
+msgstr ""
+
+msgid "Someone else saved this item's dependencies while you were editing. Your list is still here: Save again to replace theirs, or reload the page to see theirs."
+msgstr ""
+
+msgid "Unreadable dependency: %{raw}. Write each as “8 × SKU”, separated by semicolons."
+msgstr ""
+
+msgid "Row %{row}: more than one match for “%{ref}”, so that dependency was left out. Add it on the item."
+msgstr ""
+
+msgid "Row %{row}: “%{ref}” could not be saved. Add it on the item."
+msgstr ""

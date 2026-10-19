@@ -13,7 +13,7 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
   import PhoenixKitWeb.Components.Core.Select, only: [select: 1]
 
   import PhoenixKitCatalogue.Web.Components,
-    only: [attachments_files_panel: 1, metadata_editor: 1]
+    only: [ai_notes_field: 1, attachments_files_panel: 1, metadata_editor: 1]
 
   import PhoenixKitCatalogue.Web.Helpers,
     only: [
@@ -63,7 +63,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
     "kind" => :kind,
     "item_type" => :item_type,
     "markup_percentage" => :markup_percentage,
-    "discount_percentage" => :discount_percentage
+    "discount_percentage" => :discount_percentage,
+    "ai_notes" => :ai_notes
   }
 
   # PhoenixKit auto-applies its admin chrome layout to external module admin
@@ -575,6 +576,8 @@ defmodule PhoenixKitCatalogue.Web.CatalogueFormLive do
                 {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Archived catalogues are hidden from active views.")}
               </span>
             </div>
+
+            <.ai_notes_field field={@form[:ai_notes]} />
           </div>
         </div>
 

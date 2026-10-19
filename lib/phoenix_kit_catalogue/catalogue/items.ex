@@ -44,7 +44,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Items do
     :default_value,
     :default_unit,
     :description,
-    :slug
+    :slug,
+    :ai_notes
   ]
 
   # Slug projection tables read by `get_item_by_slug/3` / `get_category_by_slug/3`
@@ -1034,6 +1035,23 @@ defmodule PhoenixKitCatalogue.Catalogue.Items do
     |> filter_by_item_types(opts)
     |> repo().all()
     |> Manufacturers.hydrate()
+  end
+
+  @doc """
+  The live (non-deleted) items of several catalogues in one query, in
+  each level's order (position, then name), with no preloads. For pickers
+  that hang every item under its category across many catalogues at once,
+  where `list_items_for_catalogue/2` per catalogue would be a query each.
+  """
+  @spec list_live_items([Ecto.UUID.t()]) :: [Item.t()]
+  def list_live_items([]), do: []
+
+  def list_live_items(catalogue_uuids) when is_list(catalogue_uuids) do
+    from(i in Item,
+      where: i.catalogue_uuid in ^catalogue_uuids and i.status != "deleted",
+      order_by: [asc: i.position, asc: i.name, asc: i.uuid]
+    )
+    |> repo().all()
   end
 
   @doc """

@@ -59,11 +59,13 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     Item,
     ItemAttributeGroup,
     ItemAttributeSet,
+    ItemDependency,
     ItemSupplierInfo
   }
 
   @item_fields [
     :description,
+    :ai_notes,
     :sku,
     :base_price,
     :markup_percentage,
@@ -387,6 +389,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
       item_type: source.item_type,
       markup_percentage: source.markup_percentage,
       discount_percentage: source.discount_percentage,
+      ai_notes: source.ai_notes,
       status: if(Keyword.get(opts, :archived, false), do: "archived", else: source.status),
       position: source.position,
       folder_uuid: source.folder_uuid,
@@ -429,7 +432,26 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
       remap_rows!(schema, from(r in schema, where: r.uuid in ^copies), mapping)
     end
 
+    remap_dependencies!(copies, mapping)
+
     :ok
+  end
+
+  # A copied item's dependency on something copied in the same operation
+  # (the catalogue, a category or an item of the copy) now names the copy;
+  # a target outside the copy is not in the map and stays as it is.
+  defp remap_dependencies!(copies, mapping) do
+    from(d in ItemDependency, where: d.item_uuid in ^copies)
+    |> repo().all()
+    |> Enum.each(fn d ->
+      changes =
+        [:target_catalogue_uuid, :target_category_uuid, :target_item_uuid]
+        |> Enum.map(&{&1, Map.get(mapping, Map.get(d, &1))})
+        |> Enum.reject(fn {_field, copy} -> is_nil(copy) end)
+
+      if changes != [],
+        do: repo().update_all(from(r in ItemDependency, where: r.uuid == ^d.uuid), set: changes)
+    end)
   end
 
   defp remap_rows!(schema, query, mapping) do
@@ -610,6 +632,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     copy_attribute_group(source, item)
     if Keyword.get(opts, :suppliers, true), do: copy_supplier_rows(source, item)
     copy_rules(source, item)
+    copy_dependencies(source, item)
     item = copy_files_folder(source, item, opts)
 
     unless keep_position?, do: place_item_after(source, item)
@@ -836,6 +859,26 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     end)
   end
 
+  # Verbatim: every target stays the original. A subtree or catalogue copy
+  # then points the ones it copied at their copies in `remap_copies!/1`.
+  defp copy_dependencies(source, item) do
+    from(d in ItemDependency, where: d.item_uuid == ^source.uuid)
+    |> repo().all()
+    |> Enum.each(fn d ->
+      insert!(
+        ItemDependency.changeset(%ItemDependency{}, %{
+          item_uuid: item.uuid,
+          target_catalogue_uuid: d.target_catalogue_uuid,
+          target_category_uuid: d.target_category_uuid,
+          target_item_uuid: d.target_item_uuid,
+          quantity: d.quantity,
+          note: d.note,
+          position: d.position
+        })
+      )
+    end)
+  end
+
   # ── Files ─────────────────────────────────────────────────────────
 
   # The source's folder is the stored pointer or, for resources saved
@@ -941,6 +984,8 @@ defmodule PhoenixKitCatalogue.Catalogue.Duplication do
     attrs = %{
       name: column_copy_name(source, opts),
       description: source.description,
+      ai_notes: source.ai_notes,
+      internal: source.internal,
       status: source.status,
       position: source.position,
       catalogue_uuid: catalogue_uuid,

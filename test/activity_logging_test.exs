@@ -825,4 +825,24 @@ defmodule PhoenixKitCatalogue.ActivityLoggingTest do
       assert Catalogue.list_items_for_catalogue(cat.uuid) == []
     end
   end
+
+  describe "item.dependencies_synced" do
+    test "put_item_dependencies logs one row with the counts and the actor", %{catalogue: cat} do
+      {:ok, item} = Catalogue.create_item(%{name: "Lazy susan", catalogue_uuid: cat.uuid})
+      {:ok, screw} = Catalogue.create_item(%{name: "Screw", catalogue_uuid: cat.uuid})
+
+      {:ok, _} =
+        Catalogue.put_item_dependencies(
+          item,
+          [%{target: {:item, screw.uuid}, quantity: 8}],
+          actor_opts()
+        )
+
+      assert_activity_logged("item.dependencies_synced",
+        resource_uuid: item.uuid,
+        actor_uuid: @actor,
+        metadata_has: %{"before" => 0, "total" => 1, "name" => "Lazy susan"}
+      )
+    end
+  end
 end

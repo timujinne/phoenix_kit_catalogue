@@ -125,6 +125,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
        items_modal_set: nil,
        sets_enabled: false,
        confirm_delete: nil,
+       confirm_delete_dependents: 0,
        catalogue_view_mode: "active",
        active_catalogues: [],
        deleted_catalogue_rows: [],
@@ -2636,7 +2637,11 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
   end
 
   def handle_event("show_delete_confirm", %{"uuid" => uuid, "type" => type}, socket) do
-    {:noreply, assign(socket, confirm_delete: {type, uuid})}
+    {:noreply,
+     assign(socket,
+       confirm_delete: {type, uuid},
+       confirm_delete_dependents: delete_dependents(type, uuid)
+     )}
   end
 
   def handle_event("permanently_delete_catalogue", _params, socket) do
@@ -4178,7 +4183,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
         on_cancel="cancel_delete"
         title={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Permanently delete catalogue")}
         title_icon="hero-trash"
-        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this catalogue, all its categories, and all items. This cannot be undone.")}]}
+        messages={[{:warning, Gettext.gettext(PhoenixKitCatalogue.Gettext, "This will permanently delete this catalogue, all its categories, and all items. This cannot be undone.")} | Shared.dependents_delete_messages(@confirm_delete_dependents)]}
         confirm_text={Gettext.gettext(PhoenixKitCatalogue.Gettext, "Delete forever")}
         danger={true}
       />
@@ -4965,4 +4970,15 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLive do
 
   defp pct_str(nil), do: "—"
   defp pct_str(d), do: Decimal.to_string(d) <> "%"
+
+  # How many other items lose a dependency line to a catalogue's Delete
+  # Forever, for its confirmation.
+  defp delete_dependents("catalogue", uuid) do
+    case Catalogue.get_catalogue(uuid) do
+      nil -> 0
+      catalogue -> Catalogue.count_outside_dependents(catalogue)
+    end
+  end
+
+  defp delete_dependents(_type, _uuid), do: 0
 end

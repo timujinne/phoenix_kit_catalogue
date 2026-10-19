@@ -14,6 +14,8 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   use PhoenixKit.SchemaPrefix
   import Ecto.Changeset
 
+  alias PhoenixKitCatalogue.Schemas.Catalogue, as: CatalogueSchema
+
   @type t :: %__MODULE__{}
 
   @primary_key {:uuid, UUIDv7, autogenerate: true}
@@ -115,6 +117,9 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     field(:status, :string, default: "active")
     field(:position, :integer, default: 0)
     field(:data, :map, default: %{})
+    # Free text for an AI that reads the catalogue (V5) — see
+    # `PhoenixKitCatalogue.Schemas.Catalogue`'s field of the same name.
+    field(:ai_notes, :string)
     # Per-language public URL slug (lang -> value), projected for
     # uniqueness by the `trg_cat_item_slugs` trigger into
     # `phoenix_kit_cat_item_slugs`. See `PhoenixKitCatalogue.Catalogue.Slugs`.
@@ -173,6 +178,7 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
   @required_fields [:name, :catalogue_uuid]
   @optional_fields [
     :description,
+    :ai_notes,
     :sku,
     :base_price,
     :markup_percentage,
@@ -199,6 +205,9 @@ defmodule PhoenixKitCatalogue.Schemas.Item do
     |> validate_required(@required_fields)
     |> validate_length(:name, min: 1, max: 255)
     |> validate_length(:sku, max: 100)
+    |> validate_length(:ai_notes,
+      max: CatalogueSchema.ai_notes_max_length()
+    )
     |> validate_inclusion(:status, @statuses)
     |> validate_inclusion(:unit, @units)
     |> validate_inclusion(:manufacturer_source, @manufacturer_sources)

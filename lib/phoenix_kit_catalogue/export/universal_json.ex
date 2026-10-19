@@ -8,13 +8,23 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
   ## Output shape
 
       {
-        "catalogues": [{"uuid": "...", "name": "..."}, ...],
+        "catalogues": [{"uuid": "...", "name": "...", "ai_notes": ""}, ...],
         "exported_at": "2026-06-26T16:00:00Z",
         "index": 1111111111,
         "items": [
-          {"name": "...", "sku": "...", "base_price": "2222.00", "unit": "piece", "catalogue": "..."}
+          {"name": "...", "sku": "...", "base_price": "2222.00", "unit": "piece",
+           "item_type": "", "ai_notes": "", "catalogue": "...",
+           "dependencies": [
+             {"type": "item", "uuid": "...", "name": "...", "sku": "...",
+              "catalogue": "...", "quantity": "8", "note": "pick by wood type"}
+           ]}
         ]
       }
+
+  A dependency names its target three ways — the uuid (exact in the same
+  database), the SKU for an item and the names (catalogue, category) — so
+  an import into another database can still find it; see
+  `Import.Executor`.
 
   Filename includes the export date and local time (`YYYY-MM-DD HH-MM`): a
   single catalogue is named after the catalogue (e.g.
@@ -36,12 +46,13 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
   """
   def render(ctx) do
     %{items: items, index: index, catalogues: catalogues} = ctx
+    dependencies = Map.get(ctx, :dependencies, %{})
 
     payload = %{
       "catalogues" => Enum.map(catalogues, &encode_catalogue/1),
       "exported_at" => DateTime.utc_now() |> DateTime.to_iso8601(),
       "index" => index,
-      "items" => Enum.map(items, &encode_item/1)
+      "items" => Enum.map(items, &encode_item(&1, Map.get(dependencies, Map.get(&1, :uuid), [])))
     }
 
     filename = build_filename(catalogues, Pro100.datetime_str(index))
@@ -50,10 +61,14 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
   end
 
   defp encode_catalogue(catalogue) do
-    %{"uuid" => catalogue.uuid, "name" => catalogue.name}
+    %{
+      "uuid" => catalogue.uuid,
+      "name" => catalogue.name,
+      "ai_notes" => Map.get(catalogue, :ai_notes) || ""
+    }
   end
 
-  defp encode_item(item) do
+  defp encode_item(item, dependencies) do
     catalogue_name =
       case item.catalogue do
         %{name: name} -> name
@@ -68,9 +83,43 @@ defmodule PhoenixKitCatalogue.Export.UniversalJson do
       # The item's OWN type: "" means "as in the catalogue", so an import
       # back leaves it inheriting rather than freezing today's default.
       "item_type" => Map.get(item, :item_type) || "",
-      "catalogue" => catalogue_name
+      "ai_notes" => Map.get(item, :ai_notes) || "",
+      "catalogue" => catalogue_name,
+      "dependencies" => Enum.flat_map(dependencies, &encode_dependency/1)
     }
   end
+
+  defp encode_dependency(dependency) do
+    case target(dependency) do
+      nil ->
+        []
+
+      {type, record, catalogue} ->
+        [
+          %{
+            "type" => type,
+            "uuid" => record.uuid,
+            "name" => record.name,
+            "sku" => if(type == "item", do: record.sku),
+            "catalogue" => catalogue && catalogue.name,
+            "quantity" =>
+              dependency.quantity |> Decimal.normalize() |> Decimal.to_string(:normal),
+            "note" => dependency.note || ""
+          }
+        ]
+    end
+  end
+
+  defp target(%{target_catalogue: %{uuid: _} = catalogue}), do: {"catalogue", catalogue, nil}
+
+  defp target(%{target_category: %{uuid: _} = category}),
+    do: {"category", category, loaded(category.catalogue)}
+
+  defp target(%{target_item: %{uuid: _} = item}), do: {"item", item, loaded(item.catalogue)}
+  defp target(_dependency), do: nil
+
+  defp loaded(%{uuid: _} = record), do: record
+  defp loaded(_not_loaded), do: nil
 
   defp build_filename([catalogue], date) do
     "#{sanitize_filename(catalogue.name)} #{date}.json"

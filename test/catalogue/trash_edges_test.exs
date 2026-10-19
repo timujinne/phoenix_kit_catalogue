@@ -118,7 +118,7 @@ defmodule PhoenixKitCatalogue.Catalogue.TrashEdgesTest do
       {:ok, _} = Catalogue.trash_category(shelf, items: :cascade)
 
       assert Catalogue.permanent_delete_scope(fresh_category(shelf.uuid)) ==
-               %{subcategories: 1, items: 2}
+               %{subcategories: 1, items: 2, dependents: 0}
     end
   end
 

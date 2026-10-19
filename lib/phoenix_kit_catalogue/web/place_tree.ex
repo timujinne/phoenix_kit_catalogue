@@ -10,8 +10,8 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
   archived?, children}` plus an optional `:hint` (e.g. "top level" beside a
   catalogue row that stands for its own top level) and a `:badge` on an
   archived catalogue. Ids say what they are — `"folder:<uuid>"`,
-  `"catalogue:<uuid>"`, `"category:<uuid>"` — and `"root"` is the level
-  above every folder.
+  `"catalogue:<uuid>"`, `"category:<uuid>"`, `"item:<uuid>"` — and
+  `"root"` is the level above every folder.
 
   The builders read the database; the pure operations are core's `Tree`.
   """
@@ -19,7 +19,7 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
   alias PhoenixKit.Utils.Tree
   alias PhoenixKitCatalogue.Catalogue
 
-  @type node_type :: :root | :folder | :catalogue | :category
+  @type node_type :: :root | :folder | :catalogue | :category | :item
 
   @type tree_node :: %{
           required(:id) => String.t(),
@@ -48,6 +48,10 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
   ## Options
 
     * `:categories` — `false` stops at the catalogues (default `true`)
+    * `:items` — `true` hangs every live item under its category, or
+      under its catalogue after the categories when it has none (default
+      `false`). An item row's name carries its SKU, because a search
+      matches names only
     * `:catalogue_hint` — shown beside every catalogue row, saying what
       picking the catalogue itself means ("top level", "uncategorized")
     * `:locale` — names in that language, as the page shows them
@@ -77,6 +81,19 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
         %{}
       end
 
+    items =
+      if Keyword.get(opts, :items, false) do
+        by_folder
+        |> Map.values()
+        |> List.flatten()
+        |> Enum.map(& &1.uuid)
+        |> Catalogue.list_live_items()
+        |> Catalogue.localize(locale)
+        |> Enum.group_by(& &1.catalogue_uuid)
+      else
+        %{}
+      end
+
     folder_children =
       Catalogue.list_folder_tree()
       |> Enum.map(&elem(&1, 0))
@@ -84,28 +101,73 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
 
     hint = Keyword.get(opts, :catalogue_hint)
 
-    place_level(nil, folder_children, by_folder, categories)
+    place_level(nil, folder_children, by_folder, {categories, items})
     |> Tree.map_nodes(fn node ->
       if hint && node.type == :catalogue, do: Map.put(node, :hint, hint), else: node
     end)
   end
 
-  defp place_level(folder_uuid, folder_children, by_folder, categories) do
+  defp place_level(folder_uuid, folder_children, by_folder, contents) do
     folders =
       folder_children
       |> Map.get(folder_uuid, [])
       |> Enum.map(fn folder ->
-        folder_node(folder, place_level(folder.uuid, folder_children, by_folder, categories))
+        folder_node(folder, place_level(folder.uuid, folder_children, by_folder, contents))
       end)
       |> Enum.reject(&(&1.children == []))
 
     catalogues =
       for catalogue <- Map.get(by_folder, folder_uuid, []) do
-        catalogue_node(catalogue, category_nodes(Map.get(categories, catalogue.uuid, [])))
+        catalogue_node(catalogue, catalogue_contents(catalogue.uuid, contents))
       end
 
     folders ++ catalogues
   end
+
+  # A catalogue's categories, each holding its items, then the items no
+  # live category holds.
+  defp catalogue_contents(catalogue_uuid, {categories, items}) do
+    categories = Map.get(categories, catalogue_uuid, [])
+    live = MapSet.new(categories, & &1.uuid)
+
+    {filed, loose} =
+      items
+      |> Map.get(catalogue_uuid, [])
+      |> Enum.split_with(
+        &(is_binary(&1.category_uuid) and MapSet.member?(live, &1.category_uuid))
+      )
+
+    by_category = Enum.group_by(filed, & &1.category_uuid)
+
+    categories
+    |> category_nodes()
+    |> Tree.map_nodes(fn
+      %{type: :category, id: "category:" <> uuid} = node ->
+        %{node | children: node.children ++ item_nodes(Map.get(by_category, uuid, []))}
+
+      node ->
+        node
+    end)
+    |> Kernel.++(item_nodes(loose))
+  end
+
+  defp item_nodes(items) do
+    for item <- items do
+      %{
+        id: "item:" <> item.uuid,
+        type: :item,
+        name: item_name(item),
+        icon: "hero-cube",
+        archived?: false,
+        children: []
+      }
+    end
+  end
+
+  defp item_name(%{name: name, sku: sku}) when is_binary(sku) and sku != "",
+    do: "#{name} · #{sku}"
+
+  defp item_name(%{name: name}), do: name
 
   @doc """
   One catalogue's categories. With `root: hint` they hang under a `"root"`
@@ -197,6 +259,26 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
   @spec prune([tree_node()], [String.t()]) :: [tree_node()]
   defdelegate prune(tree, ids), to: Tree
 
+  @doc """
+  `prune/2`, then drops every folder the pruning left without a row to
+  open — a picker should not offer a folder that leads nowhere.
+  """
+  @spec prune_and_tidy([tree_node()], [String.t()]) :: [tree_node()]
+  def prune_and_tidy(tree, ids), do: tree |> Tree.prune(ids) |> drop_empty_folders()
+
+  defp drop_empty_folders(nodes) do
+    Enum.flat_map(nodes, fn
+      %{type: :folder} = node ->
+        case drop_empty_folders(node.children) do
+          [] -> []
+          children -> [%{node | children: children}]
+        end
+
+      node ->
+        [node]
+    end)
+  end
+
   @doc "See `PhoenixKit.Utils.Tree.find/2`."
   @spec find([tree_node()], term()) :: tree_node() | nil
   defdelegate find(tree, id), to: Tree
@@ -233,5 +315,6 @@ defmodule PhoenixKitCatalogue.Web.PlaceTree do
   def uuid("folder:" <> uuid) when uuid != "", do: uuid
   def uuid("catalogue:" <> uuid) when uuid != "", do: uuid
   def uuid("category:" <> uuid) when uuid != "", do: uuid
+  def uuid("item:" <> uuid) when uuid != "", do: uuid
   def uuid(_id), do: nil
 end

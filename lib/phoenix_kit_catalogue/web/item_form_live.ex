@@ -30,8 +30,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # so a type added to entities later works here without a change.
   import PhoenixKitEntities.Components.FieldInput, only: [field_input: 1]
 
+  import PhoenixKitCatalogue.Web.Components.DependenciesPanel, only: [dependencies_panel: 1]
+
   import PhoenixKitCatalogue.Web.Components,
     only: [
+      ai_notes_field: 1,
       attachments_files_panel: 1,
       catalogue_rules_picker: 1,
       metadata_editor: 1
@@ -71,8 +74,11 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   alias PhoenixKitCatalogue.Metadata
   alias PhoenixKitCatalogue.Paths
   alias PhoenixKitCatalogue.Schemas.Item
+  alias PhoenixKitCatalogue.Schemas.ItemDependency
+  alias PhoenixKitCatalogue.Web.DependencyDraft
   alias PhoenixKitCatalogue.Web.HeaderTrail
   alias PhoenixKitCatalogue.Web.ItemLocation
+  alias PhoenixKitCatalogue.Web.PlaceTree
   alias PhoenixKitCatalogue.Web.Settings, as: CatalogueSettings
   alias PhoenixKitCatalogue.Web.SupplierDraft
   alias PhoenixKitWeb.Components.TreePicker
@@ -139,6 +145,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     "unit" => :unit,
     "item_type" => :item_type,
     "status" => :status,
+    "ai_notes" => :ai_notes,
     "category_uuid" => :category_uuid,
     "manufacturer_uuid" => :manufacturer_uuid
   }
@@ -297,6 +304,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       supplier_infos: load_supplier_infos(action, item),
       # Everything the suppliers table stages until Save — see SupplierDraft.
       supplier_draft: SupplierDraft.new(),
+      # The Dependencies tab, staged until Save like the supplier rows —
+      # see DependencyDraft. The place picker loads its tree when opened.
+      dependency_picker: nil,
       supplier_company_links: %{},
       supplier_comment_threads: %{},
       # The row dialog (extra values only): nil = closed, else the row's
@@ -331,6 +341,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       pdf_tab_opened: false,
       extensions: Extensions.sections(:item)
     )
+    |> assign_dependencies(load_dependencies(action, item))
     |> mount_supplier_rows(action, item)
     |> assign_location(item)
     |> Attachments.mount_attachments(item)
@@ -662,6 +673,73 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # AI-translate modal events handled by `use ...AITranslate.Embed`.
 
   @impl true
+  # The Add pop-up. Its tree is built on open, not at mount: it holds every
+  # live item, and most edits never add a dependency. The item itself is
+  # left out, and so is everything already on the list with all that is
+  # under it: a target is listed once, and a listed catalogue or category
+  # already covers what it holds. Picking a row only selects it; Add
+  # stages the row and closes.
+  def handle_event("dependency_open_picker", _params, socket) do
+    listed = Enum.map(socket.assigns.dependency_draft.rows, &"#{&1.kind}:#{&1.uuid}")
+    self_id = List.wrap(socket.assigns.item.uuid && "item:" <> socket.assigns.item.uuid)
+
+    tree =
+      nil
+      |> PlaceTree.places(items: true, locale: socket.assigns[:current_locale])
+      |> PlaceTree.prune_and_tidy(self_id ++ listed)
+
+    {:noreply,
+     assign(socket, :dependency_picker, %{
+       tree: tree,
+       value: nil,
+       kind: nil,
+       path: [],
+       quantity: "1",
+       note: "",
+       error: nil
+     })}
+  end
+
+  def handle_event("dependency_close_picker", _params, socket),
+    do: {:noreply, assign(socket, :dependency_picker, nil)}
+
+  def handle_event("dependency_picker_change", params, socket),
+    do: {:noreply, put_picker_values(socket, params)}
+
+  def handle_event("dependency_picker_confirm", params, socket) do
+    socket = put_picker_values(socket, params)
+
+    case socket.assigns.dependency_picker do
+      %{value: value} = picker when is_binary(value) ->
+        {:noreply, confirm_dependency(socket, picker)}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("dependency_change", %{"dependencies" => values}, socket)
+      when is_map(values) do
+    {:noreply, update(socket, :dependency_draft, &DependencyDraft.put_values(&1, values))}
+  end
+
+  def handle_event("dependency_change", _params, socket), do: {:noreply, socket}
+
+  def handle_event("dependency_remove", %{"key" => key}, socket) when is_binary(key) do
+    {:noreply, update(socket, :dependency_draft, &DependencyDraft.remove(&1, key))}
+  end
+
+  # The rows' drag-and-drop list reports the new order of row keys.
+  def handle_event("dependency_reorder", %{"ordered_ids" => keys}, socket) when is_list(keys) do
+    keys = Enum.filter(keys, &is_binary/1)
+    {:noreply, update(socket, :dependency_draft, &DependencyDraft.reorder(&1, keys))}
+  end
+
+  # A malformed push (no key, no list) changes nothing.
+  def handle_event(event, _params, socket)
+      when event in ["dependency_remove", "dependency_reorder"],
+      do: {:noreply, socket}
+
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
     tab = parse_tab(tab, socket.assigns.action)
 
@@ -1326,6 +1404,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   defp parse_tab("metadata", _action), do: :metadata
   defp parse_tab("sourcing", _action), do: :sourcing
   defp parse_tab("files", _action), do: :files
+  defp parse_tab("dependencies", _action), do: :dependencies
   # Edit only, like its tab: a new item has no panel there, so landing on
   # it would hide every card and leave just the Save row.
   defp parse_tab("pdfs", :edit), do: :pdfs
@@ -1339,6 +1418,178 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
     do: ItemSupplierInfos.list_for_item(uuid)
 
   defp load_supplier_infos(_action, _item), do: []
+
+  defp load_dependencies(:edit, %Item{uuid: uuid}) when not is_nil(uuid),
+    do: Catalogue.list_item_dependencies(uuid)
+
+  defp load_dependencies(_action, _item), do: []
+
+  # The name a dependency row shows: the record's, in the form's language.
+  defp dependency_name_fun(locale) do
+    fn record -> record |> Catalogue.localize_one(locale) |> Map.get(:name) end
+  end
+
+  # A picked place (`"catalogue:<uuid>"` / `"category:<uuid>"`), read
+  # again: the tree may be minutes old, and a row is only added for a
+  # target that is still live.
+  defp put_picker_values(socket, %{"picker" => %{} = typed}) do
+    case socket.assigns.dependency_picker do
+      %{} = picker ->
+        assign(socket, :dependency_picker, %{
+          picker
+          | quantity: text_or(typed["quantity"], picker.quantity),
+            note: text_or(typed["note"], picker.note),
+            error: nil
+        })
+
+      nil ->
+        socket
+    end
+  end
+
+  defp put_picker_values(socket, _params), do: socket
+
+  defp text_or(text, _fallback) when is_binary(text), do: text
+  defp text_or(_text, fallback), do: fallback
+
+  # The selection is read again first — the tree may be minutes old — and
+  # the quantity and note are held to the rows' own rules, so a row that
+  # would not save is never staged.
+  defp confirm_dependency(socket, picker) do
+    case {DependencyDraft.values_error(picker.quantity, picker.note),
+          dependency_target_from_place(picker.value)} do
+      {error, _target} when is_binary(error) ->
+        picker_error(socket, error)
+
+      {nil, nil} ->
+        picker_error(socket, "gone")
+
+      {nil, {:item, %{uuid: uuid}}} when uuid == socket.assigns.item.uuid ->
+        picker_error(socket, "self")
+
+      {nil, {kind, record}} ->
+        quantity = String.trim(picker.quantity)
+
+        draft =
+          DependencyDraft.add(
+            socket.assigns.dependency_draft,
+            kind,
+            record,
+            dependency_name_fun(socket.assigns[:current_locale]),
+            quantity: quantity,
+            note: picker.note
+          )
+
+        socket
+        |> assign(:dependency_draft, draft)
+        |> assign(:dependency_picker, nil)
+    end
+  end
+
+  defp picker_error(socket, error),
+    do: update(socket, :dependency_picker, &%{&1 | error: error})
+
+  defp dependency_kind("catalogue:" <> _), do: :catalogue
+  defp dependency_kind("category:" <> _), do: :category
+  defp dependency_kind("item:" <> _), do: :item
+
+  defp dependency_target_from_place("catalogue:" <> uuid) do
+    case Catalogue.get_catalogue(uuid) do
+      %{status: status} = catalogue when status != "deleted" -> {:catalogue, catalogue}
+      _ -> nil
+    end
+  end
+
+  defp dependency_target_from_place("category:" <> uuid) do
+    with %{status: status} = category when status != "deleted" <- Catalogue.get_category(uuid),
+         %{} = catalogue <- Catalogue.get_catalogue(category.catalogue_uuid) do
+      {:category, Map.put(category, :catalogue, catalogue)}
+    else
+      _ -> nil
+    end
+  end
+
+  defp dependency_target_from_place("item:" <> uuid) do
+    case Catalogue.get_item(uuid, preload: [:catalogue, :category]) do
+      %{status: status} = item when status != "deleted" -> {:item, item}
+      _ -> nil
+    end
+  end
+
+  defp dependency_target_from_place(_id), do: nil
+
+  # Checked before anything is written, like the supplier values: a row
+  # that would not save blocks the whole save and opens its tab.
+  defp validate_dependencies(socket) do
+    validated =
+      with {:ok, draft} <- DependencyDraft.validate(socket.assigns.dependency_draft) do
+        DependencyDraft.mark_gone(draft, &dependency_target_exists?/2)
+      end
+
+    case validated do
+      {:ok, draft} ->
+        {:ok, assign(socket, :dependency_draft, draft)}
+
+      {:error, draft} ->
+        {:error, assign(socket, dependency_draft: draft, current_tab: :dependencies)}
+    end
+  end
+
+  # Checked before the item is written, so a target removed for good in
+  # another session (the tree or the search it came from may be minutes
+  # old) blocks the save with its row marked, instead of failing the
+  # dependency write after a new item already exists.
+  defp dependency_target_exists?(:catalogue, uuid), do: Catalogue.get_catalogue(uuid) != nil
+  defp dependency_target_exists?(:category, uuid), do: Catalogue.get_category(uuid) != nil
+  defp dependency_target_exists?(:item, uuid), do: Catalogue.get_item(uuid) != nil
+
+  # An edit passes the rows the form loaded, so a list another admin saved
+  # meanwhile is not overwritten (`{:error, :dependencies_changed}`); a new
+  # item has nothing anyone else could have changed.
+  defp put_dependencies(socket, item) do
+    expected =
+      if socket.assigns.action == :edit, do: [expected: socket.assigns.dependency_base], else: []
+
+    Catalogue.put_item_dependencies(
+      item,
+      DependencyDraft.to_specs(socket.assigns.dependency_draft),
+      actor_opts(socket) ++ expected
+    )
+  end
+
+  defp check_dependency_conflict(socket) do
+    if Catalogue.dependencies_conflict?(
+         socket.assigns.item,
+         DependencyDraft.to_specs(socket.assigns.dependency_draft),
+         socket.assigns.dependency_base
+       ),
+       do: {:error, :dependencies_changed},
+       else: :ok
+  end
+
+  defp reload_dependencies(socket, item),
+    do: assign_dependencies(socket, Catalogue.list_item_dependencies(item))
+
+  # The rows as read — kept as the base a Save compares against — and the
+  # draft the tab edits.
+  defp assign_dependencies(socket, rows) do
+    assign(socket,
+      dependency_base: rows,
+      dependency_draft:
+        DependencyDraft.new(
+          rows,
+          dependency_name_fun(socket.assigns[:current_locale]),
+          Map.new(Catalogue.internal_category_uuids(), &{&1, true})
+        )
+    )
+  end
+
+  defp dependency_error_message do
+    Gettext.gettext(
+      PhoenixKitCatalogue.Gettext,
+      "A dependency could not be saved. Check the Dependencies tab."
+    )
+  end
 
   defp supplier_display_name(info, all_suppliers) do
     case Enum.find(all_suppliers, &(&1.uuid == info.supplier_uuid)) do
@@ -1931,12 +2182,38 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
   defp format_field_value(value), do: to_string(value)
 
+  # ── Dependencies tab pickers ─────────────────────────────────────
+
+  # A catalogue, category or item picked on the Dependencies tab is staged
+  # as a row; Save writes the list. The target is read again first — the
+  # tree may be minutes old.
+  @impl true
+  def handle_info({TreePicker, "dependency-place-picker", id}, socket) do
+    case socket.assigns.dependency_picker do
+      %{tree: tree} = picker when is_binary(id) ->
+        if PlaceTree.member?(tree, id, [:catalogue, :category, :item]) do
+          {:noreply,
+           assign(socket, :dependency_picker, %{
+             picker
+             | value: id,
+               kind: dependency_kind(id),
+               path: PlaceTree.path_in(tree, id, [:folder]),
+               error: nil
+           })}
+        else
+          {:noreply, socket}
+        end
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   # ── Location picker ──────────────────────────────────────────────
 
   # A row picked in the Location picker stages the move; picking the item's
   # own place takes a staged move back. The picker only sends rows its tree
   # offers, and the tree is checked again here.
-  @impl true
   def handle_info({TreePicker, "location-tree-picker", target}, socket) do
     tree = socket.assigns.location_picker && socket.assigns.location_picker.tree
 
@@ -2032,7 +2309,17 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
         %{assigns: %{item: %{uuid: item_uuid}}} = socket
       )
       when is_binary(uuid) and uuid == item_uuid do
-    {:noreply, Attachments.refresh_files(socket)}
+    socket = Attachments.refresh_files(socket)
+
+    # A dependency list saved in another tab replaces an untouched draft;
+    # one the admin has edited is left alone (Save then refuses to
+    # overwrite the other save and says so).
+    socket =
+      if socket.assigns.dependency_draft.dirty,
+        do: socket,
+        else: reload_dependencies(socket, socket.assigns.item)
+
+    {:noreply, socket}
   end
 
   # A category changed somewhere: a rename shows in the Location path.
@@ -2159,6 +2446,21 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
   # price that would not save blocks the whole save, like an invalid item
   # field, instead of leaving half of it applied.
   defp save_item(socket, action, params, mode) do
+    case validate_dependencies(socket) do
+      {:ok, socket} ->
+        save_item_checked(socket, action, params, mode)
+
+      {:error, socket} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           Gettext.gettext(PhoenixKitCatalogue.Gettext, "Some dependency values are not valid.")
+         )}
+    end
+  end
+
+  defp save_item_checked(socket, action, params, mode) do
     case SupplierDraft.validate(socket.assigns.supplier_draft, socket.assigns.supplier_infos) do
       {:ok, draft} ->
         do_save_item(assign(socket, :supplier_draft, draft), action, params, mode)
@@ -2219,11 +2521,44 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       actor_opts(socket) ++
         [data_owned_keys: data_owned_keys(socket, @item_extra_owned_data_keys)]
 
-    with {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, update_opts),
-         {:ok, _rules} <- maybe_put_rules(socket, item) do
+    # The dependency conflict is looked for before anything is written, so
+    # a stale list does not leave the item's own fields saved without it.
+    with :ok <- check_dependency_conflict(socket),
+         {:ok, item} <- Catalogue.update_item(socket.assigns.item, params, update_opts),
+         {:ok, _rules} <- maybe_put_rules(socket, item),
+         {:ok, _dependencies} <- put_dependencies(socket, item) do
       apply_attribute_assignment(socket, item)
       finish_edit_save(socket, item, mode)
     else
+      # Another admin saved this item's dependencies since the form loaded
+      # them. Found before the item was written (only a save landing in
+      # the instant between the look and the write gets past it), so as a
+      # rule nothing of ours was written; nothing typed is lost either: the
+      # draft stays, and the base becomes their list, so a second Save is a
+      # deliberate replace.
+      {:error, :dependencies_changed} ->
+        {:noreply,
+         socket
+         |> refresh_after_edit(
+           Catalogue.get_item(socket.assigns.item.uuid) || socket.assigns.item
+         )
+         |> assign(:dependency_base, Catalogue.list_item_dependencies(socket.assigns.item))
+         |> assign(:current_tab, :dependencies)
+         |> put_flash(:error, Errors.message(:dependencies_changed))}
+
+      # Before the item clause: a dependency row's changeset is not the
+      # item form's.
+      # The item's own fields saved before the dependency write failed: the
+      # form takes the saved item, so the next Save diffs against it.
+      {:error, %Ecto.Changeset{data: %ItemDependency{}}} ->
+        {:noreply,
+         socket
+         |> refresh_after_edit(
+           Catalogue.get_item(socket.assigns.item.uuid) || socket.assigns.item
+         )
+         |> assign(:current_tab, :dependencies)
+         |> put_flash(:error, dependency_error_message())}
+
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_changeset(socket, changeset)}
 
@@ -2241,6 +2576,9 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
          {:ok, _rules} <- maybe_put_rules(socket, item),
          :ok <- Attachments.maybe_rename_pending_folder(socket, item) do
       apply_attribute_assignment(socket, item)
+      # The item exists now: a dependency that does not save is reported
+      # on its edit form, like a supplier that does not.
+      dependencies_saved? = match?({:ok, _}, put_dependencies(socket, item))
 
       {_left, failures} =
         SupplierDraft.apply(
@@ -2257,15 +2595,21 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
       # supplier that did not save lands there too, named in the flash:
       # the staged row itself does not survive the navigation.
       target =
-        if mode == :stay or failures != [],
+        if mode == :stay or failures != [] or not dependencies_saved?,
           do: Paths.item_edit(item.uuid) <> return_to_suffix(socket),
           else: redirect_target(socket, item)
 
-      {:noreply,
-       socket
-       |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item created."))
-       |> put_save_problems(nil, failures)
-       |> push_navigate(to: target)}
+      socket =
+        socket
+        |> put_flash(:info, Gettext.gettext(PhoenixKitCatalogue.Gettext, "Item created."))
+        |> put_save_problems(nil, failures)
+
+      socket =
+        if dependencies_saved?,
+          do: socket,
+          else: put_flash(socket, :error, dependency_error_message())
+
+      {:noreply, push_navigate(socket, to: target)}
     else
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign_changeset(socket, changeset)}
@@ -2329,6 +2673,7 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
 
     socket
     |> refresh_after_edit(item)
+    |> reload_dependencies(item)
     |> assign_supplier_infos(item.uuid)
     |> then(
       &assign(&1, :supplier_draft, SupplierDraft.reconcile(draft, &1.assigns.supplier_infos))
@@ -3147,6 +3492,18 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
             {length(@files_state.files)}
           </span>
         </button>
+        <button
+          type="button"
+          phx-click="switch_tab"
+          phx-value-tab="dependencies"
+          class={"tab #{if @current_tab == :dependencies, do: "tab-active"}"}
+        >
+          <.icon name="hero-link" class="w-4 h-4 mr-1" />
+          {Gettext.gettext(PhoenixKitCatalogue.Gettext, "Dependencies")}
+          <span :if={@dependency_draft.rows != []} class="badge badge-sm badge-ghost ml-2">
+            {DependencyDraft.count(@dependency_draft)}
+          </span>
+        </button>
         <%!-- The PDF search as its own tab, with a real search box (boss,
              2026-09-19) — it was a button under the Save row. Edit only:
              it starts from the item's saved names. --%>
@@ -3196,6 +3553,14 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
           />
         </div>
       </div>
+
+      <%!-- Outside the item form too: the rows are a form of their own and
+           the pickers bring their own inputs. Staged; Save writes them. --%>
+      <.dependencies_panel
+        draft={@dependency_draft}
+        picker={@dependency_picker}
+        class={@current_tab != :dependencies && "hidden"}
+      />
 
       <.form for={@form} id="item-form" action="#" phx-change="validate" phx-submit="save">
         <div class={"card bg-base-100 shadow-lg #{if @current_tab != :details, do: "hidden"}"}>
@@ -3553,6 +3918,8 @@ defmodule PhoenixKitCatalogue.Web.ItemFormLive do
                 )}
               </span>
             </div>
+
+            <.ai_notes_field field={@form[:ai_notes]} />
           </div>
         </div>
 

@@ -45,12 +45,14 @@ defmodule PhoenixKitCatalogue.Catalogue do
   """
 
   alias PhoenixKitCatalogue.Catalogue.{
+    AiNotes,
     Attributes,
     AttributeSets,
     Catalogues,
     Categories,
     Counts,
     CrmLink,
+    Dependencies,
     Duplication,
     Folders,
     ItemPaging,
@@ -291,6 +293,8 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate swap_category_positions(cat_a, cat_b, opts \\ []), to: Categories
   defdelegate change_category(category, attrs \\ %{}), to: Categories
   defdelegate category_subtree_uuids(category_uuids), to: Categories
+
+  defdelegate internal_category_uuids(), to: Categories
   defdelegate list_move_target_categories(category), to: Categories
   defdelegate list_category_tree(catalogue_uuid, opts \\ []), to: Categories
   defdelegate list_live_categories(catalogue_uuids), to: Categories
@@ -377,6 +381,7 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate list_items(opts \\ []), to: Items
   defdelegate list_items_for_category(category_uuid, opts \\ []), to: Items
   defdelegate list_items_for_catalogue(catalogue_uuid, opts \\ []), to: Items
+  defdelegate list_live_items(catalogue_uuids), to: Items
   defdelegate list_deleted_items_for_catalogue(catalogue_uuid, opts \\ []), to: Items
   defdelegate list_uncategorized_items(catalogue_uuid, opts \\ []), to: Items
   defdelegate get_item(uuid, opts \\ []), to: Items
@@ -444,6 +449,29 @@ defmodule PhoenixKitCatalogue.Catalogue do
   defdelegate update_catalogue_rule(rule, attrs, opts \\ []), to: Rules
 
   defdelegate delete_catalogue_rule(rule, opts \\ []), to: Rules
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Item dependencies — see PhoenixKitCatalogue.Catalogue.Dependencies
+  # ═══════════════════════════════════════════════════════════════════
+
+  defdelegate list_item_dependencies(item_or_uuid), to: Dependencies
+
+  defdelegate dependencies_by_item(item_uuids), to: Dependencies
+
+  defdelegate resolve_import_ref(ref, opts \\ []), to: Dependencies
+
+  defdelegate put_item_dependencies(item, specs, opts \\ []), to: Dependencies
+  defdelegate dependencies_conflict?(item, specs, expected), to: Dependencies
+
+  defdelegate list_item_dependents(target), to: Dependencies
+
+  defdelegate count_outside_dependents(record), to: Dependencies
+
+  # ═══════════════════════════════════════════════════════════════════
+  # Notes for AI — see PhoenixKitCatalogue.Catalogue.AiNotes
+  # ═══════════════════════════════════════════════════════════════════
+
+  defdelegate ai_notes_for_item(item), to: AiNotes
 
   # ═══════════════════════════════════════════════════════════════════
   # Smart-catalogue pricing — see PhoenixKitCatalogue.Catalogue.SmartPricing

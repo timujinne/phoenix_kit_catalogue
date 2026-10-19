@@ -60,6 +60,13 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
       (a search with `:include_descendants`) orders by each category's
       sibling position, not a depth-first walk — the same order the
       admin's own in-catalogue search has always had.
+    * `:exclude_internal` — when `true`, leaves out the items filed in an
+      `internal` category or anywhere under one
+      (`Catalogue.internal_category_uuids/0`), whatever `:catalogue_uuids`
+      or `:category_uuids` names. Uncategorized items are never internal. Default
+      `false`: the admin pages call this too and list everything, so a
+      caller that faces non-admin users (the module's pop-ups do) must ask
+      for it.
     * `:limit` — max results (default 50).
     * `:offset` — paging offset (default 0).
     * `:preload` — extra associations appended to the default
@@ -209,7 +216,9 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
   `:parent_uuid` narrows to that category's SUBTREE (itself excluded),
   mirroring how `search_items_in_category/3` scopes items when the user
   has drilled in. Deleted categories and categories of deleted
-  catalogues are excluded, as everywhere else.
+  catalogues are excluded, as everywhere else. `exclude_internal: true`
+  leaves out `internal` categories and everything under them (see
+  `search_items/2`).
   """
   @spec search_categories(Ecto.UUID.t(), String.t(), keyword()) :: [Category.t()]
   def search_categories(catalogue_uuid, query_str, opts \\ []) do
@@ -243,6 +252,7 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
           limit: ^limit
         )
         |> maybe_scope_subtree(opts[:parent_uuid])
+        |> maybe_exclude_internal_categories(Keyword.get(opts, :exclude_internal, false))
         |> repo().all()
     end
   end
@@ -336,7 +346,28 @@ defmodule PhoenixKitCatalogue.Catalogue.Search do
     # attribute filter stays inside it.
     |> PhoenixKitCatalogue.Catalogue.filter_by_attribute_values(opts)
     |> PhoenixKitCatalogue.Catalogue.filter_by_item_types(opts)
+    |> maybe_exclude_internal(Keyword.get(opts, :exclude_internal, false))
   end
+
+  # The hidden set is read once per call: internal categories and their
+  # subtrees. An uncategorized item is never in it.
+  defp maybe_exclude_internal(query, true) do
+    case PhoenixKitCatalogue.Catalogue.internal_category_uuids() do
+      [] -> query
+      hidden -> where(query, [i], is_nil(i.category_uuid) or i.category_uuid not in ^hidden)
+    end
+  end
+
+  defp maybe_exclude_internal(query, _), do: query
+
+  defp maybe_exclude_internal_categories(query, true) do
+    case PhoenixKitCatalogue.Catalogue.internal_category_uuids() do
+      [] -> query
+      hidden -> where(query, [c], c.uuid not in ^hidden)
+    end
+  end
+
+  defp maybe_exclude_internal_categories(query, _), do: query
 
   # Live items outside trashed categories, or — for the admin's Deleted tab —
   # the trashed items themselves, wherever their category is.

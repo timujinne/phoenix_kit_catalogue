@@ -154,7 +154,11 @@ defmodule PhoenixKitCatalogue.Web.ComponentRelay do
       )
 
       Process.send_after(self(), {:ack_check, ref}, state.ack_timeout)
-      loop(%{state | pending: ref, pending_since: System.monotonic_time(:millisecond)})
+
+      # Measured from the FIRST refresh still unanswered: a steady stream of
+      # events must not keep pushing a gone component's deadline back.
+      since = state.pending_since || System.monotonic_time(:millisecond)
+      loop(%{state | pending: ref, pending_since: since})
     end
   end
 

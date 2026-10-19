@@ -1374,4 +1374,82 @@ defmodule PhoenixKitCatalogue.GettextTest do
       assert Export.Pro100.formats() == [{:furniture, "Furnituur"}, {:materials, "Materjalid"}]
     end)
   end
+
+  # The internal catalogues, the notes for AI and the item dependencies
+  # (V5): every string they show is in every catalogue, with a real
+  # translation in each non-English one.
+  @v5_strings [
+    "Internal",
+    "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it.",
+    "Not shown in the item pickers and browse pop-ups",
+    "There is nothing to choose from here.",
+    "Notes for AI",
+    "For AI tools that read the catalogue. Customers never see it, and it is not translated.",
+    "e.g., Sold by the sheet; the price excludes edge banding.",
+    "Dependencies",
+    "What this item needs from other catalogues, categories or items, and how many. It is for the people using the catalogue: nothing is calculated from it.",
+    "No dependencies yet.",
+    "In trash",
+    "Note",
+    "e.g., pick by wood type",
+    "Add a dependency",
+    "Search catalogues, categories and items…",
+    "Pick a catalogue, a category or an item, then say how many.",
+    "Selected",
+    "Nothing selected yet.",
+    "What is already on the list, and anything inside it, is not offered.",
+    "Any item in %{place}",
+    "Anything in %{place}",
+    "The note is too long (%{max} characters at most).",
+    "Enter a quantity above zero, with at most four decimal places.",
+    "That no longer exists. Choose another.",
+    "An item cannot depend on itself.",
+    "Some dependency values are not valid.",
+    "A dependency could not be saved. Check the Dependencies tab.",
+    "%{quantity} × %{name}",
+    "Needs",
+    "This no longer exists. Remove the line to save.",
+    "Dependencies linked",
+    "Row %{row}: nothing found for “%{ref}”, so that dependency was left out.",
+    "Row %{row}: “%{ref}” could not be saved. Add it on the item.",
+    "Row %{row}: more than one match for “%{ref}”, so that dependency was left out. Add it on the item.",
+    "Someone else saved this item's dependencies while you were editing. Your list is still here: Save again to replace theirs, or reload the page to see theirs.",
+    "Unreadable dependency: %{raw}. Write each as “8 × SKU”, separated by semicolons."
+  ]
+
+  test "the V5 strings are in every locale, translated outside English" do
+    for msgid <- @v5_strings do
+      assert po_msgstr("en", msgid) == msgid, msgid
+
+      for locale <- ~w(et ru uk de fr) do
+        translated = po_msgstr(locale, msgid)
+        assert is_binary(translated) and translated != "", "#{locale}: #{msgid}"
+      end
+    end
+  end
+
+  test "the V5 strings read in et and ru" do
+    assert gettext_in("et", "Dependencies") == "Sõltuvused"
+    assert gettext_in("ru", "Dependencies") == "Зависимости"
+    assert gettext_in("et", "Notes for AI") == "Märkmed tehisintellektile"
+    assert gettext_in("ru", "Internal") == "Внутренний"
+
+    one =
+      "%{count} other item lists something this removes as a dependency. That line is removed with it."
+
+    many =
+      "%{count} other items list something this removes as a dependency. Those lines are removed with it."
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "et")
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 1) =~ "1 muu toode on"
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 3) =~ "3 muud toodet"
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "ru")
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 1) =~ "1 другая позиция"
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 3) =~ "3 другие позиции"
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 5) =~ "5 других позиций"
+
+    Gettext.put_locale(PhoenixKitCatalogue.Gettext, "en")
+    assert Gettext.ngettext(PhoenixKitCatalogue.Gettext, one, many, 1) =~ "1 other item lists"
+  end
 end

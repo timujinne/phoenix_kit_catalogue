@@ -101,11 +101,17 @@ defmodule PhoenixKitCatalogue.MixProject do
 
   defp deps do
     [
-      # 2.38.0 is the floor. The catalogue runs on core's shared toolkits
+      # 2.63.0 is the floor. The shop API tools plug into core's machine API
+      # (#934): `PhoenixKit.API.Tool`, the optional `api_tools/0` callback and
+      # `PhoenixKit.Activity.log_many/2` (the one-insert audit write behind
+      # `Catalogue.update_items/2`) — first shipped in phoenix_kit 2.63.0, and
+      # the package does not compile against an older core (undefined
+      # `PhoenixKit.API.Tool`), nor does `update_items/2` log on one.
+      # It was 2.38.0 before that: the catalogue runs on core's shared toolkits
       # (#860): `PhoenixKit.Activity.log/3`, `PhoenixKitWeb.Actor`,
       # `TreePicker` with `Utils.Tree`/`TreeQuery`, `ResourceFolders`,
       # `PhoenixKitWeb.Attachments` and `Users.ViewPrefs` — first shipped in
-      # phoenix_kit 2.38.0, and it does not compile against an older core.
+      # phoenix_kit 2.38.0, and they do not compile against an older core.
       # It was 2.34.0 before that: the Events page calls
       # `PhoenixKit.Activity.split_changes/1` / `humanize_metadata_key/1`
       # and the detail page passes `swap=` to `bulk_select_scope` — all
@@ -135,7 +141,7 @@ defmodule PhoenixKitCatalogue.MixProject do
       #     2.13.4–2.13.10) won't do — the compound form keeps the
       #     conventional open ceiling at the next major instead of
       #     collapsing to one minor (see CorePinConformanceTest).
-      pk_dep(:phoenix_kit, ">= 2.38.0 and < 3.0.0"),
+      pk_dep(:phoenix_kit, ">= 2.63.0 and < 3.0.0"),
       # mdex_native (pulled in transitively through phoenix_kit's mdex dep)
       # builds from source when MDEX_NATIVE_BUILD=1 is set in the
       # environment; that path requires rustler itself, not just

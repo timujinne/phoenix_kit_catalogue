@@ -2905,7 +2905,7 @@ msgid "Could not save the supplier."
 msgstr ""
 
 msgid "Done"
-msgstr ""
+msgstr "Fertig"
 
 msgid "Edit supplier"
 msgstr ""
@@ -3812,3 +3812,116 @@ msgstr "Alle Kategorien neu ordnen"
 
 msgid "Reorder all items"
 msgstr "Alle Artikel neu ordnen"
+
+msgid "Internal"
+msgstr "Intern"
+
+msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
+msgstr "Wird mit ihren Unterkategorien und deren Artikeln in den Artikelauswahl- und Durchsuchen-Fenstern anderer Seiten nicht angezeigt. Die Verwaltungsseiten zeigen sie weiterhin."
+
+msgid "Not shown in the item pickers and browse pop-ups"
+msgstr "Nicht in den Artikelauswahl- und Durchsuchen-Fenstern sichtbar"
+
+msgid "There is nothing to choose from here."
+msgstr "Hier gibt es nichts zur Auswahl."
+
+msgid "Notes for AI"
+msgstr "Notizen für die KI"
+
+msgid "For AI tools that read the catalogue. Customers never see it, and it is not translated."
+msgstr "Für KI-Werkzeuge, die den Katalog lesen. Kunden sehen es nie, und es wird nicht übersetzt."
+
+msgid "e.g., Sold by the sheet; the price excludes edge banding."
+msgstr "z. B. Wird plattenweise verkauft; der Preis enthält keine Kantenbearbeitung."
+
+msgid "Dependencies"
+msgstr "Abhängigkeiten"
+
+msgid "What this item needs from other catalogues, categories or items, and how many. It is for the people using the catalogue: nothing is calculated from it."
+msgstr "Was dieser Artikel aus anderen Katalogen, Kategorien oder Artikeln braucht, und wie viel. Das ist für die Menschen, die mit dem Katalog arbeiten: Daraus wird nichts berechnet."
+
+msgid "No dependencies yet."
+msgstr "Noch keine Abhängigkeiten."
+
+msgid "In trash"
+msgstr "Im Papierkorb"
+
+msgid "Note"
+msgstr "Notiz"
+
+msgid "e.g., pick by wood type"
+msgstr "z. B. je nach Holzart wählen"
+
+msgid "Add a dependency"
+msgstr "Abhängigkeit hinzufügen"
+
+msgid "Search catalogues, categories and items…"
+msgstr "Kataloge, Kategorien und Artikel durchsuchen…"
+
+msgid "Pick a catalogue, a category or an item, then say how many."
+msgstr "Wählen Sie einen Katalog, eine Kategorie oder einen Artikel und geben Sie die Menge an."
+
+msgid "Selected"
+msgstr "Ausgewählt"
+
+msgid "Nothing selected yet."
+msgstr "Noch nichts ausgewählt."
+
+msgid "What is already on the list, and anything inside it, is not offered."
+msgstr "Was schon auf der Liste steht, und alles darin, wird nicht angeboten."
+
+msgid "Any item in %{place}"
+msgstr "Beliebiger Artikel aus %{place}"
+
+msgid "Anything in %{place}"
+msgstr "Beliebiges aus %{place}"
+
+msgid "The note is too long (%{max} characters at most)."
+msgstr "Die Notiz ist zu lang (höchstens %{max} Zeichen)."
+
+msgid "Enter a quantity above zero, with at most four decimal places."
+msgstr "Geben Sie eine Menge über null ein, mit höchstens vier Nachkommastellen."
+
+msgid "That no longer exists. Choose another."
+msgstr "Das gibt es nicht mehr. Wählen Sie etwas anderes."
+
+msgid "An item cannot depend on itself."
+msgstr "Ein Artikel kann nicht von sich selbst abhängen."
+
+msgid "Some dependency values are not valid."
+msgstr "Einige Werte der Abhängigkeiten sind ungültig."
+
+msgid "A dependency could not be saved. Check the Dependencies tab."
+msgstr "Eine Abhängigkeit konnte nicht gespeichert werden. Prüfen Sie den Tab „Abhängigkeiten“."
+
+msgid "Needs"
+msgstr "Benötigt"
+
+msgid "This no longer exists. Remove the line to save."
+msgstr "Das gibt es nicht mehr. Entfernen Sie die Zeile, um zu speichern."
+
+msgid "%{count} other item lists something this removes as a dependency. That line is removed with it."
+msgid_plural "%{count} other items list something this removes as a dependency. Those lines are removed with it."
+msgstr[0] "%{count} anderer Artikel führt etwas davon als Abhängigkeit. Diese Zeile wird mit gelöscht."
+msgstr[1] "%{count} andere Artikel führen etwas davon als Abhängigkeit. Diese Zeilen werden mit gelöscht."
+
+msgid "%{quantity} × %{name}"
+msgstr "%{quantity} × %{name}"
+
+msgid "Dependencies linked"
+msgstr "Verknüpfte Abhängigkeiten"
+
+msgid "Row %{row}: nothing found for “%{ref}”, so that dependency was left out."
+msgstr "Zeile %{row}: „%{ref}“ nicht gefunden, diese Abhängigkeit wurde ausgelassen."
+
+msgid "Someone else saved this item's dependencies while you were editing. Your list is still here: Save again to replace theirs, or reload the page to see theirs."
+msgstr "Jemand anderes hat die Abhängigkeiten dieses Artikels während Ihrer Bearbeitung gespeichert. Ihre Liste ist noch da: Speichern Sie erneut, um seine zu ersetzen, oder laden Sie die Seite neu, um seine zu sehen."
+
+msgid "Unreadable dependency: %{raw}. Write each as “8 × SKU”, separated by semicolons."
+msgstr "Unlesbare Abhängigkeit: %{raw}. Schreiben Sie jede als „8 × SKU“, getrennt durch Semikolons."
+
+msgid "Row %{row}: more than one match for “%{ref}”, so that dependency was left out. Add it on the item."
+msgstr "Zeile %{row}: „%{ref}“ passt auf mehrere, diese Abhängigkeit wurde ausgelassen. Fügen Sie sie beim Artikel hinzu."
+
+msgid "Row %{row}: “%{ref}” could not be saved. Add it on the item."
+msgstr "Zeile %{row}: „%{ref}“ konnte nicht gespeichert werden. Fügen Sie es beim Artikel hinzu."

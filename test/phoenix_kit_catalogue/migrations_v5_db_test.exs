@@ -25,11 +25,11 @@ defmodule PhoenixKitCatalogue.MigrationsV5DBTest do
     end
   end
 
-  test "replaying the chain twice is idempotent and stamps pkc_schema:5" do
+  test "replaying the chain twice is idempotent and stamps the current marker" do
     replay_chain!()
     replay_chain!()
 
-    assert Migrations.migrated_version_runtime(prefix: "public") == 5
+    assert Migrations.migrated_version_runtime(prefix: "public") == Migrations.current_version()
   end
 
   test "both indexes are unique, partial and keyed on the catalogue" do

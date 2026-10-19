@@ -328,14 +328,14 @@ defmodule PhoenixKitCatalogue.Import.EncodingTest do
                {:ok,
                 %{
                   sheets: [],
-                  headers: ~w(name sku base_price unit item_type catalogue),
-                  rows: [["Oak", "A1", "10.00", "", "", ""]],
+                  headers: ~w(name sku base_price unit item_type ai_notes catalogue dependencies),
+                  rows: [["Oak", "A1", "10.00", "", "", "", "", ""]],
                   row_count: 1
                 }}
     end
 
     test "numbers and booleans are plain values" do
-      assert {:ok, %{rows: [["7", "", "9.5", "true", "", ""]]}} =
+      assert {:ok, %{rows: [["7", "", "9.5", "true", "", "", "", ""]]}} =
                Universal.parse(
                  ~s({"items":[{"name":7,"base_price":9.5,"unit":true}]}),
                  "x.json",

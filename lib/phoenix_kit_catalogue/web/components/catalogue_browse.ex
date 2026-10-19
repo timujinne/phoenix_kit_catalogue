@@ -57,6 +57,18 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
   shared with the modal since 2026-08-30; this surface previously hid
   descendant chips and rejected narrowing to them). See
   `PhoenixKitCatalogue.Catalogue.BrowseState`.
+
+  `internal` categories are left out with everything under them, even
+  where the scope names them — their items and their chips. Pass
+  `include_internal: true` for an embed that should show them. The scope's own `:exclude_internal` key is set
+  from that attr and cannot be passed.
+
+  ## Live
+
+  The embed follows the catalogue while it is on the page, as the modal
+  does (`PhoenixKitCatalogue.Web.ComponentRelay`): renames, prices, new
+  or trashed rows and a category becoming internal show up within a
+  moment, with the user's search, chip and scroll depth kept.
   """
 
   use Phoenix.LiveComponent
@@ -68,11 +80,12 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
 
   alias PhoenixKitCatalogue.Catalogue
   alias PhoenixKitCatalogue.Catalogue.BrowseState
+  alias PhoenixKitCatalogue.Web.ComponentRelay
   alias PhoenixKitCatalogue.Web.Components.Browse
 
   @impl true
   def mount(socket) do
-    {:ok, assign(socket, initialized: false)}
+    {:ok, assign(socket, initialized: false, relay: nil)}
   end
 
   @impl true
@@ -80,11 +93,14 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
     socket = assign(socket, Map.take(assigns, [:id]))
 
     if socket.assigns.initialized do
-      {:ok, socket}
+      {:ok, maybe_live_refresh(socket, assigns[:live_refresh])}
     else
       browse =
         BrowseState.init(
-          scope: Browse.expand_scope(assigns[:scope] || %{}),
+          scope:
+            (assigns[:scope] || %{})
+            |> Browse.expand_scope()
+            |> Browse.put_internal_rule(assigns[:include_internal] == true),
           per_page: assigns[:per_page] || 24,
           # The module's shared sort (client, 2026-09-01): this embed's
           # listings read in the same order the admin detail page does.
@@ -116,9 +132,57 @@ defmodule PhoenixKitCatalogue.Web.Components.CatalogueBrowse do
           browse: browse
         )
 
+      socket = assign(socket, relay: start_relay(socket, browse.scope))
+
       {:ok, run_fetch(socket, effect)}
     end
   end
+
+  # Live like the modal: a relay process holds the catalogue subscription
+  # and pushes a debounced `live_refresh` through `send_update/3`, so a
+  # rename, a price change or a catalogue becoming internal reaches an
+  # open embed with no host wiring. The relay ends with the host LiveView,
+  # or on its own when an unacknowledged refresh shows the embed is gone.
+  defp start_relay(socket, scope) do
+    if Phoenix.LiveView.connected?(socket) do
+      ComponentRelay.start(__MODULE__, socket.assigns.id,
+        catalogue_uuids: scope[:catalogue_uuids]
+      )
+    end
+  end
+
+  defp maybe_live_refresh(socket, nil), do: socket
+
+  defp maybe_live_refresh(socket, refresh) do
+    ComponentRelay.ack(refresh)
+    refresh_live(socket)
+  end
+
+  # The chips and every page loaded so far, re-read in place. A chip the
+  # user stood on that is no longer offered (its catalogue became internal,
+  # the category went away) drops them back to all of the scope.
+  defp refresh_live(socket) do
+    %{browse: browse, locale: locale} = socket.assigns
+    chips = order_chips(Browse.chip_categories(browse.scope, locale))
+    browse = %{browse | order: Browse.global_items_order()}
+
+    {browse, effect} =
+      if stranded_chip?(browse, chips),
+        do: BrowseState.command(browse, {:set_category, nil}),
+        else: BrowseState.command(browse, :refresh)
+
+    socket
+    |> assign(categories: chips, browse: browse)
+    |> run_fetch(effect)
+  end
+
+  # Chips are the only way to pick a category here, so one the user
+  # stands on that is no longer among them (trashed, its catalogue made
+  # internal — an empty row included) has gone.
+  defp stranded_chip?(%{category_uuid: uuid}, chips) when is_binary(uuid),
+    do: not Enum.any?(chips, &(&1.uuid == uuid))
+
+  defp stranded_chip?(_browse, _chips), do: false
 
   # The chip row follows the module's shared category sort where a chip
   # carries the data — name (chips are `%{uuid, name}` maps, so the

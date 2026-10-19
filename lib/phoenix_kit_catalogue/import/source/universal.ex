@@ -28,7 +28,8 @@ defmodule PhoenixKitCatalogue.Import.Source.Universal do
   def parse(binary, _filename, :json, _opts), do: parse_json(binary)
   def parse(binary, filename, _spreadsheet, opts), do: Parser.parse(binary, filename, opts)
 
-  @json_headers ~w(name sku base_price unit item_type catalogue)
+  @json_headers ~w(name sku base_price unit item_type ai_notes catalogue dependencies)
+  @plain_headers @json_headers -- ["dependencies"]
 
   defp parse_json(binary) do
     case Jason.decode(binary) do
@@ -40,7 +41,7 @@ defmodule PhoenixKitCatalogue.Import.Source.Universal do
 
   defp rows_from_items(items) do
     if Enum.all?(items, &flat_item?/1) do
-      rows = Enum.map(items, fn it -> Enum.map(@json_headers, &to_string(it[&1])) end)
+      rows = Enum.map(items, fn it -> Enum.map(@json_headers, &cell(it, &1)) end)
       {:ok, %{sheets: [], headers: @json_headers, rows: rows, row_count: length(rows)}}
     else
       {:error, :bad_json_shape}
@@ -51,10 +52,26 @@ defmodule PhoenixKitCatalogue.Import.Source.Universal do
   # cell is rendered with `to_string/1` — which raises on a nested object
   # and on some lists. Anything else is not this format.
   defp flat_item?(item) when is_map(item) do
-    Enum.all?(@json_headers, &plain_value?(item[&1]))
+    Enum.all?(@plain_headers, &plain_value?(item[&1])) and
+      dependency_list?(item["dependencies"])
   end
 
   defp flat_item?(_item), do: false
+
+  # The export's one nested value: the item's dependencies, handed to the
+  # mapper as the list's own JSON text (`Import.DependencyCell` reads it).
+  defp cell(item, "dependencies") do
+    case item["dependencies"] do
+      list when is_list(list) and list != [] -> Jason.encode!(list)
+      _ -> ""
+    end
+  end
+
+  defp cell(item, header), do: to_string(item[header])
+
+  defp dependency_list?(nil), do: true
+  defp dependency_list?(list) when is_list(list), do: Enum.all?(list, &is_map/1)
+  defp dependency_list?(_other), do: false
 
   # JSON can spell a NUL (`\u0000`) inside a string; the database refuses
   # one in a text value.

@@ -149,7 +149,7 @@ defmodule PhoenixKitCatalogue.Catalogue.ActivityLog do
   # better — but omitting it silently is worse, because the reader cannot tell
   # an untouched description from one that was rewritten (design panel,
   # 2026-09-20: unanimous on both halves).
-  @flag_only_fields [:description]
+  @flag_only_fields [:description, :ai_notes]
 
   @spec changed_fields(struct(), struct(), [atom()]) :: %{optional(String.t()) => map()}
   def changed_fields(before, now, fields) when is_list(fields) do

@@ -32,6 +32,8 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
     * `rs`        — "true" passes root_switcher (the opt-in root either-or)
     * `types`     — comma list for `scope.item_types`, e.g. "goods"
     * `type`      — one type passed as a bare string, `scope.item_types: "goods"`
+    * `ii`        — "true" passes include_internal (both components)
+    * `deps`      — "true" passes show_dependencies (the modal)
   """
 
   use Phoenix.LiveView
@@ -83,6 +85,8 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
        two: params["two"] == "true",
        browse: params["browse"] == "true",
        browse_click: params["bclick"] != "false",
+       include_internal: params["ii"] == "true",
+       show_dependencies: params["deps"] == "true",
        clicked: nil,
        picked: nil,
        closed: false
@@ -178,6 +182,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
         id="surface"
         scope={@scope}
         on_item_click={@browse_click}
+        include_internal={@include_internal}
       />
       <.live_component
         :if={@show and not @browse}
@@ -198,6 +203,8 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
         context_header={@context_header}
         show_tray={@show_tray}
         show_item_details={@show_item_details}
+        include_internal={@include_internal}
+        show_dependencies={@show_dependencies}
         title={@title}
         locale={@clocale}
         inline_qty={@inline_qty}

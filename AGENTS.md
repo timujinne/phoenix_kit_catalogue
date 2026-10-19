@@ -11,7 +11,7 @@ and import/export. Admin-only LiveView UI; no public routes of its own; the shop
 semantics live in module `@moduledoc`s and `dev_docs/` — this file holds
 conventions, contracts and non-obvious boundaries.
 
-- **Depends on:** `phoenix_kit` `>= 2.38.0 and < 3.0.0` (Hex, patch-precise
+- **Depends on:** `phoenix_kit` `>= 2.63.0 and < 3.0.0` (Hex, patch-precise
   floor — see the comment in `mix.exs` and `test/core_pin_conformance_test.exs`),
   `phoenix_kit_ai` `~> 0.24` (hard dep; the AI-translate integration is
   duck-typed through `ai_translatables/0`), `phoenix_kit_entities` `~> 0.4`
@@ -138,9 +138,10 @@ Repo-local aliases:
   `Search`, `Tree`, `Slugs`, `Manufacturers`, `Suppliers`, `Links`,
   `ItemSupplierInfos`, `Counts`, `Translations`, `Duplication`,
   `AttributeSets`, `SupplierFields`, `SupplierComments`, `CrmLink`,
-  `PdfLibrary`, `PdfEngines`, `PubSub`, `ActivityLog`, `Trash`, `Shared`,
-  `Helpers`). A new public function goes in its section module with its
-  `@doc` and `@spec`, plus a `defdelegate` in the facade. A section calls
+  `Dependencies`, `AiNotes`, `PdfLibrary`, `PdfEngines`, `PubSub`,
+  `ActivityLog`, `Trash`, `Shared`, `Helpers`). A new public function goes
+  in its section module with its `@doc` and `@spec`, plus a `defdelegate` in
+  the facade. A section calls
   another section's public function through the facade, and a private helper
   a second section needs moves to `Catalogue.Shared` (`@doc false`) rather
   than being copied. LiveViews and external consumers never call a submodule
@@ -279,7 +280,7 @@ lib/phoenix_kit_catalogue/
     …                                 Rules, SmartPricing, Search, Tree, Slugs, AttributeSets,
                                       SupplierFields, SupplierComments, CrmLink, PdfLibrary,
                                       PdfEngines, PubSub, ActivityLog, Duplication, Helpers, …
-  schemas/                            18 Ecto schemas, one per phoenix_kit_cat_* table
+  schemas/                            19 Ecto schemas, one per phoenix_kit_cat_* table
   migrations.ex                       module-owned versioned chain
   paths.ex  errors.ex  metadata.ex  attachments.ex
   api.ex  api/                        shop API tools and reference resolution (api_tools/0)
@@ -313,6 +314,12 @@ Schemas (all `@primary_key {:uuid, UUIDv7, autogenerate: true}`):
   only.
 - `CatalogueRule` — smart-catalogue rule row, `UNIQUE(item_uuid,
   referenced_catalogue_uuid)`.
+- `ItemDependency` — one line of what an item needs: exactly one target
+  catalogue, category or item (a `num_nonnulls` CHECK), a positive
+  `quantity`, an optional `note`. Every reference is a foreign key with
+  `ON DELETE CASCADE`. The table accepts the same target twice; the item
+  form never offers a listed target, nor anything under a listed
+  catalogue or category.
 - Attribute schemas: `AttributeGroup`, `Attribute`, `AttributeValue`,
   `ItemAttributeGroup`, `ItemAttributeSet`.
 - PDF library tables (`Pdf`, `PdfExtraction`, `PdfPage`, `PdfPageContent`) layer
@@ -326,6 +333,10 @@ Key invariants to preserve:
   `category_uuid` normalizes to `nil`. Callers passing `skip_derive: true`
   (the importers) are checked against the category's catalogue under the same
   `FOR SHARE` read and get a changeset error on a mismatch.
+- **`Search.search_items/2` lists internal categories' items unless asked.** The
+  admin pages share it, so `exclude_internal: true` is opt-in; anything a
+  non-admin user browses must pass it (the three embeddable components do,
+  through `Browse.put_internal_rule/2`).
 - **A restore undoes exactly the trash that produced a row's state.** Catalogue
   and category restores revive only rows stamped with their root (plus, for a
   catalogue, deleted rows with no stamp), each to its recorded status; rows
@@ -374,7 +385,7 @@ PubSub topic: `"phoenix_kit_catalogue"`.
 
 Owns a versioned chain: `PhoenixKitCatalogue.Migrations` via
 `migration_module/0`, marker `pkc_schema:<N>` as a `COMMENT ON TABLE
-phoenix_kit_cat_catalogues`, currently V5. `mix phoenix_kit.update` applies it
+phoenix_kit_cat_catalogues`, currently V6. `mix phoenix_kit.update` applies it
 in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
 `execute/1`, which only works inside an `Ecto.Migration` run).
 
@@ -413,6 +424,11 @@ in hosts; tests replay `up_statements/2` directly through the repo (`up/1` uses
   (`Catalogue.Trash.guard_external_id/1`; inside a caller's own transaction the
   Postgrex error is re-raised instead, the transaction being aborted by then),
   and a copy drops the id (`Duplication.copy_data/3`).
+- **V6 is internal categories, notes for AI and item dependencies**:
+  `internal boolean NOT NULL DEFAULT false` on categories, a nullable
+  `ai_notes text` on catalogues, categories and items, and the
+  `phoenix_kit_cat_item_dependencies` table. None of it is declared in core's
+  manifest.
 - UUIDv7 PKs and `use PhoenixKit.SchemaPrefix` on every table-backed schema.
 
 ## Testing
@@ -518,8 +534,10 @@ Pointers, not docs — the moduledocs are the contract.
   a core that enforces the confirmation gate. A category goes with its subtree
   (`items: :cascade`, the admin's default), and the dry run of an always-confirm
   tool carries `requires_confirmation: true` (`Common.preview/2`). `API.Gate`
-  keeps those tools out of the registry on a core that lacks the gate; raise the
-  `phoenix_kit` floor in `mix.exs` to the first release that ships the shop API.
+  keeps those tools out of the registry on a core that lacks the gate. The
+  `phoenix_kit` floor in `mix.exs` is 2.63.0, the first release that ships the
+  shop API (`PhoenixKit.API.Tool`, `Activity.log_many/2`); a newer API need
+  raises it again.
   `update_products` refuses a sku another live item of the catalogue holds
   (`sku_taken`; no DB index backs it).
   Guide: `dev_docs/guides/api-tools.md`; tests: `test/phoenix_kit_catalogue/api/`,
@@ -549,6 +567,49 @@ Pointers, not docs — the moduledocs are the contract.
 - **Pricing** — chain is `base → markup → discount`.
   `Catalogue.item_pricing/1` is the one-stop API for UIs; pure helpers live on
   `Item`.
+- **Internal categories** — `internal` on a category keeps it, its whole
+  subtree and every item filed there out of `ItemPicker`,
+  `ItemSelectorModal` and `CatalogueBrowse` even where the host's scope
+  names it; each takes `include_internal` to show them. The hidden set is
+  `Catalogue.internal_category_uuids/0` (the flagged categories plus their
+  descendants); an uncategorized item is never internal, and catalogues
+  have no flag. A preselected item from one stays usable but its details
+  stay closed, and the admin pages only badge it. Never shrink a scope's
+  `category_uuids` or `catalogue_uuids` to apply it — an emptied list
+  means everything; the fetch layer's `exclude_internal` does the
+  filtering. Pinned by `test/web/internal_category_popups_test.exs`.
+  `CatalogueBrowse` is live through `Web.ComponentRelay` like the modal,
+  so a category becoming internal leaves an open embed too.
+- **Notes for AI** — `ai_notes` on catalogues, categories and items: one
+  language, never shown by the pop-ups, never machine-translated, logged
+  only as "changed". `Catalogue.ai_notes_for_item/1` gathers an item's with
+  its catalogue's and categories', general first. The Universal JSON
+  export carries them, and "Notes for AI"
+  is an import column.
+- **Item dependencies** — the item form's Dependencies tab adds a target
+  through one pop-up tree like the Location chooser's
+  (`PlaceTree.places/2` with `items: true`, built on open, the item itself
+  pruned; a pick selects, Add stages it and closes; rows reorder by
+  dragging), is staged in `Web.DependencyDraft` and written on Save by
+  `Catalogue.put_item_dependencies/3` (replace-all; writes nothing when the
+  list is unchanged). The form passes `expected:` — the rows it loaded —
+  so a list another admin saved meanwhile is never overwritten
+  (`:dependencies_changed`, their list is loaded), and it looks for that
+  conflict (`dependencies_conflict?/3`) before writing the item itself;
+  an untouched tab picks up such a save live. Informational only: nothing prices or expands them.
+  A soft trash leaves a row listed as "in trash"; a permanent delete of
+  either end cascades it away, and the permanent-delete dialogs say how
+  many other items lose a line (`count_outside_dependents/1`). Duplicating
+  a category or catalogue points a target copied in the same operation at
+  its copy. `list_item_dependents/1` answers "who lists this?" for internal
+  callers; the modal's `show_dependencies` adds a "Needs" row to its item
+  details, leaving out targets the popup hides. Import/export: the
+  Universal JSON names each target by uuid, SKU and names; a Dependencies
+  column (that JSON, or typed `8 × SKU; 2 × SKU`) is read by
+  `Import.DependencyCell` and linked after every row exists
+  (`Catalogue.resolve_import_ref/2`: the uuid while it names a live row,
+  else a unique SKU or name); a line with no match is reported by row and
+  the item imports anyway.
 - **Smart catalogues** — `Catalogue.put_catalogue_rules/3` (replace-all,
   transactional, one `smart_rules.synced` activity), `list_catalogue_rules/1`,
   `list_items_referencing_catalogue/1` (warn before deleting a referenced

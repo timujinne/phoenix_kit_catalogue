@@ -3827,7 +3827,7 @@ msgid "Reorder all items"
 msgstr "Змінити порядок усіх позицій"
 
 msgid "Internal"
-msgstr "Внутрішній"
+msgstr "Прихована"
 
 msgid "Kept out of the item pickers and browse pop-ups that other pages embed, with its subcategories and their items. The admin pages still show it."
 msgstr "Не показується у вікнах вибору та перегляду позицій, які вбудовують інші сторінки, разом із підкатегоріями та їхніми позиціями. Сторінки адміністрування й надалі її показують."

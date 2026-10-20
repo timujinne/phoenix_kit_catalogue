@@ -1,3 +1,46 @@
+## 0.49.0 - 2026-10-19
+
+Reviews: `dev_docs/pull_requests/2026/152-shop-api-tools/`,
+`153-internal-notes-dependencies/` (`CLAUDE_REVIEW.md`).
+
+**Requirements raised:** `phoenix_kit` `>= 2.63.0` (was `>= 2.38.0`), the first
+core release that ships the machine API the shop tools plug into
+(`PhoenixKit.API.Tool`, `api_tools/0`, `PhoenixKit.Activity.log_many/2`). Run
+`mix phoenix_kit.update` after upgrading: the module's own chain moves to V6
+(V5 and V6 are new).
+
+### Added
+
+- Shop API: nine `catalogue.*` tools served by core's API layer behind its keys,
+  scopes and rate limits (`list_products`, `get_products`, `create_products`,
+  `update_products`, `set_translations`, `delete_products`, `list_categories`,
+  `upsert_categories`, `delete_categories`). Batches answer per row, support a
+  dry run with a fingerprint, and the two delete tools trash and ask for
+  confirmation. Guide: `dev_docs/guides/api-tools.md`. Thanks to timujinne
+  (#152).
+- `Catalogue.update_items/2` (one transaction, one activity insert, one
+  broadcast), keyset paging with exact counts for item listings, and reference
+  lookups by uuid, SKU or `external_id`.
+- V5: partial unique indexes on an item's and a category's `external_id` per
+  catalogue. A restore or move that would collide is refused with
+  `:external_id_taken`, and a copy drops the id.
+- V6: internal categories (hidden, with their subtree and items, from the item
+  picker, the item selector and the catalogue browse), notes for AI on
+  catalogues, categories and items, and item dependencies (the item form's
+  Dependencies tab, with import and export). Thanks to mdon (#153).
+
+### Changed
+
+- The `Catalogue` context is split into section modules; the facade keeps its
+  public functions.
+- The media folder layout follows batch item updates and the shop API's moves.
+
+### Fixed
+
+- The package no longer starts with its `phoenix_kit` floor below the first core
+  release that has the APIs it calls.
+- Dialyzer's `call_without_opaque` on `API.DeleteCategories`' subtree walk.
+
 ## 0.48.1 - 2026-10-13
 
 Reviews: `dev_docs/pull_requests/2026/148-media-folders/` (`CODEX_REVIEW.md`),

@@ -1432,7 +1432,9 @@ defmodule PhoenixKitCatalogue.GettextTest do
     assert gettext_in("et", "Dependencies") == "Sõltuvused"
     assert gettext_in("ru", "Dependencies") == "Зависимости"
     assert gettext_in("et", "Notes for AI") == "Märkmed tehisintellektile"
-    assert gettext_in("ru", "Internal") == "Внутренний"
+    assert gettext_in("ru", "Internal") == "Скрытая"
+    assert gettext_in("et", "Internal") == "Peidetud"
+    assert gettext_in("uk", "Internal") == "Прихована"
 
     one =
       "%{count} other item lists something this removes as a dependency. That line is removed with it."

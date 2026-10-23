@@ -171,7 +171,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
 
     test "smart fees show where the price goes: flat IS the price, percent and rules display" do
       # Smart-catalogue items rendered a BLANK price everywhere
-      # (2026-08-31 — tim-dev's rule-priced services). Flat standalone
+      # (2026-08-31 — a host's rule-priced services). Flat standalone
       # fees are real prices (line totals included); percent shows its
       # number; rule-priced items say Computed.
       flat = %Item{
@@ -341,7 +341,7 @@ defmodule PhoenixKitCatalogue.Web.Components.BrowseTest do
 
       # With the name cell at w-full, an img capped at max-width: 100%
       # has a zero minimum width and the table gives it none: the photo
-      # rendered 0px wide in the table and comfy views (tim-dev,
+      # rendered 0px wide in the table and comfy views (a host,
       # 2026-09-17). A browser is the only place that shows the width, so
       # the class that prevents it is pinned here.
       [img] = Regex.run(~r/<img[^>]*>/, html)

@@ -1,9 +1,9 @@
 defmodule PhoenixKitCatalogue.Web.CatalogueDetailTreeReproTest do
   @moduledoc """
-  Client, 2026-09-12: "In KAPI KARKASS I added MELAMIIN STANDART and started
-  moving it around; suddenly the category doubled." Replays her sequence
-  through the real detail page, ten rounds, and asserts after every
-  step that the category exists once in the DB and once in the tree.
+  A reported bug: a category moved around repeatedly in the detail tree showed
+  up twice. Replays that sequence through the real detail page, ten rounds,
+  and asserts after every step that the category exists once in the DB and
+  once in the tree.
   """
   use PhoenixKitCatalogue.LiveCase, async: false
 
@@ -33,82 +33,82 @@ defmodule PhoenixKitCatalogue.Web.CatalogueDetailTreeReproTest do
   test "moving a freshly created category in and out of a sibling never doubles it", %{
     conn: conn
   } do
-    catalogue = fixture_catalogue(%{name: "ANDI Köögimööbel"})
-    karkass = fixture_category(catalogue, %{name: "KAPI KARKASS", position: 0})
-    melamiin = fixture_category(catalogue, %{name: "MELAMIIN", parent_uuid: karkass.uuid})
-    other = fixture_category(catalogue, %{name: "MELAMIIN LUX", parent_uuid: melamiin.uuid})
+    catalogue = fixture_catalogue(%{name: "Kitchen furniture"})
+    carcasses = fixture_category(catalogue, %{name: "Cabinet carcasses", position: 0})
+    melamine = fixture_category(catalogue, %{name: "Melamine", parent_uuid: carcasses.uuid})
+    other = fixture_category(catalogue, %{name: "Melamine Lux", parent_uuid: melamine.uuid})
 
-    # The New Category form, opened from KAPI KARKASS, creates it there.
-    {:ok, standart} =
+    # The New Category form, opened from Cabinet carcasses, creates it there.
+    {:ok, standard} =
       Catalogue.create_category(%{
-        name: "MELAMIIN STANDART",
+        name: "Melamine Standard",
         catalogue_uuid: catalogue.uuid,
-        parent_uuid: karkass.uuid,
-        position: Catalogue.next_category_position(catalogue.uuid, karkass.uuid)
+        parent_uuid: carcasses.uuid,
+        position: Catalogue.next_category_position(catalogue.uuid, carcasses.uuid)
       })
 
-    {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}?category=#{karkass.uuid}")
-    render_click(view, "toggle_category_expand", %{"uuid" => melamiin.uuid})
+    {:ok, view, _html} = live(conn, "#{@base}/#{catalogue.uuid}?category=#{carcasses.uuid}")
+    render_click(view, "toggle_category_expand", %{"uuid" => melamine.uuid})
     html = settle(view)
-    assert tree_count(html, standart.uuid) == 1
+    assert tree_count(html, standard.uuid) == 1
 
     for round <- 1..10 do
-      # Edge drop under MELAMIIN, before its existing child.
+      # Edge drop under Melamine, before its existing child.
       render_click(view, "drop_row", %{
         "type" => "category",
-        "uuid" => standart.uuid,
-        "parent" => melamiin.uuid,
-        "entries" => ["category:#{standart.uuid}", "category:#{other.uuid}"]
+        "uuid" => standard.uuid,
+        "parent" => melamine.uuid,
+        "entries" => ["category:#{standard.uuid}", "category:#{other.uuid}"]
       })
 
       html = settle(view)
-      assert db_count("MELAMIIN STANDART") == 1, "round #{round}: DB doubled after nesting"
-      assert tree_count(html, standart.uuid) == 1, "round #{round}: tree doubled after nesting"
-      assert Catalogue.get_category(standart.uuid).parent_uuid == melamiin.uuid
+      assert db_count("Melamine Standard") == 1, "round #{round}: DB doubled after nesting"
+      assert tree_count(html, standard.uuid) == 1, "round #{round}: tree doubled after nesting"
+      assert Catalogue.get_category(standard.uuid).parent_uuid == melamine.uuid
 
       # Swap places with the sibling (edge drop after it).
       render_click(view, "drop_row", %{
         "type" => "category",
-        "uuid" => standart.uuid,
-        "parent" => melamiin.uuid,
-        "entries" => ["category:#{other.uuid}", "category:#{standart.uuid}"]
+        "uuid" => standard.uuid,
+        "parent" => melamine.uuid,
+        "entries" => ["category:#{other.uuid}", "category:#{standard.uuid}"]
       })
 
       html = settle(view)
-      assert db_count("MELAMIIN STANDART") == 1, "round #{round}: DB doubled after swap"
-      assert tree_count(html, standart.uuid) == 1, "round #{round}: tree doubled after swap"
+      assert db_count("Melamine Standard") == 1, "round #{round}: DB doubled after swap"
+      assert tree_count(html, standard.uuid) == 1, "round #{round}: tree doubled after swap"
 
-      # Middle drop straight onto MELAMIIN (already its parent — a no-op move).
+      # Middle drop straight onto Melamine (already its parent — a no-op move).
       render_click(view, "move_to_folder", %{
         "type" => "category",
-        "uuid" => standart.uuid,
-        "target" => melamiin.uuid
+        "uuid" => standard.uuid,
+        "target" => melamine.uuid
       })
 
       html = settle(view)
-      assert db_count("MELAMIIN STANDART") == 1, "round #{round}: DB doubled after re-drop"
-      assert tree_count(html, standart.uuid) == 1, "round #{round}: tree doubled after re-drop"
+      assert db_count("Melamine Standard") == 1, "round #{round}: DB doubled after re-drop"
+      assert tree_count(html, standard.uuid) == 1, "round #{round}: tree doubled after re-drop"
 
-      # Back out to the KAPI KARKASS level, before MELAMIIN.
+      # Back out to the Cabinet carcasses level, before Melamine.
       render_click(view, "drop_row", %{
         "type" => "category",
-        "uuid" => standart.uuid,
+        "uuid" => standard.uuid,
         "parent" => "root",
-        "entries" => ["category:#{standart.uuid}", "category:#{melamiin.uuid}"]
+        "entries" => ["category:#{standard.uuid}", "category:#{melamine.uuid}"]
       })
 
       html = settle(view)
-      assert db_count("MELAMIIN STANDART") == 1, "round #{round}: DB doubled after lifting"
-      assert tree_count(html, standart.uuid) == 1, "round #{round}: tree doubled after lifting"
-      assert card_count(html, standart.uuid) == 1, "round #{round}: cards doubled after lifting"
-      assert Catalogue.get_category(standart.uuid).parent_uuid == karkass.uuid
+      assert db_count("Melamine Standard") == 1, "round #{round}: DB doubled after lifting"
+      assert tree_count(html, standard.uuid) == 1, "round #{round}: tree doubled after lifting"
+      assert card_count(html, standard.uuid) == 1, "round #{round}: cards doubled after lifting"
+      assert Catalogue.get_category(standard.uuid).parent_uuid == carcasses.uuid
     end
 
     # The whole tree, once each.
     html = settle(view)
-    assert tree_count(html, melamiin.uuid) == 1
+    assert tree_count(html, melamine.uuid) == 1
     assert tree_count(html, other.uuid) == 1
-    assert db_count("MELAMIIN") == 1
+    assert db_count("Melamine") == 1
   end
 
   test "a category created or moved in another tab reaches the open tree without a reload", %{

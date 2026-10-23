@@ -83,7 +83,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
       indistinguishable at presentation time.
 
   Before this, smart items rendered a BLANK price everywhere
-  (2026-08-31 — tim-dev's rule-priced services, Nordic Line's fees).
+  (2026-08-31 — a host's rule-priced services, a client's fees).
   """
   @spec smart_fee(map() | struct()) :: {:price, Decimal.t()} | {:note, String.t()} | nil
   def smart_fee(%Item{base_price: nil, default_unit: "flat", default_value: %Decimal{} = v}),
@@ -125,7 +125,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
         # "name" lookup, so list names NEVER translated — the detail
         # popup resolved "_name" and came out right, which is how the
         # miss stayed invisible until a real bilingual catalogue
-        # (tim-dev error report, 2026-08-31).
+        # (host error report, 2026-08-31).
         name: Translations.translated_name(item, locale),
         sku: item.sku,
         price: price,
@@ -1099,7 +1099,7 @@ defmodule PhoenixKitCatalogue.Web.Components.Browse do
             image's minimum width zero, and the w-full name column takes
             every pixel a column can give up. One row's fixed-width letter
             placeholder held the column open for everyone, so the photos
-            vanished only in a list where EVERY row had one (tim-dev,
+            vanished only in a list where EVERY row had one (a host,
             2026-09-17: a two-item category popup lost both, a long search
             kept them). --%>
             <img

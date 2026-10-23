@@ -816,7 +816,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   # items. Built once at init from the categories-metadata read; any
   # failure degrades to the empty tree: tiles are navigation, not data.
   # A single-catalogue scope gets one flat root level; a MULTI-catalogue
-  # scope (tim-dev's wide order picker — 2026-08-31, "check why the
+  # scope (a host's wide order picker — 2026-08-31, "check why the
   # categories and sub categories aren't showing") drills CATALOGUE-FIRST:
   # the root lists the catalogues as tiles, drilling into one shows its
   # top categories. Below that, drilling is catalogue-agnostic — category
@@ -939,7 +939,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
   defp decimal_key(n) when is_number(n), do: n
   defp decimal_key(_), do: 0.0
 
-  # A scope may name only CATEGORIES (tim-dev's per-category narrow
+  # A scope may name only CATEGORIES (a host's per-category narrow
   # pickers pass category_uuids: [cat], catalogue_uuids: nil) — the
   # clauses below key the tree off catalogue_uuids, so that shape fell
   # through to the EMPTY tree and the popup showed no subcategory tiles
@@ -1125,7 +1125,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModal do
       # The FULL per-catalogue category set, ignoring the scope's tile
       # filter — `pick_sort_key/2`'s tree walk needs a pick's whole
       # ancestor chain even under a narrow `category_uuids` scope
-      # (tim-dev's per-category picker, `scope_categories/2` above): a
+      # (a host's per-category picker, `scope_categories/2` above): a
       # pick from a subcategory the tiles never show is still
       # confirmable (`in_scope?/3` expands to the subtree) and must
       # not fall out of the sort index and land first as an empty path

@@ -11,7 +11,7 @@
 Move the product card's markup — the unified photos-then-files swipe carousel,
 the jump strip, the fields grid and the compact file list — out of this module
 and into core's new `PhoenixKitWeb.Components.Core.PreviewCard`
-(phoenix_kit#827), so the catalogue item card and Andi's sub-order
+(phoenix_kit#827), so the catalogue item card and the host app's sub-order
 featured-image card share one implementation. `product_card/1` and
 `product_card_body/1` keep their names and attrs and become thin delegations;
 the DB-backed helpers (`resolve_images/1`, `resolve_files/1`, `resolve_name/2`,
@@ -76,7 +76,7 @@ So even with the lock corrected, the gate does not pass.
 
 **Fix applied**: stop forwarding it. The attr stays *declared* on
 `product_card_body/1` — it was `required: true` before this PR and external
-hosts (ecommerce/Andi) pass it — but is now `default: nil` and documented as
+hosts (ecommerce) pass it — but is now `default: nil` and documented as
 accepted-for-compatibility, mirroring how `:current_image` is already handled in
 this module. Two tests pin it: one passing a target, one omitting it entirely.
 

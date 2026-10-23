@@ -436,11 +436,11 @@ defmodule PhoenixKitCatalogue.Web.ImportLivePro100Test do
     # name never reaches :creates, whatever the checkbox says.
     test "a row from another group is refused, not created",
          %{conn: conn, catalogue: cat} do
-      view = preview_with_unmatched(conn, cat, "Andi Karkass / MP U741 ST9 16mm")
+      view = preview_with_unmatched(conn, cat, "Acme Carcass / MP U741 ST9 16mm")
       assigns = :sys.get_state(view.pid).socket.assigns
 
       assert assigns.import_plan.creates == []
-      assert [%{reason: :foreign_group, group: "Andi Karkass"}] = assigns.import_plan.skipped
+      assert [%{reason: :foreign_group, group: "Acme Carcass"}] = assigns.import_plan.skipped
 
       render_click(view, "apply_pro100", %{})
 

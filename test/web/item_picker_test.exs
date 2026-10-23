@@ -64,7 +64,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
     )
   end
 
-  describe "locale fallback (tim-dev error report, 2026-08-31)" do
+  describe "locale fallback (host error report, 2026-08-31)" do
     test "without a :locale attr the process gettext locale applies" do
       item = %{
         fake_item("i-loc-1", "Steel screw")
@@ -75,7 +75,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPickerTest do
           }
       }
 
-      # The Andi shape: the host process is in et, no attr passed. The
+      # A common host shape: the host process is in et, no attr passed. The
       # picker used to default to a hardcoded "en" here — its dropdown,
       # breadcrumbs and product-card popup all stayed English.
       Gettext.put_locale("et")

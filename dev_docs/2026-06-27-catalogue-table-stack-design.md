@@ -27,7 +27,7 @@ The page title/subtitle already moved to the global admin header (prior task). T
 
 ## Architecture — a self-contained mini-toolkit inside the module
 
-`phoenix_kit_catalogue` is a standalone library and **must not** depend on host-app `Andi.*` modules (the orders stack lives in andi). So the pattern is replicated locally, reusing only phoenix_kit **core** components (`<.table_default>`, `Modal`, `SortableGrid` hook, icons).
+`phoenix_kit_catalogue` is a standalone library and **must not** depend on host-app modules (the orders stack lives in the host app). So the pattern is replicated locally, reusing only phoenix_kit **core** components (`<.table_default>`, `Modal`, `SortableGrid` hook, icons).
 
 New modules (all under `lib/phoenix_kit_catalogue/web/`):
 
@@ -148,11 +148,11 @@ New gettext strings (Columns, Reset, Apply, Sort by, Folder, Kind, Markup %, Dis
 2. **Suppliers + Manufacturers:** wire the toolbar + dynamic columns + sort/filter/search + card view + move action buttons into the toolbar. (Simplest — already `table_default`.)
 3. **Catalogues index:** flat conversion, folder filter + folder column, Active/Deleted retained, remove tree/DnD + global item search.
 4. **Folders modal:** full folder CRUD.
-5. gettext, `mix format`, compile via `/www/app`, restart, runtime verify.
+5. gettext, `mix format`, compile via `<host-app>`, restart, runtime verify.
 
 ## Verification
 
-- Compile via `cd /www/app && mix compile` (catalogue can't compile standalone — stale deps).
+- Compile via `cd <host-app> && mix compile` (catalogue can't compile standalone — stale deps).
 - Restart elixir (path-dep, no hot reload); confirm clean boot + HTTP 200.
 - Runtime checks: column show/hide persists across a reconnect and across users; sort + filter + search work in both table and card view; folder filter narrows; folder modal CRUD works; Active/Deleted toggle intact; "Move to folder" still works; no leftover global-search crashes.
 - daisyUI 5 mobile check via headless browser (per project memory — no eyeballing).

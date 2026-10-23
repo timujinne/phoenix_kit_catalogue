@@ -35,7 +35,7 @@ branches and landed together:
 
 ## Group prefix
 
-PRO100 prefixes an item name with its group: `Andi Karkass / MP U741 ST9 16mm`.
+PRO100 prefixes an item name with its group: `Acme Carcass / MP U741 ST9 16mm`.
 The separator must be whitespace-padded, because article codes contain bare
 slashes (`MP U767 PM/ST9 18mm`).
 

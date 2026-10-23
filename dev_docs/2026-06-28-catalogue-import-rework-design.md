@@ -234,7 +234,7 @@ DB-backed (verified via Tidewave on dev when local Postgres is unavailable):
 - `Matcher` against seeded catalogue items; `update_item` application; report
   contents for unmatched/ambiguous/error.
 
-`mix format` + `mix quality` must pass (compile via `cd /www/app && mix compile`).
+`mix format` + `mix quality` must pass (compile via `cd <host-app> && mix compile`).
 
 ## Live verification
 

@@ -8,7 +8,7 @@ defmodule PhoenixKitCatalogue.Catalogue.PdfEngines do
   work: `ex_pdfium` ships Chrome's PDF engine as a precompiled binary
   fetched during `mix deps.get`. Hosts that already have poppler keep it
   as a safety net for files pdfium cannot open. Benchmarked 2026-08-16
-  on the tim-dev corpus: pdfium word recall vs `pdftotext -layout` was
+  on a host's corpus: pdfium word recall vs `pdftotext -layout` was
   98.4–100% per document (`dev_docs` has the numbers).
 
   `open_best/1` tries each engine in order and commits to the first one

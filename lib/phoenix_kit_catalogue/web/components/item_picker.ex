@@ -264,7 +264,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemPicker do
     # same fallback ItemSelectorModal and CatalogueBrowse already use —
     # this component alone stuck to its "en" mount default, so its
     # dropdown, breadcrumbs AND its product-card popup stayed English on
-    # localized pages (tim-dev error report, 2026-08-31). Resolved per
+    # localized pages (host error report, 2026-08-31). Resolved per
     # update so it also tracks a host whose process locale changes.
     # `||`, not put_new: `locale={@locale}` with a nil assign is the
     # common host shape, and a present-but-nil key would skip a

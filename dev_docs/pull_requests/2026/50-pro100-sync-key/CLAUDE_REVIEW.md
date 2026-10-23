@@ -58,11 +58,11 @@ Confirmed against the merged code before fixing, using the fixture from the
 PR's own LiveView test:
 
 ```
-catalogue "PRO100 Test Cat", row "Andi Karkass / MP U741 ST9 16mm"
-  creates: []   skipped: [%{reason: :foreign_group, group: "Andi Karkass"}]
+catalogue "PRO100 Test Cat", row "Acme Carcass / MP U741 ST9 16mm"
+  creates: []   skipped: [%{reason: :foreign_group, group: "Acme Carcass"}]
 
-catalogue "Andi Karkass", row "Andi Karkass / MP U741 ST9 16mm"
-  creates: [{"MP U741 ST9 16mm", category: "Andi Karkass"}]
+catalogue "Acme Carcass", row "Acme Carcass / MP U741 ST9 16mm"
+  creates: [{"MP U741 ST9 16mm", category: "Acme Carcass"}]
 ```
 
 **Fixed** by `category_from_group/2`: a group that was checked against a real
@@ -93,12 +93,12 @@ yields no category", which also asserts `categories_to_create == []`.
 The three tests in `import_live_pro100_test.exs`'s "force-creating unmatched
 rows" block were written on `feature/pro100-force-create`, before the
 foreign-group guard existed. They upload a row named
-`"Andi Karkass / MP U741 ST9 16mm"` into a fixture catalogue named
+`"Acme Carcass / MP U741 ST9 16mm"` into a fixture catalogue named
 `"PRO100 Test Cat"` and assert:
 
 ```elixir
 assert [create] = assigns.import_plan.creates
-assert create.category == "Andi Karkass"
+assert create.category == "Acme Carcass"
 ...
 refute is_nil(created.category_uuid)
 ```

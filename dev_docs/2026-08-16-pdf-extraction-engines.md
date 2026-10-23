@@ -3,7 +3,7 @@
 ## Why
 
 Extraction used to require poppler (`pdfinfo`/`pdftotext`) on the server.
-tim-dev ran for months with every extraction failing "pdfinfo not on PATH"
+A host ran for months with every extraction failing "pdfinfo not on PATH"
 because the container never had poppler installed — and the failure only
 lived in a DB column. Decision: extraction must work with **zero system
 packages**, so the primary engine now ships with the app.
@@ -22,7 +22,7 @@ engine refuses, the stored `error_message` lists each engine's reason. The
 winning engine is recorded in the `pdf.extracted` activity metadata
 (`"engine"` key).
 
-## Benchmark (tim-dev corpus, 6 real PDFs)
+## Benchmark (a host's corpus, 6 real PDFs)
 
 Word recall vs `pdftotext -layout` (words = downcased alnum runs ≥ 3 chars —
 the "would a part-number search hit" proxy). Harness + corpus lived in the

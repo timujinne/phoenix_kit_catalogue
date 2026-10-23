@@ -3,7 +3,7 @@
 2026-08-22. Two deliverables in one architecture: a client-facing "pick
 items with quantities" modal (the catalogue's `MediaSelectorModal`
 analogue), and the embeddable components it is assembled from, exposed so
-hosts can compose their own catalogue surfaces. First integrator: Andi
+hosts can compose their own catalogue surfaces. First integrator: a consuming host app
 (host app). Designed via a 3-model brainstorm + adversarial plan review;
 the decisions below record what was chosen and why.
 

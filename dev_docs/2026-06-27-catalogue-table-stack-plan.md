@@ -4,16 +4,16 @@
 
 **Goal:** Give `/admin/catalogue`, `/admin/catalogue/suppliers`, and `/admin/catalogue/manufacturers` a control toolbar (search + filters + sort + view-toggle + column management + relocated action buttons), a table↔card view, and per-user-persisted column/sort/filter/view state — with the catalogues index flattened (folder filter + "Folders" modal instead of the inline tree).
 
-**Architecture:** A self-contained mini-toolkit inside `phoenix_kit_catalogue` (no `Andi.*` deps): `TableConfig` (column metadata per scope), `TableQuery` (in-memory search/filter/sort), `ViewConfig` (per-user persistence in `users.custom_fields`), and a `column_settings_modal` component — all wired into the single `CataloguesLive` LiveView, rendering through phoenix_kit core's `<.table_default toggleable>`.
+**Architecture:** A self-contained mini-toolkit inside `phoenix_kit_catalogue` (no host-app deps): `TableConfig` (column metadata per scope), `TableQuery` (in-memory search/filter/sort), `ViewConfig` (per-user persistence in `users.custom_fields`), and a `column_settings_modal` component — all wired into the single `CataloguesLive` LiveView, rendering through phoenix_kit core's `<.table_default toggleable>`.
 
 **Tech Stack:** Elixir/Phoenix LiveView, phoenix_kit core components (`table_default`, `modal`, `icon`, `SortableGrid` JS hook), Gettext (`PhoenixKitCatalogue.Gettext`), daisyUI 5.
 
 ## Global Constraints
 
-- **No `Andi.*` / `AndiWeb.*` dependencies** — `phoenix_kit_catalogue` is a standalone library. Use phoenix_kit **core** components only.
+- **No host-app dependencies** — `phoenix_kit_catalogue` is a standalone library. Use phoenix_kit **core** components only.
 - **No new DB table / migration.** Per-user state lives in `phoenix_kit_users.custom_fields["catalogue_view_configs"]`.
 - **Persist writes** use `PhoenixKit.Users.Auth.update_user_custom_fields(user, merged, ensure_definitions: false, broadcast: false)` — the `ensure_definitions: false` opt is mandatory.
-- **Compile only via** `cd /www/app && mix compile` (catalogue can't compile standalone — stale deps). Must be clean: no new warnings/errors.
+- **Compile only via** `cd <host-app> && mix compile` (catalogue can't compile standalone — stale deps). Must be clean: no new warnings/errors.
 - **Runtime verify:** `sudo /usr/bin/supervisorctl restart elixir` (path-dep, no hot reload), then HTTP 200 + Tidewave `project_eval` for logic + headless browser for UI.
 - **Gettext:** add strings manually to `priv/gettext/default.pot` + `en`/`ru`/`et` `.po`. **Never** run `mix gettext.merge` (fuzzy pollution). Labels are lazy `fn -> Gettext.gettext(PhoenixKitCatalogue.Gettext, "...") end`.
 - **daisyUI 5:** conditional classes via list syntax `class={["base", @flag && "x"]}`; flex/grid children that can overflow need `min-w-0`; never eyeball mobile — measure with a headless browser.
@@ -208,7 +208,7 @@ end
 
 - [ ] **Step 3: Compile via the app.**
 
-Run: `cd /www/app && mix compile 2>&1 | grep -iE "table_config|error|warning: " | head`
+Run: `cd <host-app> && mix compile 2>&1 | grep -iE "table_config|error|warning: " | head`
 Expected: no errors/warnings referencing `table_config.ex`.
 
 - [ ] **Step 4: Verify behavior on the live node.**
@@ -356,7 +356,7 @@ defmodule PhoenixKitCatalogue.Web.TableQueryTest do
 end
 ```
 
-- [ ] **Step 3: Compile via the app.** Run `cd /www/app && mix compile` — clean re: `table_query.ex`.
+- [ ] **Step 3: Compile via the app.** Run `cd <host-app> && mix compile` — clean re: `table_query.ex`.
 
 - [ ] **Step 4: Verify on live node** (after restart) via Tidewave `project_eval`:
 ```elixir
@@ -500,7 +500,7 @@ end
 ```
 
 - [ ] **Step 3: Compile via the app** — clean re: `view_config.ex`. Confirm `PhoenixKit.Users.Auth.update_user_custom_fields/3` arity exists:
-  `cd /www/app && mix compile` then Tidewave `project_eval`: `function_exported?(PhoenixKit.Users.Auth, :update_user_custom_fields, 3)` → `true`.
+  `cd <host-app> && mix compile` then Tidewave `project_eval`: `function_exported?(PhoenixKit.Users.Auth, :update_user_custom_fields, 3)` → `true`.
 
 - [ ] **Step 4: Verify normalize on live node** via `project_eval`:
 ```elixir
@@ -658,7 +658,7 @@ defmodule PhoenixKitCatalogue.Web.TableToolbar do
 end
 ```
 
-- [ ] **Step 2: Compile via the app.** Run `cd /www/app && mix compile` — clean re: `table_toolbar.ex`. (Confirm core modules `...Core.Modal`, `...Core.Select`, `...Core.Icon` export `modal/1`, `select/1`, `icon/1` — they're used elsewhere in this module already.)
+- [ ] **Step 2: Compile via the app.** Run `cd <host-app> && mix compile` — clean re: `table_toolbar.ex`. (Confirm core modules `...Core.Modal`, `...Core.Select`, `...Core.Icon` export `modal/1`, `select/1`, `icon/1` — they're used elsewhere in this module already.)
 
 - [ ] **Step 3: Commit.**
 ```bash
@@ -806,7 +806,7 @@ defp parse_order(_), do: nil
 
 > NOTE: the existing `"search"` handler currently drives the GLOBAL ITEM search. It is repurposed in Task 7 (catalogues). For suppliers/manufacturers (Task 6) the search filters the table. To avoid a clash, Task 6/7 introduce a single `"table_search"` event for the toolbar search and remove the old global-search `"search"` handler in Task 7.
 
-- [ ] **Step 3: Compile via the app.** `cd /www/app && mix compile` — clean. (Handlers are unused until renders call them — that's fine; Elixir won't warn on handle_event clauses.)
+- [ ] **Step 3: Compile via the app.** `cd <host-app> && mix compile` — clean. (Handlers are unused until renders call them — that's fine; Elixir won't warn on handle_event clauses.)
 
 - [ ] **Step 4: Commit.**
 ```bash
@@ -1029,7 +1029,7 @@ Then add the column modal once near the end of `render/1` (shared across tabs):
 Delete the old `manufacturers_table/1` and `suppliers_table/1` defs.
 
 - [ ] **Step 6: Compile via the app + restart + runtime verify.**
-  - `cd /www/app && mix compile` clean.
+  - `cd <host-app> && mix compile` clean.
   - Restart elixir; HTTP 200.
   - Headless browser (logged-in admin) on `/admin/catalogue/manufacturers` and `/suppliers`: toolbar shows search/status-filter/sort/Columns/view-toggle/New button; toggling a column in the modal hides/shows it and persists across reload; sort + filter + search work in table and card view.
 
@@ -1100,7 +1100,7 @@ Toolbar actions: `New Folder` (existing `new_folder`), `New Catalogue` (`Paths.c
 - [ ] **Step 4: Remove the dead code.** Delete `folder_tree_table/1`; delete the global item-search block in the index render (the search input + `@search_results`/`@search_loading`/infinite-scroll-for-search markup); remove the old `"search"`, search-pagination, and `CatalogueTreeDnD`-related handlers/assigns that are now unused. Grep to confirm no remaining references: `grep -n "search_results\|folder_tree_table\|CatalogueTreeDnD\|search_has_more" lib/phoenix_kit_catalogue/web/catalogues_live.ex` → only intentional ones (none).
 
 - [ ] **Step 5: Compile + restart + runtime verify.**
-  - `cd /www/app && mix compile` clean (watch for "unused" warnings from removed handlers — remove their helpers too).
+  - `cd <host-app> && mix compile` clean (watch for "unused" warnings from removed handlers — remove their helpers too).
   - Restart; HTTP 200.
   - Browser `/admin/catalogue`: flat table; Active/Deleted toggle works; Folder filter narrows; Folder/Items/Status/Updated columns; column modal persists; sort works; card view shows folder/items/status; "Move to folder" still in row menu; no global item-search box; no JS console errors from the removed DnD hook.
 
@@ -1191,8 +1191,8 @@ git commit -m "Add gettext strings for catalogue table toolbar and columns"
 
 ## Task 10: Final integration verification
 
-- [ ] **Step 1: Full clean compile.** `cd /www/app && mix compile` — zero new warnings attributable to catalogue files.
-- [ ] **Step 2: Restart + boot check.** `sudo /usr/bin/supervisorctl restart elixir`; wait for "Running AndiWeb.Endpoint"; HTTP 200 on `/`.
+- [ ] **Step 1: Full clean compile.** `cd <host-app> && mix compile` — zero new warnings attributable to catalogue files.
+- [ ] **Step 2: Restart + boot check.** `sudo /usr/bin/supervisorctl restart elixir`; wait for "Running <HostWeb>.Endpoint"; HTTP 200 on `/`.
 - [ ] **Step 3: Cross-table runtime sweep (headless browser, logged-in admin):**
   - `/admin/catalogue`: flat table, Active/Deleted, folder filter+column, column modal persists across reload, sort (header + select), card view, Folders modal CRUD, Move-to-folder, no global item search, no JS errors.
   - `/admin/catalogue/suppliers` & `/manufacturers`: toolbar, status filter, sort, search, column modal persists, card view, New button.

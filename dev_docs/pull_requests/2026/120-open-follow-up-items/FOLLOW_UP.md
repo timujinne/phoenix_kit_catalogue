@@ -23,7 +23,7 @@ against the code first.
   advisory lock that attaching and deleting already take, so creations in one
   set run one at a time.
 - ~~New finding while cleaning up — the catalogue's two entities delete guards
-  raced at boot and one went missing (confirmed on max-dev and tim-dev), so every
+  raced at boot and one went missing (confirmed on max-dev and a second host), so every
   attribute-set delete failed closed with `:no_delete_guard`.~~ A single boot task,
   `PhoenixKitCatalogue.Catalogue.DeleteGuards`, now registers both guards in turn.
   The root cause is fixed in entities too (BeamLabEU/phoenix_kit_entities#48);

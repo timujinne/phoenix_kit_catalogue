@@ -517,7 +517,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
     test "a per-category narrow scope (category_uuids only, no catalogue_uuids) still confirms in tree order",
          %{conn: conn, cat: cat} do
-      # tim-dev's per-category narrow picker shape: the host scope names
+      # A host's per-category narrow picker shape: the host scope names
       # ONLY a category (`cat_scope`, no `c=`) — `catalogue_uuids: nil`.
       # A pick from a subcategory the tiles filter down to must still
       # sort correctly: it must not fall out of the sort index and land
@@ -1327,7 +1327,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
 
     # `qty_precision: :any` — the host's own quantity fields (an order
     # sheet) take any decimal a keyboard produces and never round; the
-    # popup must match them, or a typed 2,5 silently lands as 3 (Andi,
+    # popup must match them, or a typed 2,5 silently lands as 3 (host app,
     # 2026-09-16).
     test "qty_precision: :any keeps a typed 2,5 / 0.125 / 1,2345 exactly", %{
       conn: conn,
@@ -2835,7 +2835,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     end
   end
 
-  describe "multi-catalogue level navigation (tim-dev wide picker, 2026-08-31)" do
+  describe "multi-catalogue level navigation (wide host picker, 2026-08-31)" do
     # A scope naming SEVERAL catalogues used to get no tiles, no switcher,
     # no category hits at all ("check why the categories and sub
     # categories aren't showing up"). The root now groups each offered
@@ -3022,7 +3022,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       conn: conn,
       cat: cat
     } do
-      # tim-dev's per-category narrow pickers pass category_uuids with
+      # A host's per-category narrow pickers pass category_uuids with
       # catalogue_uuids: nil — the tree builder keyed off the catalogue
       # and handed that shape the EMPTY tree, so WASTE SORTERS' healthy
       # children never rendered (error report, 2026-08-31). The
@@ -3038,7 +3038,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
           category_uuid: franke.uuid
         })
 
-      # No c= param: the scope names ONLY the category, like Andi's.
+      # No c= param: the scope names ONLY the category, like a typical host.
       {:ok, view, _html} = open(conn, "cat_scope=#{sorters.uuid}&sel=click")
 
       assert has_element?(view, ~s(#picker-levelnav button[phx-value-uuid="#{franke.uuid}"]))
@@ -3062,7 +3062,7 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
       conn: conn,
       cat: cat
     } do
-      # Client, 2026-09-12: ANDI's per-category pickers (category_uuids
+      # Reported bug: a host's per-category pickers (category_uuids
       # only, no catalogue) listed a category's items A→Z while the
       # admin's Manual view showed the hand-arranged order — the Manual
       # gate keyed off the catalogue alone. Positions here run against
@@ -3231,9 +3231,9 @@ defmodule PhoenixKitCatalogue.Web.Components.ItemSelectorModalTest do
     end
   end
 
-  describe "content language (tim-dev error report, 2026-08-31)" do
+  describe "content language (host error report, 2026-08-31)" do
     # The host process carries the viewer's gettext locale and passes no
-    # :locale attr — exactly Andi's integration. The list used to read
+    # :locale attr — exactly a host-app integration. The list used to read
     # the wrong translation key ("name" where the editor stores "_name"),
     # so names never translated; the detail popup resolved "_name" and
     # came out right, which kept the miss invisible on single-language

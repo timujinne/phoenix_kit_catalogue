@@ -56,7 +56,7 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicateCatalogueTest do
           discount_percentage: Decimal.new("5"),
           data: %{
             "et-EE" => %{"_name" => "Köök"},
-            "meta" => %{"brand" => "Andi"},
+            "meta" => %{"brand" => "Acme"},
             "_trash" => %{"via" => "self"}
           }
         })
@@ -73,7 +73,7 @@ defmodule PhoenixKitCatalogue.Catalogue.DuplicateCatalogueTest do
       assert Decimal.equal?(copy.markup_percentage, Decimal.new("12.5"))
       assert Decimal.equal?(copy.discount_percentage, Decimal.new("5"))
       assert copy.data["et-EE"] == %{"_name" => "Köök (koopia)"}
-      assert copy.data["meta"] == %{"brand" => "Andi"}
+      assert copy.data["meta"] == %{"brand" => "Acme"}
       refute Map.has_key?(copy.data, "_trash")
     end
 

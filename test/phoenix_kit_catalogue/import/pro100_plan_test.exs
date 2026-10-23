@@ -148,15 +148,15 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     test "splits the group prefix off the name; with no catalogue name it becomes a category" do
       plan =
         Pro100Plan.build(
-          [row(%{name: "Andi Karkass  / MP U741 ST9 16mm"})],
+          [row(%{name: "Acme Carcass  / MP U741 ST9 16mm"})],
           Matcher.index([]),
           nil
         )
 
       assert [create] = plan.creates
-      assert create.category == "Andi Karkass"
+      assert create.category == "Acme Carcass"
       assert create.attrs.name == "MP U741 ST9 16mm"
-      assert create.attrs[:_category_name] == "Andi Karkass"
+      assert create.attrs[:_category_name] == "Acme Carcass"
     end
 
     # The group prefix only ever survives the foreign-group guard when it IS the
@@ -166,9 +166,9 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     test "a group matching the selected catalogue yields no category" do
       plan =
         Pro100Plan.build(
-          [row(%{name: "Andi Karkass / MP U741 ST9 16mm"})],
+          [row(%{name: "Acme Carcass / MP U741 ST9 16mm"})],
           Matcher.index([]),
-          "Andi Karkass"
+          "Acme Carcass"
         )
 
       assert [create] = plan.creates
@@ -192,13 +192,13 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     test "keeps the padded separator when a bare slash also appears" do
       plan =
         Pro100Plan.build(
-          [row(%{name: "Andi Karkass / MP U767 PM/ST9 18mm"})],
+          [row(%{name: "Acme Carcass / MP U767 PM/ST9 18mm"})],
           Matcher.index([]),
           nil
         )
 
       assert [create] = plan.creates
-      assert create.category == "Andi Karkass"
+      assert create.category == "Acme Carcass"
       assert create.attrs.name == "MP U767 PM/ST9 18mm"
     end
 
@@ -290,8 +290,8 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
   describe "to_executor_plan/1" do
     test "maps attrs and collects distinct category names" do
       rows = [
-        row(%{id: "1", name: "Andi Karkass / A"}),
-        row(%{id: "2", name: "Andi Karkass / B"}),
+        row(%{id: "1", name: "Acme Carcass / A"}),
+        row(%{id: "2", name: "Acme Carcass / B"}),
         row(%{id: "3", name: "Other Group / C"}),
         row(%{id: "4", name: "No Group"})
       ]
@@ -300,7 +300,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
       exec = Pro100Plan.to_executor_plan(plan.creates)
 
       assert length(exec.items) == 4
-      assert exec.categories_to_create == ["Andi Karkass", "Other Group"]
+      assert exec.categories_to_create == ["Acme Carcass", "Other Group"]
     end
 
     # A `_category_name` absent from categories_to_create is dropped silently by
@@ -402,24 +402,24 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
     test "a row from another group is skipped, never created" do
       plan =
         Pro100Plan.build(
-          [row(%{name: "Andi Töötasapind / Акрил Crystal"})],
+          [row(%{name: "Acme Worktops / Акрил Crystal"})],
           Matcher.index([]),
-          "Andi Karkass"
+          "Acme Carcass"
         )
 
-      assert [%{reason: :foreign_group, group: "Andi Töötasapind"}] = plan.skipped
+      assert [%{reason: :foreign_group, group: "Acme Worktops"}] = plan.skipped
       assert plan.creates == []
       assert plan.stats.foreign_group == 1
     end
 
     test "the catalogue name is compared trimmed" do
-      # The live catalogue is stored as "Andi Karkass " — with a trailing space —
-      # while the file writes "Andi Karkass".
+      # The live catalogue is stored as "Acme Carcass " — with a trailing space —
+      # while the file writes "Acme Carcass".
       plan =
         Pro100Plan.build(
-          [row(%{name: "Andi Karkass / MP U741"})],
+          [row(%{name: "Acme Carcass / MP U741"})],
           Matcher.index([]),
-          "Andi Karkass "
+          "Acme Carcass "
         )
 
       assert plan.skipped == []
@@ -432,7 +432,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
         Pro100Plan.build(
           [row(%{name: "Акрил Crystal V2778"})],
           Matcher.index([]),
-          "Andi Töötasapind"
+          "Acme Worktops"
         )
 
       assert plan.skipped == []
@@ -461,12 +461,12 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
           [
             row(%{
               id: "76002612",
-              name: "Andi Töötasapind / X",
+              name: "Acme Worktops / X",
               base_price: Decimal.new("999.00")
             })
           ],
           idx,
-          "Andi Karkass"
+          "Acme Carcass"
         )
 
       assert [%{reason: :foreign_group}] = plan.skipped
@@ -476,12 +476,12 @@ defmodule PhoenixKitCatalogue.Import.Pro100PlanTest do
 
     test "buckets partition the input" do
       rows = [
-        row(%{id: "76002612", name: "Andi Karkass / Own"}),
-        row(%{id: "999", name: "Andi Töötasapind / Foreign"}),
-        row(%{id: "", name: "Andi Karkass / No Id"})
+        row(%{id: "76002612", name: "Acme Carcass / Own"}),
+        row(%{id: "999", name: "Acme Worktops / Foreign"}),
+        row(%{id: "", name: "Acme Carcass / No Id"})
       ]
 
-      plan = Pro100Plan.build(rows, Matcher.index([]), "Andi Karkass")
+      plan = Pro100Plan.build(rows, Matcher.index([]), "Acme Carcass")
       s = plan.stats
 
       assert s.update + s.nochange + s.create + s.ambiguous + s.no_id + s.no_name +

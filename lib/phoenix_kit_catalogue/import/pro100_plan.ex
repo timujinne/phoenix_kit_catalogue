@@ -14,7 +14,7 @@ defmodule PhoenixKitCatalogue.Import.Pro100Plan do
   """
   alias PhoenixKitCatalogue.Import.{Mapper, Matcher}
 
-  # PRO100 prefixes the item name with its group: "Andi Karkass / MP U741 …".
+  # PRO100 prefixes the item name with its group: "Acme Carcass / MP U741 …".
   # The separator must be whitespace-padded: article codes contain bare
   # slashes ("MP U767 PM/ST9 18mm") that must NOT be treated as a group split.
   @group_separator ~r/\s+\/\s+/

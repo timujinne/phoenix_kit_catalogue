@@ -78,7 +78,7 @@ survive verification — consistent with earlier sweeps.
   agent)
 - **The multi-catalogue tree's blanket rescue was silent** — a DB
   hiccup degraded to "no categories", indistinguishable from the
-  tim-dev report that motivated the feature. Now logged; the two tree
+  host report that motivated the feature. Now logged; the two tree
   clauses also share one `category_tree_base/4` instead of ~20
   duplicated lines. (security + cleanliness agents)
 - **PkDialog (core)**: the stacked-cancel relay could double-push the

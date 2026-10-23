@@ -41,6 +41,20 @@ defmodule PhoenixKitCatalogue.API.CommonTest do
     assert opts[:broadcast] == false
   end
 
+  test "write_opts/3 takes via from the context when it is a non-empty string" do
+    opts = Common.write_opts(ctx(%{via: "agent"}), "catalogue.create_products")
+
+    assert opts[:log_metadata]["via"] == "agent"
+  end
+
+  test "write_opts/3 says api when the context has no usable via" do
+    for extra <- [%{}, %{via: nil}, %{via: ""}, %{via: :agent}, %{via: 5}] do
+      opts = Common.write_opts(ctx(extra), "catalogue.create_products")
+
+      assert opts[:log_metadata]["via"] == "api", inspect(extra)
+    end
+  end
+
   test "invalid/3 builds the handler error with a path" do
     assert {:error, :validation_failed, "bad", %{errors: [error]}} =
              Common.invalid("limit", "bad", [1, 2])

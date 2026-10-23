@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Module is a live path dep; compile/verify via `cd /www/app && mix compile` (standalone `mix compile` fails on a stale deps tree).
+- Module is a live path dep; compile/verify via `cd <host-app> && mix compile` (standalone `mix compile` fails on a stale deps tree).
 - `mix format` + `mix quality` must pass before each commit.
 - Commit per task directly to `main` (no feature branches). No AI attribution in commit messages.
 - No new DB tables/columns/migrations — everything goes in `item.data` (JSONB).
@@ -75,8 +75,8 @@ end
 
 - [ ] **Step 2: Run test, verify it fails**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/pro100/id_test.exs`
-Expected: FAIL (module `PhoenixKitCatalogue.Pro100.Id` undefined). If the path form is awkward, run from the catalogue dir per project convention; the andi compile path is what matters.
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/pro100/id_test.exs`
+Expected: FAIL (module `PhoenixKitCatalogue.Pro100.Id` undefined). If the path form is awkward, run from the catalogue dir per project convention; the host app compile path is what matters.
 
 - [ ] **Step 3: Implement**
 
@@ -107,7 +107,7 @@ In `lib/phoenix_kit_catalogue/export/pro100.ex` replace the `pro100_id/1` body:
 
 - [ ] **Step 5: Run tests, verify pass (incl. unchanged export tests)**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/pro100/id_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/pro100/id_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_test.exs`
 Expected: PASS (export byte tests unchanged).
 
 - [ ] **Step 6: `mix format` + commit**
@@ -129,8 +129,8 @@ Pure parser for the fixed-layout `# Parts` / `# Materials` text formats.
 - Create: `lib/phoenix_kit_catalogue/import/pro100_parser.ex`
 - Test: `test/phoenix_kit_catalogue/import/pro100_parser_test.exs`
 - Fixtures: copy the real reference files
-  - `cp "/www/app/.claude/tmp/export_examples/Furniture 8.txt" test/support/fixtures/pro100/furniture_8.txt`
-  - `cp "/www/app/.claude/tmp/export_examples/Materials 3.txt" test/support/fixtures/pro100/materials_3.txt`
+  - `cp "<host-app>/.claude/tmp/export_examples/Furniture 8.txt" test/support/fixtures/pro100/furniture_8.txt`
+  - `cp "<host-app>/.claude/tmp/export_examples/Materials 3.txt" test/support/fixtures/pro100/materials_3.txt`
 
 **Interfaces:**
 - Consumes: `Pro100.Id.digits_only/1`, `Import.Mapper.normalize_price/1`
@@ -192,15 +192,15 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_parser_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_parser_test.exs`
 Expected: FAIL (module undefined). First create the fixtures dir + copy the two files (Step 3 includes it).
 
 - [ ] **Step 3: Create fixtures + implement parser**
 
 ```bash
 mkdir -p test/support/fixtures/pro100
-cp "/www/app/.claude/tmp/export_examples/Furniture 8.txt" test/support/fixtures/pro100/furniture_8.txt
-cp "/www/app/.claude/tmp/export_examples/Materials 3.txt" test/support/fixtures/pro100/materials_3.txt
+cp "<host-app>/.claude/tmp/export_examples/Furniture 8.txt" test/support/fixtures/pro100/furniture_8.txt
+cp "<host-app>/.claude/tmp/export_examples/Materials 3.txt" test/support/fixtures/pro100/materials_3.txt
 ```
 
 ```elixir
@@ -308,7 +308,7 @@ end
 
 - [ ] **Step 4: Run, verify pass**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_parser_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_parser_test.exs`
 Expected: PASS (5 tests).
 
 - [ ] **Step 5: `mix format` + commit**
@@ -371,7 +371,7 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/matcher_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/matcher_test.exs`
 Expected: FAIL (module undefined).
 
 - [ ] **Step 3: Implement**
@@ -413,7 +413,7 @@ end
 
 - [ ] **Step 4: Run, verify pass**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/matcher_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/matcher_test.exs`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: `mix format` + commit**
@@ -461,7 +461,7 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/mapper_unit_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/mapper_unit_test.exs`
 Expected: FAIL (`resolve_pro100_unit/1` undefined).
 
 - [ ] **Step 3: Implement**
@@ -487,7 +487,7 @@ In `lib/phoenix_kit_catalogue/import/mapper.ex` add `"m" => "running_meter"` to 
 
 - [ ] **Step 4: Run, verify pass (+ existing mapper tests)**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/import/mapper_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/mapper_unit_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/import/mapper_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/mapper_unit_test.exs`
 Expected: PASS.
 
 - [ ] **Step 5: `mix format` + commit**
@@ -581,7 +581,7 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_plan_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_plan_test.exs`
 Expected: FAIL (module undefined).
 
 - [ ] **Step 3: Implement**
@@ -679,7 +679,7 @@ end
 
 - [ ] **Step 4: Run, verify pass**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_plan_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_plan_test.exs`
 Expected: PASS (4 tests).
 
 - [ ] **Step 5: `mix format` + commit**
@@ -740,7 +740,7 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_roundtrip_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_roundtrip_test.exs`
 Expected: FAIL (first test fails — current code hardcodes `c6=""`, `c7="0.0"`).
 
 - [ ] **Step 3: Implement**
@@ -795,7 +795,7 @@ Materials row builder — `c3`/`c5` from storage, `c6` stays the real unit:
 
 - [ ] **Step 4: Run, verify pass (incl. existing byte tests unchanged)**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_roundtrip_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_test.exs ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/export/pro100_roundtrip_test.exs`
 Expected: PASS (existing tests still green because items there have no `data["pro100"]`; the existing test items must include a `data: %{}` field if the new `service/3` match needs it — `service/3`'s catch-all handles any item shape, so no change required).
 
 - [ ] **Step 5: `mix format` + commit**
@@ -863,7 +863,7 @@ end
 
 - [ ] **Step 2: Run, verify pass**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_roundtrip_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/pro100_roundtrip_test.exs`
 Expected: PASS. If it fails, diff `produced` vs `original_nobom` — the most likely cause is a unit/price formatting drift; fix the parser/export accordingly (do not weaken the assertion).
 
 - [ ] **Step 3: Commit**
@@ -925,7 +925,7 @@ end
 
 - [ ] **Step 2: Run, verify fail**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/source_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/source_test.exs`
 Expected: FAIL (modules undefined).
 
 - [ ] **Step 3: Implement behaviour + sources**
@@ -1030,7 +1030,7 @@ Add to `lib/phoenix_kit_catalogue/import.ex`:
 
 - [ ] **Step 4: Run, verify pass**
 
-Run: `cd /www/app && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/source_test.exs`
+Run: `cd <host-app> && mix test ../phoenix_kit_catalogue/test/phoenix_kit_catalogue/import/source_test.exs`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: `mix format` + commit**
@@ -1045,7 +1045,7 @@ git commit -m "Add Import.Source registry (Universal + PRO100) mirroring Export.
 
 ## Task 9: `Web.ImportLive` — Source/Format selects + sync flow (preview + report)
 
-Wire the UI: source/format selects on the upload step, branch to `:mapping` (existing) or `:sync` (new preview→apply→report). This is the integration task; it is DB-backed, so its LiveView tests run in the andi test env (Postgres) — when local Postgres is unavailable, verify live via Tidewave + the manual steps in the spec's "Live verification".
+Wire the UI: source/format selects on the upload step, branch to `:mapping` (existing) or `:sync` (new preview→apply→report). This is the integration task; it is DB-backed, so its LiveView tests run in the host test env (Postgres) — when local Postgres is unavailable, verify live via Tidewave + the manual steps in the spec's "Live verification".
 
 **Files:**
 - Modify: `lib/phoenix_kit_catalogue/web/import_live.ex`
@@ -1125,16 +1125,16 @@ where `build_update_attrs/1` turns `change.changes` (`%{field => {_old, new}}`) 
 
 Follow the existing `test/web/import_live_*_test.exs` for upload simulation (`file_input`/`render_upload`). Keep assertions on: preview matched count, skipped raw lines present, post-apply DB state.
 
-- [ ] **Step 8: Run tests (andi test env) / live verify**
+- [ ] **Step 8: Run tests (host test env) / live verify**
 
-Run (if Postgres available): `cd /www/app && mix test ../phoenix_kit_catalogue/test/web/import_live_pro100_test.exs`
+Run (if Postgres available): `cd <host-app> && mix test ../phoenix_kit_catalogue/test/web/import_live_pro100_test.exs`
 Otherwise: recompile + restart elixir, then walk the spec's "Live verification" steps, and verify DB state via Tidewave.
 
 - [ ] **Step 9: `mix format` + `mix quality` + commit**
 
 ```bash
 cd /www/phoenix_kit_catalogue && mix format
-cd /www/app && mix quality
+cd <host-app> && mix quality
 cd /www/phoenix_kit_catalogue
 git add lib/phoenix_kit_catalogue/web/import_live.ex test/web/import_live_pro100_test.exs
 git commit -m "Add PRO100 import source + Universal JSON to the import wizard (preview + report)"
@@ -1146,7 +1146,7 @@ git commit -m "Add PRO100 import source + Universal JSON to the import wizard (p
 
 **Files:** none (verification only)
 
-- [ ] **Step 1:** `cd /www/app && mix compile` — fix any warnings.
+- [ ] **Step 1:** `cd <host-app> && mix compile` — fix any warnings.
 - [ ] **Step 2:** `sudo /usr/bin/supervisorctl restart elixir` (path-dep is boot-time). If recompile hits root-owned `_build` artifacts, apply the `_build` root-ownership fix from memory.
 - [ ] **Step 3:** Walk the spec's "Live verification" 1–5 (PRO100 import preview/report, round-trip export, Universal JSON, regression check on XLSX/CSV import + plain export).
 - [ ] **Step 4:** Confirm `mix quality` is clean. No commit needed unless fixes were made.

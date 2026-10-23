@@ -125,7 +125,7 @@ defmodule PhoenixKitCatalogue.Web.CataloguesLiveTest do
     end
 
     test "the Deleted tab counts what a trashed catalogue's Restore brings back", %{conn: conn} do
-      # Regression (Max, 2026-09-14, tim-dev): a freshly trashed catalogue
+      # Regression (Max, 2026-09-14, on a host): a freshly trashed catalogue
       # read "Items 0" in the Deleted tab because the tab reused the
       # active-only count, and the trash cascade had just turned every
       # item "deleted". Then (Max, 2026-09-15) counting every item added

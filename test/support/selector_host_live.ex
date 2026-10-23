@@ -43,7 +43,7 @@ defmodule PhoenixKitCatalogue.Test.SelectorHostLive do
 
   @impl true
   def mount(params, _session, socket) do
-    # `loc` — the Andi/tim-dev shape (2026-08-31): the HOST process
+    # `loc` — the host-app shape (2026-08-31): the HOST process
     # carries the viewer's gettext locale, and nothing locale-shaped is
     # passed to the component; the component's process fallback must
     # pick it up.

@@ -11,14 +11,14 @@ defmodule PhoenixKitCatalogue.API.Common do
   @doc """
   The options every API write passes to the `Catalogue` context: the key
   owner as actor, `mode: "auto"`, and the metadata that marks the entry as an
-  API write. `extra` is merged over them.
+  API write (`via` is the context's, "api" when it has none). `extra` is merged over them.
   """
   @spec write_opts(map(), String.t(), keyword()) :: keyword()
   def write_opts(ctx, tool, extra \\ []) do
     actor = ctx.actor
 
     meta = %{
-      "via" => "api",
+      "via" => via(ctx),
       "key_prefix" => actor.key_prefix,
       "request_id" => ctx.request_id,
       "tool" => tool
@@ -31,6 +31,15 @@ defmodule PhoenixKitCatalogue.API.Common do
       end
 
     Keyword.merge([actor_uuid: actor.user_uuid, mode: "auto", log_metadata: meta], extra)
+  end
+
+  # core says how a write came in (`ctx.via`: "agent" for an assistant write a
+  # person confirmed); a key has none, and an older core sends none: "api".
+  defp via(ctx) do
+    case Map.get(ctx, :via) do
+      via when is_binary(via) and via != "" -> via
+      _none -> "api"
+    end
   end
 
   # --- input checks ---------------------------------------------------------------

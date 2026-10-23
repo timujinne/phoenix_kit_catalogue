@@ -252,7 +252,7 @@ defmodule PhoenixKitCatalogue.Catalogue.BrowseStateTest do
 
     test "a CATEGORY-ONLY scope reads in position order too" do
       # Client, 2026-09-12: "the popup's order isn't the catalogue's" —
-      # tim-dev's per-category narrow pickers pass category_uuids with
+      # A host's per-category narrow pickers pass category_uuids with
       # catalogue_uuids: nil. The Manual gate keyed off the catalogue
       # alone, so that shape silently dropped :position and the fetch
       # layer listed the category A→Z while the admin showed the

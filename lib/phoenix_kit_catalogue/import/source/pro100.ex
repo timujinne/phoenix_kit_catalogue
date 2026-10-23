@@ -24,7 +24,7 @@ defmodule PhoenixKitCatalogue.Import.Source.Pro100 do
   Parse + match + plan against the selected catalogue's items.
 
   `catalogue_name` is what rows are checked against for group membership: a
-  PRO100 export can span several groups ("Andi Karkass / …", "Andi Töötasapind /
+  PRO100 export can span several groups ("Acme Carcass / …", "Acme Worktops /
   …") while the sync targets one catalogue, and rows from the other groups must
   not be offered for creation here.
 
